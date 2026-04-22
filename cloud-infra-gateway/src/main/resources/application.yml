@@ -1,0 +1,29 @@
+server:
+  port: 9000
+
+auth:
+  white-list:
+    - /auth/
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      mvc:
+        routes:
+          - id: system-module
+            uri: lb://system-module
+            predicates:
+              - Path=/system/**
+            filters:
+              - StripPrefix=1
+
+logging:
+  level:
+    com.cloudinfra.cloudinfra.gateway.filter: DEBUG
