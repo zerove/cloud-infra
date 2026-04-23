@@ -1,7 +1,7 @@
 package com.cloudinfra.framework.web.monitor;
 
 import ch.qos.logback.classic.LoggerContext;
-import com.cloudinfra.common.test.BaseIntegrationTest;
+import com.cloudinfra.test.BaseIntegrationTest;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
