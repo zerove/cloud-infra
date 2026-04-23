@@ -1,18 +1,18 @@
 package com.cloudinfra.auth.service.impl;
 
 import com.cloudinfra.auth.domain.LoginUser;
-import com.cloudinfra.auth.service.AuthTokenService;
+import com.cloudinfra.auth.feign.UserFeignClient;
 import com.cloudinfra.auth.service.UserService;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.Resource;
 
 @Service
 public class UserServiceImpl implements UserService {
+    @Resource
+    private UserFeignClient userFeignClient;
+
     @Override
     public LoginUser getUserById(Long userId) {
-        // 实现最简逻辑，供测试使用
-        LoginUser user = new LoginUser();
-        user.setUserId(userId);
-        user.setUsername("testuser");
-        return user;
+        return userFeignClient.getUserById(userId);
     }
 }
