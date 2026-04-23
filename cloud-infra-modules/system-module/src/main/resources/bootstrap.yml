@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: system-module
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+      config:
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+        shared-configs:
+          - data-id: actuator-config.yaml
+            refresh: true

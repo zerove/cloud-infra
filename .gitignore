@@ -1,3 +1,18 @@
-.worktrees/
-.worktrees/
+# Ignore build outputs
+**/target/
+**/target-*/
+.classpath
+.project
+.settings/
+.idea/
+.vscode/
+*.log
+
+# Ignore deployment/local infrastructure data
+deploy/data/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
 .worktrees/

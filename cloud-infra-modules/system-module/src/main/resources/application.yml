@@ -1,0 +1,42 @@
+server:
+  port: 9300
+
+spring:
+  datasource:
+    type: com.mysql.cj.jdbc.MysqlDataSource
+    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  threads:
+    virtual:
+      enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: health,info,prometheus,beans,env,heapdump
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+spring.main.allow-bean-definition-overriding: true

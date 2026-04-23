@@ -1,0 +1,42 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 25
+      uses: actions/setup-java@v4
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: Build with Maven
+      run: mvn -B package --file pom.xml
+      
+    - name: Build and Push Docker Images
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        # TODO: Configure Docker Hub or ACR credentials
+        # echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        
+        # Build gateway image
+        docker build -t myorg/cloud-infra-gateway:latest -f Dockerfile --build-arg JAR_FILE=cloud-infra-gateway/target/*.jar .
+        
+        # Build auth image
+        docker build -t myorg/cloud-infra-auth:latest -f Dockerfile --build-arg JAR_FILE=cloud-infra-auth/target/*.jar .
+        
+        # Build system module image
+        docker build -t myorg/cloud-infra-system:latest -f Dockerfile --build-arg JAR_FILE=cloud-infra-modules/system-module/target/*.jar .
+        
+        # docker push myorg/cloud-infra-gateway:latest
+        # docker push myorg/cloud-infra-auth:latest
+        # docker push myorg/cloud-infra-system:latest

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- <appender name="PINNED_THREAD_MONITOR" class="com.cloudinfra.framework.web.monitor.PinnedThreadMetricAppender" /> -->
+
+    <root level="INFO">
+        <!-- <appender-ref ref="PINNED_THREAD_MONITOR" /> -->
+        <!-- 其他 Appender -->
+    </root>
+</configuration>

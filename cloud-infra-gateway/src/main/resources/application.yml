@@ -24,6 +24,16 @@ spring:
             filters:
               - StripPrefix=1
 
+management:
+  metrics:
+    export:
+      prometheus:
+        step: 15s
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+
 logging:
   level:
     com.cloudinfra.cloudinfra.gateway.filter: DEBUG
