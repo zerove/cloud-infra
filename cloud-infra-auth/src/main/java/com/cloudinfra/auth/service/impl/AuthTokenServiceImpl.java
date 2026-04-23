@@ -1,6 +1,7 @@
 package com.cloudinfra.auth.service.impl;
 
 import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.UserService;
 import com.cloudinfra.common.util.JwtUtils;
 import com.cloudinfra.framework.redis.service.RedisService;

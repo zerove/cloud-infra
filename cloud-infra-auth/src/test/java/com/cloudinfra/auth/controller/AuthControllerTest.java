@@ -1,6 +1,8 @@
 package com.cloudinfra.auth.controller;
 
+import com.cloudinfra.auth.domain.LoginUser;
 import com.cloudinfra.auth.service.AuthTokenService;
+import com.cloudinfra.common.core.domain.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -30,8 +32,12 @@ public class AuthControllerTest {
     void shouldLoginSuccess() {
         when(authTokenService.createToken(any())).thenReturn(Map.of("token", "mock-token"));
 
-        Object response = authController.login("testuser", "password");
+        LoginUser loginUser = new LoginUser();
+        loginUser.setUsername("testuser");
+
+        Result<Map<String, Object>> response = authController.login(loginUser);
 
         assertThat(response).isNotNull();
+        assertThat(response.getCode()).isEqualTo(200);
     }
 }
