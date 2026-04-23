@@ -25,14 +25,18 @@ spring:
               - StripPrefix=1
 
 management:
-  metrics:
-    export:
-      prometheus:
-        step: 15s
   endpoints:
     web:
       exposure:
         include: prometheus,health,info
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 15s
 
 logging:
   level:

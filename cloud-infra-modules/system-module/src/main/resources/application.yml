@@ -26,6 +26,10 @@ management:
   info:
     env:
       enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
