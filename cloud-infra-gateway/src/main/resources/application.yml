@@ -41,3 +41,10 @@ management:
 logging:
   level:
     com.cloudinfra.cloudinfra.gateway.filter: DEBUG
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0

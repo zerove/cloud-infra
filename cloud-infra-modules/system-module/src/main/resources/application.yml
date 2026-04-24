@@ -44,3 +44,10 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 spring.main.allow-bean-definition-overriding: true
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0

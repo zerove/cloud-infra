@@ -13,3 +13,10 @@ management:
     export:
       prometheus:
         enabled: true
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
