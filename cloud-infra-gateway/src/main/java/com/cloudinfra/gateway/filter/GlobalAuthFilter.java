@@ -3,12 +3,17 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class GlobalAuthFilter extends OncePerRequestFilter {
@@ -30,8 +35,31 @@ public class GlobalAuthFilter extends OncePerRequestFilter {
 
         try {
             DecodedJWT jwt = JwtUtils.parseToken(token.replace("Bearer ", ""));
-            // 将 userId 透传给下游
-            filterChain.doFilter(request, response);
+            String userId = jwt.getClaim("userId").asString();
+            String username = jwt.getSubject();
+
+            HttpServletRequestWrapper requestWrapper = new HttpServletRequestWrapper(request) {
+                private final Map<String, String> customHeaders = new ConcurrentHashMap<>();
+                {
+                    customHeaders.put("X-User-Id", userId);
+                    customHeaders.put("X-User-Name", username);
+                }
+
+                @Override
+                public String getHeader(String name) {
+                    if (customHeaders.containsKey(name)) return customHeaders.get(name);
+                    return super.getHeader(name);
+                }
+
+                @Override
+                public Enumeration<String> getHeaderNames() {
+                    java.util.List<String> names = Collections.list(super.getHeaderNames());
+                    names.addAll(customHeaders.keySet());
+                    return Collections.enumeration(names);
+                }
+            };
+            
+            filterChain.doFilter(requestWrapper, response);
         } catch (Exception e) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
         }
