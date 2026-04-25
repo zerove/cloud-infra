@@ -23,3 +23,11 @@ spring:
               - Path=/system/**
             filters:
               - StripPrefix=1
+
+knife4j:
+  gateway:
+    enabled: true
+    strategy: discover
+    discover:
+      enabled: true
+      version: openapi3
