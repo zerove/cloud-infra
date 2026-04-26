@@ -62,8 +62,9 @@
             <artifactId>spring-cloud-starter-bootstrap</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-test-support</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>

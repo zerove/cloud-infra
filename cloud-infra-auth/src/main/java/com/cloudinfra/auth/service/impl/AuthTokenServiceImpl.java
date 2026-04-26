@@ -1,6 +1,8 @@
 package com.cloudinfra.auth.service.impl;
 
 import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.auth.exception.AuthBusinessException;
+import com.cloudinfra.auth.exception.AuthExceptionCode;
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.UserService;
 import com.cloudinfra.common.util.JwtUtils;
@@ -44,21 +46,16 @@ public class AuthTokenServiceImpl implements AuthTokenService {
     public Map<String, Object> refreshToken(String refreshToken) {
         Object userIdObj = redisService.get("refresh_token:" + refreshToken);
         if (userIdObj == null) {
-            // Consider returning a more informative error or throwing an exception
-            return new HashMap<>();
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
         }
         
         Long userId = Long.parseLong(userIdObj.toString());
-        // Fetch user details using the userId
-        LoginUser loginUser = userService.getUserById(userId); // Assuming this method exists and returns LoginUser
+        LoginUser loginUser = userService.getUserById(userId);
 
         if (loginUser == null) {
-            // Handle case where user is not found, though this should ideally not happen if Redis is consistent
-            // Returning an empty map for now, but a more robust error handling might be needed.
-            return new HashMap<>(); 
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
         }
         
-        // The existing createToken method will use the userId and username from the fetched loginUser
         return createToken(loginUser);
     }
 
