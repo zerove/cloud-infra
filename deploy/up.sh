@@ -11,9 +11,24 @@ COMPOSE_FILE="$DIR/compose.yaml"
 echo -e "${GREEN}>>> 正在停止并清理旧容器...${NC}"
 podman-compose -f "$COMPOSE_FILE" down
 
-echo -e "${GREEN}>>> 正在构建微服务镜像 (使用 JDK 25 + ZGC)...${NC}"
-# 执行构建并后台启动
-podman-compose -f "$COMPOSE_FILE" up --build -d
+echo -e "${GREEN}>>> 正在启动中间件 (Nacos/Redis)...${NC}"
+podman-compose -f "$COMPOSE_FILE" up -d nacos redis
+
+# 等待 Nacos 就绪
+echo "等待 Nacos 启动..."
+until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nacos/); do
+    printf '.'
+    sleep 5
+done
+echo -e "${GREEN}>>> Nacos 已就绪。${NC}"
+
+echo -e "${GREEN}>>> 正在启动业务微服务...${NC}"
+podman-compose -f "$COMPOSE_FILE" up --build -d gateway auth system
+
+# 触发监控发现更新
+echo -e "${GREEN}>>> 正在同步监控服务发现目标...${NC}"
+bash "$DIR/service_discovery.sh"
+podman-compose -f "$COMPOSE_FILE" restart prometheus
 
 echo -e "${GREEN}>>> 部署完成！${NC}"
 echo "Nacos 控制台: http://localhost:8848/nacos"

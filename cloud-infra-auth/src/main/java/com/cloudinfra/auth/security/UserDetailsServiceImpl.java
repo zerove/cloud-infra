@@ -21,6 +21,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private final UserService userService;
     private final ISysPermissionService permissionService;
 
+import com.cloudinfra.auth.domain.SecurityUser;
+// ... (其他导入保持不变)
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         var user = userService.getByUsername(username);
@@ -28,13 +31,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
-        // 获取该用户的角色对应的权限 (假设用户关联角色，此处为简化处理，实际需联查 User-Role-Permission)
         List<SysPermission> permissions = permissionService.getPermissionsByRoleId(user.getRoleId());
         
         List<SimpleGrantedAuthority> authorities = permissions.stream()
                 .map(p -> new SimpleGrantedAuthority(p.getPerms()))
                 .collect(Collectors.toList());
 
-        return new User(user.getUsername(), user.getPassword(), authorities);
+        return new SecurityUser(user.getId(), user.getUsername(), user.getPassword(), authorities);
     }
 }

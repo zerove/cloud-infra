@@ -6,15 +6,24 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import com.cloudinfra.system.domain.SysPermission;
+import com.cloudinfra.system.service.ISysPermissionService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final ISysPermissionService permissionService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -24,7 +33,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = token.substring(7);
             if (JwtUtils.validateToken(jwt)) {
                 String username = JwtUtils.getUsernameFromToken(jwt);
-                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(username, null, List.of());
+                Long roleId = JwtUtils.getRoleIdFromToken(jwt);
+                
+                List<SysPermission> permissions = permissionService.getPermissionsByRoleId(roleId);
+                List<SimpleGrantedAuthority> authorities = permissions.stream()
+                        .map(p -> new SimpleGrantedAuthority(p.getPerms()))
+                        .collect(Collectors.toList());
+                
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(username, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }

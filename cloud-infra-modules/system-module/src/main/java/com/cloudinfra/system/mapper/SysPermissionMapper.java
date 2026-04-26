@@ -1,14 +1,14 @@
 package com.cloudinfra.system.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.cloudinfra.system.domain.SysPermission;
+import com.cloudinfra.system.domain.SysPermissionEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
 @Mapper
-public interface SysPermissionMapper extends BaseMapper<SysPermission> {
+public interface SysPermissionMapper extends BaseMapper<SysPermissionEntity> {
     
     @Select("SELECT p.perms FROM sys_permission p " +
             "JOIN sys_role_permission rp ON p.id = rp.permission_id " +

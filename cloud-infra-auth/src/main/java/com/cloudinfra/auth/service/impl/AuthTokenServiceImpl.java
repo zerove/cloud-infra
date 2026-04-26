@@ -34,6 +34,7 @@ public Map<String, Object> createToken(LoginUser loginUser) {
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", loginUser.getUserId());
+        claims.put("roleId", loginUser.getRoleId()); // 仅存入必要标识
         claims.put("jti", accessTokenJti);
 
         String accessToken = JwtUtils.createToken(claims, loginUser.getUsername());

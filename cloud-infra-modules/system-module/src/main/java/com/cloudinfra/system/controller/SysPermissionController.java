@@ -1,7 +1,7 @@
 package com.cloudinfra.system.controller;
 
 import com.cloudinfra.common.core.domain.Result;
-import com.cloudinfra.system.domain.SysPermission;
+import com.cloudinfra.system.domain.SysPermissionEntity;
 import com.cloudinfra.system.service.ISysPermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -16,12 +16,12 @@ public class SysPermissionController {
     private final ISysPermissionService sysPermissionService;
 
     @GetMapping("/list")
-    public Result<List<SysPermission>> list() {
+    public Result<List<SysPermissionEntity>> list() {
         return Result.success(sysPermissionService.list());
     }
 
     @PostMapping
-    public Result<?> add(@RequestBody SysPermission permission) {
+    public Result<?> add(@RequestBody SysPermissionEntity permission) {
         return Result.success(sysPermissionService.save(permission));
     }
 }

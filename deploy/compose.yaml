@@ -67,6 +67,8 @@ services:
       resources:
         limits:
           memory: 1G
+    labels:
+      - "monitoring=true"
     restart: always
 
   auth:
@@ -92,6 +94,8 @@ services:
       resources:
         limits:
           memory: 1G
+    labels:
+      - "monitoring=true"
     restart: always
 
   system:
@@ -121,6 +125,8 @@ services:
       resources:
         limits:
           memory: 1G
+    labels:
+      - "monitoring=true"
     restart: always
 
   prometheus:

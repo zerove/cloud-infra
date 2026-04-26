@@ -3,7 +3,7 @@ global:
 
 scrape_configs:
   - job_name: 'microservices'
-    metrics_path: '/management/prometheus'
+    metrics_path: '/actuator/prometheus'
     file_sd_configs:
       - files:
           - /etc/prometheus/services.json

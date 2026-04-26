@@ -25,4 +25,21 @@ public class JwtUtils {
                 .build()
                 .verify(token);
     }
+
+    public static String getUsernameFromToken(String token) {
+        return parseToken(token).getSubject();
+    }
+
+    public static Long getRoleIdFromToken(String token) {
+        return parseToken(token).getClaim("roleId").asLong();
+    }
+
+    public static boolean validateToken(String token) {
+        try {
+            parseToken(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
