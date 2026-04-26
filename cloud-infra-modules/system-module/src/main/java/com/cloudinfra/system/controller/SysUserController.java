@@ -48,8 +48,7 @@ public class SysUserController {
     public Result<UserDTO> getByUsername(@PathVariable String username) {
         com.cloudinfra.system.domain.SysUser user = sysUserService.getByUsername(username);
         if (user == null) {
-            return Result.error(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), 
-                               com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getMsg());
+            throw new com.cloudinfra.system.exception.SystemBusinessException(com.cloudinfra.system.exception.SystemExceptionCode.USER_NOT_FOUND);
         }
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());

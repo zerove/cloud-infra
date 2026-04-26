@@ -21,10 +21,15 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
     @Resource
     private UserService userService;
+@Override
+public Map<String, Object> createToken(LoginUser loginUser) {
+    if (loginUser == null || loginUser.getUserId() == null) {
+        throw new AuthBusinessException(AuthExceptionCode.LOGIN_FAILED);
+    }
 
-    @Override
-    public Map<String, Object> createToken(LoginUser loginUser) {
-        String accessTokenJti = UUID.randomUUID().toString();
+    String accessTokenJti = UUID.randomUUID().toString();
+    // ... (其余逻辑不变)
+
         String refreshTokenJti = UUID.randomUUID().toString();
 
         Map<String, Object> claims = new HashMap<>();
