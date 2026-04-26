@@ -45,13 +45,16 @@ public class SysUserController {
     }
 
     @GetMapping("/users/username/{username}")
-    public UserDTO getByUsername(@PathVariable String username) {
+    public Result<UserDTO> getByUsername(@PathVariable String username) {
         com.cloudinfra.system.domain.SysUser user = sysUserService.getByUsername(username);
-        if (user == null) return null;
+        if (user == null) {
+            return Result.error(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), 
+                               com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getMsg());
+        }
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setPassword(user.getPassword());
-        return dto;
+        return Result.success(dto);
     }
 }

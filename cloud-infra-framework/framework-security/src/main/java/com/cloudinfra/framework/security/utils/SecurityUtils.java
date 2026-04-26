@@ -1,9 +1,13 @@
 package com.cloudinfra.framework.security.utils;
 
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
 /**
  * 安全工具类
  */
 public class SecurityUtils {
+
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     /**
      * 获取当前用户ID (模拟)
@@ -20,9 +24,16 @@ public class SecurityUtils {
     }
 
     /**
-     * 密码加密 (模拟)
+     * 密码加密
      */
     public static String encryptPassword(String password) {
-        return password; // 待整合 BCrypt
+        return PASSWORD_ENCODER.encode(password);
+    }
+
+    /**
+     * 密码匹配
+     */
+    public static boolean matches(String rawPassword, String encodedPassword) {
+        return PASSWORD_ENCODER.matches(rawPassword, encodedPassword);
     }
 }

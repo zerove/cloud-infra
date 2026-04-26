@@ -11,43 +11,12 @@
 
     <artifactId>framework-web</artifactId>
     <name>framework-web</name>
-    <description>Web Framework - Includes Spring MVC, Virtual Thread Config, Global Exception Handler</description>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>1.20.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>cloud-infra-common</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-            <scope>test</scope>
-            <classifier>tests</classifier>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -58,17 +27,18 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-tracing</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-test-support</artifactId>
-            <version>${revision}</version>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 </project>

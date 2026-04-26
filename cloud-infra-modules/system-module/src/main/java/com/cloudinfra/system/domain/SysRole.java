@@ -15,4 +15,6 @@ public class SysRole {
     private String roleKey;
     private String status;
     private LocalDateTime createTime;
+    @com.baomidou.mybatisplus.annotation.TableLogic
+    private Integer deleted;
 }

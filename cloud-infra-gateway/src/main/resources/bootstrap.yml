@@ -11,5 +11,14 @@ spring:
         shared-configs:
           - data-id: actuator-config.yaml
             refresh: true
+    sentinel:
+      datasource:
+        gateway-flow-rules:
+          nacos:
+            server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+            data-id: gateway-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: gw-flow
 
 

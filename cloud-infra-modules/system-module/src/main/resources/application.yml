@@ -2,6 +2,8 @@ server:
   port: 9300
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     type: com.mysql.cj.jdbc.MysqlDataSource
     url: jdbc:mysql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8
@@ -11,6 +13,11 @@ spring:
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
 
 management:
   server:
@@ -19,22 +26,24 @@ management:
     web:
       base-path: /management
       exposure:
-        include: health,info,prometheus,beans,env,heapdump
+        include: "*"
   endpoint:
     health:
       show-details: always
-  info:
-    env:
-      enabled: true
   metrics:
     export:
       prometheus:
         enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   global-config:
-    banner: false
     db-config:
       id-type: auto
       logic-delete-field: deleted
@@ -43,11 +52,3 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-spring.main.allow-bean-definition-overriding: true
-
-spring:
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      database: 0

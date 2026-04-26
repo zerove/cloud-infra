@@ -38,6 +38,7 @@ public class AuthControllerTest {
         Result<Map<String, Object>> response = authController.login(loginUser);
 
         assertThat(response).isNotNull();
+        assertThat(response.getData().get("token")).isEqualTo("mock-token");
         assertThat(response.getCode()).isEqualTo(200);
     }
 }

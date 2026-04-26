@@ -31,7 +31,7 @@
         <mysql.version>8.4.0</mysql.version>
         <redisson.version>3.30.0</redisson.version>
         <hutool.version>5.8.27</hutool.version>
-        <lombok.version>1.18.44</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <jjwt.version>0.12.5</jjwt.version>
         <testcontainers.version>1.20.1</testcontainers.version>
@@ -53,20 +53,8 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>${testcontainers.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
                 <groupId>org.flywaydb</groupId>
                 <artifactId>flyway-core</artifactId>
-                <version>${flyway.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-mysql</artifactId>
                 <version>${flyway.version}</version>
             </dependency>
             <dependency>
@@ -93,23 +81,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-test</artifactId>
                 <version>${spring-boot.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.testcontainers</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>mysql</artifactId>
-                <version>${testcontainers.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>junit-jupiter</artifactId>
-                <version>${testcontainers.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers</artifactId>
-                <version>${testcontainers.version}</version>
-            </dependency>
-            
             <!-- Spring Cloud BOM -->
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
@@ -194,9 +172,19 @@
                 <version>${spring-boot.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-aop</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>io.micrometer</groupId>
-                <artifactId>micrometer-registry-prometheus</artifactId>
+                <artifactId>micrometer-core</artifactId>
                 <version>1.14.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-tracing</artifactId>
+                <version>1.4.0</version>
             </dependency>
             <dependency>
                 <groupId>com.cloudinfra</groupId>
@@ -225,6 +213,11 @@
             </dependency>
             <dependency>
                 <groupId>com.cloudinfra</groupId>
+                <artifactId>framework-tracing</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.cloudinfra</groupId>
                 <artifactId>cloud-infra-api</artifactId>
                 <version>${revision}</version>
             </dependency>
@@ -240,6 +233,12 @@
     </dependencies>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -250,27 +249,19 @@
                         <release>${java.version}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
                         <fork>true</fork>
-                        <!-- Enable preview features if needed for Java 25, though virtual threads are standard -->
                         <compilerArgs>
-                            <arg>-parameters</arg>
-                            <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
                             <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
                             <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
                             <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
-                            <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
-                            <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
-                            <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
-                            <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
                             <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
-                            <arg>-J--add-modules=jdk.compiler</arg>
                         </compilerArgs>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
                 <!-- Spring Boot Maven Plugin for packaging executable jars -->

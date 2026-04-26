@@ -72,12 +72,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>cloud-infra-test-support</artifactId>
-            <version>${revision}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <version>8.4.0</version>

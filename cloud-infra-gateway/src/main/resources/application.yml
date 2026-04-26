@@ -23,6 +23,16 @@ spring:
               - Path=/system/**
             filters:
               - StripPrefix=1
+    sentinel:
+      transport:
+        dashboard: localhost:8080
+      datasource:
+        ds1:
+          nacos:
+            server-addr: localhost:8848
+            dataId: sentinel-gateway-rules
+            groupId: DEFAULT_GROUP
+            rule-type: gw-flow
 
 knife4j:
   gateway:
@@ -31,3 +41,12 @@ knife4j:
     discover:
       enabled: true
       version: openapi3
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+
