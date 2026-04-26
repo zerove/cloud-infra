@@ -1,0 +1,52 @@
+[INFO] Scanning for projects...
+[INFO] Reactor Build Order:
+[INFO] cloud-infra                                                        [pom]
+[INFO] cloud-infra-common                                                 [jar]
+[INFO] cloud-infra-test-support                                           [jar]
+[INFO] cloud-infra-framework                                              [pom]
+[INFO] framework-tracing                                                  [jar]
+[INFO] framework-web                                                      [jar]
+[INFO] framework-mybatis                                                  [jar]
+[INFO] framework-redis                                                    [jar]
+[INFO] framework-security                                                 [jar]
+[INFO] cloud-infra-api                                                    [jar]
+[INFO] cloud-infra-gateway                                                [jar]
+[INFO] cloud-infra-auth                                                   [jar]
+[INFO] cloud-infra-modules                                                [pom]
+[INFO] system-module                                                      [jar]
+[INFO]   from pom.xml
+[INFO] Installing /home/zeron/dev/cloud-infra/pom.xml to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra/1.0.0-SNAPSHOT/cloud-infra-1.0.0-SNAPSHOT.pom
+[INFO]   from cloud-infra-common/pom.xml
+[INFO] Deleting /home/zeron/dev/cloud-infra/cloud-infra-common/target
+[INFO] skip non existing resourceDirectory /home/zeron/dev/cloud-infra/cloud-infra-common/src/main/resources
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 11 source files with javac [forked debug release 25] to target/classes
+[INFO] skip non existing resourceDirectory /home/zeron/dev/cloud-infra/cloud-infra-common/src/test/resources
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Tests are skipped.
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-common/pom.xml to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-common/1.0.0-SNAPSHOT/cloud-infra-common-1.0.0-SNAPSHOT.pom
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-common/target/cloud-infra-common-1.0.0-SNAPSHOT.jar to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-common/1.0.0-SNAPSHOT/cloud-infra-common-1.0.0-SNAPSHOT.jar
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-common/target/cloud-infra-common-1.0.0-SNAPSHOT-tests.jar to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-common/1.0.0-SNAPSHOT/cloud-infra-common-1.0.0-SNAPSHOT-tests.jar
+[INFO]   from cloud-infra-test-support/pom.xml
+[INFO] Deleting /home/zeron/dev/cloud-infra/cloud-infra-test-support/target
+[INFO] skip non existing resourceDirectory /home/zeron/dev/cloud-infra/cloud-infra-test-support/src/main/resources
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [forked debug release 25] to target/classes
+[INFO] skip non existing resourceDirectory /home/zeron/dev/cloud-infra/cloud-infra-test-support/src/test/resources
+[INFO] No sources to compile
+[INFO] Tests are skipped.
+[WARNING] JAR will be empty - no content was marked for inclusion!
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-test-support/pom.xml to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-test-support/1.0.0-SNAPSHOT/cloud-infra-test-support-1.0.0-SNAPSHOT.pom
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-test-support/target/cloud-infra-test-support-1.0.0-SNAPSHOT.jar to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-test-support/1.0.0-SNAPSHOT/cloud-infra-test-support-1.0.0-SNAPSHOT.jar
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-test-support/target/cloud-infra-test-support-1.0.0-SNAPSHOT-tests.jar to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-test-support/1.0.0-SNAPSHOT/cloud-infra-test-support-1.0.0-SNAPSHOT-tests.jar
+[INFO]   from cloud-infra-framework/pom.xml
+[INFO] Installing /home/zeron/dev/cloud-infra/cloud-infra-framework/pom.xml to /home/zeron/.m2/repository/com/cloudinfra/cloud-infra-framework/1.0.0-SNAPSHOT/cloud-infra-framework-1.0.0-SNAPSHOT.pom
+[INFO]   from cloud-infra-framework/framework-tracing/pom.xml
+[INFO] Deleting /home/zeron/dev/cloud-infra/cloud-infra-framework/framework-tracing/target
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 1 source file with javac [forked debug release 25] to target/classes
+[INFO] skip non existing resourceDirectory /home/zeron/dev/cloud-infra/cloud-infra-framework/framework-tracing/src/test/resources
+[INFO] Recompiling the module because of changed dependency.
+... (102 lines truncated)
+[full output: ~/.local/share/rtk/tee/1777179775_mvn_clean_install_-DskipTests.log]
