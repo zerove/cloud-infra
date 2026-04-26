@@ -32,27 +32,37 @@ public class Result<T> implements Serializable {
      */
     private T data;
 
+    /**
+     * 链路追踪ID
+     */
+    private String traceId;
+
+    public Result<T> setTraceId(String traceId) {
+        this.traceId = traceId;
+        return this;
+    }
+
     public static <T> Result<T> success() {
-        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), null);
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), null, null);
     }
 
     public static <T> Result<T> success(T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), data);
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), data, null);
     }
 
     public static <T> Result<T> success(String msg, T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), msg, data);
+        return new Result<>(ResultCode.SUCCESS.getCode(), msg, data, null);
     }
 
     public static <T> Result<T> error() {
-        return new Result<>(ResultCode.ERROR.getCode(), ResultCode.ERROR.getMsg(), null);
+        return new Result<>(ResultCode.ERROR.getCode(), ResultCode.ERROR.getMsg(), null, null);
     }
 
     public static <T> Result<T> error(String msg) {
-        return new Result<>(ResultCode.ERROR.getCode(), msg, null);
+        return new Result<>(ResultCode.ERROR.getCode(), msg, null, null);
     }
 
     public static <T> Result<T> error(Integer code, String msg) {
-        return new Result<>(code, msg, null);
+        return new Result<>(code, msg, null, null);
     }
 }
