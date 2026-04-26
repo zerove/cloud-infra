@@ -40,6 +40,7 @@ public class SysUserController {
     }
 
     @DeleteMapping("/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("@ss.hasPermission('system:user:remove')")
     public Result<?> remove(@PathVariable Long id) {
         return Result.success(sysUserService.removeById(id));
     }
