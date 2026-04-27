@@ -11,6 +11,10 @@ import java.util.List;
 
 @Service
 public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> implements ISysDeptService {
+    @Override
+    public boolean insertDept(SysDept dept) {
+        return this.save(dept);
+    }
 
     @Override
     @DataScope(deptAlias = "d")

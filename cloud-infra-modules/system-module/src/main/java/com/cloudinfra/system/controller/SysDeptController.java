@@ -13,6 +13,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/system/dept")
 public class SysDeptController {
+    @Autowired
+    private ISysDeptService deptService;
+
+    @PostMapping
+    public org.springframework.http.ResponseEntity<String> add(@org.springframework.web.bind.annotation.RequestBody SysDept dept) {
+        deptService.insertDept(dept);
+        return org.springframework.http.ResponseEntity.ok("Success");
+    }
 
     @Autowired
     private ISysDeptService deptService;
