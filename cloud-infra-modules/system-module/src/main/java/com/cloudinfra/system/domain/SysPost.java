@@ -1,13 +1,16 @@
 package com.cloudinfra.system.domain;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.io.Serializable;
 
 @Data
 @TableName("sys_post")
 public class SysPost implements Serializable {
-    @TableId(type = IdType.AUTO)
+    private static final long serialVersionUID = 1L;
+
+    @TableId
     private Long postId;
     private String postCode;
     private String postName;
