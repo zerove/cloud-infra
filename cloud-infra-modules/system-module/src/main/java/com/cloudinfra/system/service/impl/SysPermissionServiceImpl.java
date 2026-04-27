@@ -23,14 +23,15 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, SysPermissionEntity> implements ISysPermissionService {
 
-    private static final String PERMISSION_CACHE_KEY = "sys:permissions:user:";
+    private static final String USER_PERMISSION_CACHE_KEY = "sys:permissions:user:";
+    private static final String ROLE_PERMISSION_CACHE_KEY = "sys:permissions:role:";
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RedissonClient redissonClient;
 
     @Override
     public List<String> getPermissionsByUserId(Long userId) {
-        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
+        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(USER_PERMISSION_CACHE_KEY);
         List<String> cached = cache.get(userId);
         if (cached != null) return cached;
 
@@ -52,7 +53,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public void clearPermissionCache(Long userId) {
-        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
+        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(USER_PERMISSION_CACHE_KEY);
         cache.remove(userId);
     }
 
@@ -68,7 +69,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public List<SysPermission> getPermissionsByRoleId(Long roleId) {
-        RMapCache<Long, List<SysPermission>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
+        RMapCache<Long, List<SysPermission>> cache = redissonClient.getMapCache(ROLE_PERMISSION_CACHE_KEY);
         List<SysPermission> cached = cache.get(roleId);
         if (cached != null) {
             return cached;
