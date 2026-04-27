@@ -1,6 +1,7 @@
 package com.cloudinfra.common.core.domain;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.cloudinfra.common.core.enums.ResultCode;
@@ -11,6 +12,7 @@ import java.io.Serializable;
  * 统一响应结果体
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Result<T> implements Serializable {
@@ -37,32 +39,34 @@ public class Result<T> implements Serializable {
      */
     private String traceId;
 
-    public Result<T> setTraceId(String traceId) {
-        this.traceId = traceId;
-        return this;
-    }
-
     public static <T> Result<T> success() {
-        return new Result<>(ResultCode.SUCCESS.getCode(), "success", null, null);
+        return success(null);
     }
 
     public static <T> Result<T> success(T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), "success", data, null);
+        return success("success", data);
     }
 
     public static <T> Result<T> success(String message, T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), message, data, null);
+        return Result.<T>builder()
+                .code(ResultCode.SUCCESS.getCode())
+                .message(message)
+                .data(data)
+                .build();
     }
 
     public static <T> Result<T> error() {
-        return new Result<>(ResultCode.ERROR.getCode(), "error", null, null);
+        return error("error");
     }
 
     public static <T> Result<T> error(String message) {
-        return new Result<>(ResultCode.ERROR.getCode(), message, null, null);
+        return error(ResultCode.ERROR.getCode(), message);
     }
 
     public static <T> Result<T> error(Integer code, String message) {
-        return new Result<>(code, message, null, null);
+        return Result.<T>builder()
+                .code(code)
+                .message(message)
+                .build();
     }
 }

@@ -11,13 +11,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BaseException.class)
     public Result<?> handleBaseException(BaseException e) {
-        return Result.error(e.getCode(), e.getMessage())
-                .setTraceId(MDC.get("traceId"));
+        return Result.builder()
+                .code(e.getCode())
+                .message(e.getMessage())
+                .traceId(MDC.get("traceId"))
+                .build();
     }
 
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
-        return Result.error(500, "Internal Server Error")
-                .setTraceId(MDC.get("traceId"));
+        return Result.builder()
+                .code(500)
+                .message("Internal Server Error")
+                .traceId(MDC.get("traceId"))
+                .build();
     }
 }

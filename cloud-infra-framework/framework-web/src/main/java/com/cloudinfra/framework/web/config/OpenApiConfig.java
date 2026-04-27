@@ -7,13 +7,8 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class OpenApiConfig {
-
     @Bean
-    public OpenAPI customOpenAPI() {
-        return new OpenAPI()
-                .info(new Info()
-                        .title("Cloud Infrastructure API")
-                        .version("1.0.0")
-                        .description("API documentation for Cloud Infrastructure System"));
+    public OpenAPI openAPI() {
+        return new OpenAPI().info(new Info().title("Cloud Infra API").version("1.0.0"));
     }
 }
