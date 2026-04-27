@@ -16,6 +16,9 @@ public class TracingAutoConfiguration {
     @Bean
     public Executor taskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(25);
         executor.setTaskDecorator(new MDCContextTaskDecorator());
         executor.initialize();
         return executor;
