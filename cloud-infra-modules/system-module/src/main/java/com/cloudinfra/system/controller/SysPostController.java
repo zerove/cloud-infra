@@ -1,27 +1,27 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.system.domain.SysPost;
+import com.cloudinfra.system.service.ISysPostService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.access.prepost.PreAuthorize;
+import java.util.List;
 
 @RestController
 @RequestMapping("/system/post")
 public class SysPostController {
 
-    @PreAuthorize("@ss.hasPermi('system:post:list')")
+    @Autowired
+    private ISysPostService postService;
+
     @GetMapping("/list")
-    public String list() {
-        return "list";
+    public ResponseEntity<List<SysPost>> list() {
+        return ResponseEntity.ok(postService.list());
     }
 
-    @PreAuthorize("@ss.hasPermi('system:post:add')")
     @PostMapping
-    public String add(@RequestBody String post) {
-        return "add";
-    }
-
-    @PreAuthorize("@ss.hasPermi('system:post:edit')")
-    @PostMapping("/{postId}/permissions")
-    public String updatePermissions(@PathVariable Long postId, @RequestBody String permissionIds) {
-        return "updatePermissions";
+    public ResponseEntity<String> add(@RequestBody SysPost post) {
+        postService.save(post);
+        return ResponseEntity.ok("Success");
     }
 }
