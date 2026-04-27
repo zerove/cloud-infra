@@ -25,7 +25,7 @@ public class Result<T> implements Serializable {
     /**
      * 响应消息
      */
-    private String msg;
+    private String message;
 
     /**
      * 响应数据
@@ -43,26 +43,26 @@ public class Result<T> implements Serializable {
     }
 
     public static <T> Result<T> success() {
-        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), null, null);
+        return new Result<>(ResultCode.SUCCESS.getCode(), "success", null, null);
     }
 
     public static <T> Result<T> success(T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), data, null);
+        return new Result<>(ResultCode.SUCCESS.getCode(), "success", data, null);
     }
 
-    public static <T> Result<T> success(String msg, T data) {
-        return new Result<>(ResultCode.SUCCESS.getCode(), msg, data, null);
+    public static <T> Result<T> success(String message, T data) {
+        return new Result<>(ResultCode.SUCCESS.getCode(), message, data, null);
     }
 
     public static <T> Result<T> error() {
-        return new Result<>(ResultCode.ERROR.getCode(), ResultCode.ERROR.getMsg(), null, null);
+        return new Result<>(ResultCode.ERROR.getCode(), "error", null, null);
     }
 
-    public static <T> Result<T> error(String msg) {
-        return new Result<>(ResultCode.ERROR.getCode(), msg, null, null);
+    public static <T> Result<T> error(String message) {
+        return new Result<>(ResultCode.ERROR.getCode(), message, null, null);
     }
 
-    public static <T> Result<T> error(Integer code, String msg) {
-        return new Result<>(code, msg, null, null);
+    public static <T> Result<T> error(Integer code, String message) {
+        return new Result<>(code, message, null, null);
     }
 }
