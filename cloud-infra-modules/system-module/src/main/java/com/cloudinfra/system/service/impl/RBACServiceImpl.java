@@ -1,14 +1,18 @@
 package com.cloudinfra.system.service.impl;
 
-import com.cloudinfra.system.mapper.SysUserRoleMapper;
-import com.cloudinfra.system.mapper.SysRolePermissionMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.cloudinfra.system.domain.SysRolePermission;
+import com.cloudinfra.system.domain.SysUserRole;
 import com.cloudinfra.system.mapper.SysPermissionMapper;
+import com.cloudinfra.system.mapper.SysRolePermissionMapper;
+import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.service.RBACService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,29 +25,28 @@ public class RBACServiceImpl implements RBACService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignRolesToUser(Long userId, List<Long> roleIds) {
-        // 先删除旧关联
-        sysUserRoleMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.cloudinfra.system.domain.SysUserRole>()
-                .eq(com.cloudinfra.system.domain.SysUserRole::getUserId, userId));
-        // 插入新关联
-        roleIds.forEach(roleId -> {
-            com.cloudinfra.system.domain.SysUserRole userRole = new com.cloudinfra.system.domain.SysUserRole();
+        sysUserRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+        List<SysUserRole> list = roleIds.stream().map(roleId -> {
+            SysUserRole userRole = new SysUserRole();
             userRole.setUserId(userId);
             userRole.setRoleId(roleId);
-            sysUserRoleMapper.insert(userRole);
-        });
+            return userRole;
+        }).collect(Collectors.toList());
+        // 使用 MyBatis-Plus 的 saveBatch（假设 Service 层有实现，这里简化为循环插入或使用 Mapper 批量方法）
+        list.forEach(sysUserRoleMapper::insert);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignPermissionsToRole(Long roleId, List<Long> permissionIds) {
-        sysRolePermissionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.cloudinfra.system.domain.SysRolePermission>()
-                .eq(com.cloudinfra.system.domain.SysRolePermission::getRoleId, roleId));
-        permissionIds.forEach(permId -> {
-            com.cloudinfra.system.domain.SysRolePermission rolePerm = new com.cloudinfra.system.domain.SysRolePermission();
+        sysRolePermissionMapper.delete(new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
+        List<SysRolePermission> list = permissionIds.stream().map(permId -> {
+            SysRolePermission rolePerm = new SysRolePermission();
             rolePerm.setRoleId(roleId);
             rolePerm.setPermissionId(permId);
-            sysRolePermissionMapper.insert(rolePerm);
-        });
+            return rolePerm;
+        }).collect(Collectors.toList());
+        list.forEach(sysRolePermissionMapper::insert);
     }
 
     @Override
