@@ -30,19 +30,22 @@ public class SysUserController {
     }
 
     @PostMapping
-    public Result<?> add(@Validated @RequestBody SysUserDTO userDto) {
-        return Result.success(sysUserService.addUser(userDto));
+    public Result<Void> add(@Validated @RequestBody SysUserDTO userDto) {
+        sysUserService.addUser(userDto);
+        return Result.success();
     }
 
     @PutMapping
-    public Result<?> edit(@RequestBody SysUserDTO userDto) {
-        return Result.success(sysUserService.updateById(sysUserConverter.dtoToEntity(userDto)));
+    public Result<Void> edit(@RequestBody SysUserDTO userDto) {
+        sysUserService.updateById(sysUserConverter.dtoToEntity(userDto));
+        return Result.success();
     }
 
     @DeleteMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("@ss.hasPermission('system:user:remove')")
-    public Result<?> remove(@PathVariable Long id) {
-        return Result.success(sysUserService.removeById(id));
+    public Result<Void> remove(@PathVariable Long id) {
+        sysUserService.removeById(id);
+        return Result.success();
     }
 
     @GetMapping("/users/username/{username}")
