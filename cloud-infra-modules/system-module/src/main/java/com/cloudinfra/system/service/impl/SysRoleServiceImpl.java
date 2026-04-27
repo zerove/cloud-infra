@@ -18,8 +18,14 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     private final SysRolePermissionMapper sysRolePermissionMapper;
 
-    @Override
     @Transactional(rollbackFor = Exception.class)
+    @Override
+    public boolean updateRolePermissions(Long roleId, List<Long> permissionIds) {
+        assignPermissions(roleId, permissionIds);
+        return true;
+    }
+
+    @Override
     public void assignPermissions(Long roleId, List<Long> permissionIds) {
         sysRolePermissionMapper.delete(new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
         permissionIds.forEach(permId -> {
