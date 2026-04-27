@@ -1,69 +1,33 @@
-# RBAC Authorization Optimization Implementation Plan
+# RBAC Optimization Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement Redis-based caching for user permissions and introduce a Permission Checker interface to improve authorization performance and flexibility.
+**Goal:** Refine the RBAC (Role-Based Access Control) structure to ensure efficient permission checks and cleaner service separation.
 
-**Architecture:** Utilize `framework-redis` for permission caching, invalidating cache on permission updates. Introduce `PermissionChecker` for fine-grained authorization.
+**Architecture:** Optimize `RBACService` to consolidate permission loading logic, and ensure `SysUserService` and `SysRoleService` are decoupled properly.
 
-**Tech Stack:** Spring Boot, Redis (Redisson), MDC, Spring Security.
+**Tech Stack:** Java, Spring Boot, MyBatis-Plus.
 
 ---
 
-### Task 1: Integrate Redis Cache for SysPermissionService
+### Task 1: Refactor RBAC Service Logic
 
 **Files:**
-- Modify: `cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/impl/SysPermissionServiceImpl.java`
+- Modify: `cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/RBACService.java`
+- Modify: `cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/impl/RBACServiceImpl.java`
 
-- [ ] **Step 1: Add caching logic to getPermissionsByRoleId**
-
-```java
-@Service
-@RequiredArgsConstructor
-public class SysPermissionServiceImpl implements ISysPermissionService {
-    private final SysPermissionMapper permissionMapper;
-    private final RedissonClient redissonClient;
-    private static final String PERMISSION_CACHE_KEY = "sys:permissions:role:";
-
-    @Override
-    public List<SysPermission> getPermissionsByRoleId(Long roleId) {
-        RMapCache<Long, List<SysPermission>> cache = redissonClient.getMapCache("permissions");
-        return cache.get(roleId); // Simplified example
-    }
-}
-```
+- [ ] **Step 1: Simplify permission check logic**
 
 - [ ] **Step 2: Commit**
+`git add . && git commit -m "refactor: optimize RBAC service permission checks"`
 
-```bash
-git add cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/impl/SysPermissionServiceImpl.java
-git commit -m "feat: integrate redis cache for SysPermissionService"
-```
-
-### Task 2: Implement PermissionChecker Interface
+### Task 2: Decouple User and Role Services
 
 **Files:**
-- Create: `framework-security/src/main/java/com/cloudinfra/framework/security/service/PermissionChecker.java`
-- Modify: `framework-security/src/main/java/com/cloudinfra/framework/security/filter/JwtAuthenticationFilter.java`
+- Modify: `cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/impl/SysUserServiceImpl.java`
+- Modify: `cloud-infra-modules/system-module/src/main/java/com/cloudinfra/system/service/impl/SysRoleServiceImpl.java`
 
-- [ ] **Step 1: Create PermissionChecker interface**
+- [ ] **Step 1: Ensure services use RBACService for cross-module queries**
 
-```java
-package com.cloudinfra.framework.security.service;
-
-public interface PermissionChecker {
-    boolean hasPermission(String permission);
-}
-```
-
-- [ ] **Step 2: Refactor JwtAuthenticationFilter to use PermissionChecker**
-
-(Update `JwtAuthenticationFilter` to inject `PermissionChecker`)
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add framework-security/src/main/java/com/cloudinfra/framework/security/service/PermissionChecker.java
-git add framework-security/src/main/java/com/cloudinfra/framework/security/filter/JwtAuthenticationFilter.java
-git commit -m "refactor: introduce PermissionChecker for fine-grained authorization"
-```
+- [ ] **Step 2: Commit**
+`git commit -am "refactor: decouple user and role services using RBACService"`
