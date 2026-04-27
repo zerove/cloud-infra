@@ -20,4 +20,5 @@ public class SysDept implements Serializable {
     private String ancestors;
     private Integer orderNum;
     private String status;
+    private java.util.List<SysDept> children;
 }

@@ -1,33 +1,27 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysDept;
 import com.cloudinfra.system.service.ISysDeptService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
 @RequestMapping("/system/dept")
 public class SysDeptController {
+
     @Autowired
     private ISysDeptService deptService;
 
-    @PostMapping
-    public org.springframework.http.ResponseEntity<String> add(@org.springframework.web.bind.annotation.RequestBody SysDept dept) {
-        deptService.insertDept(dept);
-        return org.springframework.http.ResponseEntity.ok("Success");
+    @GetMapping("/list")
+    public ResponseEntity<List<SysDept>> list(@RequestParam(required = false) Long parentId) {
+        return ResponseEntity.ok(deptService.selectDeptList(parentId));
     }
 
-    @Autowired
-    private ISysDeptService deptService;
-
-    @PreAuthorize("@ss.hasPermission('system:dept:list')")
-    @GetMapping("/list")
-    public Result<List<SysDept>> list(Long parentId) {
-        return Result.success(deptService.selectDeptList(parentId));
+    @PostMapping
+    public ResponseEntity<String> add(@RequestBody SysDept dept) {
+        deptService.insertDept(dept);
+        return ResponseEntity.ok("Success");
     }
 }

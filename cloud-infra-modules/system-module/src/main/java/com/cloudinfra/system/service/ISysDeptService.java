@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface ISysDeptService extends IService<SysDept> {
     List<SysDept> selectDeptList(Long parentId);
+    boolean insertDept(SysDept dept);
 }
