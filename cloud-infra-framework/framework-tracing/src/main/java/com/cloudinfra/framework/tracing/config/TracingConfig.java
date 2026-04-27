@@ -1,7 +1,6 @@
 package com.cloudinfra.framework.tracing.config;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -9,7 +8,11 @@ import org.springframework.context.annotation.Configuration;
 public class TracingConfig {
 
     @Bean
-    public MeterRegistryCustomizer<MeterRegistry> configurer() {
-        return registry -> registry.config().commonTags("application", "cloud-infra-service");
+    public io.micrometer.core.instrument.config.MeterFilter commonTagsFilter() {
+        return io.micrometer.core.instrument.config.MeterFilter.commonTags(
+            java.util.Collections.singletonList(
+                io.micrometer.core.instrument.Tag.of("application", "cloud-infra-service")
+            )
+        );
     }
 }
