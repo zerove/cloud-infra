@@ -28,7 +28,7 @@ public class SysRoleController {
         return Result.success(sysRoleService.save(role));
     }
 
-    @PreAuthorize("@ss.hasPermission('system:role:edit')")
+    @PreAuthorize("@ss.hasPermission('system:role:permission')")
     @PostMapping("/{roleId}/permissions")
     public Result<Boolean> updatePermissions(@PathVariable Long roleId, @RequestBody List<Long> permissionIds) {
         return Result.success(sysRoleService.updateRolePermissions(roleId, permissionIds));

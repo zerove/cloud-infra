@@ -53,6 +53,7 @@ public class SysUserController {
         return Result.success();
     }
 
+    @PreAuthorize("@ss.hasPermission('system:user:view')")
     @GetMapping("/users/username/{username}")
     public Result<UserDTO> getByUsername(@PathVariable String username) {
         com.cloudinfra.system.domain.SysUser user = sysUserService.getByUsername(username);
