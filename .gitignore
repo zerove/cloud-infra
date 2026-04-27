@@ -15,3 +15,4 @@ deploy/data/
 .DS_Store
 Thumbs.db
 
+.worktrees/
