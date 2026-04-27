@@ -6,8 +6,12 @@ import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.domain.dto.SysUserDTO;
 import com.cloudinfra.system.domain.vo.SysUserVO;
 
+import java.util.List;
+
 public interface ISysUserService extends IService<SysUser> {
     
+    List<SysUserVO> listUsers();
+
     PageResult<SysUserVO> getPageList(SysUserDTO dto);
     
     boolean addUser(SysUserDTO dto);

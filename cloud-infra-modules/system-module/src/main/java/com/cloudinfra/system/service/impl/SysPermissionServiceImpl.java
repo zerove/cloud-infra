@@ -16,13 +16,46 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import com.cloudinfra.system.mapper.SysUserRoleMapper;
+import com.cloudinfra.system.domain.SysUserRole;
+import java.util.Collections;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, SysPermissionEntity> implements ISysPermissionService {
 
-    private static final String PERMISSION_CACHE_KEY = "sys:permissions:role:";
+    private static final String PERMISSION_CACHE_KEY = "sys:permissions:user:";
     private final SysRolePermissionMapper rolePermissionMapper;
+    private final SysUserRoleMapper userRoleMapper;
     private final RedissonClient redissonClient;
+    @Override
+    public List<String> getPermissionsByUserId(Long userId) {
+        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
+        List<String> cached = cache.get(userId);
+        if (cached != null) return cached;
+
+        List<SysUserRole> userRoles = userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+        List<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toList());
+
+        if (roleIds.isEmpty()) return Collections.emptyList();
+
+        List<SysRolePermission> rolePermissions = rolePermissionMapper.selectList(new LambdaQueryWrapper<SysRolePermission>().in(SysRolePermission::getRoleId, roleIds));
+        List<Long> permissionIds = rolePermissions.stream().map(SysRolePermission::getPermissionId).collect(Collectors.toList());
+
+        List<String> permissions = baseMapper.selectBatchIds(permissionIds).stream()
+                .map(SysPermissionEntity::getPerms)
+                .collect(Collectors.toList());
+
+        cache.put(userId, permissions, 1, TimeUnit.HOURS);
+        return permissions;
+    }
+
+    @Override
+    public void clearPermissionCache(Long userId) {
+        RMapCache<Long, List<String>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
+        cache.remove(userId);
+    }
 
     @Override
     public List<SysPermissionEntity> list() {

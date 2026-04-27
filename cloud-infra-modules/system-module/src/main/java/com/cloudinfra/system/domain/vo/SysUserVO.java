@@ -12,4 +12,5 @@ public class SysUserVO {
     private String phone;
     private Integer status;
     private LocalDateTime createTime;
+    private java.util.List<String> permissions;
 }

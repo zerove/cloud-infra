@@ -17,11 +17,25 @@ import org.springframework.stereotype.Service;
 
 import java.util.stream.Collectors;
 
+import com.cloudinfra.system.service.ISysPermissionService;
+import java.util.List;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements ISysUserService {
 
     private final SysUserConverter sysUserConverter;
+    private final ISysPermissionService sysPermissionService;
+
+    @Override
+    public List<SysUserVO> listUsers() {
+        return list().stream().map(user -> {
+            SysUserVO vo = sysUserConverter.entityToVo(user);
+            vo.setPermissions(sysPermissionService.getPermissionsByUserId(user.getId()));
+            return vo;
+        }).collect(Collectors.toList());
+    }
 
     @Override
     @NewSpan("getPageList")
@@ -32,7 +46,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                         .eq(dto.getStatus() != null, SysUser::getStatus, dto.getStatus()));
 
         return PageResult.of(
-                page.getRecords().stream().map(sysUserConverter::entityToVo).collect(Collectors.toList()),
+                page.getRecords().stream().map(user -> {
+                    SysUserVO vo = sysUserConverter.entityToVo(user);
+                    vo.setPermissions(sysPermissionService.getPermissionsByUserId(user.getId()));
+                    return vo;
+                }).collect(Collectors.toList()),
                 page.getTotal()
         );
     }
@@ -42,7 +60,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     public boolean addUser(SysUserDTO dto) {
         SysUser user = sysUserConverter.dtoToEntity(dto);
         user.setPassword(SecurityUtils.encryptPassword(dto.getPassword()));
-        return save(user);
+        boolean success = save(user);
+        if (success) {
+            sysPermissionService.clearPermissionCache(user.getId());
+        }
+        return success;
     }
 
     @Override

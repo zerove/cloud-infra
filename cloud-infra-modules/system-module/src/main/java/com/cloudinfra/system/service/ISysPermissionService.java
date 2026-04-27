@@ -8,4 +8,8 @@ public interface ISysPermissionService {
     List<SysPermissionEntity> list();
     boolean save(SysPermissionEntity entity);
     List<SysPermission> getPermissionsByRoleId(Long roleId);
+    
+    List<String> getPermissionsByUserId(Long userId);
+
+    void clearPermissionCache(Long userId);
 }
