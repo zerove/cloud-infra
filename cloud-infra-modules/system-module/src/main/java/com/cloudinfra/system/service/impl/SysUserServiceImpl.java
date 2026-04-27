@@ -19,8 +19,6 @@ import java.util.stream.Collectors;
 
 import com.cloudinfra.system.service.ISysPermissionService;
 import java.util.List;
-import java.util.Set;
-
 @Service
 @RequiredArgsConstructor
 public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements ISysUserService {

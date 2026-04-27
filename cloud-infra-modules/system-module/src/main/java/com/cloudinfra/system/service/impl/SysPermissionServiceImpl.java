@@ -19,8 +19,6 @@ import java.util.stream.Collectors;
 import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.domain.SysUserRole;
 import java.util.Collections;
-import java.util.Set;
-
 @Service
 @RequiredArgsConstructor
 public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, SysPermissionEntity> implements ISysPermissionService {
@@ -29,6 +27,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RedissonClient redissonClient;
+
     @Override
     public List<String> getPermissionsByUserId(Long userId) {
         RMapCache<Long, List<String>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
@@ -59,7 +58,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
 
     @Override
     public List<SysPermissionEntity> list() {
-        return this.list();
+        return super.list();
     }
 
     @Override
@@ -68,7 +67,6 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<SysPermission> getPermissionsByRoleId(Long roleId) {
         RMapCache<Long, List<SysPermission>> cache = redissonClient.getMapCache(PERMISSION_CACHE_KEY);
         List<SysPermission> cached = cache.get(roleId);
