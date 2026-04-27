@@ -8,12 +8,13 @@ import java.util.Map;
 
 @Component
 public class PermissionCache {
-    private List<Map> permissions;
+    private List<Map<String, Object>> permissions;
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     @NacosConfigListener(dataId = "gateway-permissions.json", groupId = "DEFAULT_GROUP")
     public void onChange(String newConfig) {
-        this.permissions = JSONUtil.toList(newConfig, Map.class);
+        this.permissions = (List<Map<String, Object>>) (List) JSONUtil.toList(newConfig, Map.class);
     }
     
-    public List<Map> getPermissions() { return permissions; }
+    public List<Map<String, Object>> getPermissions() { return permissions; }
 }

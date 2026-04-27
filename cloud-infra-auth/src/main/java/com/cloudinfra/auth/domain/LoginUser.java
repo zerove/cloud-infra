@@ -13,5 +13,7 @@ import java.util.Set;
 public class LoginUser {
     private Long userId;
     private String username;
+    private String password;
+    private Long roleId;
     private Set<String> permissions;
 }

@@ -10,6 +10,7 @@ import com.cloudinfra.system.domain.dto.SysUserDTO;
 import com.cloudinfra.system.domain.vo.SysUserVO;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import com.cloudinfra.system.service.ISysUserService;
+import com.cloudinfra.common.util.SecurityUtils;
 import io.micrometer.tracing.annotation.NewSpan;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,7 +41,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @NewSpan("addUser")
     public boolean addUser(SysUserDTO dto) {
         SysUser user = sysUserConverter.dtoToEntity(dto);
-        user.setPassword(com.cloudinfra.framework.security.utils.SecurityUtils.encryptPassword(dto.getPassword()));
+        user.setPassword(SecurityUtils.encryptPassword(dto.getPassword()));
         return save(user);
     }
 

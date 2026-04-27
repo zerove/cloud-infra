@@ -1,3 +1,5 @@
+package com.cloudinfra.gateway.filter;
+
 import com.cloudinfra.common.util.JwtUtils;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import jakarta.servlet.FilterChain;

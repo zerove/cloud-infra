@@ -30,8 +30,6 @@ public Map<String, Object> createToken(LoginUser loginUser) {
     String accessTokenJti = UUID.randomUUID().toString();
     // ... (其余逻辑不变)
 
-        String refreshTokenJti = UUID.randomUUID().toString();
-
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", loginUser.getUserId());
         claims.put("roleId", loginUser.getRoleId()); // 仅存入必要标识

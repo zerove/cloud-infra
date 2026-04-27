@@ -1,4 +1,4 @@
-package com.cloudinfra.framework.security.utils;
+package com.cloudinfra.common.util;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 

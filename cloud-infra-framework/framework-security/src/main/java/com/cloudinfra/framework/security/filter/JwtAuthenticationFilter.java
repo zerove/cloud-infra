@@ -6,10 +6,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import com.cloudinfra.system.domain.SysPermission;
 import com.cloudinfra.system.service.ISysPermissionService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -35,9 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = JwtUtils.getUsernameFromToken(jwt);
                 Long roleId = JwtUtils.getRoleIdFromToken(jwt);
                 
-                List<SysPermission> permissions = permissionService.getPermissionsByRoleId(roleId);
+                List<String> permissions = permissionService.getPermissionsByRoleId(roleId).stream()
+                        .map(com.cloudinfra.common.domain.SysPermission::getPerms)
+                        .collect(Collectors.toList());
                 List<SimpleGrantedAuthority> authorities = permissions.stream()
-                        .map(p -> new SimpleGrantedAuthority(p.getPerms()))
+                        .map(SimpleGrantedAuthority::new)
                         .collect(Collectors.toList());
                 
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(username, null, authorities);

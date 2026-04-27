@@ -6,7 +6,8 @@ import com.cloudinfra.system.domain.SysPermissionEntity;
 import com.cloudinfra.system.domain.SysRolePermission;
 import com.cloudinfra.system.mapper.SysPermissionMapper;
 import com.cloudinfra.system.mapper.SysRolePermissionMapper;
-import com.cloudinfra.common.service.ISysPermissionService;
+import com.cloudinfra.system.service.ISysPermissionService;
+import com.cloudinfra.common.domain.SysPermission;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -19,7 +20,17 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
     private final SysRolePermissionMapper rolePermissionMapper;
 
     @Override
-    public List<SysPermissionEntity> getPermissionsByRoleId(Long roleId) {
+    public List<SysPermissionEntity> list() {
+        return this.list();
+    }
+
+    @Override
+    public boolean save(SysPermissionEntity entity) {
+        return super.save(entity);
+    }
+
+    @Override
+    public List<SysPermission> getPermissionsByRoleId(Long roleId) {
         List<SysRolePermission> relations = rolePermissionMapper.selectList(
                 new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
         
@@ -29,6 +40,8 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
                 .map(SysRolePermission::getPermissionId)
                 .collect(Collectors.toList());
 
-        return baseMapper.selectBatchIds(permissionIds);
+        return baseMapper.selectBatchIds(permissionIds).stream()
+                .map(e -> (SysPermission) e)
+                .collect(Collectors.toList());
     }
 }
