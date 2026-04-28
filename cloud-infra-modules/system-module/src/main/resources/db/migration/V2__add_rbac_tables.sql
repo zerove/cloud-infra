@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS sys_permission (
   name varchar(50) NOT NULL COMMENT '权限名称',
   perms varchar(100) DEFAULT NULL COMMENT '权限标识（如：user:add）',
   path varchar(200) DEFAULT NULL COMMENT '路由地址',
+  method varchar(10) DEFAULT 'ALL' COMMENT 'HTTP方法',
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='权限信息表';
 

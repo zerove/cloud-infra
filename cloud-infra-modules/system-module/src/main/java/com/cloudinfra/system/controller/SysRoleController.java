@@ -13,15 +13,6 @@ import java.util.List;
 @RequestMapping("/system/role")
 @RequiredArgsConstructor
 public class SysRoleController {
-    @org.springframework.beans.factory.annotation.Autowired
-    private com.cloudinfra.system.service.ISysRoleService roleService;
-
-    @org.springframework.web.bind.annotation.PostMapping("/{roleId}/permissions")
-    public org.springframework.http.ResponseEntity<String> assignPermissions(@org.springframework.web.bind.annotation.PathVariable Long roleId, @org.springframework.web.bind.annotation.RequestBody java.util.List<Long> permissionIds) {
-        roleService.assignPermissions(roleId, permissionIds);
-        return org.springframework.http.ResponseEntity.ok("Success");
-    }
-
     private final ISysRoleService sysRoleService;
 
     @PreAuthorize("@ss.hasPermission('system:role:list')")

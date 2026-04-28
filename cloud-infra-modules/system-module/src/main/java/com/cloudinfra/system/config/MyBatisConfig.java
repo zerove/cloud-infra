@@ -18,4 +18,11 @@ public class MyBatisConfig {
         interceptor.addInnerInterceptor(new DataScopeInterceptor());
         return interceptor;
     }
+
+    @Bean
+    public SqlSessionFactory sqlSessionFactory(javax.sql.DataSource dataSource) throws Exception {
+        MybatisSqlSessionFactoryBean factoryBean = new MybatisSqlSessionFactoryBean();
+        factoryBean.setDataSource(dataSource);
+        return factoryBean.getObject();
+    }
 }

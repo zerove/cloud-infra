@@ -8,6 +8,14 @@ spring:
   config:
     import: "optional:nacos:"
   datasource:
-    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8
+    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      enabled: false

@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
   id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   username varchar(50) NOT NULL COMMENT '用户名',
   password varchar(100) NOT NULL COMMENT '密码',
+  email varchar(100) DEFAULT NULL COMMENT '邮箱',
+  phone varchar(20) DEFAULT NULL COMMENT '手机号',
   status char(1) DEFAULT '0' COMMENT '状态（0正常 1停用）',
   create_time datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (id)
