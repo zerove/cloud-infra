@@ -1,5 +1,6 @@
 package com.cloudinfra.system.service.impl;
 
+import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudinfra.system.domain.SysPermissionEntity;
@@ -19,15 +20,17 @@ import java.util.stream.Collectors;
 import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.domain.SysUserRole;
 import java.util.Collections;
+
 @Service
 @RequiredArgsConstructor
-public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, SysPermissionEntity> implements ISysPermissionService {
+public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, SysPermissionEntity> implements ISysPermissionService, IPermissionProvider {
 
     private static final String USER_PERMISSION_CACHE_KEY = "sys:permissions:user:";
     private static final String ROLE_PERMISSION_CACHE_KEY = "sys:permissions:role:";
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RedissonClient redissonClient;
+
 
     @Override
     public List<String> getPermissionsByUserId(Long userId) {

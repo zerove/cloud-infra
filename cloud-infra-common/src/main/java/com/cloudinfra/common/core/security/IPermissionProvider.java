@@ -1,4 +1,4 @@
-package com.cloudinfra.framework.security.service;
+package com.cloudinfra.common.core.security;
 
 import java.util.List;
 
