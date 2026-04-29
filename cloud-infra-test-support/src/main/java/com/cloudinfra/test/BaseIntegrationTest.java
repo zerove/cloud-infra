@@ -20,6 +20,10 @@ public abstract class BaseIntegrationTest {
     protected static final GenericContainer<?> redis;
 
     static {
+        System.setProperty("testcontainers.ryuk.disabled", "true");
+    }
+
+    static {
         // Podman 稳定性优化
         System.setProperty("testcontainers.ryuk.disabled", "true");
 
