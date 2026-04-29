@@ -58,6 +58,13 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
@@ -85,6 +92,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
@@ -112,6 +124,11 @@ services:
         condition: service_healthy
       mysql:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9300/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_DATASOURCE_HOST=mysql-server
