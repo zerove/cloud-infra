@@ -3,12 +3,13 @@
 ## 当前状态
 - 数据范围 (Data Scope) 逻辑实现：已完成。
 - 循环依赖修复：已完成。
-- 系统监控与链路追踪增强：已完成。
-- API 文档标准化：已完成。
-- 用户上下文安全注入：已完成。
+- 系统监控与链路追踪增强：已完成 (Async MDC propagation, Gateway Header propagation)。
+- API 文档标准化：已完成 (Knife4j Gateway Aggregation)。
+- 用户上下文安全注入：已完成 (ThreadLocal UserContext + MVC Interceptor)。
 - 权限组件解耦优化：已完成。
-- 单元测试基础设施：已完成。
-- 生产环境配置与容器化部署：已完成 (Healthcheck, Startup Dependency)。
+- 业务审计日志 (Audit Log)：已完成 (AOP Aspect + Common IAuditLogService)。
+- 单元测试基础设施：已完成 (JUnit5 + Mockito + Testcontainers规避)。
+- 部门/岗位服务测试：已补齐。
 - 项目编译：通过。
 
 ## 后续任务规划

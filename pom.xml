@@ -40,6 +40,7 @@
     </properties>
 
     <modules>
+        <module>cloud-infra-starter</module>
         <module>cloud-infra-common</module>
         <module>cloud-infra-framework</module>
         <module>cloud-infra-api</module>
