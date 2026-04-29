@@ -1,11 +1,20 @@
 package com.cloudinfra.system.controller;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysPost;
 import com.cloudinfra.system.service.ISysPostService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
 
 @RestController
 @RequestMapping("/system/post")
@@ -15,13 +24,21 @@ public class SysPostController {
     private ISysPostService postService;
 
     @GetMapping("/list")
-    public ResponseEntity<List<SysPost>> list() {
-        return ResponseEntity.ok(postService.list());
+    public Result<List<SysPost>> list() {
+        return Result.success(postService.list());
     }
 
+    @PreAuthorize("@ss.hasPermission('system:post:add')")
     @PostMapping
-    public ResponseEntity<String> add(@RequestBody SysPost post) {
+    public Result<Void> add(@RequestBody SysPost post) {
         postService.save(post);
-        return ResponseEntity.ok("Success");
+        return Result.success();
+    }
+
+    @PreAuthorize("@ss.hasPermission('system:post:remove')")
+    @DeleteMapping("/{postIds}")
+    public Result<Void> remove(@PathVariable List<Long> postIds) {
+        postService.deletePostByIds(postIds);
+        return Result.success();
     }
 }

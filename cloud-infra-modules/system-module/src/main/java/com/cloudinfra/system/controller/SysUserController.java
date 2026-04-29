@@ -5,6 +5,7 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.converter.SysUserConverter;
 import com.cloudinfra.system.domain.dto.SysUserDTO;
 import com.cloudinfra.system.domain.vo.SysUserVO;
+import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import com.cloudinfra.system.service.ISysUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,7 +59,7 @@ public class SysUserController {
     public Result<UserDTO> getByUsername(@PathVariable String username) {
         com.cloudinfra.system.domain.SysUser user = sysUserService.getByUsername(username);
         if (user == null) {
-            throw new com.cloudinfra.system.exception.SystemBusinessException(com.cloudinfra.system.exception.SystemExceptionCode.USER_NOT_FOUND);
+            throw new com.cloudinfra.system.exception.SystemBusinessException(SystemExceptionCode.USER_NOT_FOUND);
         }
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());

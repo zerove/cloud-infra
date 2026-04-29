@@ -9,4 +9,9 @@ import org.apache.ibatis.annotations.Select;
 public interface SysUserMapper extends BaseMapper<SysUser> {
     @Select("SELECT count(*) FROM sys_user")
     Long countUsers();
+
+    Long countByDeptId(Long deptId);
+
+    @Select("SELECT count(*) FROM sys_user WHERE post_id = #{postId}")
+    Long countByPostId(Long postId);
 }

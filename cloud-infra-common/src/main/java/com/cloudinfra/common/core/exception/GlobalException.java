@@ -29,4 +29,10 @@ public class GlobalException extends RuntimeException {
         this.code = resultCode.getCode();
         this.msg = resultCode.getMsg();
     }
+
+    public GlobalException(SystemExceptionCode systemExceptionCode) {
+        super(systemExceptionCode.getMsg());
+        this.code = systemExceptionCode.getCode();
+        this.msg = systemExceptionCode.getMsg();
+    }
 }
