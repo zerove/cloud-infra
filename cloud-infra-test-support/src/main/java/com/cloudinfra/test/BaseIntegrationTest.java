@@ -1,5 +1,8 @@
 package com.cloudinfra.test;
 
+import java.time.Duration;
+import java.util.Map;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -8,9 +11,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
-import java.time.Duration;
-import java.util.Map;
-
+@SuppressWarnings("resource")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
@@ -29,7 +30,7 @@ public abstract class BaseIntegrationTest {
                 .withEnv("MYSQL_DATABASE", "cloud_infra")
                 .withTmpFs(Map.of("/var/lib/mysql", "rw"))
                 .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(120)));
-        
+
         redis = new GenericContainer<>(DockerImageName.parse("redis:7.2"))
                 .withExposedPorts(6379)
                 .waitingFor(Wait.forListeningPort());
@@ -42,13 +43,15 @@ public abstract class BaseIntegrationTest {
     static void configureProperties(DynamicPropertyRegistry registry) {
         String host = mysql.getHost();
         Integer port = mysql.getMappedPort(3306);
-        String jdbcUrl = String.format("jdbc:mysql://%s:%d/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%%2B8", host, port);
-        
+        String jdbcUrl = String.format(
+                "jdbc:mysql://%s:%d/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%%2B8",
+                host, port);
+
         registry.add("spring.datasource.url", () -> jdbcUrl);
         registry.add("spring.datasource.username", () -> "root");
         registry.add("spring.datasource.password", () -> "root");
         registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
-        
+
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
