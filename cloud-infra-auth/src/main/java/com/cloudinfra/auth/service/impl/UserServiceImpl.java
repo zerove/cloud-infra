@@ -1,6 +1,6 @@
 package com.cloudinfra.auth.service.impl;
 
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.feign.UserFeignClient;
 import com.cloudinfra.auth.service.UserService;
 import org.springframework.stereotype.Service;

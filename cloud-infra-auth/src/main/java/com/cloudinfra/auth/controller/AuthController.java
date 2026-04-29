@@ -1,7 +1,7 @@
 package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.auth.service.AuthTokenService;
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import jakarta.annotation.Resource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;

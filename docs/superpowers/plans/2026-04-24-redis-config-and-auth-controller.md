@@ -69,7 +69,7 @@ git commit -m "chore: add redis configuration to modules"
 package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.auth.service.AuthTokenService;
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;

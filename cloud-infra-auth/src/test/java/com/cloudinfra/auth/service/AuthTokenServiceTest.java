@@ -1,6 +1,6 @@
 package com.cloudinfra.auth.service;
 
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.impl.AuthTokenServiceImpl;
 import com.cloudinfra.framework.redis.service.RedisService;
 import org.junit.jupiter.api.Test;

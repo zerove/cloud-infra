@@ -1,6 +1,6 @@
 package com.cloudinfra.auth.service.impl;
 
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.exception.AuthBusinessException;
 import com.cloudinfra.auth.exception.AuthExceptionCode;
 import com.cloudinfra.auth.service.AuthTokenService;

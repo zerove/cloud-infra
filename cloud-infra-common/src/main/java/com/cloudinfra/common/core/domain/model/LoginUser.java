@@ -1,4 +1,4 @@
-package com.cloudinfra.auth.domain;
+package com.cloudinfra.common.core.domain.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

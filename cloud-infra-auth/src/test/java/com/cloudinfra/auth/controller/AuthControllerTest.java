@@ -1,6 +1,6 @@
 package com.cloudinfra.auth.controller;
 
-import com.cloudinfra.auth.domain.LoginUser;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.common.core.domain.Result;
 import org.junit.jupiter.api.BeforeEach;
