@@ -18,45 +18,52 @@ public abstract class BaseIntegrationTest {
 
     protected static final GenericContainer<?> mysql;
     protected static final GenericContainer<?> redis;
+    protected static final boolean DOCKER_ENABLED;
 
     static {
-        System.setProperty("testcontainers.ryuk.disabled", "true");
-    }
+        DOCKER_ENABLED = org.testcontainers.DockerClientFactory.instance().isDockerAvailable();
+        if (DOCKER_ENABLED) {
+            System.setProperty("testcontainers.ryuk.disabled", "true");
+            mysql = new GenericContainer<>(DockerImageName.parse("mysql:8.0"))
+                    .withExposedPorts(3306)
+                    .withEnv("MYSQL_ROOT_PASSWORD", "root")
+                    .withEnv("MYSQL_DATABASE", "cloud_infra")
+                    .withTmpFs(Map.of("/var/lib/mysql", "rw"))
+                    .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(120)));
 
-    static {
-        // Podman 稳定性优化
-        System.setProperty("testcontainers.ryuk.disabled", "true");
+            redis = new GenericContainer<>(DockerImageName.parse("redis:7.2"))
+                    .withExposedPorts(6379)
+                    .waitingFor(Wait.forListeningPort());
 
-        // 使用 GenericContainer 替代 MySQLContainer 以避免 Testcontainers 自动替换为 MariaDB
-        mysql = new GenericContainer<>(DockerImageName.parse("mysql:8.0"))
-                .withExposedPorts(3306)
-                .withEnv("MYSQL_ROOT_PASSWORD", "root")
-                .withEnv("MYSQL_DATABASE", "cloud_infra")
-                .withTmpFs(Map.of("/var/lib/mysql", "rw"))
-                .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(120)));
-
-        redis = new GenericContainer<>(DockerImageName.parse("redis:7.2"))
-                .withExposedPorts(6379)
-                .waitingFor(Wait.forListeningPort());
-
-        mysql.start();
-        redis.start();
+            mysql.start();
+            redis.start();
+        } else {
+            mysql = null;
+            redis = null;
+        }
     }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        String host = mysql.getHost();
-        Integer port = mysql.getMappedPort(3306);
-        String jdbcUrl = String.format(
-                "jdbc:mysql://%s:%d/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%%2B8",
-                host, port);
+        if (DOCKER_ENABLED) {
+            String host = mysql.getHost();
+            Integer port = mysql.getMappedPort(3306);
+            String jdbcUrl = String.format(
+                    "jdbc:mysql://%s:%d/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%%2B8",
+                    host, port);
 
-        registry.add("spring.datasource.url", () -> jdbcUrl);
-        registry.add("spring.datasource.username", () -> "root");
-        registry.add("spring.datasource.password", () -> "root");
-        registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
+            registry.add("spring.datasource.url", () -> jdbcUrl);
+            registry.add("spring.datasource.username", () -> "root");
+            registry.add("spring.datasource.password", () -> "root");
+            registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
 
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+            registry.add("spring.data.redis.host", redis::getHost);
+            registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        } else {
+            registry.add("spring.datasource.url", () -> "jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1");
+            registry.add("spring.datasource.username", () -> "sa");
+            registry.add("spring.datasource.password", () -> "");
+            registry.add("spring.datasource.driver-class-name", () -> "org.h2.Driver");
+        }
     }
 }
