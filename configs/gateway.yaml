@@ -1,0 +1,60 @@
+server:
+  port: 9000
+
+auth:
+  white-list:
+    - /auth/
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      mvc:
+        routes:
+          - id: system-module
+            uri: lb://system-module
+            predicates:
+              - Path=/system/**
+            filters:
+              - StripPrefix=1
+    sentinel:
+      transport:
+        dashboard: localhost:8080
+      datasource:
+        ds1:
+          nacos:
+            server-addr: localhost:8848
+            dataId: sentinel-gateway-rules
+            groupId: DEFAULT_GROUP
+            rule-type: gw-flow
+
+knife4j:
+  gateway:
+    enabled: true
+    strategy: discover
+    discover:
+      enabled: true
+      version: openapi3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
