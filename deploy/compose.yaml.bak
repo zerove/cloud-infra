@@ -1,0 +1,172 @@
+services:
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: nacos-server
+    environment:
+      - PREFER_HOST_MODE=hostname
+      - MODE=standalone
+      - JVM_XMS=256m
+      - JVM_XMX=256m
+      - JVM_XMN=128m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    expose:
+      - "9848"
+    volumes:
+      - nacos_logs:/home/nacos/logs
+      - nacos_data:/home/nacos/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis-server
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  mysql:
+    image: mysql:8.4
+    container_name: mysql-server
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=cloud_infra
+      - TZ=Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: always
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        JAR_FILE: cloud-infra-gateway/target/cloud-infra-gateway-1.0.0-SNAPSHOT.jar
+    container_name: cloud-gateway
+    ports:
+      - "9000:9000"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
+      - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC -Dspring.cloud.nacos.config.import-check.enabled=false -Dspring.cloud.nacos.config.import-check.enabled=false
+      - SPRING_DATA_REDIS_HOST=redis-server
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    labels:
+      - "monitoring=true"
+    restart: always
+
+  auth:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        JAR_FILE: cloud-infra-auth/target/cloud-infra-auth-1.0.0-SNAPSHOT.jar
+    container_name: cloud-auth
+    ports:
+      - "9200:9200"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
+      - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC -Dspring.cloud.nacos.config.import-check.enabled=false -Dspring.cloud.nacos.config.import-check.enabled=false
+      - SPRING_DATA_REDIS_HOST=redis-server
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    labels:
+      - "monitoring=true"
+    restart: always
+
+  system:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        JAR_FILE: cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT.jar
+    container_name: cloud-system
+    ports:
+      - "9300:9300"
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9300/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./config/system-application.yml:/app/config/application.yml:ro
+      - ./logs/system:/var/log/system
+    environment:
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
+      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
+      - SPRING_DATASOURCE_HOST=mysql-server
+      - SPRING_DATASOURCE_PORT=3306
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_THREADS_VIRTUAL_ENABLED=false
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC -Dspring.cloud.nacos.config.import-check.enabled=false -Dlogging.file.path=/var/log/system
+      - SPRING_DATA_REDIS_HOST=redis-server
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    labels:
+      - "monitoring=true"
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./services.json:/etc/prometheus/services.json
+    networks:
+      - deploy_default
+    restart: always
+
+networks:
+  deploy_default:
+
+volumes:
+  nacos_logs:
+  nacos_data:
+  redis_data:
+  mysql_data:

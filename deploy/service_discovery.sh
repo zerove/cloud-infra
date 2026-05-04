@@ -1,7 +1,7 @@
 #!/bin/bash
-# 自动生成 Prometheus 服务发现配置文件
-
-OUTPUT="/home/zeron/dev/cloud-infra/deploy/data/prometheus/services.json"
+# 获取脚本所在目录
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+OUTPUT="$DIR/services.json"
 
 # 获取带有 monitoring 标签的容器
 containers=$(podman ps --filter "label=monitoring=true" --format "{{.Names}}:{{.Ports}}")

@@ -1,4 +1,4 @@
-package com.cloudinfra.cloudinfra.gateway.filter;
+package com.cloudinfra.gateway.filter;
 
 import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.framework.security.utils.JwtUtils;

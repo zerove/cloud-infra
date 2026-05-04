@@ -1,10 +1,6 @@
 package com.cloudinfra.gateway.config;
 
-import com.alibaba.csp.sentinel.adapter.gateway.sc.callback.GatewayCallbackManager;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.web.reactive.function.server.ServerResponse;
 
 import jakarta.annotation.PostConstruct;
 
@@ -13,16 +9,7 @@ public class SentinelConfig {
 
     @PostConstruct
     public void init() {
-        initBlockHandler();
         initGatewayRules();
-    }
-
-    private void initBlockHandler() {
-        GatewayCallbackManager.setBlockHandler((exchange, throwable) -> {
-            return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue("{\"code\": 429, \"message\": \"Too Many Requests\"}");
-        });
     }
 
     private void initGatewayRules() {

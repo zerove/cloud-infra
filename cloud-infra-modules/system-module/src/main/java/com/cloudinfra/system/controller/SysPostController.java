@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,15 +24,29 @@ public class SysPostController {
     @Autowired
     private ISysPostService postService;
 
+    @PreAuthorize("@ss.hasPermission('system:post:query')")
     @GetMapping("/list")
     public Result<List<SysPost>> list() {
         return Result.success(postService.list());
+    }
+
+    @PreAuthorize("@ss.hasPermission('system:post:query')")
+    @GetMapping("/{postId}")
+    public Result<SysPost> getInfo(@PathVariable Long postId) {
+        return Result.success(postService.getById(postId));
     }
 
     @PreAuthorize("@ss.hasPermission('system:post:add')")
     @PostMapping
     public Result<Void> add(@RequestBody SysPost post) {
         postService.save(post);
+        return Result.success();
+    }
+
+    @PreAuthorize("@ss.hasPermission('system:post:edit')")
+    @PutMapping
+    public Result<Void> edit(@RequestBody SysPost post) {
+        postService.updateById(post);
         return Result.success();
     }
 

@@ -6,6 +6,8 @@ auth:
     - /auth/
 
 spring:
+  config:
+    import: "optional:nacos:gateway-module.yaml"
   threads:
     virtual:
       enabled: true
@@ -17,6 +19,12 @@ spring:
           lower-case-service-id: true
       mvc:
         routes:
+          - id: auth-module
+            uri: http://cloud-auth:9200
+            predicates:
+              - Path=/auth/**
+            filters:
+              - StripPrefix=1
           - id: system-module
             uri: lb://system-module
             predicates:
@@ -57,4 +65,3 @@ management:
     export:
       prometheus:
         enabled: true
-

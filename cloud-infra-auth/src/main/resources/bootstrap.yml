@@ -1,14 +1,13 @@
 spring:
   application:
-    name: auth-module
+    name: cloud-auth
   cloud:
     nacos:
       discovery:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: nacos:8848
+        enabled: true
       config:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: nacos:8848
         file-extension: yaml
-        shared-configs:
-          - data-id: actuator-config.yaml
-            refresh: true
-
+        group: DEFAULT_GROUP
+        namespace: public

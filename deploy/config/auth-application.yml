@@ -1,0 +1,33 @@
+server:
+  port: 9200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+spring:
+  application:
+    name: cloud-auth
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+      config:
+        server-addr: nacos:8848
+        file-extension: yaml
+  config:
+    import: "optional:nacos:auth.yaml"
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0

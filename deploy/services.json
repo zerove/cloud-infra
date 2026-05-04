@@ -1,8 +1,25 @@
 [
-  {
-    "targets": ["cloud-system:9301", "cloud-auth:9301", "cloud-gateway:9301"],
+{
+    "targets": ["cloud-gateway:0.0.0.0:9000->9000"],
     "labels": {
-      "job": "microservices"
+        "job": "microservices",
+        "instance": "cloud-gateway"
     }
-  }
+}
+,
+{
+    "targets": ["cloud-auth:0.0.0.0:9200->9200"],
+    "labels": {
+        "job": "microservices",
+        "instance": "cloud-auth"
+    }
+}
+,
+{
+    "targets": ["cloud-system:0.0.0.0:9300->9300"],
+    "labels": {
+        "job": "microservices",
+        "instance": "cloud-system"
+    }
+}
 ]

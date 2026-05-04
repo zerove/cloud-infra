@@ -16,15 +16,29 @@ public class SysDeptController {
     @Autowired
     private ISysDeptService deptService;
 
+    @PreAuthorize("@ss.hasPermission('system:dept:query')")
     @GetMapping("/list")
     public Result<List<SysDept>> list(@RequestParam(required = false) Long parentId) {
         return Result.success(deptService.selectDeptList(parentId));
+    }
+
+    @PreAuthorize("@ss.hasPermission('system:dept:query')")
+    @GetMapping("/{deptId}")
+    public Result<SysDept> getInfo(@PathVariable Long deptId) {
+        return Result.success(deptService.getById(deptId));
     }
 
     @PreAuthorize("@ss.hasPermission('system:dept:add')")
     @PostMapping
     public Result<Void> add(@RequestBody SysDept dept) {
         deptService.insertDept(dept);
+        return Result.success();
+    }
+
+    @PreAuthorize("@ss.hasPermission('system:dept:edit')")
+    @PutMapping
+    public Result<Void> edit(@RequestBody SysDept dept) {
+        deptService.updateById(dept);
         return Result.success();
     }
 

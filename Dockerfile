@@ -17,7 +17,7 @@ COPY --from=builder /app/extracted/application/ ./
 # 暴露端口，使用环境变量配置
 EXPOSE 8080
 
-# 优化 JVM 参数，开启虚拟线程特性的底层支持（JDK 21+ 已默认开启，这里优化 GC）
-ENV JAVA_OPTS="-XX:+UseZGC -XX:+ZGenerational -Xms512m -Xmx512m -XX:+HeapDumpOnOutOfMemoryError"
+# 优化 JVM 参数，启用 ZGC 和虚拟线程钉住监控
+ENV JAVA_OPTS="-XX:+UseZGC -Djdk.tracePinnedThreads=short -Xms512m -Xmx512m -XX:+HeapDumpOnOutOfMemoryError"
 
 ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} org.springframework.boot.loader.launch.JarLauncher"]

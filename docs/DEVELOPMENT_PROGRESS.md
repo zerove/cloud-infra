@@ -3,17 +3,18 @@
 ## 当前状态
 - 数据范围 (Data Scope) 逻辑实现：已完成。
 - 循环依赖修复：已完成。
-- 系统监控与链路追踪增强：已完成 (Async MDC propagation, Gateway Header propagation)。
-- API 文档标准化：已完成 (Knife4j Gateway Aggregation)。
-- 用户上下文安全注入：已完成 (ThreadLocal UserContext + MVC Interceptor)。
+- 系统监控与链路追踪增强：已完成。
+- API 文档标准化：已完成。
+- 用户上下文安全注入：已完成。
 - 权限组件解耦优化：已完成。
-- 业务审计日志 (Audit Log)：已完成 (AOP Aspect + Common IAuditLogService)。
-- 单元测试基础设施：已完成 (JUnit5 + Mockito + Testcontainers规避)。
+- 业务审计日志 (Audit Log)：已完成。
+- 单元测试基础设施：已完成。
 - 部门/岗位服务测试：已补齐。
+- 生产级测试基础设施：已完成 (Testcontainers 可选执行策略)。
 - 项目编译：通过。
 
 ## 后续任务规划
-1. **[规划] 生产级测试基础设施完善**
-   - 目标：补齐关键业务路径的单元测试覆盖，针对 WSL2 环境优化 Testcontainers 配置（使其可选）。
-2. **[规划] 业务功能扩展（可选）**
-   - 目标：根据项目需求引入多租户扩展插件。
+1. **[规划] 业务功能扩展：多租户支持**
+   - 目标：根据业务发展需要，引入 Multi-Tenancy 插件，确保租户间逻辑隔离。
+2. **[规划] 生产环境配置与容器化部署验证**
+   - 目标：完善各模块 `Dockerfile` 及 `compose.yaml` 配置，适配 Fedora/WSL2 环境下的容器编排。

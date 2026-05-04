@@ -23,11 +23,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AuditLogAspect {
 
-    @Autowired
+    @Autowired(required = false)
     private IAuditLogService auditLogService;
 
     @Before("@annotation(auditLog)")
     public void doBefore(JoinPoint joinPoint, AuditLog auditLog) {
+        if (auditLogService == null) {
+            log.warn("AuditLogService not found, skip saving audit log.");
+            return;
+        }
         String userId = UserContext.get("userId");
         String username = UserContext.get("username");
 

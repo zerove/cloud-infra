@@ -1,17 +1,19 @@
-FROM eclipse-temurin:25-jre
-
+# Stage: Run
+FROM eclipse-temurin:25-jre-jammy
 WORKDIR /app
 
-ENV TZ=Asia/Shanghai
+# Create a non-root user
+RUN groupadd -g 1000 appuser && \
+    useradd -u 1000 -g appuser -m appuser
 
-# 安装 curl 以支持健康检查
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:9000/actuator/health || exit 1
-
+# Copy the jar from the host target directory
 ARG JAR_FILE
 COPY ${JAR_FILE} app.jar
 
-# 使用 sh -c 以支持环境变量扩展
+RUN chown appuser:appuser app.jar
+USER appuser
+
+ENV TZ=Asia/Shanghai
+ENV JAVA_OPTS="-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom"
+
 ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -Djava.security.egd=file:/dev/./urandom -jar app.jar"]

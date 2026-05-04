@@ -11,8 +11,8 @@ COMPOSE_FILE="$DIR/compose.yaml"
 echo -e "${GREEN}>>> 正在停止并清理旧容器...${NC}"
 podman-compose -f "$COMPOSE_FILE" down
 
-echo -e "${GREEN}>>> 正在启动中间件 (Nacos/Redis)...${NC}"
-podman-compose -f "$COMPOSE_FILE" up -d nacos redis
+echo -e "${GREEN}>>> 正在启动中间件 (Nacos/Redis/MySQL)...${NC}"
+podman-compose -f "$COMPOSE_FILE" up -d nacos redis mysql
 
 # 等待 Nacos 就绪
 echo "等待 Nacos 启动..."
@@ -20,10 +20,14 @@ until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nac
     printf '.'
     sleep 5
 done
-echo -e "${GREEN}>>> Nacos 已就绪。${NC}"
+echo -e "\n${GREEN}>>> Nacos 已就绪。${NC}"
+
+# 同步配置到 Nacos
+echo -e "${GREEN}>>> 正在同步配置到 Nacos...${NC}"
+bash "$DIR/sync-nacos.sh"
 
 echo -e "${GREEN}>>> 正在启动业务微服务...${NC}"
-podman-compose -f "$COMPOSE_FILE" up --build -d gateway auth system
+podman-compose -f "$COMPOSE_FILE" up --build -d gateway auth system prometheus
 
 # 触发监控发现更新
 echo -e "${GREEN}>>> 正在同步监控服务发现目标...${NC}"

@@ -11,9 +11,11 @@ services:
     ports:
       - "8848:8848"
       - "9848:9848"
+    expose:
+      - "9848"
     volumes:
-      - ./data/nacos/logs:/home/nacos/logs
-      - ./data/nacos/data:/home/nacos/data
+      - nacos_logs:/home/nacos/logs
+      - nacos_data:/home/nacos/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
       interval: 5s
@@ -28,7 +30,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./data/redis/data:/data
+      - redis_data:/data
     restart: always
 
   mysql:
@@ -41,11 +43,9 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./data/mysql/data:/var/lib/mysql
-      - ./data/mysql/init:/docker-entrypoint-initdb.d
+      - mysql_data:/var/lib/mysql
     restart: always
 
-  # --- Microservices ---
   gateway:
     build:
       context: ..
@@ -60,15 +60,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - ./config/gateway-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC
+      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
@@ -92,15 +90,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - ./config/auth-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC
+      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
@@ -124,19 +120,18 @@ services:
         condition: service_healthy
       mysql:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9300/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - ./config/system-application.yml:/app/config/application.yml:ro
+      - ./logs/system:/var/log/system
     environment:
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_DATASOURCE_HOST=mysql-server
       - SPRING_DATASOURCE_PORT=3306
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
-      - SPRING_THREADS_VIRTUAL_ENABLED=false
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseZGC
+      - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
@@ -154,10 +149,10 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./services.json:/etc/prometheus/services.json
-    networks:
-      - deploy_default
     restart: always
 
-networks:
-  deploy_default:
-    external: true
+volumes:
+  nacos_logs:
+  nacos_data:
+  redis_data:
+  mysql_data:

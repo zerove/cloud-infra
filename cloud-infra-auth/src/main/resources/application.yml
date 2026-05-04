@@ -2,21 +2,28 @@ server:
   port: 9200
 
 management:
-  endpoints:
-    web:
-      exposure:
-        include: prometheus,health,info
-  endpoint:
-    health:
-      show-details: always
-  metrics:
-    export:
-      prometheus:
-        enabled: true
+  health:
+    db:
+      enabled: false
 
 spring:
+  application:
+    name: cloud-auth
+  datasource:
+    type: com.mysql.cj.jdbc.MysqlDataSource
+    url: jdbc:mysql://mysql-server:3306/cloud_infra?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
+    username: root
+    password: root
   data:
     redis:
-      host: localhost
+      host: redis-server
       port: 6379
       database: 0
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        enabled: true
+      config:
+        server-addr: nacos:8848
+        enabled: true

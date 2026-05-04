@@ -10,6 +10,12 @@ spring:
     virtual:
       enabled: true
   cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        enabled: true
+      config:
+        server-addr: nacos:8848
     gateway:
       discovery:
         locator:

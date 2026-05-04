@@ -2,6 +2,13 @@ server:
   port: 9300
 
 spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        enabled: true
+      config:
+        server-addr: nacos:8848
   main:
     allow-bean-definition-overriding: true
   datasource:

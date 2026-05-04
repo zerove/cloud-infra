@@ -8,15 +8,33 @@ management:
         include: prometheus,health,info
   endpoint:
     health:
-      show-details: always
+      enabled: false
   metrics:
     export:
       prometheus:
         enabled: true
 
 spring:
+  application:
+    name: cloud-auth
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        enabled: true
+      config:
+        server-addr: nacos:8848
+  datasource:
+    type: com.mysql.cj.jdbc.MysqlDataSource
+    url: jdbc:mysql://mysql-server:3306/cloud_infra?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
+    username: root
+    password: root
   data:
     redis:
-      host: localhost
+      host: redis-server
       port: 6379
       database: 0
