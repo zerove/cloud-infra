@@ -67,14 +67,18 @@ services:
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
     labels:
       - "monitoring=true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: always
 
   auth:
@@ -97,14 +101,18 @@ services:
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
     labels:
       - "monitoring=true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: always
 
   system:
@@ -132,14 +140,18 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - JAVA_OPTS=-Xms512m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
       - SPRING_DATA_REDIS_HOST=redis-server
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 768M
     labels:
       - "monitoring=true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9300/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: always
 
   prometheus:
