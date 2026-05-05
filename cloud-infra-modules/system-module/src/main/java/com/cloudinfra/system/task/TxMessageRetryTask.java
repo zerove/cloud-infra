@@ -4,6 +4,7 @@ import com.cloudinfra.system.domain.SysTxMessage;
 import com.cloudinfra.system.service.SysTxMessageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import java.util.List;
@@ -15,6 +16,9 @@ public class TxMessageRetryTask {
     @Autowired
     private SysTxMessageService txMessageService;
 
+    @Autowired
+    private StreamBridge streamBridge;
+
     @Scheduled(fixedDelay = 60000)
     public void retryPendingMessages() {
         log.info("开始处理待发送事务消息...");
@@ -23,7 +27,7 @@ public class TxMessageRetryTask {
         for (SysTxMessage message : pendingMessages) {
             try {
                 log.info("处理消息: {}", message.getId());
-                // TODO: 实现具体的消息发送逻辑 (如 MQ 发送)
+                streamBridge.send("txMessageOut-out-0", message);
                 
                 // 模拟发送成功
                 txMessageService.updateMessageStatus(message.getId(), 1);
