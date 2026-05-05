@@ -25,6 +25,17 @@ spring:
       host: localhost
       port: 6379
       database: 0
+  cloud:
+    stream:
+      bindings:
+        txMessageOut-out-0:
+          destination: tx.message.exchange
+          content-type: application/json
+      rabbit:
+        bindings:
+          txMessageOut-out-0:
+            producer:
+              publisher-confirm-type: correlated
 
 management:
   server:
