@@ -31,7 +31,9 @@ public class SysUserConverter {
         vo.setEmail(entity.getEmail());
         vo.setPhone(entity.getPhone());
         vo.setStatus(entity.getStatus());
-        vo.setCreateTime(entity.getCreateTime());
+        if (entity.getCreateTime() != null) {
+            vo.setCreateTime(entity.getCreateTime());
+        }
         return vo;
     }
 

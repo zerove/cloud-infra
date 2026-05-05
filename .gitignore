@@ -6,6 +6,7 @@
 .settings/
 .idea/
 .vscode/
+.omg/
 *.log
 
 # Ignore deployment/local infrastructure data

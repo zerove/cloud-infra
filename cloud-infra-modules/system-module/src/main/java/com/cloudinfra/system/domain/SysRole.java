@@ -1,20 +1,24 @@
 package com.cloudinfra.system.domain;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
+import com.cloudinfra.common.core.domain.BaseEntity;
 import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.EqualsAndHashCode;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("sys_role")
-public class SysRole {
+public class SysRole extends BaseEntity {
+
     @TableId(type = IdType.AUTO)
     private Long id;
+
     private String roleName;
+
     private String roleKey;
-    private String status;
-    private LocalDateTime createTime;
-    @com.baomidou.mybatisplus.annotation.TableLogic
+
+    private Integer status;
+
+    @TableLogic
     private Integer deleted;
 }

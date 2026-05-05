@@ -31,8 +31,8 @@ public class GlobalException extends RuntimeException {
     }
 
     public GlobalException(SystemExceptionCode systemExceptionCode) {
-        super(systemExceptionCode.getMsg());
-        this.code = systemExceptionCode.getCode();
-        this.msg = systemExceptionCode.getMsg();
+        super(systemExceptionCode.getMessage());
+        this.code = (int) systemExceptionCode.getCode();
+        this.msg = systemExceptionCode.getMessage();
     }
 }

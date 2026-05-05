@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
@@ -15,9 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 @EnableAsync
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = TracePropagationTest.TestConfig.class)
+@ActiveProfiles("test")
 public class TracePropagationTest extends BaseIntegrationTest {
 
-    @org.springframework.boot.autoconfigure.SpringBootApplication
+    @org.springframework.boot.SpringBootConfiguration
+    @org.springframework.context.annotation.ComponentScan
     static class TestConfig {}
 
     @Autowired
@@ -36,7 +42,7 @@ public class TracePropagationTest extends BaseIntegrationTest {
         MDC.clear();
     }
 
-    @Service
+    @Component
     public static class AsyncService {
         @Async
         public CompletableFuture<String> doAsyncWork() {

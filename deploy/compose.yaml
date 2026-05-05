@@ -33,17 +33,18 @@ services:
       - redis_data:/data
     restart: always
 
-  mysql:
-    image: mysql:8.4
-    container_name: mysql-server
+  postgres:
+    image: postgres:16
+    container_name: postgres-server
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=cloud_infra
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=cloud_infra
       - TZ=Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     restart: always
 
   gateway:
@@ -118,7 +119,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      mysql:
+      postgres:
         condition: service_started
     volumes:
       - ./config/system-application.yml:/app/config/application.yml:ro
@@ -126,8 +127,8 @@ services:
     environment:
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_DATASOURCE_HOST=mysql-server
-      - SPRING_DATASOURCE_PORT=3306
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_PORT=5432
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_THREADS_VIRTUAL_ENABLED=true
@@ -151,8 +152,25 @@ services:
       - ./services.json:/etc/prometheus/services.json
     restart: always
 
+  seata:
+    image: seataio/seata-server:2.0.0
+    container_name: seata-server
+    environment:
+      - SEATA_PORT=8091
+      - STORE_MODE=file
+      - REGISTRY_TYPE=nacos
+      - REGISTRY_NACOS_SERVER_ADDR=nacos:8848
+      - REGISTRY_NACOS_GROUP=SEATA_GROUP
+    ports:
+      - "8091:8091"
+      - "7091:7091"
+    depends_on:
+      nacos:
+        condition: service_healthy
+    restart: always
+
 volumes:
   nacos_logs:
   nacos_data:
   redis_data:
-  mysql_data:
+  postgres_data:

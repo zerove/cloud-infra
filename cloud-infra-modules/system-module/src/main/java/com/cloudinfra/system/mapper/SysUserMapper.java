@@ -1,17 +1,14 @@
 package com.cloudinfra.system.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.system.domain.SysUser;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface SysUserMapper extends BaseMapper<SysUser> {
-    @Select("SELECT count(*) FROM sys_user")
-    Long countUsers();
-
-    Long countByDeptId(Long deptId);
-
-    @Select("SELECT count(*) FROM sys_user WHERE post_id = #{postId}")
-    Long countByPostId(Long postId);
+    IPage<SysUser> selectUserPage(IPage<SysUser> page, @Param("user") SysUser user);
+    int countByDeptId(@Param("deptId") Long deptId);
+    int countByPostId(@Param("postId") Long postId);
 }

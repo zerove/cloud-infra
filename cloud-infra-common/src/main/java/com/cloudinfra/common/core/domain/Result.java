@@ -48,25 +48,19 @@ public class Result<T> implements Serializable {
     }
 
     public static <T> Result<T> success(String message, T data) {
-        return Result.<T>builder()
-                .code(ResultCode.SUCCESS.getCode())
-                .message(message)
-                .data(data)
-                .build();
-    }
-
-    public static <T> Result<T> error() {
-        return error("error");
-    }
-
-    public static <T> Result<T> error(String message) {
-        return error(ResultCode.ERROR.getCode(), message);
+        return build(ResultCode.SUCCESS.getCode(), message, data);
     }
 
     public static <T> Result<T> error(Integer code, String message) {
+        return build(code, message, null);
+    }
+
+    private static <T> Result<T> build(Integer code, String message, T data) {
         return Result.<T>builder()
                 .code(code)
                 .message(message)
+                .data(data)
+                .traceId(org.slf4j.MDC.get("traceId"))
                 .build();
     }
 }

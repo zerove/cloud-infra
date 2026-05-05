@@ -1,20 +1,11 @@
 package com.cloudinfra.system.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
-import com.cloudinfra.common.core.domain.PageResult;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cloudinfra.common.annotation.DataScope;
 import com.cloudinfra.system.domain.SysUser;
-import com.cloudinfra.system.domain.dto.SysUserDTO;
-import com.cloudinfra.system.domain.vo.SysUserVO;
 
-import java.util.List;
-
-public interface ISysUserService extends IService<SysUser> {
-    
-    List<SysUserVO> listUsers();
-
-    PageResult<SysUserVO> getPageList(SysUserDTO dto);
-    
-    boolean addUser(SysUserDTO dto);
-
-    SysUser getByUsername(String username);
+public interface ISysUserService {
+    @DataScope(deptAlias = "d")
+    IPage<SysUser> selectUserList(Page<SysUser> page, SysUser user);
 }

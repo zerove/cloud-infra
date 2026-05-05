@@ -1,6 +1,8 @@
 package com.cloudinfra.common.core.exception;
 
-public enum SystemExceptionCode {
+import com.cloudinfra.common.core.enums.IResultCode;
+
+public enum SystemExceptionCode implements IResultCode {
     USER_NOT_FOUND(2001, "用户不存在"),
     ROLE_NOT_FOUND(2002, "角色不存在"),
     DEPT_LEVEL_EXCEED(3001, "部门层级最多支持 5 级"),
@@ -16,6 +18,8 @@ public enum SystemExceptionCode {
         this.msg = msg;
     }
 
-    public int getCode() { return code; }
-    public String getMsg() { return msg; }
+    @Override
+    public long getCode() { return code; }
+    @Override
+    public String getMessage() { return msg; }
 }

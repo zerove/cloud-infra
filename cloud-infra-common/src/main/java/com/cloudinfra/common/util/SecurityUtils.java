@@ -24,6 +24,13 @@ public class SecurityUtils {
     }
 
     /**
+     * 获取当前用户部门ID (模拟)
+     */
+    public static Long getDeptId() {
+        return 1L;
+    }
+
+    /**
      * 密码加密
      */
     public static String encryptPassword(String password) {

@@ -1,17 +1,15 @@
 server:
   port: 9200
-
-management:
-  health:
-    db:
-      enabled: false
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: cloud-auth
   datasource:
-    type: com.mysql.cj.jdbc.MysqlDataSource
-    url: jdbc:mysql://mysql-server:3306/cloud_infra?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
+    type: org.postgresql.ds.PGSimpleDataSource
+    url: jdbc:postgresql://mysql-server:3306/cloud_infra
     username: root
     password: root
   data:
@@ -26,4 +24,15 @@ spring:
         enabled: true
       config:
         server-addr: nacos:8848
+        enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
         enabled: true

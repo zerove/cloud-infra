@@ -1,18 +1,22 @@
 server:
   port: 9300
+  shutdown: graceful
 
 spring:
+  application:
+    name: system-module
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   config:
-    import: "optional:nacos:"
+    import: "optional:classpath:application.yml"
   main:
     allow-bean-definition-overriding: true
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    type: com.mysql.cj.jdbc.MysqlDataSource
-    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8
+    driver-class-name: org.postgresql.Driver
+    type: org.postgresql.ds.PGSimpleDataSource
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
-    driver-class-name: com.mysql.cj.jdbc.Driver
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
@@ -33,6 +37,8 @@ management:
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
   metrics:
     export:
       prometheus:
@@ -55,3 +61,22 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+seata:
+  application-id: system-module
+  tx-service-group: system_tx_group
+  enable-auto-data-source-proxy: true
+  registry:
+    type: nacos
+    nacos:
+      application: seata-server
+      server-addr: nacos:8848
+      group: SEATA_GROUP
+      namespace:
+      cluster: default
+  config:
+    type: nacos
+    nacos:
+      server-addr: nacos:8848
+      group: SEATA_GROUP
+      namespace:

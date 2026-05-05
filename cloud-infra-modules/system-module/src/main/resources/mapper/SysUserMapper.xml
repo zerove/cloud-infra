@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cloudinfra.system.mapper.SysUserMapper">
+
+    <select id="selectUserPage" resultType="com.cloudinfra.system.domain.SysUser">
+        select u.* from sys_user u
+        left join sys_dept d on u.dept_id = d.dept_id
+        <where>
+            <if test="user.username != null and user.username != ''">
+                AND u.username like concat('%', #{user.username}, '%')
+            </if>
+        </where>
+    </select>
+
+</mapper>

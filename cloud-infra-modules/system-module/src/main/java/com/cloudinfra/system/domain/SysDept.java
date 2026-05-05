@@ -3,22 +3,21 @@ package com.cloudinfra.system.domain;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import java.io.Serializable;
 
-/**
- * 部门对象
- */
 @Data
 @TableName("sys_dept")
+@EqualsAndHashCode(callSuper = false)
 public class SysDept implements Serializable {
-    private static final long serialVersionUID = 1L;
-
     @TableId
     private Long deptId;
-    private String deptName;
     private Long parentId;
     private String ancestors;
+    private String deptName;
     private Integer orderNum;
-    private String status;
-    private java.util.List<SysDept> children;
+    private String leader;
+    private String phone;
+    private String email;
+    private String status; // 0:正常, 1:停用
 }

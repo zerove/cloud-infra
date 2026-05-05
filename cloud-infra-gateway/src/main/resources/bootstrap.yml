@@ -8,8 +8,12 @@ spring:
       config:
         server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
         file-extension: yaml
+        namespace: public
+        group: DEFAULT_GROUP
+        refresh-enabled: true
         shared-configs:
           - data-id: actuator-config.yaml
+            group: DEFAULT_GROUP
             refresh: true
     sentinel:
       datasource:

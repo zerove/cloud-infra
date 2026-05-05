@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -15,27 +16,37 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class GlobalAuthFilter extends OncePerRequestFilter {
 
+    private static final String TRACE_ID = "traceId";
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String path = request.getRequestURI();
-        if (path.contains("/auth/login")) {
-            filterChain.doFilter(request, response);
-            return;
+        String tempTraceId = request.getHeader(TRACE_ID);
+        if (tempTraceId == null || tempTraceId.isEmpty()) {
+            tempTraceId = UUID.randomUUID().toString().replace("-", "");
         }
-
-        String token = request.getHeader("Authorization");
-        if (token == null || token.isEmpty()) {
-            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-            return;
-        }
+        final String traceId = tempTraceId;
+        MDC.put(TRACE_ID, traceId);
 
         try {
+            String path = request.getRequestURI();
+            if (path.contains("/auth/login")) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            String token = request.getHeader("Authorization");
+            if (token == null || token.isEmpty()) {
+                response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                return;
+            }
+
             DecodedJWT jwt = JwtUtils.parseToken(token.replace("Bearer ", ""));
             String userId = jwt.getClaim("userId").asString();
             String username = jwt.getSubject();
@@ -45,6 +56,7 @@ public class GlobalAuthFilter extends OncePerRequestFilter {
                 {
                     customHeaders.put("X-User-Id", userId);
                     customHeaders.put("X-User-Name", username);
+                    customHeaders.put(TRACE_ID, traceId);
                 }
 
                 @Override
@@ -64,6 +76,8 @@ public class GlobalAuthFilter extends OncePerRequestFilter {
             filterChain.doFilter(requestWrapper, response);
         } catch (Exception e) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
+        } finally {
+            MDC.remove(TRACE_ID);
         }
     }
 }

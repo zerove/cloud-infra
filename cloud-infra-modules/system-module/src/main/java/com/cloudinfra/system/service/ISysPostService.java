@@ -5,5 +5,8 @@ import com.cloudinfra.system.domain.SysPost;
 import java.util.List;
 
 public interface ISysPostService extends IService<SysPost> {
-    void deletePostByIds(List<Long> postIds);
+    List<SysPost> selectPostList(SysPost post);
+    boolean insertPost(SysPost post);
+    boolean deletePostById(Long postId);
+    boolean deletePostByIds(List<Long> postIds);
 }

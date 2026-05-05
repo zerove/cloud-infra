@@ -3,7 +3,7 @@ package com.cloudinfra.common.core.domain;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 public class BaseEntity {
@@ -11,11 +11,11 @@ public class BaseEntity {
     private String createBy;
 
     @TableField(fill = FieldFill.INSERT)
-    private Date createTime;
+    private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private String updateBy;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
-    private Date updateTime;
+    private LocalDateTime updateTime;
 }

@@ -43,12 +43,26 @@ public class DataScopeInterceptor implements InnerInterceptor {
         String sql = boundSql.getSql();
 
         Long userId = SecurityUtils.getUserId();
-        if (userId != null) {
-            String alias = dataScope.deptAlias();
-            // 简单处理：暂时过滤当前用户ID相关的部门数据 (需后续与业务逻辑对齐)
-            String sqlFragment = String.format(" AND %s.create_by = %d", alias, userId);
+        Long deptId = SecurityUtils.getDeptId();
 
-            metaObject.setValue("delegate.boundSql.sql", sql + sqlFragment);
+        if (userId == null) {
+            return;
         }
+
+        StringBuilder sqlFragment = new StringBuilder();
+        switch (dataScope.type()) {
+            case ALL:
+                return;
+            case SELF:
+                sqlFragment.append(String.format(" AND %s.create_by = %d", dataScope.userAlias(), userId));
+                break;
+            case DEPT:
+                sqlFragment.append(String.format(" AND %s.dept_id = %d", dataScope.deptAlias(), deptId));
+                break;
+            default:
+                break;
+        }
+
+        metaObject.setValue("delegate.boundSql.sql", sql + sqlFragment.toString());
     }
 }

@@ -2,59 +2,49 @@ package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.cloudinfra.common.annotation.DataScope;
-import com.cloudinfra.common.core.exception.GlobalException;
-import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import com.cloudinfra.system.domain.SysDept;
 import com.cloudinfra.system.mapper.SysDeptMapper;
-import com.cloudinfra.system.mapper.SysUserMapper;
 import com.cloudinfra.system.service.ISysDeptService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.cloudinfra.system.domain.vo.DeptTreeVO;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> implements ISysDeptService {
 
-    @Autowired
-    private SysUserMapper userMapper;
+    @Override
+    public List<SysDept> selectDeptList(Long parentId) {
+        return baseMapper.selectList(new LambdaQueryWrapper<SysDept>()
+                .eq(parentId != null, SysDept::getParentId, parentId)
+                .orderByAsc(SysDept::getOrderNum));
+    }
 
     @Override
-    @DataScope(deptAlias = "d")
-    public List<SysDept> selectDeptList(Long parentId) {
-        List<SysDept> deptList = this.list(new LambdaQueryWrapper<SysDept>()
-                .orderByAsc(SysDept::getOrderNum));
-        return buildTree(deptList, parentId == null ? 0L : parentId);
+    public List<DeptTreeVO> selectDeptTreeList() {
+        List<SysDept> depts = baseMapper.selectList(null);
+        List<DeptTreeVO> vos = depts.stream().map(DeptTreeVO::fromSysDept).toList();
+        return buildTree(vos, 0L);
+    }
+
+    private List<DeptTreeVO> buildTree(List<DeptTreeVO> vos, Long parentId) {
+        List<DeptTreeVO> tree = new ArrayList<>();
+        for (DeptTreeVO vo : vos) {
+            if (parentId.equals(vo.getParentId())) {
+                vo.setChildren(buildTree(vos, vo.getId()));
+                tree.add(vo);
+            }
+        }
+        return tree;
     }
 
     @Override
     public boolean insertDept(SysDept dept) {
-        String[] ancestors = dept.getAncestors().split(",");
-        if (ancestors.length >= 5) {
-            throw new GlobalException(SystemExceptionCode.DEPT_LEVEL_EXCEED);
-        }
         return this.save(dept);
     }
 
     @Override
-    public void deleteDeptById(Long deptId) {
-        if (baseMapper.selectCountByParentId(deptId) > 0) {
-            throw new GlobalException(SystemExceptionCode.DEPT_HAS_CHILD);
-        }
-        if (userMapper.countByDeptId(deptId) > 0) {
-            throw new GlobalException(SystemExceptionCode.DEPT_IN_USE);
-        }
-        this.removeById(deptId);
-    }
-
-    private List<SysDept> buildTree(List<SysDept> depts, Long parentId) {
-        List<SysDept> tree = depts.stream()
-                .filter(dept -> dept.getParentId().equals(parentId))
-                .collect(Collectors.toList());
-        for (SysDept dept : tree) {
-            dept.setChildren(buildTree(depts, dept.getDeptId()));
-        }
-        return tree;
+    public boolean deleteDeptById(Long deptId) {
+        return this.removeById(deptId);
     }
 }

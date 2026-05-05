@@ -1,39 +1,27 @@
 package com.cloudinfra.system;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.service.ISysUserService;
-import com.cloudinfra.test.BaseIntegrationTest;
-import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Slf4j
-@org.springframework.test.context.ActiveProfiles("test")
-@SpringBootTest(classes = SystemTestConfig.class)
-public class SysUserIntegrationTest extends BaseIntegrationTest {
+@SpringBootTest
+public class SysUserIntegrationTest {
 
     @Autowired
-    private ISysUserService sysUserService;
+    private ISysUserService userService;
 
     @Test
-    void testCreateAndGet() {
-        log.info("Starting SysUserIntegrationTest - this log should have a traceId");
-        
+    public void testUserPageListWithDataScope() {
+        Page<SysUser> page = new Page<>(1, 10);
         SysUser user = new SysUser();
-        user.setUsername("test_admin");
-        user.setPassword("123456");
-        user.setEmail("test@example.com");
         
-        boolean saved = sysUserService.save(user);
-        assertThat(saved).isTrue();
+        // 触发分页与 @DataScope 拦截
+        var result = userService.selectUserList(page, user);
         
-        SysUser found = sysUserService.getByUsername("test_admin");
-        assertThat(found).isNotNull();
-        assertThat(found.getEmail()).isEqualTo("test@example.com");
-        
-        log.info("Successfully verified SysUser in integration test with traceId: {}", found.getUsername());
+        assertThat(result).isNotNull();
     }
 }

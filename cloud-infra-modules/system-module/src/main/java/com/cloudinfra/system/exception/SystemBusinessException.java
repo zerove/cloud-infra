@@ -5,6 +5,6 @@ import com.cloudinfra.common.exception.BaseException;
 
 public class SystemBusinessException extends BaseException {
     public SystemBusinessException(SystemExceptionCode code) {
-        super(code.getCode(), code.getMsg());
+        super((int) code.getCode(), code.getMessage());
     }
 }

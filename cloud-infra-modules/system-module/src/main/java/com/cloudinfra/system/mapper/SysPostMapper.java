@@ -2,11 +2,8 @@ package com.cloudinfra.system.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cloudinfra.system.domain.SysPost;
+import org.apache.ibatis.annotations.Mapper;
 
-/**
- * 岗位信息 数据层
- * 
- * @author cloud-infra
- */
+@Mapper
 public interface SysPostMapper extends BaseMapper<SysPost> {
 }

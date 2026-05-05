@@ -27,7 +27,7 @@ public class SysPostServiceTest {
     @Test
     public void testDeletePostByIds_InUse() {
         Long postId = 1L;
-        when(userMapper.countByPostId(postId)).thenReturn(1L);
+        when(userMapper.countByPostId(postId)).thenReturn(1);
 
         assertThrows(GlobalException.class, () -> {
             postService.deletePostByIds(Collections.singletonList(postId));

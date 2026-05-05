@@ -3,12 +3,12 @@ spring:
     nacos:
       config:
         enabled: false
-        import-check:
-          enabled: false
+      discovery:
+        enabled: false
   config:
-    import: "optional:nacos:"
+    import: "optional:classpath:application-test.yml"
   datasource:
-    url: jdbc:mysql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
   sql:

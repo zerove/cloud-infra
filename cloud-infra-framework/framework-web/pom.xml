@@ -40,6 +40,11 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-redis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-test-support</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

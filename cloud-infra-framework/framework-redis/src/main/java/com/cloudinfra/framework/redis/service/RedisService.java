@@ -26,4 +26,14 @@ public class RedisService {
     public Object get(String key) {
         return redisTemplate.opsForValue().get(key);
     }
+
+    /**
+     * 执行 Lua 脚本
+     */
+    public <T> T executeLuaScript(String script, java.util.List<String> keys, Object... args) {
+        org.springframework.data.redis.core.script.DefaultRedisScript<T> redisScript = new org.springframework.data.redis.core.script.DefaultRedisScript<>();
+        redisScript.setScriptText(script);
+        redisScript.setResultType((Class<T>) args[0].getClass()); // 简化处理，实际生产需更严谨
+        return redisTemplate.execute(redisScript, keys, args);
+    }
 }

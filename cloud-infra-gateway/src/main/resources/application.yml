@@ -1,11 +1,10 @@
 server:
   port: 9000
-
-auth:
-  white-list:
-    - /auth/
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   config:
     import: "optional:nacos:gateway-module.yaml"
   threads:
@@ -55,6 +54,11 @@ management:
     web:
       exposure:
         include: prometheus,health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
   tracing:
     sampling:
       probability: 1.0

@@ -4,7 +4,14 @@ import org.slf4j.MDC;
 import org.springframework.core.task.TaskDecorator;
 import java.util.Map;
 
+/**
+ * 异步任务 MDC 上下文装饰器
+ * 增强支持链路追踪 TraceID 的传播
+ */
 public class MDCContextTaskDecorator implements TaskDecorator {
+
+    private static final String TRACE_ID = "traceId";
+
     @Override
     public Runnable decorate(Runnable runnable) {
         Map<String, String> contextMap = MDC.getCopyOfContextMap();
@@ -12,6 +19,8 @@ public class MDCContextTaskDecorator implements TaskDecorator {
             try {
                 if (contextMap != null) {
                     MDC.setContextMap(contextMap);
+                } else {
+                    MDC.clear();
                 }
                 runnable.run();
             } finally {
