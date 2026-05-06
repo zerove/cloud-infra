@@ -6,7 +6,7 @@ RUN groupadd -g 1000 appuser &&     useradd -u 1000 -g appuser -m appuser
 
 # Copy the pre-built jar from the host target directory
 ARG JAR_FILE
-COPY  app.jar
+COPY ${JAR_FILE} app.jar
 
 RUN chown appuser:appuser app.jar
 USER appuser

@@ -11,14 +11,21 @@ COMPOSE_FILE="$DIR/compose.yaml"
 echo -e "${GREEN}>>> 正在停止并清理旧容器...${NC}"
 podman-compose -f "$COMPOSE_FILE" down
 
-echo -e "${GREEN}>>> 正在启动中间件 (Nacos/Redis/MySQL)...${NC}"
-podman-compose -f "$COMPOSE_FILE" up -d nacos redis mysql
+echo -e "${GREEN}>>> 正在启动中间件 (Nacos/Redis/PostgreSQL)...${NC}"
+podman-compose -f "$COMPOSE_FILE" up -d nacos redis postgres
 
 # 等待 Nacos 就绪
 echo "等待 Nacos 启动..."
-until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nacos/); do
+# 增加重试机制，防止死循环
+retry=0
+until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nacos/index.html); do
     printf '.'
     sleep 5
+    retry=$((retry+1))
+    if [ $retry -gt 24 ]; then
+        echo -e "\n${RED}>>> Nacos 启动超时，请检查日志。${NC}"
+        exit 1
+    fi
 done
 echo -e "\n${GREEN}>>> Nacos 已就绪。${NC}"
 

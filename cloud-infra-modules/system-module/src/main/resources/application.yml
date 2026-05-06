@@ -8,13 +8,13 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   config:
-    import: "optional:classpath:application.yml"
+    import: "optional:nacos:system-module.yaml"
   main:
     allow-bean-definition-overriding: true
   datasource:
     driver-class-name: org.postgresql.Driver
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
   threads:
@@ -22,11 +22,14 @@ spring:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
   data:
     redis:
-      host: localhost
+      host: ${SPRING_DATA_REDIS_HOST:redis-server}
       port: 6379
       database: 0
   cloud:
     stream:
+      rabbit:
+        binder:
+          brokers: rabbitmq-server
       bindings:
         txMessageOut-out-0:
           destination: tx.message.exchange
@@ -36,7 +39,6 @@ spring:
           txMessageOut-out-0:
             producer:
               publisher-confirm-type: correlated
-
 management:
   server:
     port: 9301
@@ -72,22 +74,3 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-seata:
-  application-id: system-module
-  tx-service-group: system_tx_group
-  enable-auto-data-source-proxy: true
-  registry:
-    type: nacos
-    nacos:
-      application: seata-server
-      server-addr: nacos:8848
-      group: SEATA_GROUP
-      namespace:
-      cluster: default
-  config:
-    type: nacos
-    nacos:
-      server-addr: nacos:8848
-      group: SEATA_GROUP
-      namespace:

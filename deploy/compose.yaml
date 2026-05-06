@@ -33,6 +33,14 @@ services:
       - redis_data:/data
     restart: always
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+
   postgres:
     image: postgres:16
     container_name: postgres-server
@@ -162,23 +170,6 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./services.json:/etc/prometheus/services.json
-    restart: always
-
-  seata:
-    image: seataio/seata-server:2.0.0
-    container_name: seata-server
-    environment:
-      - SEATA_PORT=8091
-      - STORE_MODE=file
-      - REGISTRY_TYPE=nacos
-      - REGISTRY_NACOS_SERVER_ADDR=nacos:8848
-      - REGISTRY_NACOS_GROUP=SEATA_GROUP
-    ports:
-      - "8091:8091"
-      - "7091:7091"
-    depends_on:
-      nacos:
-        condition: service_healthy
     restart: always
 
 volumes:

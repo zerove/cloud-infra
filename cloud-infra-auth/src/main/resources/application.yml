@@ -3,27 +3,29 @@ server:
   shutdown: graceful
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
     name: cloud-auth
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://mysql-server:3306/cloud_infra
-    username: root
-    password: root
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
   data:
     redis:
-      host: redis-server
+      host: ${SPRING_DATA_REDIS_HOST:redis-server}
       port: 6379
       database: 0
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
         enabled: true
       config:
-        server-addr: nacos:8848
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
         enabled: true
 
 management:
