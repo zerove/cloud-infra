@@ -7,7 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import com.cloudinfra.common.core.messaging.CloudMessage;
+
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -27,7 +30,11 @@ public class TxMessageRetryTask {
         for (SysTxMessage message : pendingMessages) {
             try {
                 log.info("处理消息: {}", message.getId());
-                streamBridge.send("txMessageOut-out-0", message);
+                CloudMessage<SysTxMessage> cloudMessage = CloudMessage.<SysTxMessage>builder()
+                        .traceId(UUID.randomUUID().toString()) // or get from MDC if available
+                        .data(message)
+                        .build();
+                streamBridge.send("txMessageOut-out-0", cloudMessage);
                 
                 // 模拟发送成功
                 txMessageService.updateMessageStatus(message.getId(), 1);
