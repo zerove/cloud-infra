@@ -1,7 +1,7 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.cloudinfra.system.domain.SysRole;
+import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.service.ISysRoleService;
 import org.springframework.stereotype.Service;

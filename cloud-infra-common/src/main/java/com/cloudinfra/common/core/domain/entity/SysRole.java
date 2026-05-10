@@ -1,4 +1,4 @@
-package com.cloudinfra.system.domain;
+package com.cloudinfra.common.core.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.cloudinfra.common.core.domain.BaseEntity;
@@ -18,6 +18,8 @@ public class SysRole extends BaseEntity {
     private String roleKey;
 
     private Integer status;
+    
+    private String dataScope;
 
     @TableLogic
     private Integer deleted;

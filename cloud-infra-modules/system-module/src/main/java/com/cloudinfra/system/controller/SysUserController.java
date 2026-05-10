@@ -1,5 +1,7 @@
 package com.cloudinfra.system.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.common.core.annotation.Log;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.enums.BusinessType;
@@ -10,8 +12,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @Tag(name = "用户管理")
 @RestController
@@ -24,8 +24,11 @@ public class SysUserController {
     @Operation(summary = "查询用户列表")
     @PreAuthorize("@ss.hasPermi('system:user:list')")
     @GetMapping("/list")
-    public Result<List<SysUser>> list(SysUser user) {
-        List<SysUser> users = userService.selectUserList(user);
+    public Result<IPage<SysUser>> list(SysUser user, 
+                                      @RequestParam(defaultValue = "1") Integer pageNum,
+                                      @RequestParam(defaultValue = "10") Integer pageSize) {
+        Page<SysUser> page = new Page<>(pageNum, pageSize);
+        IPage<SysUser> users = userService.selectUserList(page, user);
         return Result.success(users);
     }
 

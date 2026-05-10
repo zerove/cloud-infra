@@ -3,7 +3,7 @@ package com.cloudinfra.system.controller;
 import com.cloudinfra.common.core.annotation.Log;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.enums.BusinessType;
-import com.cloudinfra.system.domain.SysRole;
+import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.service.ISysRoleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

@@ -18,4 +18,7 @@ public class BaseEntity {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    @TableField(exist = false)
+    private java.util.Map<String, Object> params = new java.util.HashMap<>();
 }

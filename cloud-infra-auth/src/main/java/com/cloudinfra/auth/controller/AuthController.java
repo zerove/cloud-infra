@@ -1,38 +1,32 @@
 package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.auth.service.AuthTokenService;
-import com.cloudinfra.common.core.domain.model.LoginUser;
-import jakarta.annotation.Resource;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.Map;
+import com.cloudinfra.auth.service.SysLoginService;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.domain.model.LoginUser;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
+@Tag(name = "认证管理")
 @RestController
 @RequestMapping("/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
-    @Resource
-    private AuthTokenService authTokenService;
+    private final AuthTokenService authTokenService;
+    private final SysLoginService loginService;
 
-    @Resource
-    private AuthenticationManager authenticationManager;
-
+    @Operation(summary = "登录")
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody LoginUser loginUser) {
-        // 使用 AuthenticationManager 进行认证
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginUser.getUsername(), loginUser.getPassword()));
-        
-        // 认证通过，签发 Token
-        return Result.success(authTokenService.createToken(loginUser));
+        return loginService.login(loginUser);
     }
 
+    @Operation(summary = "刷新Token")
     @PostMapping("/refresh")
     public Result<Map<String, Object>> refresh(@RequestHeader("Refresh-Token") String refreshToken) {
         return Result.success(authTokenService.refreshToken(refreshToken));

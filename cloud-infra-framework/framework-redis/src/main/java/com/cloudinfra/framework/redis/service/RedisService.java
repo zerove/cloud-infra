@@ -43,4 +43,20 @@ public class RedisService {
     public Long executeLuaScript(String script, List<String> keys, Object... args) {
         return redisTemplate.execute(new DefaultRedisScript<>(script, Long.class), keys, args);
     }
+
+    public boolean delete(String key) {
+        return Boolean.TRUE.equals(redisTemplate.delete(key));
+    }
+
+    public boolean hasKey(String key) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    public Long incr(String key, long delta) {
+        return redisTemplate.opsForValue().increment(key, delta);
+    }
+
+    public boolean expire(String key, long timeout) {
+        return Boolean.TRUE.equals(redisTemplate.expire(key, timeout, TimeUnit.MILLISECONDS));
+    }
 }

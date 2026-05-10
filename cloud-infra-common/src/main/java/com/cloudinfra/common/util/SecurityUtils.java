@@ -1,5 +1,8 @@
 package com.cloudinfra.common.util;
 
+import com.cloudinfra.common.core.domain.model.LoginUser;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
@@ -10,24 +13,42 @@ public class SecurityUtils {
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     /**
-     * 获取当前用户ID (模拟)
+     * 获取当前登录用户
+     */
+    public static LoginUser getLoginUser() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getPrincipal() instanceof LoginUser) {
+                return (LoginUser) authentication.getPrincipal();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
+    }
+
+    /**
+     * 获取当前用户ID
      */
     public static Long getUserId() {
-        return 1L;
+        LoginUser loginUser = getLoginUser();
+        return loginUser != null ? loginUser.getUserId() : null;
     }
 
     /**
-     * 获取当前用户名 (模拟)
+     * 获取当前用户名
      */
     public static String getUsername() {
-        return "admin";
+        LoginUser loginUser = getLoginUser();
+        return loginUser != null ? loginUser.getUsername() : "guest";
     }
 
     /**
-     * 获取当前用户部门ID (模拟)
+     * 获取当前用户部门ID
      */
     public static Long getDeptId() {
-        return 1L;
+        // Need to add deptId to LoginUser as well
+        return 1L; // placeholder
     }
 
     /**

@@ -9,6 +9,8 @@
             <if test="user.username != null and user.username != ''">
                 AND u.username like concat('%', #{user.username}, '%')
             </if>
+            <!-- 数据范围过滤 -->
+            ${user.params.dataScope}
         </where>
     </select>
 

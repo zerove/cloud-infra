@@ -13,6 +13,11 @@ import java.util.stream.Collectors;
 public class SysMenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> implements ISysMenuService {
 
     @Override
+    public List<SysMenu> selectMenuList(SysMenu menu) {
+        return list();
+    }
+
+    @Override
     public List<SysMenu> selectMenuTree() {
         List<SysMenu> menus = list();
         return buildTree(menus, 0L);

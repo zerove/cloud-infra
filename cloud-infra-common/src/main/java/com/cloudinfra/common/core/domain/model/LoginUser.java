@@ -13,7 +13,11 @@ import java.util.Set;
 public class LoginUser {
     private Long userId;
     private String username;
+    private Long deptId;
     private String password;
+    private String captcha;
+    private String uuid;
     private Long roleId;
+    private java.util.List<com.cloudinfra.common.core.domain.entity.SysRole> roles;
     private Set<String> permissions;
 }
