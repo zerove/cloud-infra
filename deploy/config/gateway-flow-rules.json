@@ -1,0 +1,13 @@
+[
+  {
+    "resource": "system-module",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 100,
+    "interval": 1,
+    "intervalUnit": 0,
+    "controlBehavior": 0,
+    "burstCount": 0,
+    "maxQueueingTimeMs": 500
+  }
+]

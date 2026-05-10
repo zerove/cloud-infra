@@ -37,7 +37,7 @@ spring:
         ds1:
           nacos:
             server-addr: localhost:8848
-            dataId: sentinel-gateway-rules
+            dataId: gateway-flow-rules
             groupId: DEFAULT_GROUP
             rule-type: gw-flow
 

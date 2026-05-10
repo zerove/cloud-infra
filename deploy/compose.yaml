@@ -58,7 +58,7 @@ services:
   gateway:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: deploy/Dockerfile.prod
       args:
         JAR_FILE: cloud-infra-gateway/target/cloud-infra-gateway-1.0.0-SNAPSHOT.jar
     container_name: cloud-gateway
@@ -92,7 +92,7 @@ services:
   auth:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: deploy/Dockerfile.prod
       args:
         JAR_FILE: cloud-infra-auth/target/cloud-infra-auth-1.0.0-SNAPSHOT.jar
     container_name: cloud-auth
@@ -126,7 +126,7 @@ services:
   system:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: deploy/Dockerfile.prod
       args:
         JAR_FILE: cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT.jar
     container_name: cloud-system
