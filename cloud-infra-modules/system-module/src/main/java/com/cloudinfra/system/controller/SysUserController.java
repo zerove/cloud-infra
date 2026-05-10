@@ -1,26 +1,58 @@
 package com.cloudinfra.system.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.cloudinfra.common.annotation.Log;
+import com.cloudinfra.common.core.annotation.Log;
+import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.service.ISysUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "User Management", description = "Operations related to system users")
+import java.util.List;
+
+@Tag(name = "用户管理")
 @RestController
 @RequestMapping("/system/user")
+@RequiredArgsConstructor
 public class SysUserController {
 
-    @Autowired
-    private ISysUserService userService;
+    private final ISysUserService userService;
 
-    @Log(title = "用户查询", businessType = "QUERY")
+    @Operation(summary = "查询用户列表")
+    @PreAuthorize("@ss.hasPermi('system:user:list')")
     @GetMapping("/list")
-    @Operation(summary = "List users", description = "Retrieve a paginated list of users based on search criteria")
-    public Object list(Page<SysUser> page, SysUser user) {
-        return userService.selectUserList(page, user);
+    public Result<List<SysUser>> list(SysUser user) {
+        List<SysUser> users = userService.selectUserList(user);
+        return Result.success(users);
+    }
+
+    @Operation(summary = "新增用户")
+    @PreAuthorize("@ss.hasPermi('system:user:add')")
+    @Log(title = "用户管理", businessType = BusinessType.INSERT)
+    @PostMapping
+    public Result<Void> add(@RequestBody SysUser user) {
+        userService.insertUser(user);
+        return Result.success();
+    }
+
+    @Operation(summary = "修改用户")
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @Log(title = "用户管理", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public Result<Void> edit(@RequestBody SysUser user) {
+        userService.updateUser(user);
+        return Result.success();
+    }
+
+    @Operation(summary = "删除用户")
+    @PreAuthorize("@ss.hasPermi('system:user:remove')")
+    @Log(title = "用户管理", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{userIds}")
+    public Result<Void> remove(@PathVariable Long[] userIds) {
+        userService.deleteUserByIds(userIds);
+        return Result.success();
     }
 }

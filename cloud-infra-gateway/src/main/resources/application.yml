@@ -30,6 +30,18 @@ spring:
               - Path=/system/**
             filters:
               - StripPrefix=1
+          - id: notification-service
+            uri: lb://notification-service
+            predicates:
+              - Path=/notification/**
+            filters:
+              - StripPrefix=1
+          - id: file-service
+            uri: lb://file-service
+            predicates:
+              - Path=/file/**
+            filters:
+              - StripPrefix=1
     sentinel:
       transport:
         dashboard: localhost:8080
@@ -65,7 +77,7 @@ management:
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true

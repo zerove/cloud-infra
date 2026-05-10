@@ -19,26 +19,29 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:root}
   threads:
     virtual:
-      enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+      enabled: true
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:redis-server}
       port: 6379
       database: 0
   cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
     stream:
-      rabbit:
-        binder:
-          brokers: rabbitmq-server
       bindings:
         txMessageOut-out-0:
           destination: tx.message.exchange
           content-type: application/json
       rabbit:
+        binder:
+          brokers: rabbitmq-server
         bindings:
           txMessageOut-out-0:
             producer:
               publisher-confirm-type: correlated
+
 management:
   server:
     port: 9301
@@ -52,9 +55,9 @@ management:
       show-details: always
       probes:
         enabled: true
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
   tracing:
     sampling:

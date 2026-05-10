@@ -2,19 +2,19 @@ package com.cloudinfra.system.domain;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.cloudinfra.common.core.domain.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import java.io.Serializable;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("sys_post")
-@EqualsAndHashCode(callSuper = false)
-public class SysPost implements Serializable {
+public class SysPost extends BaseEntity {
     @TableId
     private Long postId;
     private String postCode;
     private String postName;
     private Integer postSort;
-    private String status; // 0:正常, 1:停用
+    private String status;
     private String remark;
 }

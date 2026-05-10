@@ -1,7 +1,6 @@
 package com.cloudinfra.common.core.aspectj;
 
 import com.cloudinfra.common.core.annotation.DataScope;
-import com.cloudinfra.common.core.context.DataScopeContext;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;

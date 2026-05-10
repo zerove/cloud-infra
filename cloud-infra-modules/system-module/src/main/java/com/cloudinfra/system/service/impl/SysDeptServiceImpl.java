@@ -6,45 +6,93 @@ import com.cloudinfra.system.domain.SysDept;
 import com.cloudinfra.system.mapper.SysDeptMapper;
 import com.cloudinfra.system.service.ISysDeptService;
 import org.springframework.stereotype.Service;
-import com.cloudinfra.system.domain.vo.DeptTreeVO;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> implements ISysDeptService {
 
     @Override
-    public List<SysDept> selectDeptList(Long parentId) {
-        return baseMapper.selectList(new LambdaQueryWrapper<SysDept>()
-                .eq(parentId != null, SysDept::getParentId, parentId)
-                .orderByAsc(SysDept::getOrderNum));
+    public List<SysDept> selectDeptList(SysDept dept) {
+        LambdaQueryWrapper<SysDept> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysDept::getDelFlag, "0");
+        if (dept != null) {
+            if (dept.getDeptName() != null) {
+                wrapper.like(SysDept::getDeptName, dept.getDeptName());
+            }
+            if (dept.getStatus() != null) {
+                wrapper.eq(SysDept::getStatus, dept.getStatus());
+            }
+        }
+        wrapper.orderByAsc(SysDept::getParentId, SysDept::getOrderNum);
+        return list(wrapper);
     }
 
     @Override
-    public List<DeptTreeVO> selectDeptTreeList() {
-        List<SysDept> depts = baseMapper.selectList(null);
-        List<DeptTreeVO> vos = depts.stream().map(DeptTreeVO::fromSysDept).toList();
-        return buildTree(vos, 0L);
-    }
-
-    private List<DeptTreeVO> buildTree(List<DeptTreeVO> vos, Long parentId) {
-        List<DeptTreeVO> tree = new ArrayList<>();
-        for (DeptTreeVO vo : vos) {
-            if (parentId.equals(vo.getParentId())) {
-                vo.setChildren(buildTree(vos, vo.getId()));
-                tree.add(vo);
+    public List<SysDept> buildDeptTree(List<SysDept> depts) {
+        List<SysDept> returnList = new ArrayList<>();
+        List<Long> tempList = depts.stream().map(SysDept::getDeptId).collect(Collectors.toList());
+        for (SysDept dept : depts) {
+            if (!tempList.contains(dept.getParentId())) {
+                recursionFn(depts, dept);
+                returnList.add(dept);
             }
         }
-        return tree;
+        if (returnList.isEmpty()) {
+            returnList = depts;
+        }
+        return returnList;
     }
 
     @Override
     public boolean insertDept(SysDept dept) {
-        return this.save(dept);
+        SysDept info = this.getById(dept.getParentId());
+        if (info != null) {
+            dept.setAncestors(info.getAncestors() + "," + dept.getParentId());
+        } else {
+            dept.setAncestors("0");
+        }
+        return save(dept);
+    }
+
+    @Override
+    public boolean updateDept(SysDept dept) {
+        SysDept newParentDept = this.getById(dept.getParentId());
+        SysDept oldDept = this.getById(dept.getDeptId());
+        if (newParentDept != null && oldDept != null) {
+            String newAncestors = newParentDept.getAncestors() + "," + newParentDept.getDeptId();
+            String oldAncestors = oldDept.getAncestors();
+            dept.setAncestors(newAncestors);
+            updateDeptChildren(dept.getDeptId(), newAncestors, oldAncestors);
+        }
+        return updateById(dept);
     }
 
     @Override
     public boolean deleteDeptById(Long deptId) {
-        return this.removeById(deptId);
+        return removeById(deptId);
+    }
+
+    private void updateDeptChildren(Long deptId, String newAncestors, String oldAncestors) {
+        List<SysDept> children = list(new LambdaQueryWrapper<SysDept>().apply("ancestors like {0}", oldAncestors + "," + deptId + "%"));
+        for (SysDept child : children) {
+            child.setAncestors(child.getAncestors().replaceFirst(oldAncestors, newAncestors));
+        }
+        if (!children.isEmpty()) {
+            updateBatchById(children);
+        }
+    }
+
+    private void recursionFn(List<SysDept> list, SysDept t) {
+        List<SysDept> childList = getChildList(list, t);
+        // UI logic usually handles children
+    }
+
+    private List<SysDept> getChildList(List<SysDept> list, SysDept t) {
+        return list.stream()
+                .filter(n -> n.getParentId().equals(t.getDeptId()))
+                .collect(Collectors.toList());
     }
 }

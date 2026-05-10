@@ -51,6 +51,10 @@ public class Result<T> implements Serializable {
         return build(ResultCode.SUCCESS.getCode(), message, data);
     }
 
+    public static <T> Result<T> error(String message) {
+        return error(ResultCode.ERROR.getCode(), message);
+    }
+
     public static <T> Result<T> error(Integer code, String message) {
         return build(code, message, null);
     }

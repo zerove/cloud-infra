@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: file-service
+  threads:
+    virtual:
+      enabled: true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8084
+
+logging:
+  level:
+    com.cloudinfra: info

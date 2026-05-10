@@ -9,5 +9,27 @@
     "controlBehavior": 0,
     "burstCount": 0,
     "maxQueueingTimeMs": 500
+  },
+  {
+    "resource": "notification-service",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 50,
+    "interval": 1,
+    "intervalUnit": 0,
+    "controlBehavior": 0,
+    "burstCount": 0,
+    "maxQueueingTimeMs": 500
+  },
+  {
+    "resource": "file-service",
+    "resourceMode": 0,
+    "grade": 1,
+    "count": 20,
+    "interval": 1,
+    "intervalUnit": 0,
+    "controlBehavior": 0,
+    "burstCount": 0,
+    "maxQueueingTimeMs": 500
   }
 ]

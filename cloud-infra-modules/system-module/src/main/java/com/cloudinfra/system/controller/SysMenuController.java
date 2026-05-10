@@ -1,45 +1,55 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.common.core.annotation.Log;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysMenu;
-import com.cloudinfra.system.service.SysMenuService;
+import com.cloudinfra.system.service.ISysMenuService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "菜单管理")
 @RestController
 @RequestMapping("/system/menu")
 @RequiredArgsConstructor
 public class SysMenuController {
 
-    private final SysMenuService sysMenuService;
+    private final ISysMenuService menuService;
 
-    @PreAuthorize("@ss.hasPermission('system:menu:list')")
-    @GetMapping("/tree")
-    public Result<List<SysMenu>> treeList() {
-        return Result.success(sysMenuService.treeList());
+    @Operation(summary = "查询菜单列表")
+    @PreAuthorize("@ss.hasPermi('system:menu:list')")
+    @GetMapping("/list")
+    public Result<List<SysMenu>> list(SysMenu menu) {
+        List<SysMenu> menus = menuService.selectMenuList(menu);
+        return Result.success(menus);
     }
 
-    @PreAuthorize("@ss.hasPermission('system:menu:add')")
+    @Operation(summary = "新增菜单")
+    @PreAuthorize("@ss.hasPermi('system:menu:add')")
+    @Log(title = "菜单管理", businessType = BusinessType.INSERT)
     @PostMapping
     public Result<Void> add(@RequestBody SysMenu menu) {
-        sysMenuService.addMenu(menu);
-        return Result.success();
+        return menuService.save(menu) ? Result.success() : Result.error("新增菜单失败");
     }
 
-    @PreAuthorize("@ss.hasPermission('system:menu:edit')")
+    @Operation(summary = "修改菜单")
+    @PreAuthorize("@ss.hasPermi('system:menu:edit')")
+    @Log(title = "菜单管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public Result<Void> edit(@RequestBody SysMenu menu) {
-        sysMenuService.updateMenu(menu);
-        return Result.success();
+        return menuService.updateById(menu) ? Result.success() : Result.error("修改菜单失败");
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("@ss.hasPermission('system:menu:remove')")
-    public Result<Void> remove(@PathVariable Long id) {
-        sysMenuService.deleteMenu(id);
-        return Result.success();
+    @Operation(summary = "删除菜单")
+    @PreAuthorize("@ss.hasPermi('system:menu:remove')")
+    @Log(title = "菜单管理", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{menuId}")
+    public Result<Void> remove(@PathVariable Long menuId) {
+        return menuService.removeById(menuId) ? Result.success() : Result.error("删除菜单失败");
     }
 }

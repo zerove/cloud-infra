@@ -1,51 +1,55 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.common.core.annotation.Log;
+import com.cloudinfra.common.core.enums.BusinessType;
+import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysDept;
 import com.cloudinfra.system.service.ISysDeptService;
-import org.springframework.beans.factory.annotation.Autowired;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
-import com.cloudinfra.common.core.domain.Result;
-import org.springframework.security.access.prepost.PreAuthorize;
-
+@Tag(name = "部门管理")
 @RestController
 @RequestMapping("/system/dept")
+@RequiredArgsConstructor
 public class SysDeptController {
 
-    @Autowired
-    private ISysDeptService deptService;
+    private final ISysDeptService deptService;
 
-    @PreAuthorize("@ss.hasPermission('system:dept:query')")
+    @Operation(summary = "查询部门列表")
+    @PreAuthorize("@ss.hasPermi('system:dept:list')")
     @GetMapping("/list")
-    public Result<List<SysDept>> list(@RequestParam(required = false) Long parentId) {
-        return Result.success(deptService.selectDeptList(parentId));
+    public Result<List<SysDept>> list(SysDept dept) {
+        List<SysDept> depts = deptService.selectDeptList(dept);
+        return Result.success(depts);
     }
 
-    @PreAuthorize("@ss.hasPermission('system:dept:query')")
-    @GetMapping("/{deptId}")
-    public Result<SysDept> getInfo(@PathVariable Long deptId) {
-        return Result.success(deptService.getById(deptId));
-    }
-
-    @PreAuthorize("@ss.hasPermission('system:dept:add')")
+    @Operation(summary = "新增部门")
+    @PreAuthorize("@ss.hasPermi('system:dept:add')")
+    @Log(title = "部门管理", businessType = BusinessType.INSERT)
     @PostMapping
     public Result<Void> add(@RequestBody SysDept dept) {
-        deptService.insertDept(dept);
-        return Result.success();
+        return deptService.insertDept(dept) ? Result.success() : Result.error("新增部门失败");
     }
 
-    @PreAuthorize("@ss.hasPermission('system:dept:edit')")
+    @Operation(summary = "修改部门")
+    @PreAuthorize("@ss.hasPermi('system:dept:edit')")
+    @Log(title = "部门管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public Result<Void> edit(@RequestBody SysDept dept) {
-        deptService.updateById(dept);
-        return Result.success();
+        return deptService.updateDept(dept) ? Result.success() : Result.error("修改部门失败");
     }
 
-    @PreAuthorize("@ss.hasPermission('system:dept:remove')")
+    @Operation(summary = "删除部门")
+    @PreAuthorize("@ss.hasPermi('system:dept:remove')")
+    @Log(title = "部门管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{deptId}")
     public Result<Void> remove(@PathVariable Long deptId) {
-        deptService.deleteDeptById(deptId);
-        return Result.success();
+        return deptService.deleteDeptById(deptId) ? Result.success() : Result.error("删除部门失败");
     }
 }
