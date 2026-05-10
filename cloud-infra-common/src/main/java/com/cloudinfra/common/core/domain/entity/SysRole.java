@@ -21,6 +21,16 @@ public class SysRole extends BaseEntity {
     
     private String dataScope;
 
+    private String remark;
+
+    /** 菜单组 */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private java.util.List<Long> menuIds;
+
+    /** 部门组（数据权限） */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private java.util.List<Long> deptIds;
+
     @TableLogic
     private Integer deleted;
 }

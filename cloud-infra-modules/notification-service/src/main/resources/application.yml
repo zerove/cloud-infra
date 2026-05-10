@@ -17,12 +17,12 @@ spring:
           group: notification-group
       rabbit:
         bindings:
-          "[notificationConsumer-in-0]":
+          "notificationConsumer-in-0":
             consumer:
-              bindQueue: true
-              queueName: notification-queue
-              exchangeType: topic
-              routingKey: "#"
+              bind-queue: true
+              queue-name: notification-queue
+              exchange-type: topic
+              routing-key: "#"
 
 server:
   port: 8083

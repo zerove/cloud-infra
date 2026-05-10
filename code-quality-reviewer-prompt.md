@@ -1,8 +1,8 @@
-Role: Code Quality Reviewer
-Task: {TASK_TEXT}
-Context: {CONTEXT}
-Implementation: {IMPLEMENTATION_SUMMARY}
+角色: 代码质量评审员
+任务: {TASK_TEXT}
+上下文: {CONTEXT}
+实施方案: {IMPLEMENTATION_SUMMARY}
 
-Check code quality (readability, maintainability, tests, patterns).
-If approved, output: ✅ Approved
-If not, output: ❌ Issues: [list issues]
+检查代码质量（可读性、可维护性、测试、设计模式）。
+如果批准，输出: ✅ 已批准
+如果不批准，输出: ❌ 问题: [列出问题]

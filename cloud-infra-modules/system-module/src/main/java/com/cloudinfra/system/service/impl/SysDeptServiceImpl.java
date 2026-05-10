@@ -86,8 +86,11 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
     }
 
     private void recursionFn(List<SysDept> list, SysDept t) {
-        List<SysDept> childList = getChildList(list, t);
-        // UI logic usually handles children
+        List<SysDept> children = getChildList(list, t);
+        t.setChildren(children);
+        for (SysDept child : children) {
+            recursionFn(list, child);
+        }
     }
 
     private List<SysDept> getChildList(List<SysDept> list, SysDept t) {

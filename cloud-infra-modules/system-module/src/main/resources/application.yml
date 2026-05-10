@@ -40,7 +40,7 @@ spring:
         bindings:
           txMessageOut-out-0:
             producer:
-              publisher-confirm-type: correlated
+              confirm-type: correlated
 
 management:
   server:
@@ -59,12 +59,7 @@ management:
     metrics:
       export:
         enabled: true
-  tracing:
-    sampling:
-      probability: 1.0
-  otlp:
-    tracing:
-      endpoint: http://localhost:4318/v1/traces
+
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

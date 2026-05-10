@@ -1,6 +1,5 @@
 package com.cloudinfra.system.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.cloudinfra.system.domain.SysDictData;
 import com.cloudinfra.system.domain.SysDictType;
 import java.util.List;

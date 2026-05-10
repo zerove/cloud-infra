@@ -22,34 +22,51 @@ public class SysMenuController {
     private final ISysMenuService menuService;
 
     @Operation(summary = "查询菜单列表")
-    @PreAuthorize("@ss.hasPermi('system:menu:list')")
+    @PreAuthorize("hasAuthority('system:menu:list')")
     @GetMapping("/list")
     public Result<List<SysMenu>> list(SysMenu menu) {
         List<SysMenu> menus = menuService.selectMenuList(menu);
         return Result.success(menus);
     }
 
+    @Operation(summary = "查询菜单树")
+    @PreAuthorize("hasAuthority('system:menu:list')")
+    @GetMapping("/tree")
+    public Result<List<SysMenu>> tree() {
+        return Result.success(menuService.selectMenuTree());
+    }
+
+    @Operation(summary = "查询菜单详细")
+    @PreAuthorize("hasAuthority('system:menu:query')")
+    @GetMapping("/{menuId}")
+    public Result<SysMenu> getInfo(@PathVariable Long menuId) {
+        return Result.success(menuService.getById(menuId));
+    }
+
     @Operation(summary = "新增菜单")
-    @PreAuthorize("@ss.hasPermi('system:menu:add')")
+    @PreAuthorize("hasAuthority('system:menu:add')")
     @Log(title = "菜单管理", businessType = BusinessType.INSERT)
     @PostMapping
     public Result<Void> add(@RequestBody SysMenu menu) {
-        return menuService.save(menu) ? Result.success() : Result.error("新增菜单失败");
+        menuService.insertMenu(menu);
+        return Result.success();
     }
 
     @Operation(summary = "修改菜单")
-    @PreAuthorize("@ss.hasPermi('system:menu:edit')")
+    @PreAuthorize("hasAuthority('system:menu:edit')")
     @Log(title = "菜单管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public Result<Void> edit(@RequestBody SysMenu menu) {
-        return menuService.updateById(menu) ? Result.success() : Result.error("修改菜单失败");
+        menuService.updateMenu(menu);
+        return Result.success();
     }
 
     @Operation(summary = "删除菜单")
-    @PreAuthorize("@ss.hasPermi('system:menu:remove')")
+    @PreAuthorize("hasAuthority('system:menu:remove')")
     @Log(title = "菜单管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{menuId}")
     public Result<Void> remove(@PathVariable Long menuId) {
-        return menuService.removeById(menuId) ? Result.success() : Result.error("删除菜单失败");
+        menuService.deleteMenuById(menuId);
+        return Result.success();
     }
 }

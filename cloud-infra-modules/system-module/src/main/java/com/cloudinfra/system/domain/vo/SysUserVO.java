@@ -1,8 +1,7 @@
 package com.cloudinfra.system.domain.vo;
 
 import lombok.Data;
-
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 public class SysUserVO {
@@ -11,6 +10,6 @@ public class SysUserVO {
     private String email;
     private String phone;
     private Integer status;
-    private Date createTime;
+    private LocalDateTime createTime;
     private java.util.List<String> permissions;
 }

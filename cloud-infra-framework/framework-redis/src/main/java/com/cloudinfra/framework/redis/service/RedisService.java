@@ -59,4 +59,8 @@ public class RedisService {
     public boolean expire(String key, long timeout) {
         return Boolean.TRUE.equals(redisTemplate.expire(key, timeout, TimeUnit.MILLISECONDS));
     }
+
+    public java.util.Collection<String> keys(String pattern) {
+        return redisTemplate.keys(pattern);
+    }
 }

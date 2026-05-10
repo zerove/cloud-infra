@@ -21,4 +21,7 @@ public class SysDept extends BaseEntity {
     private String email;
     private String status;
     private String delFlag;
+
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private java.util.List<SysDept> children = new java.util.ArrayList<>();
 }

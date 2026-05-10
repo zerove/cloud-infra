@@ -3,15 +3,17 @@ package com.cloudinfra.system.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.cloudinfra.common.core.domain.BaseEntity;
 import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.EqualsAndHashCode;
 
 /**
  * 字典数据表 sys_dict_data
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("sys_dict_data")
-public class SysDictData {
+public class SysDictData extends BaseEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Integer dictSort;
@@ -22,9 +24,5 @@ public class SysDictData {
     private String listClass;
     private String isDefault;
     private String status;
-    private String createBy;
-    private LocalDateTime createTime;
-    private String updateBy;
-    private LocalDateTime updateTime;
     private String remark;
 }

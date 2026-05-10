@@ -48,13 +48,13 @@ public class GlobalAuthFilter extends OncePerRequestFilter {
             }
 
             DecodedJWT jwt = JwtUtils.parseToken(token.replace("Bearer ", ""));
-            String userId = jwt.getClaim("userId").asString();
+            Long userId = jwt.getClaim("userId").asLong();
             String username = jwt.getSubject();
 
             HttpServletRequestWrapper requestWrapper = new HttpServletRequestWrapper(request) {
                 private final Map<String, String> customHeaders = new ConcurrentHashMap<>();
                 {
-                    customHeaders.put("X-User-Id", userId);
+                    customHeaders.put("X-User-Id", userId.toString());
                     customHeaders.put("X-User-Name", username);
                     customHeaders.put(TRACE_ID, traceId);
                 }

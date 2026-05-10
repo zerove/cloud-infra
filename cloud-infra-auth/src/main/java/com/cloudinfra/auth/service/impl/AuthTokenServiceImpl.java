@@ -37,6 +37,10 @@ public Map<String, Object> createToken(LoginUser loginUser) {
 
         String accessToken = JwtUtils.createToken(claims, loginUser.getUsername());
         
+        // 存储在线用户信息，用于监控和踢出
+        String sessionKey = "auth:session:" + loginUser.getUserId() + ":" + accessTokenJti;
+        redisService.set(sessionKey, loginUser, 24 * 3600 * 1000L); // 24小时有效
+
         String refreshToken = UUID.randomUUID().toString();
         redisService.set("refresh_token:" + refreshToken, (Object) String.valueOf(loginUser.getUserId()), 7 * 24 * 3600 * 1000L);
 

@@ -8,6 +8,11 @@ import org.springframework.context.ApplicationEvent;
 public class LogEvent extends ApplicationEvent {
     private final SysOperLog operLog;
 
+    public LogEvent(SysOperLog operLog) {
+        super(operLog);
+        this.operLog = operLog;
+    }
+
     public LogEvent(Object source, SysOperLog operLog) {
         super(source);
         this.operLog = operLog;

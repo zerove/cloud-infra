@@ -6,7 +6,6 @@ import com.cloudinfra.framework.redis.service.RedisService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -28,7 +27,7 @@ public class SysLoginService {
 
         try {
             // 3. 用户认证
-            Authentication authentication = authenticationManager.authenticate(
+            authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(loginUser.getUsername(), loginUser.getPassword()));
             
             // 4. 清除登录失败计数
