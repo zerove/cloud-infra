@@ -10,7 +10,7 @@ import java.util.Map;
  */
 public class MDCContextTaskDecorator implements TaskDecorator {
 
-    private static final String TRACE_ID = "traceId";
+    // TRACE_ID field removed as it was reported as unused
 
     @Override
     public Runnable decorate(Runnable runnable) {
