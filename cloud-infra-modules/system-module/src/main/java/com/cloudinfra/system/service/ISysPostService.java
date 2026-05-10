@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface ISysPostService extends IService<SysPost> {
     List<SysPost> selectPostList(SysPost post);
+    boolean deletePostByIds(List<Long> postIds);
 }

@@ -34,13 +34,18 @@ spring:
         txMessageOut-out-0:
           destination: tx.message.exchange
           content-type: application/json
+        search-operlog-out-0:
+          destination: search-operlog-topic
       rabbit:
         binder:
-          brokers: rabbitmq-server
+          brokers: ${SPRING_RABBITMQ_HOST:rabbitmq-server}
         bindings:
           txMessageOut-out-0:
             producer:
               confirm-type: correlated
+          search-operlog-out-0:
+            producer:
+              routing-key-expression: "'search-operlog-key'"
 
 management:
   server:

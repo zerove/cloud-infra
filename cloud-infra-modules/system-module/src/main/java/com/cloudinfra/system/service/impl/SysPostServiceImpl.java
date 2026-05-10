@@ -29,4 +29,9 @@ public class SysPostServiceImpl extends ServiceImpl<SysPostMapper, SysPost> impl
         wrapper.orderByAsc(SysPost::getPostSort);
         return list(wrapper);
     }
+
+    @Override
+    public boolean deletePostByIds(List<Long> postIds) {
+        return removeByIds(postIds);
+    }
 }

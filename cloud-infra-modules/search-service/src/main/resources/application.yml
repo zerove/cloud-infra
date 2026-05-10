@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: search-service
+  profiles:
+    active: dev
+  elasticsearch:
+    uris: http://${SPRING_ELASTICSEARCH_HOST:localhost}:9200
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        file-extension: yaml
+    stream:
+      function:
+        definition: operLogConsumer
+      bindings:
+        operLogConsumer-in-0:
+          destination: search-operlog-topic
+          group: search-service-group
+      rabbit:
+        binder:
+          brokers: ${SPRING_RABBITMQ_HOST:rabbitmq-server}
+        bindings:
+          operLogConsumer-in-0:
+            consumer:
+              bind-queue: true
+              queue-name: search-operlog-queue
+              exchange-type: topic
+              routing-key: search-operlog-key
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
