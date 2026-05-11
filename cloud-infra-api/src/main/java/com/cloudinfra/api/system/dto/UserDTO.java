@@ -48,4 +48,10 @@ public class UserDTO {
      */
     @Schema(description = "权限标识集合")
     private Set<String> permissions;
+
+    /**
+     * 密码
+     */
+    @Schema(description = "密码")
+    private String password;
 }

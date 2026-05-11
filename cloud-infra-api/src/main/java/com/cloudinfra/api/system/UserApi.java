@@ -25,4 +25,12 @@ public interface UserApi {
     @Operation(summary = "根据ID获取用户信息")
     @GetMapping("/system/user/{userId}")
     Result<UserDTO> getUserById(@PathVariable("userId") Long userId);
+
+    @Operation(summary = "根据用户名获取用户信息")
+    @GetMapping("/system/user/username/{username}")
+    Result<UserDTO> getUserByUsername(@PathVariable("username") String username);
+
+    @Operation(summary = "注册用户")
+    @org.springframework.web.bind.annotation.PostMapping("/system/user/register")
+    Result<Void> registerUser(@org.springframework.web.bind.annotation.RequestBody com.cloudinfra.api.system.dto.UserDTO userDTO);
 }

@@ -1,36 +1,39 @@
 package com.cloudinfra.framework.web.aspect;
 
-import com.cloudinfra.common.annotation.Idempotent;
-import com.cloudinfra.framework.redis.service.RedisService;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
+import com.cloudinfra.common.core.annotation.Idempotent;
+import com.cloudinfra.common.core.exception.GlobalException;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
+import java.time.Duration;
 
 @Aspect
 @Component
+@RequiredArgsConstructor
 public class IdempotentAspect {
 
-    @Resource
-    private RedisService redisService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    @Around("@annotation(idempotent)")
-    public Object around(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
-        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
-        String key = "idempotent:" + request.getRequestURI() + ":" + request.getRemoteAddr() + ":" + idempotent.key();
+    @Before("@annotation(idempotent)")
+    public void doBefore(JoinPoint joinPoint, Idempotent idempotent) {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) return;
         
-        Object existing = redisService.get(key);
-        if (existing != null) {
-            throw new RuntimeException("请勿重复提交");
+        HttpServletRequest request = attributes.getRequest();
+        String key = "idempotent:" + request.getRequestURI() + ":" + request.getHeader("X-Request-Token");
+        
+        // 尝试设置 key，如果存在则表示请求重复
+        Boolean success = redisTemplate.opsForValue().setIfAbsent(key, "locked", Duration.ofSeconds(idempotent.expireSeconds()));
+        
+        if (Boolean.FALSE.equals(success)) {
+            throw new GlobalException(idempotent.message());
         }
-        
-        redisService.set(key, "1", idempotent.expireSeconds() * 1000L);
-        
-        return joinPoint.proceed();
     }
 }

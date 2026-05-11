@@ -20,6 +20,7 @@
         <module>framework-redis</module>
         <module>framework-security</module>
         <module>framework-tracing</module>
+        <module>framework-seata</module>
     </modules>
 
 </project>

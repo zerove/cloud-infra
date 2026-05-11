@@ -2,8 +2,8 @@ package com.cloudinfra.gateway.filter;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.cloudinfra.common.util.JwtUtils;
-import com.cloudinfra.framework.redis.service.RedisService;
 import jakarta.annotation.Resource;
+import org.springframework.data.redis.core.RedisTemplate;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,7 +21,7 @@ import java.util.List;
 public class AuthFilter extends OncePerRequestFilter implements Ordered {
 
     @Resource
-    private RedisService redisService;
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Value("${auth.white-list:}")
     private List<String> whiteList;
@@ -52,14 +52,14 @@ public class AuthFilter extends OncePerRequestFilter implements Ordered {
             Long userId = jwt.getClaim("userId").asLong();
             
             // 检查是否在黑名单中
-            if (redisService.isBlacklisted(jti)) {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti))) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
 
             // 检查在线会话是否存在（用于强退）
             String sessionKey = "auth:session:" + userId + ":" + jti;
-            if (!redisService.hasKey(sessionKey)) {
+            if (Boolean.FALSE.equals(redisTemplate.hasKey(sessionKey))) {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "会话已失效或被强退");
                 return;
             }

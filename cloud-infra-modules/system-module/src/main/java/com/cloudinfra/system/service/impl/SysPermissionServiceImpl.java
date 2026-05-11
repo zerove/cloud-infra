@@ -38,17 +38,7 @@ public class SysPermissionServiceImpl extends ServiceImpl<SysPermissionMapper, S
         List<String> cached = cache.get(userId);
         if (cached != null) return cached;
 
-        List<SysUserRole> userRoles = userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
-        List<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toList());
-
-        if (roleIds.isEmpty()) return Collections.emptyList();
-
-        List<SysRolePermission> rolePermissions = rolePermissionMapper.selectList(new LambdaQueryWrapper<SysRolePermission>().in(SysRolePermission::getRoleId, roleIds));
-        List<Long> permissionIds = rolePermissions.stream().map(SysRolePermission::getPermissionId).collect(Collectors.toList());
-
-        List<String> permissions = baseMapper.selectBatchIds(permissionIds).stream()
-                .map(SysPermissionEntity::getPerms)
-                .collect(Collectors.toList());
+        List<String> permissions = baseMapper.selectPermsByUserId(userId);
 
         cache.put(userId, permissions, 1, TimeUnit.HOURS);
         return permissions;

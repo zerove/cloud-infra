@@ -1,28 +1,16 @@
 spring:
   application:
-    name: gateway-module
+    name: cloud-cloud-infra-gateway
   cloud:
     nacos:
       discovery:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: 
       config:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: 
         file-extension: yaml
         namespace: public
         group: DEFAULT_GROUP
-        refresh-enabled: true
-        shared-configs:
-          - data-id: actuator-config.yaml
+        extension-configs:
+          - data-id: cloud-cloud-infra-gateway.yaml
             group: DEFAULT_GROUP
             refresh: true
-    sentinel:
-      datasource:
-        gateway-flow-rules:
-          nacos:
-            server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
-            data-id: gateway-flow-rules
-            group-id: SENTINEL_GROUP
-            data-type: json
-            rule-type: gw-flow
-
-

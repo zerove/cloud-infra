@@ -1,15 +1,22 @@
 spring:
-  main:
-    allow-bean-definition-overriding: true
   application:
     name: cloud-auth
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
-        enabled: true
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
       config:
-        server-addr: nacos:8848
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
         file-extension: yaml
-        group: DEFAULT_GROUP
         namespace: public
+        group: DEFAULT_GROUP
+        extension-configs:
+          - data-id: cloud-auth.yaml
+            group: DEFAULT_GROUP
+            refresh: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

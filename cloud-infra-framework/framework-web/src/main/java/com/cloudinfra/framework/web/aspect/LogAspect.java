@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
  * 操作日志记录处理
  */
 @Aspect
-@Component
 @RequiredArgsConstructor
 public class LogAspect {
 

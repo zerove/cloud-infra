@@ -1,15 +1,16 @@
 spring:
-  main:
-    allow-bean-definition-overriding: true
   application:
     name: system-module
   cloud:
     nacos:
       discovery:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: 
       config:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: 
         file-extension: yaml
-        shared-configs:
-          - data-id: actuator-config.yaml
+        namespace: public
+        group: DEFAULT_GROUP
+        extension-configs:
+          - data-id: system-module.yaml
+            group: DEFAULT_GROUP
             refresh: true

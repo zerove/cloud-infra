@@ -50,12 +50,10 @@ public class SysUserController {
         return Result.success();
     }
 
-    @Operation(summary = "删除用户")
-    @PreAuthorize("@ss.hasPermi('system:user:remove')")
-    @Log(title = "用户管理", businessType = BusinessType.DELETE)
-    @DeleteMapping("/{userIds}")
-    public Result<Void> remove(@PathVariable Long[] userIds) {
-        userService.deleteUserByIds(userIds);
+    @Operation(summary = "注册用户")
+    @PostMapping("/register")
+    public Result<Void> register(@RequestBody SysUser user) {
+        userService.insertUser(user);
         return Result.success();
     }
 }

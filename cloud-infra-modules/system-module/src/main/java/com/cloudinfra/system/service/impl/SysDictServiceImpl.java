@@ -19,7 +19,7 @@ public class SysDictServiceImpl implements ISysDictService {
 
     private final SysDictTypeMapper dictTypeMapper;
     private final SysDictDataMapper dictDataMapper;
-    private final RedisService redisService;
+    private final org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate;
 
     private static final String CACHE_KEY_PREFIX = "sys:dict:";
 
@@ -42,11 +42,10 @@ public class SysDictServiceImpl implements ISysDictService {
     @Override
     @Transactional
     public int updateDictType(SysDictType dictType) {
-        // Clear cache for this type if name changed
         SysDictType old = dictTypeMapper.selectById(dictType.getId());
         int result = dictTypeMapper.updateById(dictType);
-        if (result > 0) {
-            redisService.deleteObject(CACHE_KEY_PREFIX + old.getDictType());
+        if (result > 0 && old != null) {
+            redisTemplate.delete(CACHE_KEY_PREFIX + old.getDictType());
         }
         return result;
     }
@@ -57,7 +56,7 @@ public class SysDictServiceImpl implements ISysDictService {
         for (Long id : ids) {
             SysDictType type = dictTypeMapper.selectById(id);
             if (type != null) {
-                redisService.deleteObject(CACHE_KEY_PREFIX + type.getDictType());
+                redisTemplate.delete(CACHE_KEY_PREFIX + type.getDictType());
             }
         }
         return dictTypeMapper.deleteBatchIds(List.of(ids));
@@ -67,19 +66,19 @@ public class SysDictServiceImpl implements ISysDictService {
     @SuppressWarnings("unchecked")
     public List<SysDictData> selectDictDataByType(String dictType) {
         String cacheKey = CACHE_KEY_PREFIX + dictType;
-        List<SysDictData> dictDatas = (List<SysDictData>) redisService.get(cacheKey);
+        Object cached = redisTemplate.opsForValue().get(cacheKey);
         
-        if (dictDatas != null) {
-            return dictDatas;
+        if (cached instanceof List<?>) {
+            return (List<SysDictData>) cached;
         }
 
-        dictDatas = dictDataMapper.selectList(new LambdaQueryWrapper<SysDictData>()
+        List<SysDictData> dictDatas = dictDataMapper.selectList(new LambdaQueryWrapper<SysDictData>()
                 .eq(SysDictData::getDictType, dictType)
                 .eq(SysDictData::getStatus, "0")
                 .orderByAsc(SysDictData::getDictSort));
         
         if (!dictDatas.isEmpty()) {
-            redisService.set(cacheKey, dictDatas, 3600000); // 1 hour
+            redisTemplate.opsForValue().set(cacheKey, dictDatas, java.time.Duration.ofHours(1));
         }
         
         return dictDatas;
@@ -90,7 +89,7 @@ public class SysDictServiceImpl implements ISysDictService {
     public int insertDictData(SysDictData dictData) {
         int result = dictDataMapper.insert(dictData);
         if (result > 0) {
-            redisService.set(CACHE_KEY_PREFIX + dictData.getDictType(), null, 0);
+            redisTemplate.delete(CACHE_KEY_PREFIX + dictData.getDictType());
         }
         return result;
     }
@@ -100,7 +99,7 @@ public class SysDictServiceImpl implements ISysDictService {
     public int updateDictData(SysDictData dictData) {
         int result = dictDataMapper.updateById(dictData);
         if (result > 0) {
-            redisService.set(CACHE_KEY_PREFIX + dictData.getDictType(), null, 0);
+            redisTemplate.delete(CACHE_KEY_PREFIX + dictData.getDictType());
         }
         return result;
     }
@@ -111,7 +110,7 @@ public class SysDictServiceImpl implements ISysDictService {
         for (Long id : ids) {
             SysDictData data = dictDataMapper.selectById(id);
             if (data != null) {
-                redisService.set(CACHE_KEY_PREFIX + data.getDictType(), null, 0);
+                redisTemplate.delete(CACHE_KEY_PREFIX + data.getDictType());
             }
         }
         return dictDataMapper.deleteBatchIds(List.of(ids));
@@ -119,7 +118,9 @@ public class SysDictServiceImpl implements ISysDictService {
 
     @Override
     public void clearDictCache() {
-        // In a real system, we'd use scan to delete all sys:dict:* keys
-        // For now, let's keep it simple
+        java.util.Set<String> keys = redisTemplate.keys(CACHE_KEY_PREFIX + "*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
     }
 }

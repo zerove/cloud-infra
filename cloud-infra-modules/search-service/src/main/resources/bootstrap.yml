@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: search-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 
+      config:
+        server-addr: 
+        file-extension: yaml
+        namespace: public
+        group: DEFAULT_GROUP
+        extension-configs:
+          - data-id: search-service.yaml
+            group: DEFAULT_GROUP
+            refresh: true

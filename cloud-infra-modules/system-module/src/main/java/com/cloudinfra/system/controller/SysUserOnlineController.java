@@ -21,18 +21,20 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SysUserOnlineController {
 
-    private final RedisService redisService;
+    private final org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate;
 
     @Operation(summary = "查询在线用户列表")
     @PreAuthorize("hasAuthority('monitor:online:list')")
     @GetMapping("/list")
     public Result<List<LoginUser>> list() {
-        Collection<String> keys = redisService.keys("auth:session:*");
+        java.util.Set<String> keys = redisTemplate.keys("auth:session:*");
         List<LoginUser> userOnlineList = new ArrayList<>();
-        for (String key : keys) {
-            LoginUser user = (LoginUser) redisService.get(key);
-            if (user != null) {
-                userOnlineList.add(user);
+        if (keys != null) {
+            for (String key : keys) {
+                LoginUser user = (LoginUser) redisTemplate.opsForValue().get(key);
+                if (user != null) {
+                    userOnlineList.add(user);
+                }
             }
         }
         return Result.success(userOnlineList);
@@ -43,8 +45,7 @@ public class SysUserOnlineController {
     @Log(title = "在线用户", businessType = BusinessType.FORCE)
     @DeleteMapping("/{tokenId}")
     public Result<Void> forceLogout(@PathVariable String tokenId) {
-        // 此处的 tokenId 是 Redis 中的完整 key
-        redisService.delete(tokenId);
+        redisTemplate.delete(tokenId);
         return Result.success();
     }
 }
