@@ -7,6 +7,7 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.service.ISysUserService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +37,7 @@ public class SysUserController {
     @PreAuthorize("@ss.hasPermi('system:user:add')")
     @Log(title = "用户管理", businessType = BusinessType.INSERT)
     @PostMapping
-    public Result<Void> add(@RequestBody SysUser user) {
+    public Result<Void> add(@Valid @RequestBody SysUser user) {
         userService.insertUser(user);
         return Result.success();
     }
@@ -45,14 +46,14 @@ public class SysUserController {
     @PreAuthorize("@ss.hasPermi('system:user:edit')")
     @Log(title = "用户管理", businessType = BusinessType.UPDATE)
     @PutMapping
-    public Result<Void> edit(@RequestBody SysUser user) {
+    public Result<Void> edit(@Valid @RequestBody SysUser user) {
         userService.updateUser(user);
         return Result.success();
     }
 
     @Operation(summary = "注册用户")
     @PostMapping("/register")
-    public Result<Void> register(@RequestBody SysUser user) {
+    public Result<Void> register(@Valid @RequestBody SysUser user) {
         userService.insertUser(user);
         return Result.success();
     }
