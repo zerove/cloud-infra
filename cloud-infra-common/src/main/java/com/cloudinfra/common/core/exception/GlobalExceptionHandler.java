@@ -32,6 +32,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理 @RequestBody 参数校验异常
+     */
+    @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleMethodArgumentNotValidException(org.springframework.web.bind.MethodArgumentNotValidException e) {
+        String errorMessage = e.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .collect(java.util.stream.Collectors.joining(", "));
+        log.warn("Validation failed: {}", errorMessage);
+        return Result.fail(ErrorCode.PARAM_ERROR.getCode(), errorMessage);
+    }
+
+    /**
+     * 处理路径参数/查询参数校验异常
+     */
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<?> handleConstraintViolationException(jakarta.validation.ConstraintViolationException e) {
+        String errorMessage = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(java.util.stream.Collectors.joining(", "));
+        log.warn("Constraint violation: {}", errorMessage);
+        return Result.fail(ErrorCode.PARAM_ERROR.getCode(), errorMessage);
+    }
+
+    /**
      * 处理所有未捕获的运行时异常
      */
     @ExceptionHandler(Exception.class)
