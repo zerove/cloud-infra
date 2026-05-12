@@ -26,6 +26,15 @@ public class NotificationController {
     private final StreamBridge streamBridge;
     private final INotificationService notificationService;
 
+    /**
+     * 异步发送通知。
+     * <p>
+     * 将通知请求投递至消息队列，由后台消费者异步处理具体的发送逻辑（如邮件、短信），
+     * 从而提高接口响应速度并实现削峰填谷。
+     *
+     * @param request 通知请求参数
+     * @return 包含异步发送状态的结果
+     */
     @Operation(summary = "发送通知 (异步)")
     @PostMapping("/send")
     public Result<NotificationResponse> send(@RequestBody NotificationRequest request) {
@@ -37,14 +46,26 @@ public class NotificationController {
         return Result.success(response);
     }
 
+    /**
+     * 查询用户的通知历史记录。
+     * <p>
+     * 支持根据用户 ID、通知状态和通知类型进行过滤，并支持分页查询。
+     *
+     * @param userId  用户 ID
+     * @param status  通知状态（可选）
+     * @param type    通知类型（可选）
+     * @param page    页码，默认为 1
+     * @param size    每页数量，默认为 10
+     * @return 用户通知历史列表
+     */
     @Operation(summary = "查询通知历史")
     @GetMapping("/history")
     public Result<List<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
         
         List<Notification> history = notificationService.getHistory(userId, status, type);
         
@@ -62,6 +83,12 @@ public class NotificationController {
         return Result.success(responses);
     }
 
+    /**
+     * 将指定 ID 的通知标记为已读。
+     *
+     * @param id 通知记录 ID
+     * @return 操作结果
+     */
     @Operation(summary = "标记为已读")
     @PutMapping("/read/{id}")
     public Result<Void> markAsRead(@PathVariable Long id) {

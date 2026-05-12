@@ -1,7 +1,7 @@
 package com.cloudinfra.notification.mq;
 
+import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.notification.service.INotificationService;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,28 +15,29 @@ import java.util.function.Consumer;
 public class NotificationConsumer {
 
     private final INotificationService notificationService;
-    private final ObjectMapper objectMapper;
 
     @Bean
-    public Consumer<String> notificationConsumer() {
-        return message -> {
-            log.info("接收到通知消息: {}", message);
+    public Consumer<NotificationRequest> notificationConsumer() {
+        return request -> {
+            log.info("接收到通知消息: {}", request);
             try {
-                JsonNode node = objectMapper.readTree(message);
-                String type = node.get("type").asText();
-                String target = node.get("target").asText();
-                String content = node.get("content").asText();
+                String target = request.getTarget();
+                String content = request.getContent();
+                String title = request.getTitle() != null ? request.getTitle() : "系统通知";
 
-                if ("email".equalsIgnoreCase(type)) {
-                    String subject = node.has("subject") ? node.get("subject").asText() : "系统通知";
-                    notificationService.sendEmail(target, subject, content);
-                } else if ("sms".equalsIgnoreCase(type)) {
+                if (com.cloudinfra.api.notification.enums.NotificationType.EMAIL.equals(request.getType())) {
+                    notificationService.sendEmail(target, title, content);
+                } else if (com.cloudinfra.api.notification.enums.NotificationType.SMS.equals(request.getType())) {
                     notificationService.sendSms(target, content);
                 } else {
-                    log.warn("未知的通知类型: {}", type);
+                    log.warn("不支持的通知类型或未指定发送渠道: {}", request.getType());
                 }
+
+                // PERSISTENCE: Save to DB after sending
+                notificationService.saveNotification(request.getUserId(), request.getType(), title, content);
+
             } catch (Exception e) {
-                log.error("处理通知失败: {}", message, e);
+                log.error("处理通知失败: {}", request, e);
             }
         };
     }
