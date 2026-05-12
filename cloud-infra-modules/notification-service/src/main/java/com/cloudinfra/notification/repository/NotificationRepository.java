@@ -1,6 +1,7 @@
 package com.cloudinfra.notification.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
@@ -18,10 +19,10 @@ import java.util.List;
 @Repository
 @RequiredArgsConstructor
 public class NotificationRepository extends ServiceImpl<NotificationMapper, Notification> {
-    
+
     /**
      * 分页/列表查询通知历史
-     * 
+     *
      * @param userId 用户ID
      * @param status 通知状态 (null 表示忽略状态过滤)
      * @param type 通知类型 (null 表示忽略类型过滤)
@@ -36,7 +37,8 @@ public class NotificationRepository extends ServiceImpl<NotificationMapper, Noti
                .eq(status != null, Notification::getStatus, status)
                .eq(type != null, Notification::getType, type)
                .orderByDesc(Notification::getCreateTime);
-        
+
         return this.page(pageParam, wrapper).getRecords();
     }
 }
+
