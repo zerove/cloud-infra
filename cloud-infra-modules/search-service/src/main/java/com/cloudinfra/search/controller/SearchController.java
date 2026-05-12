@@ -1,44 +1,37 @@
 package com.cloudinfra.search.controller;
 
+import com.cloudinfra.api.search.*;
+import com.cloudinfra.api.search.dto.*;
 import com.cloudinfra.common.core.domain.Result;
-import com.cloudinfra.search.domain.OperLogDocument;
-import com.cloudinfra.search.repository.OperLogRepository;
+import com.cloudinfra.search.service.SearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.cloud.openfeign.SpringQueryMap;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 /**
- * 搜索服务接口
+ * 搜索管理控制器
+ * 提供对操作日志等系统数据的搜索接口实现
  */
 @Tag(name = "搜索管理")
 @RestController
 @RequestMapping("/search")
 @RequiredArgsConstructor
-public class SearchController {
+public class SearchController implements SearchApi {
 
-    private final OperLogRepository operLogRepository;
+    private final SearchService searchService;
 
-    @Operation(summary = "全文本搜索操作日志")
+    /**
+     * 搜索操作日志
+     * 
+     * @param request 搜索请求参数，包含关键字、页码和页大小
+     * @return 包含搜索结果的分页响应
+     */
+    @Override
+    @Operation(summary = "搜索操作日志")
     @GetMapping("/operlog")
-    public Result<List<OperLogDocument>> searchOperLog(
-            @RequestParam String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        
-        // 此处为简单实现，生产环境建议使用 NativeQuery 构建复杂检索（含高亮）
-        Page<OperLogDocument> result = operLogRepository.findAll(PageRequest.of(page, size));
-        return Result.success(result.getContent());
-    }
-
-    @Operation(summary = "保存操作日志索引")
-    @PostMapping("/operlog")
-    public Result<Void> save(@RequestBody OperLogDocument document) {
-        operLogRepository.save(document);
-        return Result.success();
+    public Result<SearchResponse<OperLogDTO>> searchOperLog(@SpringQueryMap SearchRequest request) {
+        return Result.success(searchService.searchOperLog(request));
     }
 }
