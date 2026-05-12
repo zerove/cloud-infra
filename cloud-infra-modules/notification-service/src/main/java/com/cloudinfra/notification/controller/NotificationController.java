@@ -39,7 +39,7 @@ public class NotificationController {
     @PostMapping("/send")
     public Result<NotificationResponse> send(@RequestBody NotificationRequest request) {
         // 投递至 MQ
-        streamBridge.send("notificationConsumer-out-0", request);
+        streamBridge.send("notification-topic", request);
         
         NotificationResponse response = new NotificationResponse();
         response.setStatus("ASYNC_SENT");
@@ -67,7 +67,7 @@ public class NotificationController {
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
         
-        List<Notification> history = notificationService.getHistory(userId, status, type);
+        List<Notification> history = notificationService.getHistory(userId, status, type, page, size);
         
         List<NotificationHistoryResponse> responses = history.stream().map(n -> {
             NotificationHistoryResponse r = new NotificationHistoryResponse();

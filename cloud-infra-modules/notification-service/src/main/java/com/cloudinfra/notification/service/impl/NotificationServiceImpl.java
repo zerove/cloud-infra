@@ -32,6 +32,9 @@ public class NotificationServiceImpl implements INotificationService {
         log.info("Sending SMS to: {}, Content: {}", phone, content);
     }
 
+    /**
+     * 保存通知记录到数据库。
+     */
     @Override
     @Transactional
     public void saveNotification(Long userId, NotificationType type, String title, String content) {
@@ -45,11 +48,17 @@ public class NotificationServiceImpl implements INotificationService {
         log.info("Notification saved for user {}: {}", userId, title);
     }
 
+    /**
+     * 根据用户ID、状态和类型查询通知历史记录。
+     */
     @Override
-    public List<Notification> getHistory(Long userId, NotificationStatus status, NotificationType type) {
-        return notificationRepository.findHistory(userId, status, type);
+    public List<Notification> getHistory(Long userId, NotificationStatus status, NotificationType type, Integer page, Integer size) {
+        return notificationRepository.findHistory(userId, status, type, page, size);
     }
 
+    /**
+     * 将指定ID的通知标记为已读。
+     */
     @Override
     @Transactional
     public void markAsRead(Long notificationId) {

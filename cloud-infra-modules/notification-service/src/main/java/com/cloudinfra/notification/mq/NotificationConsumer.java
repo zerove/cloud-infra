@@ -1,6 +1,7 @@
 package com.cloudinfra.notification.mq;
 
 import com.cloudinfra.api.notification.dto.NotificationRequest;
+import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.service.INotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +26,9 @@ public class NotificationConsumer {
                 String content = request.getContent();
                 String title = request.getTitle() != null ? request.getTitle() : "系统通知";
 
-                if (com.cloudinfra.api.notification.enums.NotificationType.EMAIL.equals(request.getType())) {
+                if (NotificationType.EMAIL.equals(request.getType())) {
                     notificationService.sendEmail(target, title, content);
-                } else if (com.cloudinfra.api.notification.enums.NotificationType.SMS.equals(request.getType())) {
+                } else if (NotificationType.SMS.equals(request.getType())) {
                     notificationService.sendSms(target, content);
                 } else {
                     log.warn("不支持的通知类型或未指定发送渠道: {}", request.getType());
