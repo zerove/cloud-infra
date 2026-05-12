@@ -31,7 +31,7 @@ public class SearchController implements SearchApi {
     @Override
     @Operation(summary = "搜索操作日志")
     @GetMapping("/operlog")
-    public Result<SearchResponse<OperLogDTO>> searchOperLog(@SpringQueryMap SearchRequest request) {
+    public Result<SearchResponse<OperLogDTO>> searchOperLog(SearchRequest request) {
         return Result.success(searchService.searchOperLog(request));
     }
 }
