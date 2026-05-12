@@ -4,20 +4,26 @@ import com.alibaba.cloud.nacos.NacosConfigManager;
 import com.alibaba.nacos.api.config.listener.Listener;
 import com.alibaba.nacos.api.exception.NacosException;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-import org.yaml.snakeyaml.Yaml;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * 网关动态路由管理器：监听 Nacos 配置，实时更新本地内存中的路由表
  */
-@Slf4j
 @Component
+@ConditionalOnBean(NacosConfigManager.class)
 public class DynamicRouteManager {
+
+    private static final Logger log = LoggerFactory.getLogger(
+        DynamicRouteManager.class
+    );
 
     private static final String DATA_ID = "gateway-routes.yaml";
     private static final String GROUP = "DEFAULT_GROUP";
@@ -25,6 +31,7 @@ public class DynamicRouteManager {
     private final NacosConfigManager nacosConfigManager;
     private final Map<String, Object> routeMap = new ConcurrentHashMap<>();
 
+    @Autowired
     public DynamicRouteManager(NacosConfigManager nacosConfigManager) {
         this.nacosConfigManager = nacosConfigManager;
     }
@@ -32,21 +39,29 @@ public class DynamicRouteManager {
     @PostConstruct
     public void init() {
         try {
-            String configInfo = nacosConfigManager.getConfigService().getConfig(DATA_ID, GROUP, 5000);
+            String configInfo = nacosConfigManager
+                .getConfigService()
+                .getConfig(DATA_ID, GROUP, 5000);
             updateRoutes(configInfo);
 
-            nacosConfigManager.getConfigService().addListener(DATA_ID, GROUP, new Listener() {
-                @Override
-                public void receiveConfigInfo(String configInfo) {
-                    log.info("检测到路由配置变更，开始更新...");
-                    updateRoutes(configInfo);
-                }
+            nacosConfigManager
+                .getConfigService()
+                .addListener(
+                    DATA_ID,
+                    GROUP,
+                    new Listener() {
+                        @Override
+                        public void receiveConfigInfo(String configInfo) {
+                            log.info("检测到路由配置变更，开始更新...");
+                            updateRoutes(configInfo);
+                        }
 
-                @Override
-                public Executor getExecutor() {
-                    return null;
-                }
-            });
+                        @Override
+                        public Executor getExecutor() {
+                            return null;
+                        }
+                    }
+                );
         } catch (NacosException e) {
             log.error("Nacos 路由监听初始化失败", e);
         }

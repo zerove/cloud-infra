@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @EnableDiscoveryClient
 @EnableTransactionManagement
-@SpringBootApplication(scanBasePackages = {"com.cloudinfra.system", "com.cloudinfra.common", "com.cloudinfra.framework"}, excludeName = "org.springframework.boot.autoconfigure.web.client.RestClientAutoConfiguration")
+@SpringBootApplication(scanBasePackages = {"com.cloudinfra.system", "com.cloudinfra.framework"}, excludeName = "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration")
 public class SystemApplication {
     public static void main(String[] args) {
         SpringApplication.run(SystemApplication.class, args);

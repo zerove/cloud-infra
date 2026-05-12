@@ -15,6 +15,14 @@
 - 部门/岗位服务测试：已补齐。
 - 生产级测试基础设施：已完成 (Testcontainers 可选执行策略)。
 - 项目编译：通过。
+- 通知服务逻辑补齐与分页查询支持：已完成。
+- API 契约标准化 (cloud-infra-api 模块定义)：已完成。
+- 解决单元测试中 Nacos 依赖注入冲突问题：已完成。
+- 修复集成测试中 MQ 消费者 Bean 定义覆盖错误：已完成。
+- 测试基础设施标准化 (集成 Testcontainers 与 BaseIntegrationTest)：已完成。
+- 模块解耦与组件边界规范化 (Explicit Component Scan)：已完成。
+- Feign 调用弹性优化 (Resilience4j 集成)：已完成。
+- JDK 25 虚拟线程高性能调优：已完成。
 
 ## 后续任务规划
 1. **[暂不处理] 业务功能扩展：多租户支持**

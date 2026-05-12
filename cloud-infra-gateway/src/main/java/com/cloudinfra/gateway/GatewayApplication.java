@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 @EnableDiscoveryClient
-@SpringBootApplication(scanBasePackages = {"com.cloudinfra"}, excludeName = {
+@SpringBootApplication(scanBasePackages = {"com.cloudinfra.gateway", "com.cloudinfra.framework"}, excludeName = {
         "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
         "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration",
         "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",

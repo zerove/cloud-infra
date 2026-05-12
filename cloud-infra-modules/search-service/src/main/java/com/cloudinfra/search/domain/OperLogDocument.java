@@ -2,6 +2,7 @@ package com.cloudinfra.search.domain;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
@@ -17,7 +18,7 @@ public class OperLogDocument {
     @Id
     private Long operId;
 
-    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
+    @Field(type = FieldType.Text, analyzer = "standard")
     private String title;
 
     @Field(type = FieldType.Integer)
@@ -29,7 +30,7 @@ public class OperLogDocument {
     @Field(type = FieldType.Keyword)
     private String operName;
 
-    @Field(type = FieldType.Text, analyzer = "ik_max_word")
+    @Field(type = FieldType.Text, analyzer = "standard")
     private String operUrl;
 
     @Field(type = FieldType.Ip)
@@ -47,6 +48,6 @@ public class OperLogDocument {
     @Field(type = FieldType.Text)
     private String errorMsg;
 
-    @Field(type = FieldType.Date)
+    @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis)
     private LocalDateTime operTime;
 }

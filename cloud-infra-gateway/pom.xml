@@ -11,10 +11,20 @@
     <artifactId>cloud-infra-gateway</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- 网关核心 (WebMVC) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+            <version>4.2.0</version>
         </dependency>
         
         <!-- Nacos 配置 -->
@@ -65,12 +75,8 @@
             <artifactId>sentinel-datasource-nacos</artifactId>
         </dependency>
         
+
         <!-- API 文档聚合 -->
-        <dependency>
-            <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-gateway-spring-boot-starter</artifactId>
-            <version>4.5.0</version>
-        </dependency>
 
         <!-- Test -->
         <dependency>

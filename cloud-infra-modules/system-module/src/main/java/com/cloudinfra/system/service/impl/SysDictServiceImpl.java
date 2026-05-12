@@ -1,17 +1,15 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.system.domain.SysDictData;
 import com.cloudinfra.system.domain.SysDictType;
 import com.cloudinfra.system.mapper.SysDictDataMapper;
 import com.cloudinfra.system.mapper.SysDictTypeMapper;
 import com.cloudinfra.system.service.ISysDictService;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -19,7 +17,10 @@ public class SysDictServiceImpl implements ISysDictService {
 
     private final SysDictTypeMapper dictTypeMapper;
     private final SysDictDataMapper dictDataMapper;
-    private final org.springframework.data.redis.core.RedisTemplate<String, Object> redisTemplate;
+    private final org.springframework.data.redis.core.RedisTemplate<
+        String,
+        Object
+    > redisTemplate;
 
     private static final String CACHE_KEY_PREFIX = "sys:dict:";
 
@@ -67,20 +68,24 @@ public class SysDictServiceImpl implements ISysDictService {
     public List<SysDictData> selectDictDataByType(String dictType) {
         String cacheKey = CACHE_KEY_PREFIX + dictType;
         Object cached = redisTemplate.opsForValue().get(cacheKey);
-        
+
         if (cached instanceof List<?>) {
             return (List<SysDictData>) cached;
         }
 
-        List<SysDictData> dictDatas = dictDataMapper.selectList(new LambdaQueryWrapper<SysDictData>()
+        List<SysDictData> dictDatas = dictDataMapper.selectList(
+            new LambdaQueryWrapper<SysDictData>()
                 .eq(SysDictData::getDictType, dictType)
                 .eq(SysDictData::getStatus, "0")
-                .orderByAsc(SysDictData::getDictSort));
-        
+                .orderByAsc(SysDictData::getDictSort)
+        );
+
         if (!dictDatas.isEmpty()) {
-            redisTemplate.opsForValue().set(cacheKey, dictDatas, java.time.Duration.ofHours(1));
+            redisTemplate
+                .opsForValue()
+                .set(cacheKey, dictDatas, java.time.Duration.ofHours(1));
         }
-        
+
         return dictDatas;
     }
 

@@ -6,19 +6,28 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.Map;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "认证管理")
 @RestController
 @RequestMapping("/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthTokenService authTokenService;
     private final SysLoginService loginService;
+
+    public AuthController(
+        AuthTokenService authTokenService,
+        SysLoginService loginService
+    ) {
+        this.authTokenService = authTokenService;
+        this.loginService = loginService;
+    }
 
     @Operation(summary = "登录")
     @PostMapping("/login")
@@ -28,7 +37,9 @@ public class AuthController {
 
     @Operation(summary = "刷新Token")
     @PostMapping("/refresh")
-    public Result<Map<String, Object>> refresh(@RequestHeader("Refresh-Token") String refreshToken) {
+    public Result<Map<String, Object>> refresh(
+        @RequestHeader("Refresh-Token") String refreshToken
+    ) {
         return Result.success(authTokenService.refreshToken(refreshToken));
     }
 
@@ -36,8 +47,15 @@ public class AuthController {
     @PostMapping("/register")
     @com.cloudinfra.common.core.annotation.Idempotent
     public Result<Void> register(@RequestBody LoginUser registerUser) {
-        if (!com.cloudinfra.common.util.PasswordValidator.isValid(registerUser.getPassword())) {
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位");
+        if (
+            !com.cloudinfra.common.util.PasswordValidator.isValid(
+                registerUser.getPassword()
+            )
+        ) {
+            return Result.fail(
+                com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(),
+                "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位"
+            );
         }
         return loginService.register(registerUser);
     }

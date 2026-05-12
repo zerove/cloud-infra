@@ -2,7 +2,7 @@
 
 
 ---
-## [2026-04-27] 系统模块测试 Bean 注入冲突与 MyBatis 配置错误
+## [已修复] 2026-04-27 系统模块测试 Bean 注入冲突与 MyBatis 配置错误
 - **报错现象**: 
   - `ConflictingBeanDefinitionException`: `GlobalExceptionHandler` Bean 定义冲突。
   - `UnsatisfiedDependencyException`: `RBACController` 依赖注入失败，MyBatis Mapper 无法注入 (`Property 'sqlSessionFactory' or 'sqlSessionTemplate' are required`)。

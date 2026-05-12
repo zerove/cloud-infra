@@ -1,9 +1,8 @@
 package com.cloudinfra.framework.redis.service;
 
-import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
 import java.util.Collections;
-import java.util.List;
+import org.springframework.stereotype.Service;
 
 /**
  * 分布式限流器
@@ -22,7 +21,7 @@ public class RedisRateLimiter {
      * @return 是否允许访问
      */
     public boolean isAllowed(String key, int limit, int period) {
-        String script = 
+        String script =
             "local key = KEYS[1] " +
             "local limit = tonumber(ARGV[1]) " +
             "local period = tonumber(ARGV[2]) " +
@@ -35,8 +34,13 @@ public class RedisRateLimiter {
             "    redis.call('expire', key, period) " +
             "end " +
             "return 1";
-        
-        Long result = redisService.executeLuaScript(script, Collections.singletonList(key), limit, period);
+
+        Long result = redisService.executeLuaScript(
+            script,
+            Collections.singletonList(key),
+            limit,
+            period
+        );
         return result != null && result == 1;
     }
 }

@@ -2,7 +2,10 @@ package com.cloudinfra.test;
 
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-@SpringBootTest
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-public abstract class BaseIntegrationTest {
+@Transactional
+public class BaseIntegrationTest {
 }

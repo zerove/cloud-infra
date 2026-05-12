@@ -1,25 +1,29 @@
 package com.cloudinfra.framework.tracing;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.cloudinfra.test.BaseIntegrationTest;
-import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Component;
+import org.springframework.test.context.ActiveProfiles;
 
-import java.util.concurrent.CompletableFuture;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-@Slf4j
-@EnableAsync
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = TracePropagationTest.TestConfig.class)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    classes = TracePropagationTest.TestConfig.class
+)
 @ActiveProfiles("test")
 public class TracePropagationTest extends BaseIntegrationTest {
+
+    private static final Logger log = LoggerFactory.getLogger(
+        TracePropagationTest.class
+    );
 
     @org.springframework.boot.SpringBootConfiguration
     @org.springframework.context.annotation.ComponentScan
@@ -43,6 +47,11 @@ public class TracePropagationTest extends BaseIntegrationTest {
 
     @Component
     public static class AsyncService {
+
+        private static final Logger log = LoggerFactory.getLogger(
+            AsyncService.class
+        );
+
         @Async
         public CompletableFuture<String> doAsyncWork() {
             String traceId = MDC.get("traceId");

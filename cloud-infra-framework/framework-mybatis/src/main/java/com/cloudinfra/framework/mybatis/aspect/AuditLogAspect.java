@@ -1,27 +1,28 @@
 package com.cloudinfra.framework.mybatis.aspect;
 
+import com.cloudinfra.common.annotation.AuditLog;
+import com.cloudinfra.common.context.UserContext;
+import com.cloudinfra.common.core.audit.IAuditLogService;
 import java.lang.reflect.Method;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.cloudinfra.common.annotation.AuditLog;
-import com.cloudinfra.common.context.UserContext;
-import com.cloudinfra.common.core.audit.IAuditLogService;
-
-import lombok.extern.slf4j.Slf4j;
-
 @Aspect
 @Component
-@Slf4j
 public class AuditLogAspect {
+
+    private static final Logger log = LoggerFactory.getLogger(
+        AuditLogAspect.class
+    );
 
     @Autowired(required = false)
     private IAuditLogService auditLogService;

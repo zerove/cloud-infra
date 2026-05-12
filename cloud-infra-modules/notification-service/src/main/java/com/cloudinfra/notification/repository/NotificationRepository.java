@@ -1,16 +1,15 @@
 package com.cloudinfra.notification.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.mapper.NotificationMapper;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import java.util.List;
 
 /**
  * 通知仓库类
@@ -18,7 +17,9 @@ import java.util.List;
  */
 @Repository
 @RequiredArgsConstructor
-public class NotificationRepository extends ServiceImpl<NotificationMapper, Notification> {
+public class NotificationRepository
+    extends ServiceImpl<NotificationMapper, Notification>
+{
 
     /**
      * 分页/列表查询通知历史
@@ -30,15 +31,21 @@ public class NotificationRepository extends ServiceImpl<NotificationMapper, Noti
      * @param size 每页数量
      * @return 通知列表，按创建时间倒序排列
      */
-    public List<Notification> findHistory(Long userId, NotificationStatus status, NotificationType type, Integer page, Integer size) {
+    public List<Notification> findHistory(
+        Long userId,
+        NotificationStatus status,
+        NotificationType type,
+        Integer page,
+        Integer size
+    ) {
         Page<Notification> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<Notification> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Notification::getUserId, userId)
-               .eq(status != null, Notification::getStatus, status)
-               .eq(type != null, Notification::getType, type)
-               .orderByDesc(Notification::getCreateTime);
+        wrapper
+            .eq(Notification::getUserId, userId)
+            .eq(status != null, Notification::getStatus, status)
+            .eq(type != null, Notification::getType, type)
+            .orderByDesc(Notification::getCreateTime);
 
         return this.page(pageParam, wrapper).getRecords();
     }
 }
-

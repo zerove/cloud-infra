@@ -1,17 +1,18 @@
 package com.cloudinfra.search.service.impl;
 
-import com.cloudinfra.api.search.dto.*;
+import com.cloudinfra.api.search.dto.OperLogDTO;
+import com.cloudinfra.api.search.dto.SearchRequest;
+import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
 import com.cloudinfra.search.service.SearchService;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 搜索服务实现类
@@ -38,22 +39,37 @@ public class SearchServiceImpl implements SearchService {
      */
     @Override
     public SearchResponse<OperLogDTO> searchOperLog(SearchRequest request) {
-        log.info("Executing operlog search: keyword={}, page={}, size={}", 
-            request.getKeyword(), request.getPage(), request.getSize());
-        
-        // SearchRequest 中的 page 是从 1 开始的，而 PageRequest 是从 0 开始的
-        int page = (request.getPage() != null && request.getPage() > 0) ? request.getPage() - 1 : 0;
-        int size = (request.getSize() != null && request.getSize() > 0) ? request.getSize() : 10;
+        log.info(
+            "Executing operlog search: keyword={}, page={}, size={}",
+            request.getKeyword(),
+            request.getPage(),
+            request.getSize()
+        );
+
+        // SearchRequest 中的 page 是从 0 开始的
+        int page = (request.getPage() != null && request.getPage() >= 0)
+            ? request.getPage()
+            : 0;
+        int size = (request.getSize() != null && request.getSize() > 0)
+            ? request.getSize()
+            : 10;
         Pageable pageable = PageRequest.of(page, size);
-        
-        Page<OperLogDocument> pageResult = operLogRepository.findByKeyword(request.getKeyword(), pageable);
-        
+
+        Page<OperLogDocument> pageResult = operLogRepository.findByKeyword(
+            request.getKeyword(),
+            pageable
+        );
+
         SearchResponse<OperLogDTO> response = new SearchResponse<>();
         response.setTotal(pageResult.getTotalElements());
-        response.setData(pageResult.getContent().stream()
-            .map(this::convertToDto)
-            .collect(Collectors.toList()));
-            
+        response.setData(
+            pageResult
+                .getContent()
+                .stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList())
+        );
+
         return response;
     }
 
@@ -65,12 +81,12 @@ public class SearchServiceImpl implements SearchService {
      */
     private OperLogDTO convertToDto(OperLogDocument doc) {
         OperLogDTO dto = new OperLogDTO();
-        dto.setId(doc.getOperId());
+        dto.setOperId(doc.getOperId());
         dto.setTitle(doc.getTitle());
-        dto.setUserName(doc.getOperName());
-        dto.setCreateTime(doc.getOperTime());
+        dto.setOperName(doc.getOperName());
+        dto.setOperTime(doc.getOperTime());
         dto.setMethod(doc.getMethod());
-        dto.setIp(doc.getOperIp());
+        dto.setOperIp(doc.getOperIp());
         return dto;
     }
 }

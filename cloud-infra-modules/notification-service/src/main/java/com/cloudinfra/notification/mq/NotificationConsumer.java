@@ -3,21 +3,18 @@ package com.cloudinfra.notification.mq;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.service.INotificationService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 import java.util.function.Consumer;
 
 @Slf4j
-@Configuration
+@Component
 @RequiredArgsConstructor
 public class NotificationConsumer {
 
     private final INotificationService notificationService;
 
-    @Bean
     public Consumer<NotificationRequest> notificationConsumer() {
         return request -> {
             log.info("接收到通知消息: {}", request);

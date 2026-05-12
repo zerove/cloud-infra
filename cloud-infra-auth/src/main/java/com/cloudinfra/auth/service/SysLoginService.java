@@ -2,16 +2,13 @@ package com.cloudinfra.auth.service;
 
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import java.util.Map;
 import org.springframework.data.redis.core.RedisTemplate;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
-
 @Service
-@RequiredArgsConstructor
 public class SysLoginService {
 
     private final AuthTokenService authTokenService;
@@ -20,9 +17,27 @@ public class SysLoginService {
     private final com.cloudinfra.api.system.UserApi userApi;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
+    public SysLoginService(
+        AuthTokenService authTokenService,
+        AuthenticationManager authenticationManager,
+        RedisTemplate<String, Object> redisTemplate,
+        com.cloudinfra.api.system.UserApi userApi,
+        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder
+    ) {
+        this.authTokenService = authTokenService;
+        this.authenticationManager = authenticationManager;
+        this.redisTemplate = redisTemplate;
+        this.userApi = userApi;
+        this.passwordEncoder = passwordEncoder;
+    }
+
     public Result<Map<String, Object>> login(LoginUser loginUser) {
         // 1. 验证码校验
-        validateCaptcha(loginUser.getUsername(), loginUser.getCaptcha(), loginUser.getUuid());
+        validateCaptcha(
+            loginUser.getUsername(),
+            loginUser.getCaptcha(),
+            loginUser.getUuid()
+        );
 
         // 2. 登录限制校验 (Lockout)
         checkLoginLock(loginUser.getUsername());
@@ -30,7 +45,11 @@ public class SysLoginService {
         try {
             // 3. 用户认证
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginUser.getUsername(), loginUser.getPassword()));
+                new UsernamePasswordAuthenticationToken(
+                    loginUser.getUsername(),
+                    loginUser.getPassword()
+                )
+            );
 
             // 4. 清除登录失败计数
             clearLoginRecord(loginUser.getUsername());
@@ -41,15 +60,19 @@ public class SysLoginService {
             // 6. 记录登录失败次数
             recordLoginFail(loginUser.getUsername());
             // 隐藏具体错误，防止账号枚举
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户名或密码错误");
+            return Result.fail(
+                com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(),
+                "用户名或密码错误"
+            );
         }
     }
 
     public Result<Void> register(LoginUser registerUser) {
-        com.cloudinfra.api.system.dto.UserDTO userDTO = new com.cloudinfra.api.system.dto.UserDTO();
+        com.cloudinfra.api.system.dto.UserDTO userDTO =
+            new com.cloudinfra.api.system.dto.UserDTO();
         userDTO.setUsername(registerUser.getUsername());
         userDTO.setPassword(passwordEncoder.encode(registerUser.getPassword()));
-        
+
         return userApi.registerUser(userDTO);
     }
 
@@ -76,7 +99,13 @@ public class SysLoginService {
         String countKey = "login_error_count:" + username;
         Long count = redisTemplate.opsForValue().increment(countKey, 1L);
         if (count != null && count >= 5) {
-            redisTemplate.opsForValue().set("login_lock:" + username, "locked", java.time.Duration.ofMinutes(10));
+            redisTemplate
+                .opsForValue()
+                .set(
+                    "login_lock:" + username,
+                    "locked",
+                    java.time.Duration.ofMinutes(10)
+                );
             redisTemplate.delete(countKey);
         } else {
             redisTemplate.expire(countKey, java.time.Duration.ofMinutes(10));
@@ -86,4 +115,4 @@ public class SysLoginService {
     private void clearLoginRecord(String username) {
         redisTemplate.delete("login_error_count:" + username);
     }
-    }
+}

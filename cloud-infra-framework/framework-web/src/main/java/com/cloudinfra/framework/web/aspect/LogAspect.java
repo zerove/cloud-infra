@@ -3,7 +3,7 @@ package com.cloudinfra.framework.web.aspect;
 import com.cloudinfra.common.core.annotation.Log;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.common.core.event.LogEvent;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
@@ -12,16 +12,18 @@ import org.aspectj.lang.annotation.Before;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-
 /**
  * 操作日志记录处理
  */
 @Aspect
-@RequiredArgsConstructor
+@Component
 public class LogAspect {
 
     private final ApplicationEventPublisher eventPublisher;
+
+    public LogAspect(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+    }
 
     /**
      * 处理请求前执行
@@ -34,8 +36,15 @@ public class LogAspect {
     /**
      * 处理完请求后执行
      */
-    @AfterReturning(pointcut = "@annotation(controllerLog)", returning = "jsonResult")
-    public void doAfterReturning(JoinPoint joinPoint, Log controllerLog, Object jsonResult) {
+    @AfterReturning(
+        pointcut = "@annotation(controllerLog)",
+        returning = "jsonResult"
+    )
+    public void doAfterReturning(
+        JoinPoint joinPoint,
+        Log controllerLog,
+        Object jsonResult
+    ) {
         handleLog(joinPoint, controllerLog, null, jsonResult);
     }
 
@@ -43,17 +52,26 @@ public class LogAspect {
      * 拦截异常操作
      */
     @AfterThrowing(value = "@annotation(controllerLog)", throwing = "e")
-    public void doAfterThrowing(JoinPoint joinPoint, Log controllerLog, Exception e) {
+    public void doAfterThrowing(
+        JoinPoint joinPoint,
+        Log controllerLog,
+        Exception e
+    ) {
         handleLog(joinPoint, controllerLog, e, null);
     }
 
-    protected void handleLog(final JoinPoint joinPoint, Log controllerLog, final Exception e, Object jsonResult) {
+    protected void handleLog(
+        final JoinPoint joinPoint,
+        Log controllerLog,
+        final Exception e,
+        Object jsonResult
+    ) {
         try {
             // 构造日志对象
             SysOperLog operLog = new SysOperLog();
             operLog.setStatus(0); // 正常
             operLog.setOperTime(LocalDateTime.now());
-            
+
             if (e != null) {
                 operLog.setStatus(1); // 异常
                 operLog.setErrorMsg(e.getMessage());
@@ -61,7 +79,7 @@ public class LogAspect {
 
             operLog.setTitle(controllerLog.title());
             operLog.setBusinessType(controllerLog.businessType().ordinal());
-            
+
             // 发布事件，异步保存
             eventPublisher.publishEvent(new LogEvent(operLog));
         } catch (Exception exp) {

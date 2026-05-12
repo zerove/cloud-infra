@@ -1,21 +1,24 @@
 package com.cloudinfra.framework.redis.service;
 
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 @Service
-@RequiredArgsConstructor
 public class RedisService {
 
     private final RedisTemplate<String, Object> redisTemplate;
 
+    public RedisService(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
     public void set(String key, Object value, long expireTime) {
-        redisTemplate.opsForValue().set(key, value, expireTime, TimeUnit.MILLISECONDS);
+        redisTemplate
+            .opsForValue()
+            .set(key, value, expireTime, TimeUnit.MILLISECONDS);
     }
 
     public boolean deleteObject(String key) {
@@ -40,8 +43,16 @@ public class RedisService {
         return Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti));
     }
 
-    public Long executeLuaScript(String script, List<String> keys, Object... args) {
-        return redisTemplate.execute(new DefaultRedisScript<>(script, Long.class), keys, args);
+    public Long executeLuaScript(
+        String script,
+        List<String> keys,
+        Object... args
+    ) {
+        return redisTemplate.execute(
+            new DefaultRedisScript<>(script, Long.class),
+            keys,
+            args
+        );
     }
 
     public boolean delete(String key) {
@@ -57,7 +68,9 @@ public class RedisService {
     }
 
     public boolean expire(String key, long timeout) {
-        return Boolean.TRUE.equals(redisTemplate.expire(key, timeout, TimeUnit.MILLISECONDS));
+        return Boolean.TRUE.equals(
+            redisTemplate.expire(key, timeout, TimeUnit.MILLISECONDS)
+        );
     }
 
     public java.util.Collection<String> keys(String pattern) {

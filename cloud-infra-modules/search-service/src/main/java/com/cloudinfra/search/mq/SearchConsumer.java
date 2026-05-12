@@ -3,7 +3,6 @@ package com.cloudinfra.search.mq;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -20,7 +19,6 @@ import java.util.function.Consumer;
 public class SearchConsumer {
 
     private final OperLogRepository operLogRepository;
-    private final ObjectMapper objectMapper;
 
     @Bean
     public Consumer<SysOperLog> operLogConsumer() {

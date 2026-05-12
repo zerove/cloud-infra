@@ -1,0 +1,28 @@
+server:
+  port: 9500
+
+spring:
+  application:
+    name: cloud-search
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+      config:
+        server-addr: nacos:8848
+        file-extension: yaml
+  data:
+    elasticsearch:
+      cluster-nodes: elasticsearch:9200
+  threads:
+    virtual:
+      enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: always

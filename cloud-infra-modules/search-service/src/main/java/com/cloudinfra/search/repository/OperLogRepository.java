@@ -13,6 +13,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface OperLogRepository extends ElasticsearchRepository<OperLogDocument, Long> {
     
-    @Query("{\"bool\": {\"should\": [{\"match\": {\"title\": \"?0\"}}, {\"match\": {\"operName\": \"?0\"}}, {\"match\": {\"method\": \"?0\"}}, {\"match\": {\"operUrl\": \"?0\"}}]}}")
+    @Query("{\"bool\": {\"must\": [{\"multi_match\": {\"query\": \"?0\", \"fields\": [\"title^3\", \"operName^2\", \"method^1\", \"operUrl^1\"]}}]}}")
     Page<OperLogDocument> findByKeyword(String keyword, Pageable pageable);
 }

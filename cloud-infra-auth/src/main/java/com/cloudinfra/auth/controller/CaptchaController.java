@@ -6,22 +6,23 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.framework.redis.service.RedisService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 @Tag(name = "验证码管理")
 @RestController
 @RequestMapping("/auth")
-@RequiredArgsConstructor
 public class CaptchaController {
 
     private final RedisService redisService;
+
+    public CaptchaController(RedisService redisService) {
+        this.redisService = redisService;
+    }
 
     @Operation(summary = "生成验证码")
     @GetMapping("/captchaImage")

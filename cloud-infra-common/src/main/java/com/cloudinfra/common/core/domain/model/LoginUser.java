@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.util.Set;
+import java.util.List;
+import com.cloudinfra.common.core.domain.entity.SysRole;
 
 @Data
 @Builder
@@ -18,6 +20,10 @@ public class LoginUser {
     private String captcha;
     private String uuid;
     private Long roleId;
-    private java.util.List<com.cloudinfra.common.core.domain.entity.SysRole> roles;
+    private List<SysRole> roles;
     private Set<String> permissions;
+
+    public Long getUserId() { return userId; }
+    public Long getDeptId() { return deptId; }
+    public List<SysRole> getRoles() { return roles; }
 }

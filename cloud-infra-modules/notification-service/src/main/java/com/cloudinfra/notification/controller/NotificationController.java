@@ -1,6 +1,8 @@
 package com.cloudinfra.notification.controller;
 
-import com.cloudinfra.api.notification.dto.*;
+import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
+import com.cloudinfra.api.notification.dto.NotificationRequest;
+import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.Result;
@@ -8,11 +10,18 @@ import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.service.INotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
-import org.springframework.cloud.stream.function.StreamBridge;
-import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.cloud.stream.function.StreamBridge;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 通知管理控制器，负责处理通知发送请求、历史查询及已读标记等 API 接口。
@@ -37,10 +46,12 @@ public class NotificationController {
      */
     @Operation(summary = "发送通知 (异步)")
     @PostMapping("/send")
-    public Result<NotificationResponse> send(@RequestBody NotificationRequest request) {
+    public Result<NotificationResponse> send(
+        @RequestBody NotificationRequest request
+    ) {
         // 投递至 MQ
         streamBridge.send("notification-topic", request);
-        
+
         NotificationResponse response = new NotificationResponse();
         response.setStatus("ASYNC_SENT");
         return Result.success(response);
@@ -61,25 +72,35 @@ public class NotificationController {
     @Operation(summary = "查询通知历史")
     @GetMapping("/history")
     public Result<List<NotificationHistoryResponse>> getHistory(
-            @RequestParam Long userId,
-            @RequestParam(required = false) NotificationStatus status,
-            @RequestParam(required = false) NotificationType type,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
-        
-        List<Notification> history = notificationService.getHistory(userId, status, type, page, size);
-        
-        List<NotificationHistoryResponse> responses = history.stream().map(n -> {
-            NotificationHistoryResponse r = new NotificationHistoryResponse();
-            r.setId(n.getId());
-            r.setType(n.getType());
-            r.setTitle(n.getTitle());
-            r.setContent(n.getContent());
-            r.setStatus(n.getStatus());
-            r.setCreateTime(n.getCreateTime());
-            return r;
-        }).collect(Collectors.toList());
-        
+        @RequestParam Long userId,
+        @RequestParam(required = false) NotificationStatus status,
+        @RequestParam(required = false) NotificationType type,
+        @RequestParam(defaultValue = "1") Integer page,
+        @RequestParam(defaultValue = "10") Integer size
+    ) {
+        List<Notification> history = notificationService.getHistory(
+            userId,
+            status,
+            type,
+            page,
+            size
+        );
+
+        List<NotificationHistoryResponse> responses = history
+            .stream()
+            .map(n -> {
+                NotificationHistoryResponse r =
+                    new NotificationHistoryResponse();
+                r.setId(n.getId());
+                r.setType(n.getType());
+                r.setTitle(n.getTitle());
+                r.setContent(n.getContent());
+                r.setStatus(n.getStatus());
+                r.setCreateTime(n.getCreateTime());
+                return r;
+            })
+            .collect(Collectors.toList());
+
         return Result.success(responses);
     }
 
