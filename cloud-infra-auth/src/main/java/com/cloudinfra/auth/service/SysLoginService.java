@@ -41,7 +41,7 @@ public class SysLoginService {
             // 6. 记录登录失败次数
             recordLoginFail(loginUser.getUsername());
             // 隐藏具体错误，防止账号枚举
-            return Result.error(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户名或密码错误");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户名或密码错误");
         }
     }
 

@@ -37,7 +37,7 @@ public class AuthController {
     @com.cloudinfra.common.core.annotation.Idempotent
     public Result<Void> register(@RequestBody LoginUser registerUser) {
         if (!com.cloudinfra.common.util.PasswordValidator.isValid(registerUser.getPassword())) {
-            return Result.error(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位");
         }
         return loginService.register(registerUser);
     }

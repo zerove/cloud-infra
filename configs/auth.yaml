@@ -30,7 +30,7 @@ spring:
         server-addr: nacos:8848
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://mysql-server:3306/cloud_infra
+    url: jdbc:postgresql://postgres-server:5432/cloud_infra
     username: root
     password: root
   data:

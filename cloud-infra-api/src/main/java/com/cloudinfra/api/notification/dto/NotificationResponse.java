@@ -16,5 +16,5 @@ public class NotificationResponse implements Serializable {
     /**
      * 发送状态
      */
-    private NotificationStatus status;
+    private String status;
 }

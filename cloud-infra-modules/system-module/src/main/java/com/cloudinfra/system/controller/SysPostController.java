@@ -34,7 +34,7 @@ public class SysPostController {
     @Log(title = "岗位管理", businessType = BusinessType.INSERT)
     @PostMapping
     public Result<Void> add(@RequestBody SysPost post) {
-        return postService.save(post) ? Result.success() : Result.error("新增岗位失败");
+        return postService.save(post) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "新增岗位失败");
     }
 
     @Operation(summary = "修改岗位")
@@ -42,7 +42,7 @@ public class SysPostController {
     @Log(title = "岗位管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public Result<Void> edit(@RequestBody SysPost post) {
-        return postService.updateById(post) ? Result.success() : Result.error("修改岗位失败");
+        return postService.updateById(post) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "修改岗位失败");
     }
 
     @Operation(summary = "删除岗位")
@@ -50,6 +50,6 @@ public class SysPostController {
     @Log(title = "岗位管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{postIds}")
     public Result<Void> remove(@PathVariable List<Long> postIds) {
-        return postService.removeByIds(postIds) ? Result.success() : Result.error("删除岗位失败");
+        return postService.removeByIds(postIds) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "删除岗位失败");
     }
 }

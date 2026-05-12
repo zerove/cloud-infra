@@ -9,11 +9,11 @@ import com.cloudinfra.notification.repository.NotificationRepository;
 import com.cloudinfra.test.BaseIntegrationTest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.time.Duration;
 
@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Transactional
 public class NotificationServiceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
@@ -28,11 +29,6 @@ public class NotificationServiceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
-
-    @AfterEach
-    public void cleanup() {
-        notificationRepository.remove(new QueryWrapper<>());
-    }
 
     @Test
     public void testFullNotificationFlow() {

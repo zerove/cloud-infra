@@ -34,7 +34,7 @@ public class SysDeptController {
     @Log(title = "部门管理", businessType = BusinessType.INSERT)
     @PostMapping
     public Result<Void> add(@RequestBody SysDept dept) {
-        return deptService.insertDept(dept) ? Result.success() : Result.error("新增部门失败");
+        return deptService.insertDept(dept) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "新增部门失败");
     }
 
     @Operation(summary = "修改部门")
@@ -42,7 +42,7 @@ public class SysDeptController {
     @Log(title = "部门管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public Result<Void> edit(@RequestBody SysDept dept) {
-        return deptService.updateDept(dept) ? Result.success() : Result.error("修改部门失败");
+        return deptService.updateDept(dept) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "修改部门失败");
     }
 
     @Operation(summary = "删除部门")
@@ -50,6 +50,6 @@ public class SysDeptController {
     @Log(title = "部门管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{deptId}")
     public Result<Void> remove(@PathVariable Long deptId) {
-        return deptService.deleteDeptById(deptId) ? Result.success() : Result.error("删除部门失败");
+        return deptService.deleteDeptById(deptId) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "删除部门失败");
     }
 }

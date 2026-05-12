@@ -13,7 +13,7 @@ spring:
     allow-bean-definition-overriding: true
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:3306}/cloud_infra
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: org.postgresql.Driver

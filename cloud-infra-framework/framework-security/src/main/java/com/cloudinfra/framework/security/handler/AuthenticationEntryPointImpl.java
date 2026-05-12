@@ -17,6 +17,6 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint {
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
         response.setStatus(200);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().println(new ObjectMapper().writeValueAsString(Result.error(401, "未授权，请先登录")));
+        response.getWriter().println(new ObjectMapper().writeValueAsString(Result.fail(401, "未授权，请先登录")));
     }
 }

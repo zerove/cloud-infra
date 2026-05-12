@@ -10,6 +10,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum NotificationType {
     /**
+     * 电子邮件
+     */
+    EMAIL("EMAIL", "电子邮件"),
+    /**
+     * 短信
+     */
+    SMS("SMS", "短信"),
+    /**
      * 系统通知
      */
     SYSTEM("SYSTEM", "系统通知"),

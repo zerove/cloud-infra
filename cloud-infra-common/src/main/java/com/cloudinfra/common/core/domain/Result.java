@@ -19,6 +19,10 @@ public class Result<T> implements Serializable {
         return result;
     }
 
+    public static <T> Result<T> success() {
+        return success(null);
+    }
+
     public static <T> Result<T> fail(Integer code, String message) {
         Result<T> result = new Result<>();
         result.setSuccess(false);

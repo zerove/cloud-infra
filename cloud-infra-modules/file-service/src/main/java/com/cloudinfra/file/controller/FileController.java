@@ -29,7 +29,7 @@ public class FileController {
             data.put("name", file.getOriginalFilename());
             return Result.success(data);
         } catch (Exception e) {
-            return Result.error("文件上传失败: " + e.getMessage());
+            return Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "文件上传失败: " + e.getMessage());
         }
     }
 
@@ -39,6 +39,6 @@ public class FileController {
         if (fileService.delete(path)) {
             return Result.success();
         }
-        return Result.error("文件删除失败");
+        return Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "文件删除失败");
     }
 }

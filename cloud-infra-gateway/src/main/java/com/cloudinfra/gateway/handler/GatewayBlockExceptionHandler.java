@@ -23,7 +23,7 @@ public class GatewayBlockExceptionHandler implements BlockExceptionHandler {
         response.setCharacterEncoding("UTF-8");
         response.setContentType("application/json;charset=utf-8");
 
-        Result<?> result = Result.error(ResultCode.BUSINESS_ERROR.getCode(), "系统繁忙，请稍后再试 (Sentinel Blocked)");
+        Result<?> result = Result.fail(ResultCode.BUSINESS_ERROR.getCode(), "系统繁忙，请稍后再试 (Sentinel Blocked)");
 
         ObjectMapper objectMapper = new ObjectMapper();
         PrintWriter out = response.getWriter();
