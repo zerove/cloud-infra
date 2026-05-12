@@ -16,10 +16,11 @@ public interface SearchApi {
 
     /**
      * 搜索操作日志
-     * 
+     *
      * @param request 搜索请求参数
      * @return 操作日志分页结果
      */
     @GetMapping("/search/operlog")
-    Result<SearchResponse<Object>> searchOperLog(@SpringQueryMap SearchRequest request);
+    Result<SearchResponse<OperLogDTO>> searchOperLog(@SpringQueryMap SearchRequest request);
+
 }
