@@ -11,6 +11,8 @@ spring:
       config:
         server-addr: nacos:8848
         file-extension: yaml
+  config:
+    import: "optional:nacos:search.yaml"
   data:
     elasticsearch:
       cluster-nodes: elasticsearch:9200

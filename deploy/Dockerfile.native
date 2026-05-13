@@ -1,0 +1,13 @@
+# Stage 1: Build native binary
+FROM ghcr.io/graalvm/native-image-community:25 AS builder
+WORKDIR /build
+COPY . .
+RUN ./mvnw native:compile -Pnative -pl cloud-infra-gateway -am -DskipTests
+
+# Stage 2: Final runner image
+FROM debian:bookworm-slim
+WORKDIR /app
+# Copy binary from builder - assume standard location for cloud-infra-gateway
+COPY --from=builder /build/cloud-infra-gateway/target/gateway /app/gateway
+EXPOSE 9000
+ENTRYPOINT ["/app/gateway"]

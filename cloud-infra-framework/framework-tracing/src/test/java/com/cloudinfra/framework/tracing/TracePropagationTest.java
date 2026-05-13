@@ -19,6 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
     classes = TracePropagationTest.TestConfig.class
 )
 @ActiveProfiles("test")
+@org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
 public class TracePropagationTest extends BaseIntegrationTest {
 
     private static final Logger log = LoggerFactory.getLogger(
