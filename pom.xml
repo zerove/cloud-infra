@@ -171,6 +171,11 @@
             </dependency>
 
             <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-starter-gateway-mvc</artifactId>
+                <version>4.2.0</version>
+            </dependency>
+            <dependency>
                 <groupId>com.cloudinfra</groupId>
                 <artifactId>cloud-infra-common</artifactId>
                 <version>${revision}</version>
@@ -235,6 +240,37 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.graalvm.buildtools</groupId>
+                    <artifactId>native-maven-plugin</artifactId>
+                    <version>0.10.4</version>
+                    <extensions>true</extensions>
+                    <executions>
+                        <execution>
+                            <id>build-native</id>
+                            <goals>
+                                <goal>compile-no-fork</goal>
+                            </goals>
+                            <phase>package</phase>
+                        </execution>
+                        <execution>
+                            <id>test-native</id>
+                            <goals>
+                                <goal>test</goal>
+                            </goals>
+                            <phase>test</phase>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <fallback>false</fallback>
+                        <buildArgs>
+                            <arg>-H:+ReportExceptionStackTraces</arg>
+                            <arg>--no-fallback</arg>
+                            <arg>--enable-http</arg>
+                            <arg>--enable-https</arg>
+                        </buildArgs>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
