@@ -29,7 +29,7 @@ public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(TableName.class));
         
-        Set<org.springframework.beans.factory.config.BeanDefinition> candidateComponents = scanner.findCandidateComponents("com.cloudinfra");
+        Set<org.springframework.beans.factory.config.BeanDefinition> candidateComponents = scanner.findCandidateComponents("com.cloudinfra.modules");
         for (org.springframework.beans.factory.config.BeanDefinition bd : candidateComponents) {
             String className = bd.getBeanClassName();
             if (className != null) {
