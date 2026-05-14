@@ -8,23 +8,30 @@ spring:
     nacos:
       discovery:
         server-addr: nacos:8848
+        register-enabled: true
       config:
         server-addr: nacos:8848
         file-extension: yaml
   config:
-    import: "optional:nacos:search.yaml"
+    import: "optional:nacos:search-application.yaml"
+  elasticsearch:
+    uris: http://elasticsearch:9200
   data:
     elasticsearch:
-      cluster-nodes: elasticsearch:9200
+      repositories:
+        enabled: true
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
 
 management:
+  health:
+    elasticsearch:
+      enabled: false
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: "*"
   endpoint:
     health:
       show-details: always

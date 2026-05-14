@@ -1,10 +1,11 @@
 package com.cloudinfra.search.mq;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,10 +14,10 @@ import java.util.function.Consumer;
 /**
  * 搜索消息消费者
  */
-@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class SearchConsumer {
+    private static final Logger log = LoggerFactory.getLogger(SearchConsumer.class);
 
     private final OperLogRepository operLogRepository;
 

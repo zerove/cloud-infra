@@ -8,7 +8,6 @@ import org.mybatis.spring.annotation.MapperScan;
 
 @EnableDiscoveryClient
 @EnableAsync
-@MapperScan("com.cloudinfra.notification.mapper")
 @SpringBootApplication(scanBasePackages = {"com.cloudinfra.notification", "com.cloudinfra.framework"})
 public class NotificationApplication {
     public static void main(String[] args) {

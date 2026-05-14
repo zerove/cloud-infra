@@ -19,4 +19,4 @@ ENV TZ=Asia/Shanghai
 # Production JVM settings: ZGC + 512M Limit
 ENV JAVA_OPTS="-XX:+UseZGC -Xmx512m -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -Dspring.elasticsearch.uris=http://elasticsearch:9200 -jar app.jar"]

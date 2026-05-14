@@ -3,6 +3,7 @@ services:
     image: nacos/nacos-server:v2.3.2
     container_name: nacos-server
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - PREFER_HOST_MODE=hostname
       - MODE=standalone
       - JVM_XMS=256m
@@ -45,6 +46,7 @@ services:
     image: postgres:16
     container_name: postgres-server
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=root
       - POSTGRES_DB=cloud_infra
@@ -56,7 +58,7 @@ services:
     restart: always
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.22
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
@@ -88,10 +90,15 @@ services:
     volumes:
       - ./config/gateway-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
       - SPRING_DATA_REDIS_HOST=redis-server
+      - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
     deploy:
       resources:
         limits:
@@ -105,29 +112,6 @@ services:
       retries: 3
     restart: always
 
-  gateway-native:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.native
-    container_name: cloud-gateway-native
-    ports:
-      - "9001:9000"
-    depends_on:
-      nacos:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - ./config/gateway-application.yml:/app/config/application.yml:ro
-    environment:
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_DATA_REDIS_HOST=redis-server
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    restart: always
 
   auth:
     build:
@@ -146,10 +130,15 @@ services:
     volumes:
       - ./config/auth-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
       - SPRING_DATA_REDIS_HOST=redis-server
+      - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
     deploy:
       resources:
         limits:
@@ -181,6 +170,7 @@ services:
       - ./config/system-application.yml:/app/config/application.yml:ro
       - ./logs/system:/var/log/system
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_DATASOURCE_HOST=postgres-server
@@ -188,7 +178,12 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
       - SPRING_DATA_REDIS_HOST=redis-server
+      - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
     deploy:
       resources:
         limits:
@@ -196,7 +191,7 @@ services:
     labels:
       - "monitoring=true"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9300/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9300/management/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -221,11 +216,15 @@ services:
     volumes:
       - ./config/notification-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
       - SPRING_DATA_REDIS_HOST=redis-server
       - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
     deploy:
       resources:
         limits:
@@ -256,9 +255,16 @@ services:
     volumes:
       - ./config/search-application.yml:/app/config/application.yml:ro
     environment:
+      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
       - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
       - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
       - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - SPRING_DATA_REDIS_HOST=redis-server
+      - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
     deploy:
       resources:
         limits:
