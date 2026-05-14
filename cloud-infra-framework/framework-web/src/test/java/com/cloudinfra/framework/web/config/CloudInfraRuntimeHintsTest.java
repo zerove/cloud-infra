@@ -14,9 +14,9 @@ class CloudInfraRuntimeHintsTest {
         CloudInfraRuntimeHints registrar = new CloudInfraRuntimeHints();
         registrar.registerHints(hints, this.getClass().getClassLoader());
 
-        // Check if reflection hints for MyBatis TableName annotation are present
-        // In real Spring AOT, checking hints directly is hard.
-        // We will assume that if we register them, we can verify it via the TypeHints.
+        // 检查 MyBatis TableName 注解的反射提示是否已注册
+        // 在实际 Spring AOT 中，直接检查提示信息非常困难。
+        // 我们假设如果已注册，就可以通过 TypeHints 验证。
         assertTrue(hints.reflection().getTypeHint(com.baomidou.mybatisplus.annotation.TableName.class) != null, 
             "TableName annotation should be registered for reflection");
     }

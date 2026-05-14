@@ -50,7 +50,7 @@ public class SysUser extends BaseEntity {
     /** 岗位组 */
     private List<Long> postIds;
 
-    // Helper methods for migration
+    // 迁移辅助方法
     public void setId(Long id) { this.userId = id; }
     public Long getId() { return this.userId; }
 }

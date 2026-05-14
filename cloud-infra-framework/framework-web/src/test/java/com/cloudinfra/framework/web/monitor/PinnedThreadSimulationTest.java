@@ -17,7 +17,7 @@ public class PinnedThreadSimulationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void setupAppender() {
-        // Ensure the meter registry is added to the global registry
+        // 确保 meterRegistry 已添加到全局注册表
         if (!io.micrometer.core.instrument.Metrics.globalRegistry.getRegistries().contains(meterRegistry)) {
             io.micrometer.core.instrument.Metrics.addRegistry(meterRegistry);
         }

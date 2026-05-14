@@ -40,7 +40,7 @@ public class SysUserServiceImpl implements ISysUserService {
     @Override
     @Transactional
     public int insertUser(SysUser user) {
-        // Set initial password from config if not provided
+        // 如果未提供密码，则从配置中设置初始密码
         if (user.getPassword() == null || user.getPassword().isEmpty()) {
             String initPassword = configService.selectConfigByKey("sys.user.initPassword");
             user.setPassword(passwordEncoder.encode(initPassword != null ? initPassword : "123456"));
@@ -53,7 +53,7 @@ public class SysUserServiceImpl implements ISysUserService {
     @Override
     @Transactional
     public int updateUser(SysUser user) {
-        // Don't update password here
+        // 此处不更新密码
         user.setPassword(null);
         return userMapper.updateById(user);
     }
