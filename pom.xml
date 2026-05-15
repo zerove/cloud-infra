@@ -139,9 +139,9 @@
                 <version>${swagger-annotations.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.seata</groupId>
-                <artifactId>seata-spring-boot-starter</artifactId>
-                <version>${seata.version}</version>
+                <groupId>com.alibaba.csp</groupId>
+                <artifactId>sentinel-gateway-adapter</artifactId>
+                <version>1.8.9</version>
             </dependency>
 
             <dependency>

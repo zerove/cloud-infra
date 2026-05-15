@@ -165,6 +165,8 @@ services:
       - SPRING_DATASOURCE_HOST=postgres-server
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
+      - SW_AGENT_NAME=cloud-auth
+      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
     deploy:
       resources:
         limits:
@@ -208,9 +210,8 @@ services:
       - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
       - SPRING_DATA_REDIS_HOST=redis-server
       - SPRING_RABBITMQ_HOST=rabbitmq-server
-      - SPRING_DATASOURCE_HOST=postgres-server
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
+      - SW_AGENT_NAME=cloud-system
+      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
     deploy:
       resources:
         limits:
@@ -253,6 +254,8 @@ services:
       - SPRING_DATASOURCE_HOST=postgres-server
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
+      - SW_AGENT_NAME=cloud-notification
+      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
     deploy:
       resources:
         limits:
@@ -294,6 +297,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
+      - SW_AGENT_NAME=cloud-search
+      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
     deploy:
       resources:
         limits:
@@ -308,7 +313,24 @@ services:
       start_period: 120s
     restart: always
 
+  skywalking-oap:
+    image: apache/skywalking-oap-server:9.4.0
+    container_name: skywalking-oap
+    ports:
+      - "11800:11800"
+      - "12800:12800"
+    restart: always
 
+  skywalking-ui:
+    image: apache/skywalking-ui:9.4.0
+    container_name: skywalking-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - SW_OAP_ADDRESS=http://skywalking-oap:12800
+    depends_on:
+      - skywalking-oap
+    restart: always
 
 volumes:
   nacos_logs:
