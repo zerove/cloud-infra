@@ -59,6 +59,13 @@ public class JwtUtils {
     }
 
     /**
+     * 从令牌中获取特定声明的列表
+     */
+    public static java.util.List<String> getClaimListFromToken(String token, String claimName) {
+        return parseToken(token).getClaim(claimName).asList(String.class);
+    }
+
+    /**
      * 验证令牌是否有效
      */
     public static boolean validateToken(String token) {

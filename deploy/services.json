@@ -6,36 +6,4 @@
         "instance": "cloud-gateway"
     }
 }
-,
-{
-    "targets": ["cloud-auth:0.0.0.0:9201->9200"],
-    "labels": {
-        "job": "microservices",
-        "instance": "cloud-auth"
-    }
-}
-,
-{
-    "targets": ["cloud-system:0.0.0.0:9300->9300"],
-    "labels": {
-        "job": "microservices",
-        "instance": "cloud-system"
-    }
-}
-,
-{
-    "targets": ["cloud-search:0.0.0.0:9500->9500"],
-    "labels": {
-        "job": "microservices",
-        "instance": "cloud-search"
-    }
-}
-,
-{
-    "targets": ["cloud-notification:0.0.0.0:9400->9400"],
-    "labels": {
-        "job": "microservices",
-        "instance": "cloud-notification"
-    }
-}
 ]

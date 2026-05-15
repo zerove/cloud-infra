@@ -32,8 +32,13 @@ public Map<String, Object> createToken(LoginUser loginUser) {
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", loginUser.getUserId());
-        claims.put("roleId", loginUser.getRoleId()); // 仅存入必要标识
+        claims.put("roleId", loginUser.getRoleId());
         claims.put("jti", accessTokenJti);
+        
+        // 关键点：将权限列表放入 JWT Claims
+        if (loginUser.getPermissions() != null) {
+            claims.put("permissions", loginUser.getPermissions());
+        }
 
         String accessToken = JwtUtils.createToken(claims, loginUser.getUsername());
         

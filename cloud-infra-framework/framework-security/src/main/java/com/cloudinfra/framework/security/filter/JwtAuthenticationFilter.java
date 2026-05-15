@@ -31,28 +31,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = token.substring(7);
             if (JwtUtils.validateToken(jwt)) {
                 String username = JwtUtils.getUsernameFromToken(jwt);
-
-                UserDetails userDetails = null;
-                if (userDetailsService != null) {
-                    userDetails = userDetailsService.loadUserByUsername(
-                        username
-                    );
-                } else {
-                    // If no UserDetailsService, create a minimal UserDetails from JWT info
-                    userDetails =
-                        org.springframework.security.core.userdetails.User.withUsername(
-                            username
-                        )
-                            .password("")
-                            .authorities(new java.util.ArrayList<>())
-                            .build();
-                }
+                
+                // 从 JWT 直接提取权限标识列表
+                java.util.List<String> permissions = JwtUtils.getClaimListFromToken(jwt, "permissions");
+                java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities = 
+                    permissions.stream()
+                        .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                        .collect(java.util.stream.Collectors.toList());
 
                 UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(
-                        userDetails,
+                        username,
                         null,
-                        userDetails.getAuthorities()
+                        authorities
                     );
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
