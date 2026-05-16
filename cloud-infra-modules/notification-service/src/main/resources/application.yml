@@ -1,4 +1,17 @@
 spring:
+  application:
+    name: cloud-notification
+  config:
+    import: "optional:nacos:notification-service.yaml"
+  cloud:
+    nacos:
+      config:
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
+        file-extension: yaml
+        import-check:
+          enabled: false
+      discovery:
+        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
   threads:
     virtual:
       enabled: true

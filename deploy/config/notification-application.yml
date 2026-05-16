@@ -11,6 +11,16 @@ spring:
       config:
         server-addr: nacos:8848
         file-extension: yaml
+    stream:
+      bindings:
+        notificationConsumer-in-0:
+          destination: notification-exchange
+          group: notification-group
+      rabbit:
+        bindings:
+          notificationConsumer-in-0:
+            consumer:
+              exchangeType: direct
   config:
     import: "optional:nacos:notification.yaml"
   rabbitmq:

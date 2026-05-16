@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: file-service
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  mybatis-plus:
+    mapper-locations: classpath:/mapper/**/*.xml
+    type-aliases-package: com.cloudinfra.**.domain
+    global-config:
+      banner: false
+---
+spring:
+  config:
+    activate:
+      on-profile: test

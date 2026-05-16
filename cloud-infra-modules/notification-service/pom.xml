@@ -18,20 +18,29 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>framework-web</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-extension</artifactId>
         </dependency>
+
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-mybatis</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>cloud-infra-api</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-api</artifactId>
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
@@ -92,4 +101,18 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

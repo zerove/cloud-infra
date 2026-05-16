@@ -5,6 +5,7 @@ import com.cloudinfra.file.service.IFileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -12,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Tag(name = "文件管理")
+@Slf4j
 @RestController
 @RequestMapping("/file")
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class FileController {
             data.put("name", file.getOriginalFilename());
             return Result.success(data);
         } catch (Exception e) {
+            log.error("文件上传失败", e);
             return Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "文件上传失败: " + e.getMessage());
         }
     }

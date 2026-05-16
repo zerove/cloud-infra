@@ -1,5 +1,6 @@
 package com.cloudinfra.system.service.impl;
 
+import com.cloudinfra.framework.redis.service.RedisService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudinfra.system.domain.SysRolePermission;
 import com.cloudinfra.system.domain.SysUserRole;
@@ -21,6 +22,9 @@ public class RBACServiceImpl implements RBACService {
     private final SysUserRoleMapper sysUserRoleMapper;
     private final SysRolePermissionMapper sysRolePermissionMapper;
     private final SysPermissionMapper sysPermissionMapper;
+    private final RedisService redisService;
+
+    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -32,8 +36,10 @@ public class RBACServiceImpl implements RBACService {
             userRole.setRoleId(roleId);
             return userRole;
         }).collect(Collectors.toList());
-        // 使用 MyBatis-Plus 的 saveBatch（假设 Service 层有实现，这里简化为循环插入或使用 Mapper 批量方法）
         list.forEach(sysUserRoleMapper::insert);
+        
+        // 发布权限刷新事件
+        redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
     }
 
     @Override
@@ -47,6 +53,9 @@ public class RBACServiceImpl implements RBACService {
             return rolePerm;
         }).collect(Collectors.toList());
         list.forEach(sysRolePermissionMapper::insert);
+        
+        // 发布权限刷新事件
+        redisService.publish(AUTH_REFRESH_CHANNEL, "role:" + roleId);
     }
 
     @Override

@@ -1,0 +1,17 @@
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:notification_db;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  cloud:
+    nacos:
+      config:
+        enabled: false
+  config:
+    import: "optional:classpath:application.yml"

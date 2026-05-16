@@ -73,7 +73,7 @@ public class RedisService {
         );
     }
 
-    public java.util.Collection<String> keys(String pattern) {
-        return redisTemplate.keys(pattern);
+    public void publish(String channel, Object message) {
+        redisTemplate.convertAndSend(channel, message);
     }
 }
