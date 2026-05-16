@@ -1,15 +1,22 @@
 spring:
   application:
     name: cloud-notification
+  autoconfigure:
+    exclude:
+      - com.cloudinfra.framework.mybatis.config.MybatisPlusConfig
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+      - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
   config:
     import: "optional:nacos:notification-service.yaml"
   cloud:
     nacos:
       config:
+        enabled: false
         server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
         file-extension: yaml
         import-check:
           enabled: false
+        fail-fast: false
       discovery:
         server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
   threads:
@@ -23,5 +30,6 @@ spring:
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
+  type-aliases-package: com.cloudinfra.notification.domain
+
+

@@ -1,9 +1,2 @@
 [
-{
-    "targets": ["cloud-gateway:0.0.0.0:9000->9000"],
-    "labels": {
-        "job": "microservices",
-        "instance": "cloud-gateway"
-    }
-}
 ]

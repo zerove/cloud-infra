@@ -8,18 +8,22 @@ import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.mapper.NotificationMapper;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Repository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * 通知仓库类
  * 提供对通知数据的 CRUD 操作及自定义查询
  */
 @Repository
-@RequiredArgsConstructor
 public class NotificationRepository
     extends ServiceImpl<NotificationMapper, Notification>
 {
+    @Autowired
+    public NotificationRepository(@Qualifier("notificationMapper") NotificationMapper baseMapper) {
+        this.baseMapper = baseMapper;
+    }
+
 
     /**
      * 分页/列表查询通知历史
