@@ -246,7 +246,12 @@ services:
       - ./config/notification-application.yml:/app/config/application.yml:ro
     environment:
       - JAVA_OPTS=-XX:+UseZGC -Xmx512m -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom -Ddebug=true
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
+      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
+      - SPRING_THREADS_VIRTUAL_ENABLED=true
+      - SPRING_DATA_REDIS_HOST=redis-server
+      - SPRING_RABBITMQ_HOST=rabbitmq-server
+      - SPRING_DATASOURCE_HOST=postgres-server
     deploy:
       resources:
         limits:
