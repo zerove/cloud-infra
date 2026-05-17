@@ -9,6 +9,6 @@ import org.springframework.stereotype.Repository;
  * 通知持久层接口
  */
 @Mapper
-@Repository("notificationMapper")
+@Repository
 public interface NotificationMapper extends BaseMapper<Notification> {
 }

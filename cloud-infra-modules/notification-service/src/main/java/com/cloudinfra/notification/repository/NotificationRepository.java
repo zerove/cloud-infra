@@ -10,6 +10,7 @@ import com.cloudinfra.notification.mapper.NotificationMapper;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Repository;
 
 /**
  * 通知仓库类
@@ -20,10 +21,7 @@ public class NotificationRepository
     extends ServiceImpl<NotificationMapper, Notification>
 {
     @Autowired
-    public NotificationRepository(@Qualifier("notificationMapper") NotificationMapper baseMapper) {
-        this.baseMapper = baseMapper;
-    }
-
+    private NotificationMapper notificationMapper;
 
     /**
      * 分页/列表查询通知历史

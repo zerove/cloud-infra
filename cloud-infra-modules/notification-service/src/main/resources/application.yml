@@ -1,11 +1,6 @@
 spring:
   application:
     name: cloud-notification
-  autoconfigure:
-    exclude:
-      - com.cloudinfra.framework.mybatis.config.MybatisPlusConfig
-      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
-      - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
   config:
     import: "optional:nacos:notification-service.yaml"
   cloud:

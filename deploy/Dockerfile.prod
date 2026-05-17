@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install necessary tools for health checks and SkyWalking agent
 RUN apk add --no-cache curl wget
-RUN wget https://archive.apache.org/dist/skywalking/java-agent/9.2.0/apache-skywalking-java-agent-9.2.0.tgz -O /tmp/skywalking-agent.tgz && \
+RUN wget https://archive.apache.org/dist/skywalking/java-agent/9.4.0/apache-skywalking-java-agent-9.4.0.tgz -O /tmp/skywalking-agent.tgz && \
     tar -xzf /tmp/skywalking-agent.tgz -C /opt && \
     rm /tmp/skywalking-agent.tgz
 
@@ -20,7 +20,7 @@ RUN chown -R appuser:appgroup app.jar /opt/skywalking-agent
 USER appuser
 
 ENV TZ=Asia/Shanghai
-# Production JVM settings: ZGC + 512M Limit + SkyWalking Agent
-ENV JAVA_OPTS="-XX:+UseZGC -Xmx512m -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom -javaagent:/opt/skywalking-agent/skywalking-agent.jar"
+# Production JVM settings: ZGC + 512M Limit
+ENV JAVA_OPTS="-XX:+UseZGC -Xmx512m -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
 ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -Dspring.elasticsearch.uris=http://elasticsearch:9200 -jar app.jar"]

@@ -34,12 +34,12 @@ echo -e "${GREEN}>>> 正在同步配置到 Nacos...${NC}"
 bash "$DIR/sync-nacos.sh"
 
 echo -e "${GREEN}>>> 正在启动业务微服务...${NC}"
-podman-compose -f "$COMPOSE_FILE" up --build -d gateway auth system notification search prometheus
+podman-compose -f "$COMPOSE_FILE" up --build -d gateway1 gateway2 auth system notification search skywalking-oap skywalking-ui
 
-# 触发监控发现更新
+# 触发监控服务发现更新
 echo -e "${GREEN}>>> 正在同步监控服务发现目标...${NC}"
 bash "$DIR/service_discovery.sh"
-podman-compose -f "$COMPOSE_FILE" restart prometheus
+# podman-compose -f "$COMPOSE_FILE" restart prometheus # 此处 prometheus 未定义，暂时注释
 
 echo -e "${GREEN}>>> 部署完成！${NC}"
 echo "Nacos 控制台: http://localhost:8848/nacos"
