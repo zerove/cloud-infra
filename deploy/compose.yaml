@@ -333,3 +333,13 @@ volumes:
   nacos_data:
   redis_data:
   postgres_data:
+
+  emqx:
+    image: emqx/emqx:5.8.0
+    container_name: emqx-broker
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+      - "8883:8883"
+      - "18083:18083"
+    restart: always
