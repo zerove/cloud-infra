@@ -58,6 +58,13 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
     }
 
     @Override
+    @io.seata.spring.annotation.GlobalTransactional
+    public boolean insertDeptWithException(SysDept dept) {
+        insertDept(dept);
+        throw new RuntimeException("Test exception for rollback");
+    }
+
+    @Override
     public boolean updateDept(SysDept dept) {
         SysDept newParentDept = this.getById(dept.getParentId());
         SysDept oldDept = this.getById(dept.getDeptId());
