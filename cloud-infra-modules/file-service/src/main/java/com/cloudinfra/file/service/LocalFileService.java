@@ -17,8 +17,6 @@ import java.util.Date;
 import java.util.UUID;
 
 @Slf4j
-@Primary
-@Service
 @RequiredArgsConstructor
 public class LocalFileService implements IFileService {
 
