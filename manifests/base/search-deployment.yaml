@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+      - name: search
+        image: localhost/cloud-infra-search:jre
+        envFrom:
+        - configMapRef:
+            name: cloud-infra-config
+        ports:
+        - containerPort: 9500
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9500
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9500
+          initialDelaySeconds: 40
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+spec:
+  ports:
+  - port: 9500
+    targetPort: 9500
+  selector:
+    app: search
