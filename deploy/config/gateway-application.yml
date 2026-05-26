@@ -1,46 +1,72 @@
 server:
-  port: 9000
+    port: 9000
 
 auth:
-  white-list:
-    - /auth/
+    white-list:
+        - /auth/
+        - /api-docs/**
+        - /doc.html
+        - /webjars/**
+        - /swagger-resources/**
+        - /v3/api-docs/**
 
 spring:
-  application:
-    name: cloud-gateway
-  config:
-    import: "optional:nacos:gateway.yaml"
-  threads:
-    virtual:
-      enabled: true
-  cloud:
-    nacos:
-      discovery:
-        server-addr: nacos:8848
-    gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      server:
-        webmvc:
-          routes:
-            - id: system-module
-              uri: http://system-module
-              predicates:
-                - Path=/system/**
-              filters:
-                - StripPrefix=1
-    sentinel:
-      transport:
-        dashboard: localhost:8080
-      datasource:
-        ds1:
-          nacos:
-            server-addr: localhost:8848
-            dataId: sentinel-gateway-rules
-            groupId: DEFAULT_GROUP
-            rule-type: gw-flow
+    main:
+        allow-bean-definition-overriding: true
+    application:
+        name: cloud-gateway
+    config:
+        import: "optional:nacos:gateway.yaml"
+    threads:
+        virtual:
+            enabled: true
+    cloud:
+        nacos:
+            discovery:
+                server-addr: nacos:8848
+        gateway:
+            discovery:
+                locator:
+                    enabled: true
+                    lower-case-service-id: true
+            gateway:
+                server:
+                    webmvc:
+                        routes:
+                            - id: system-docs
+                              uri: http://cloud-system:9300
+                              predicates:
+                                  - Path=/api-docs/system/**
+                              filters:
+                                  - RewritePath=/api-docs/system/(?<remaining>.*), /management/${remaining}
+                            - id: notification-docs
+                              uri: http://cloud-notification:9400
+                              predicates:
+                                  - Path=/api-docs/notification/**
+                              filters:
+                                  - RewritePath=/api-docs/notification/(?<remaining>.*), /${remaining}
+                            - id: search-docs
+                              uri: http://cloud-search:9500
+                              predicates:
+                                  - Path=/api-docs/search/**
+                              filters:
+                                  - RewritePath=/api-docs/search/(?<remaining>.*), /${remaining}
+                            - id: auth-docs
+                              uri: http://cloud-auth:9201
+                              predicates:
+                                  - Path=/api-docs/auth/**
+                              filters:
+                                  - RewritePath=/api-docs/auth/(?<remaining>.*), /${remaining}
+
+            transport:
+                dashboard: localhost:8080
+            datasource:
+                ds1:
+                    nacos:
+                        server-addr: localhost:8848
+                        dataId: sentinel-gateway-rules
+                        groupId: DEFAULT_GROUP
+                        rule-type: gw-flow
 
 # knife4j:
 #   gateway:
@@ -50,22 +76,39 @@ spring:
 #       enabled: true
 #       version: openapi3
 
-management:
-  health:
-    db:
-      enabled: false
-  endpoints:
-    web:
-      exposure:
-        include: prometheus,health,info
-  tracing:
-    sampling:
-      probability: 1.0
-  otlp:
-    tracing:
-      endpoint: http://localhost:4318/v1/traces
-  metrics:
-    export:
-      prometheus:
+knife4j:
+    gateway:
         enabled: true
+        strategy: manual
+        routes:
+            - name: 系统模块
+              url: /system/v3/api-docs
+              service-name: cloud-system
+            - name: 通知模块
+              url: /notification/v3/api-docs
+              service-name: cloud-notification
+            - name: 搜索模块
+              url: /search/v3/api-docs
+              service-name: cloud-search
+            - name: 认证模块
+              url: /auth/v3/api-docs
+              service-name: cloud-auth
 
+management:
+    health:
+        db:
+            enabled: false
+    endpoints:
+        web:
+            exposure:
+                include: prometheus,health,info
+    tracing:
+        sampling:
+            probability: 1.0
+    otlp:
+        tracing:
+            endpoint: http://localhost:4318/v1/traces
+    metrics:
+        export:
+            prometheus:
+                enabled: true

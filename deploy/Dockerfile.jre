@@ -1,0 +1,8 @@
+FROM eclipse-temurin:25-jre-alpine
+WORKDIR /app
+COPY app.jar app.jar
+
+# 启用 ZGC，虚拟线程是默认特性
+ENV JAVA_OPTS="-XX:+UseZGC -Xms256m -Xmx512m"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

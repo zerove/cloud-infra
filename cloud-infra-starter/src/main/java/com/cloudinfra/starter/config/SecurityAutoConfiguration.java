@@ -1,6 +1,6 @@
 package com.cloudinfra.starter.config;
 
-import com.cloudinfra.framework.security.filter.JwtAuthenticationFilter;
+import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -11,9 +11,9 @@ import org.springframework.context.annotation.Configuration;
 public class SecurityAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(JwtAuthenticationFilter.class)
-    public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter();
+    @ConditionalOnMissingBean(HeaderAuthenticationFilter.class)
+    public HeaderAuthenticationFilter headerAuthenticationFilter() {
+        return new HeaderAuthenticationFilter();
     }
 
     @Bean

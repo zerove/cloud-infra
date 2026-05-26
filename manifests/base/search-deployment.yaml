@@ -1,52 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: search-service
+    name: search-service
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: search
-  template:
-    metadata:
-      labels:
-        app: search
-    spec:
-      containers:
-      - name: search
-        image: localhost/cloud-infra-search:jre
-        envFrom:
-        - configMapRef:
-            name: cloud-infra-config
-        ports:
-        - containerPort: 9500
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        readinessProbe:
-          httpGet:
-            path: /actuator/health/readiness
-            port: 9500
-          initialDelaySeconds: 20
-          periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /actuator/health/liveness
-            port: 9500
-          initialDelaySeconds: 40
-          periodSeconds: 20
+    replicas: 1
+    selector:
+        matchLabels:
+            app: search
+    template:
+        metadata:
+            labels:
+                app: search
+        spec:
+            containers:
+                - name: search
+                  image: localhost/cloud-infra-search:latest
+                  imagePullPolicy: IfNotPresent
+                  env:
+                      - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CONFIG_ADDITIONAL-LOCATION
+                        value: "file:/app/config/"
+                      - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
+                        value: "true"
+                  volumeMounts:
+                      - name: config-volume
+                        mountPath: /app/config
+                  ports:
+                      - containerPort: 9500
+                  resources:
+                      requests:
+                          memory: 512Mi
+                      limits:
+                          memory: 2Gi
+            volumes:
+                - name: config-volume
+                  configMap:
+                      name: cloud-infra-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: search-service
+    name: search-service
 spec:
-  ports:
-  - port: 9500
-    targetPort: 9500
-  selector:
-    app: search
+    ports:
+        - port: 9500
+          targetPort: 9500
+    selector:
+        app: search

@@ -1,6 +1,6 @@
 package com.cloudinfra.auth.config;
 
-import com.cloudinfra.framework.security.filter.JwtAuthenticationFilter;
+import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import org.springframework.context.annotation.Bean;
@@ -21,16 +21,16 @@ public class SecurityConfig {
 
     private final AuthenticationEntryPointImpl authenticationEntryPoint;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final HeaderAuthenticationFilter headerAuthenticationFilter;
 
     public SecurityConfig(
         AuthenticationEntryPointImpl authenticationEntryPoint,
         AccessDeniedHandlerImpl accessDeniedHandler,
-        JwtAuthenticationFilter jwtAuthenticationFilter
+        HeaderAuthenticationFilter headerAuthenticationFilter
     ) {
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.headerAuthenticationFilter = headerAuthenticationFilter;
     }
 
     @Bean
@@ -50,14 +50,16 @@ public class SecurityConfig {
                     .requestMatchers(
                         "/swagger-ui/**",
                         "/v3/api-docs/**",
-                        "/swagger-ui.html"
-                    )
-                    .authenticated()
+                        "/swagger-ui.html",
+                        "/doc.html",
+                        "/webjars/**",
+                        "/swagger-resources/**"
+                    ).permitAll()
                     .anyRequest()
                     .authenticated()
             )
             .addFilterBefore(
-                jwtAuthenticationFilter,
+                headerAuthenticationFilter,
                 UsernamePasswordAuthenticationFilter.class
             );
         return http.build();

@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: cloud-system
+  cloud:
+    nacos:
+      config:
+        server-addr: nacos-service:8848
+        file-extension: yaml
+        import-check:
+          enabled: false
+      discovery:
+        server-addr: nacos-service:8848
+  config:
+    import: optional:nacos:system-module.yaml

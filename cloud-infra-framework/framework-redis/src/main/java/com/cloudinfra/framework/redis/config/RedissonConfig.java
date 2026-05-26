@@ -18,7 +18,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @AutoConfiguration
 public class RedissonConfig {
 
-    @Value("${spring.data.redis.host:127.0.0.1}")
+    @Value("${spring.data.redis.host:redis}")
     private String host;
 
     @Value("${spring.data.redis.port:6379}")

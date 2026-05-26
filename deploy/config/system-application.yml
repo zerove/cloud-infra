@@ -7,9 +7,9 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
+        server-addr: nacos-service:8848
       config:
-        server-addr: nacos:8848
+        server-addr: nacos-service:8848
         file-extension: yaml
   config:
     import: "optional:nacos:system-module.yaml"
@@ -17,10 +17,10 @@ spring:
     allow-bean-definition-overriding: true
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres-server}:5432/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
-    driver-class-name: org.postgresql.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/cloud_infra}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
@@ -33,13 +33,13 @@ spring:
       validation-timeout: 5000
       pool-name: cloud-system-pool
   rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:rabbitmq-server}
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
     port: 5672
     username: guest
     password: guest
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:redis-server}
+      host: ${SPRING_DATA_REDIS_HOST:redis}
       port: 6379
       database: 0
       lettuce:

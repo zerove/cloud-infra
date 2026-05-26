@@ -8,8 +8,6 @@ import org.springframework.context.annotation.ComponentScan;
 
 @EnableDiscoveryClient
 @SpringBootApplication(scanBasePackages = "com.cloudinfra")
-@MapperScan("com.cloudinfra.file.mapper")
-@ComponentScan(basePackages = {"com.cloudinfra.file", "com.cloudinfra.framework.mybatis"})
 public class FileApplication {
     public static void main(String[] args) {
         SpringApplication.run(FileApplication.class, args);

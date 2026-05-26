@@ -9,6 +9,8 @@ spring:
   threads:
     virtual:
       enabled: true
+  main:
+    lazy-initialization: true
   cloud:
     nacos:
       discovery:

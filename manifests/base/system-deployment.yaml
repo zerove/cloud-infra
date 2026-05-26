@@ -1,52 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: system-service
+    name: system-service
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: system
-  template:
-    metadata:
-      labels:
-        app: system
-    spec:
-      containers:
-      - name: system
-        image: localhost/cloud-infra-system:jre
-        envFrom:
-        - configMapRef:
-            name: cloud-infra-config
-        ports:
-        - containerPort: 9300
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        readinessProbe:
-          httpGet:
-            path: /actuator/health/readiness
-            port: 9300
-          initialDelaySeconds: 20
-          periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /actuator/health/liveness
-            port: 9300
-          initialDelaySeconds: 40
-          periodSeconds: 20
+    replicas: 1
+    selector:
+        matchLabels:
+            app: system
+    template:
+        metadata:
+            labels:
+                app: system
+        spec:
+            containers:
+                - name: system
+                  image: localhost/cloud-infra-system:latest
+                  imagePullPolicy: IfNotPresent
+                  env:
+                      - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CONFIG_ADDITIONAL-LOCATION
+                        value: "file:/app/config/"
+                      - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
+                        value: "true"
+                  volumeMounts:
+                      - name: config-volume
+                        mountPath: /app/config
+                  ports:
+                      - containerPort: 9300
+                  resources:
+                      requests:
+                          memory: 512Mi
+                      limits:
+                          memory: 2Gi
+            volumes:
+                - name: config-volume
+                  configMap:
+                      name: cloud-infra-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: system-service
+    name: system-service
 spec:
-  ports:
-  - port: 9300
-    targetPort: 9300
-  selector:
-    app: system
+    ports:
+        - port: 9300
+          targetPort: 9300
+    selector:
+        app: system

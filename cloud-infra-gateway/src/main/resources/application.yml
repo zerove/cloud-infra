@@ -1,14 +1,15 @@
 spring:
-  application:
-    name: cloud-gateway
-  config:
-    import: "optional:nacos:gateway.yaml"
-  cloud:
-    nacos:
-      config:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
-        file-extension: yaml
-        import-check:
-          enabled: false
-      discovery:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
+    cloud:
+        refresh:
+            enabled: false
+        nacos:
+            config:
+                import-check:
+                    enabled: false
+                fail-fast: false
+    config:
+        import: optional:nacos:gateway.yaml
+    autoconfigure:
+        exclude:
+            - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+            - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration

@@ -1,345 +1,170 @@
+networks:
+  default:
+    name: cloud-infra-net
+
 services:
   nacos:
     image: nacos/nacos-server:v2.3.2
     container_name: nacos-server
+    networks:
+      - default
     environment:
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
-      - PREFER_HOST_MODE=hostname
       - MODE=standalone
-      - JVM_XMS=256m
-      - JVM_XMX=256m
-      - JVM_XMN=128m
+      - SPRING_DATASOURCE_PLATFORM=mysql
+      - MYSQL_SERVICE_HOST=mysql-nacos
+      - MYSQL_SERVICE_PORT=3306
+      - MYSQL_SERVICE_DB_NAME=nacos_config
+      - MYSQL_SERVICE_USER=nacos
+      - MYSQL_SERVICE_PASSWORD=nacos
+      - NACOS_DB_URL=jdbc:mysql://mysql-nacos:3306/nacos_config?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
+      - NACOS_DB_USER=nacos
+      - NACOS_DB_PASSWORD=nacos
+      - NACOS_JDBC_URL=jdbc:mysql://mysql-nacos:3306/nacos_config?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8
     ports:
       - "8848:8848"
       - "9848:9848"
-    expose:
-      - "9848"
-    volumes:
-      - nacos_logs:/home/nacos/logs
-      - nacos_data:/home/nacos/data
+      - "7848:7848"
+    depends_on:
+      mysql-nacos:
+        condition: service_healthy
+
+  mysql-nacos:
+    image: mysql:8.0
+    container_name: mysql-nacos
+    command: --bind-address=0.0.0.0 --default-authentication-plugin=mysql_native_password
+    networks:
+      - default
+    environment:
+      - MYSQL_DATABASE=nacos_config
+      - MYSQL_USER=nacos
+      - MYSQL_PASSWORD=nacos
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - "3306:3306"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u", "root", "-proot"]
       interval: 5s
       timeout: 5s
-      retries: 10
-    restart: always
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: redis-server
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: always
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq-server
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    restart: always
-
+      retries: 30
+  
   postgres:
-    image: postgres:16
-    container_name: postgres-server
+    image: postgres:16-alpine
+    container_name: postgres
+    networks:
+      - default
     environment:
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
-      - POSTGRES_USER=root
-      - POSTGRES_PASSWORD=root
+      - POSTGRES_PASSWORD=password
       - POSTGRES_DB=cloud_infra
-      - TZ=Asia/Shanghai
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.22
-    container_name: elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    networks:
+      - default
     ports:
-      - "9200:9200"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
+      - "6379:6379"
 
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-lb
-    ports:
-      - "9000:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      gateway1:
-        condition: service_healthy
-      gateway2:
-        condition: service_healthy
-
-
-  gateway1:
+  gateway:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.prod
+      dockerfile: deploy/Dockerfile.jre
       args:
         JAR_FILE: cloud-infra-gateway/target/cloud-infra-gateway-1.0.0-SNAPSHOT.jar
     container_name: cloud-gateway-1
-    volumes:
-      - ./config/gateway-application.yml:/app/config/application.yml:ro
+    networks:
+      - default
+    ports:
+      - "9000:9000"
     environment:
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_REDIS_HOST=redis-server
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: always
-
-  gateway2:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.prod
-      args:
-        JAR_FILE: cloud-infra-gateway/target/cloud-infra-gateway-1.0.0-SNAPSHOT.jar
-    container_name: cloud-gateway-2
-    volumes:
-      - ./config/gateway-application.yml:/app/config/application.yml:ro
-    environment:
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_REDIS_HOST=redis-server
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: always
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=nacos-server:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos-server:8848
+      - SPRING_CONFIG_IMPORT=optional:nacos:gateway.yaml
+      - SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED=false
+    depends_on:
+      nacos:
+        condition: service_healthy
 
   auth:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.prod
+      dockerfile: deploy/Dockerfile.jre
       args:
         JAR_FILE: cloud-infra-auth/target/cloud-infra-auth-1.0.0-SNAPSHOT.jar
-    container_name: cloud-auth
+    container_name: auth-service
+    networks:
+      - default
     ports:
-      - "9201:9200"
+      - "9200:9200"
+    environment:
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=nacos-server:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos-server:8848
+      - SPRING_CONFIG_IMPORT=optional:nacos:auth.yaml
+      - SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED=false
     depends_on:
       nacos:
         condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - ./config/auth-application.yml:/app/config/application.yml:ro
-    environment:
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_REDIS_HOST=redis-server
-      - SPRING_RABBITMQ_HOST=rabbitmq-server
-      - SPRING_DATASOURCE_HOST=postgres-server
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
-      - SW_AGENT_NAME=cloud-auth
-      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    labels:
-      - "monitoring=true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: always
 
   system:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.prod
+      dockerfile: deploy/Dockerfile.jre
       args:
         JAR_FILE: cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT.jar
-    container_name: cloud-system
+    container_name: system-service
+    networks:
+      - default
     ports:
       - "9300:9300"
+    environment:
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cloud_infra
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=nacos-server:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos-server:8848
+      - SPRING_CONFIG_IMPORT=optional:nacos:system-module.yaml
+      - SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED=false
     depends_on:
       nacos:
         condition: service_healthy
       postgres:
         condition: service_started
-    volumes:
-      - ./config/system-application.yml:/app/config/application.yml:ro
-      - ./logs/system:/var/log/system
-    environment:
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_DATASOURCE_HOST=postgres-server
-      - SPRING_DATASOURCE_PORT=5432
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
-      - SPRING_DATA_REDIS_HOST=redis-server
-      - SPRING_RABBITMQ_HOST=rabbitmq-server
-      - SW_AGENT_NAME=cloud-system
-      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-    labels:
-      - "monitoring=true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9300/management/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-    restart: always
+      redis:
+        condition: service_started
 
   notification:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.prod
+      dockerfile: deploy/Dockerfile.jre
       args:
         JAR_FILE: cloud-infra-modules/notification-service/target/notification-service-1.0.0-SNAPSHOT.jar
-    container_name: cloud-notification
-    ports:
-      - "9400:9400"
-    depends_on:
-      nacos:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
-    volumes:
-      - ./config/notification-application.yml:/app/config/application.yml:ro
+    container_name: notification-service
+    networks:
+      - default
     environment:
-      - JAVA_OPTS=-XX:+UseZGC -Xmx512m -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom -Ddebug=true
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_REDIS_HOST=redis-server
-      - SPRING_RABBITMQ_HOST=rabbitmq-server
-      - SPRING_DATASOURCE_HOST=postgres-server
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    labels:
-      - "monitoring=true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9400/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-    restart: always
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=nacos-server:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos-server:8848
+      - SPRING_CONFIG_IMPORT=optional:nacos:notification.yaml
+      - SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED=false
+    depends_on:
+      - nacos
 
   search:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.prod
+      dockerfile: deploy/Dockerfile.jre
       args:
         JAR_FILE: cloud-infra-modules/search-service/target/search-service-1.0.0-SNAPSHOT.jar
-    container_name: cloud-search
-    ports:
-      - "9500:9500"
-    depends_on:
-      nacos:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-    volumes:
-      - ./config/search-application.yml:/app/config/application.yml:ro
+    container_name: search-service
+    networks:
+      - default
     environment:
-      - SPRING_DATA_ELASTICSEARCH_CLIENT_REACTIVE_ENDPOINTS=elasticsearch:9200
-      - SPRING_CONFIG_LOCATION=file:/app/config/application.yml
-      - SPRING_CLOUD_NACOS_SERVER_ADDR=nacos:8848
-      - SPRING_THREADS_VIRTUAL_ENABLED=true
-      - SPRING_DATA_REDIS_HOST=redis-server
-      - SPRING_RABBITMQ_HOST=rabbitmq-server
-      - SPRING_DATASOURCE_HOST=postgres-server
-      - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=root
-      - SPRING_DATA_ELASTICSEARCH_CLUSTER_NODES=elasticsearch:9200
-      - SW_AGENT_NAME=cloud-search
-      - SW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    labels:
-      - "monitoring=true"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9500/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-    restart: always
-
-  skywalking-oap:
-    image: apache/skywalking-oap-server:9.4.0
-    container_name: skywalking-oap
-    ports:
-      - "11800:11800"
-      - "12800:12800"
-    restart: always
-
-  skywalking-ui:
-    image: apache/skywalking-ui:9.4.0
-    container_name: skywalking-ui
-    ports:
-      - "8080:8080"
-    environment:
-      - SW_OAP_ADDRESS=http://skywalking-oap:12800
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=nacos-server:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=nacos-server:8848
+      - SPRING_CONFIG_IMPORT=optional:nacos:search.yaml
+      - SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED=false
     depends_on:
-      - skywalking-oap
-    restart: always
-
-volumes:
-  nacos_logs:
-  nacos_data:
-  redis_data:
-  postgres_data:
-
-  emqx:
-    image: emqx/emqx:5.8.0
-    container_name: emqx-broker
-    ports:
-      - "1883:1883"
-      - "8083:8083"
-      - "8883:8883"
-      - "18083:18083"
-    restart: always
+      - nacos

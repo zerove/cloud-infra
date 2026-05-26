@@ -1,52 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth-service
+    name: auth-service
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: auth
-  template:
-    metadata:
-      labels:
-        app: auth
-    spec:
-      containers:
-      - name: auth
-        image: localhost/cloud-infra-auth:native
-        envFrom:
-        - configMapRef:
-            name: cloud-infra-config
-        ports:
-        - containerPort: 9200
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 128Mi
-        readinessProbe:
-          httpGet:
-            path: /actuator/health/readiness
-            port: 9200
-          initialDelaySeconds: 5
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /actuator/health/liveness
-            port: 9200
-          initialDelaySeconds: 10
-          periodSeconds: 10
+    replicas: 1
+    selector:
+        matchLabels:
+            app: auth
+    template:
+        metadata:
+            labels:
+                app: auth
+        spec:
+            containers:
+                - name: auth
+                  image: localhost/cloud-infra-auth:latest
+                  imagePullPolicy: IfNotPresent
+                  env:
+                      - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+                        value: "file:/app/config/"
+                      - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
+                        value: "true"
+                  volumeMounts:
+                      - name: config-volume
+                        mountPath: /app/config
+                  ports:
+                      - containerPort: 9200
+                  resources:
+                      requests:
+                          memory: 512Mi
+                      limits:
+                          memory: 2Gi
+            volumes:
+                - name: config-volume
+                  configMap:
+                      name: cloud-infra-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: auth-service
+    name: auth-service
 spec:
-  ports:
-  - port: 9200
-    targetPort: 9200
-  selector:
-    app: auth
+    ports:
+        - port: 9200
+          targetPort: 9200
+    selector:
+        app: auth
