@@ -13,7 +13,7 @@ import lombok.EqualsAndHashCode;
 @TableName("sys_permission")
 public class SysPermissionEntity extends SysPermission {
     @TableId(type = IdType.AUTO)
-    private Long id; // 覆盖 POJO 中的 id
+    private Long id;
     
     @TableLogic
     private Integer deleted;

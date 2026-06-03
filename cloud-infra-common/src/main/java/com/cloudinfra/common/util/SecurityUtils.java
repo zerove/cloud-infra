@@ -22,7 +22,6 @@ public class SecurityUtils {
                 return (LoginUser) authentication.getPrincipal();
             }
         } catch (Exception e) {
-            // ignore
         }
         return null;
     }
@@ -47,8 +46,8 @@ public class SecurityUtils {
      * 获取当前用户部门ID
      */
     public static Long getDeptId() {
-        // Need to add deptId to LoginUser as well
-        return 1L; // placeholder
+        LoginUser loginUser = getLoginUser();
+        return loginUser != null ? loginUser.getDeptId() : null;
     }
 
     /**

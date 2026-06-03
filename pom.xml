@@ -42,8 +42,10 @@
         <!-- Native Image Build Control -->
         <spring-boot.aot.skip>true</spring-boot.aot.skip>
         <native.image.skip>true</native.image.skip>
-    </properties>
-    <modules>
+        <spring-boot.repackage.skip>false</spring-boot.repackage.skip>
+        </properties>
+
+        <modules>
         <module>cloud-infra-starter</module>
         <module>cloud-infra-common</module>
         <module>cloud-infra-framework</module>
@@ -52,9 +54,9 @@
         <module>cloud-infra-auth</module>
         <module>cloud-infra-modules</module>
         <module>cloud-infra-test-support</module>
-    </modules>
+        </modules>
 
-    <dependencyManagement>
+        <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -229,9 +231,9 @@
                 <version>${revision}</version>
             </dependency>
         </dependencies>
-    </dependencyManagement>
+        </dependencyManagement>
 
-    <build>
+        <build>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -249,74 +251,24 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
-                    <executions>
-                        <execution>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
-                        </execution>                    </executions>
-                    <configuration>
-                        <image>
-                            <builder>paketobuildpacks/builder-optimistic:latest</builder>
-                        </image>
-                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.graalvm.buildtools</groupId>
+                    <artifactId>native-maven-plugin</artifactId>
+                    <version>0.10.3</version>
+                    <extensions>true</extensions>
                 </plugin>
             </plugins>
         </pluginManagement>
-    </build>
+        </build>
 
-    <profiles>
+        <profiles>
         <profile>
             <id>native</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>process-aot</id>
-                                <goals>
-                                    <goal>process-aot</goal>
-                                </goals>
-                                <configuration>
-                                    <skip>${spring-boot.aot.skip}</skip>
-                                    <systemPropertyVariables>
-                                        <spring.cloud.nacos.discovery.enabled>false</spring.cloud.nacos.discovery.enabled>
-                                        <spring.cloud.nacos.config.enabled>false</spring.cloud.nacos.config.enabled>
-                                    </systemPropertyVariables>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                    <groupId>org.graalvm.buildtools</groupId>
-                    <artifactId>native-maven-plugin</artifactId>
-                    <configuration>
-                        <imageName>${project.artifactId}-binary</imageName>
-                        <skip>${native.image.skip}</skip>
-                        <buildArgs>
-                            <buildArg>--no-fallback</buildArg>
-                            <buildArg>--enable-http</buildArg>
-                            <buildArg>--enable-https</buildArg>
-                            <buildArg>-H:+ReportExceptionStackTraces</buildArg>
-                        </buildArgs>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <id>build-native</id>
-                            <goals>
-                                <goal>compile</goal>
-                            </goals>
-                            <phase>package</phase>
-                        </execution>
-                    </executions>
-                    </plugin>
-                </plugins>
-            </build>
+            <properties>
+                <spring-boot.aot.skip>false</spring-boot.aot.skip>
+                <native.image.skip>false</native.image.skip>
+            </properties>
         </profile>
-    </profiles>
+        </profiles>
 </project>

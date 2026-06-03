@@ -24,10 +24,10 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
+        server-addr: 127.0.0.1:8848
         enabled: true
       config:
-        server-addr: nacos:8848
+        server-addr: 127.0.0.1:8848
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
     url: jdbc:postgresql://postgres-server:5432/cloud_infra
@@ -35,6 +35,6 @@ spring:
     password: root
   data:
     redis:
-      host: redis-server
+      host: 127.0.0.1
       port: 6379
       database: 0

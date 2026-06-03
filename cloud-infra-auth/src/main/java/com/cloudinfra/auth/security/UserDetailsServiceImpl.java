@@ -21,16 +21,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username)
         throws UsernameNotFoundException {
-        // Assume username is userId for simplicity in this migration if needed,
-        // but here we just need to adapt to the existing UserService interface
-        // If UserService only has getUserById, we might need another way to fetch user
-        // by username.
-        // Given current constraints, I will assume username is being used as a
-        // placeholder.
         var user = userService.getUserById(Long.valueOf(username));
         if (user == null) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
+
 
         // Permissions might be in LoginUser already
         List<SimpleGrantedAuthority> authorities = user

@@ -10,13 +10,19 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>system-module</artifactId>
+    <packaging>jar</packaging>
 
     <properties>
         <spring-boot.aot.skip>false</spring-boot.aot.skip>
         <native.image.skip>false</native.image.skip>
+        <main.class>com.cloudinfra.system.SystemApplication</main.class>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-bootstrap</artifactId>
@@ -36,7 +42,11 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
-            <artifactId>framework-web</artifactId>
+            <artifactId>framework-tracing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-seata</artifactId>
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
@@ -72,7 +82,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
         <dependency>
@@ -107,19 +117,9 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-stream-binder-rabbit</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>framework-seata</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.seata</groupId>
-                    <artifactId>seata-spring-autoconfigure-client</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
     </dependencies>
-
     <build>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -142,12 +142,10 @@
                         <goals>
                             <goal>repackage</goal>
                         </goals>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
 </project>
+

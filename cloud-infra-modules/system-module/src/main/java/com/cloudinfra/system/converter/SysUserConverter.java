@@ -14,7 +14,7 @@ public class SysUserConverter {
     public SysUser dtoToEntity(SysUserDTO dto) {
         if (dto == null) return null;
         SysUser entity = new SysUser();
-        entity.setId(dto.getId());
+        entity.setUserId(dto.getId());
         entity.setUsername(dto.getUsername());
         entity.setPassword(dto.getPassword());
         entity.setEmail(dto.getEmail());
@@ -26,7 +26,7 @@ public class SysUserConverter {
     public SysUserVO entityToVo(SysUser entity) {
         if (entity == null) return null;
         SysUserVO vo = new SysUserVO();
-        vo.setId(entity.getId());
+        vo.setId(entity.getUserId());
         vo.setUsername(entity.getUsername());
         vo.setEmail(entity.getEmail());
         vo.setPhone(entity.getPhone());

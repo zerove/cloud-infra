@@ -1,5 +1,6 @@
 package com.cloudinfra.file;
 
+import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
 import com.cloudinfra.file.mapper.FileMetadataMapper;
 import com.cloudinfra.file.service.IFileService;
@@ -21,9 +22,16 @@ public class FileServiceIntegrationTest extends BaseIntegrationTest {
     @Test
     public void testUploadAndMetadataPersistence() throws Exception {
         String fileName = "test.txt";
-        MockMultipartFile file = new MockMultipartFile("file", fileName, "text/plain", "Hello World".getBytes());
+        byte[] contentBytes = "Hello World".getBytes();
+        FileContent fileContent = new FileContent(
+            fileName, 
+            "text/plain", 
+            contentBytes.length, 
+            new java.io.ByteArrayInputStream(contentBytes)
+        );
 
-        String fileUrl = fileService.upload(file);
+        String fileUrl = fileService.upload(fileContent);
+
 
         assertThat(fileUrl).isNotNull();
         assertThat(fileUrl).contains(fileName);
@@ -36,6 +44,6 @@ public class FileServiceIntegrationTest extends BaseIntegrationTest {
 
         assertThat(metadata).isNotNull();
         assertThat(metadata.getFileName()).isEqualTo(fileName);
-        assertThat(metadata.getFileSize()).isEqualTo(file.getSize());
+        assertThat(metadata.getFileSize()).isEqualTo(contentBytes.length);
     }
 }

@@ -23,6 +23,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GlobalAuthFilter extends OncePerRequestFilter {
 
     private static final String TRACE_ID = "traceId";
+    private final JwtUtils jwtUtils;
+
+    public GlobalAuthFilter(JwtUtils jwtUtils) {
+        this.jwtUtils = jwtUtils;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -35,27 +40,14 @@ public class GlobalAuthFilter extends OncePerRequestFilter {
         MDC.put(TRACE_ID, traceId);
 
         try {
-            String path = request.getRequestURI();
-            if (path.contains("/auth/login")) {
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            String token = request.getHeader("Authorization");
-            if (token == null || token.isEmpty()) {
-                response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                return;
-            }
-
-            DecodedJWT jwt = JwtUtils.parseToken(token.replace("Bearer ", ""));
-            Long userId = jwt.getClaim("userId").asLong();
-            String username = jwt.getSubject();
+            String userId = (String) request.getAttribute("X-User-Id");
+            String username = (String) request.getAttribute("X-User-Name");
 
             HttpServletRequestWrapper requestWrapper = new HttpServletRequestWrapper(request) {
                 private final Map<String, String> customHeaders = new ConcurrentHashMap<>();
                 {
-                    customHeaders.put("X-User-Id", userId.toString());
-                    customHeaders.put("X-User-Name", username);
+                    if (userId != null) customHeaders.put("X-User-Id", userId);
+                    if (username != null) customHeaders.put("X-User-Name", username);
                     customHeaders.put(TRACE_ID, traceId);
                 }
 

@@ -6,6 +6,7 @@ import com.cloudinfra.api.notification.enums.NotificationType;
 import lombok.Data;
 import java.time.LocalDateTime;
 
+
 /**
  * 通知实体类
  * 存储系统发送给用户的通知信息
@@ -13,45 +14,36 @@ import java.time.LocalDateTime;
 @Data
 @TableName("sys_notification")
 public class Notification {
-    /**
-     * 主键ID
-     */
     @TableId(type = IdType.AUTO)
     private Long id;
-
-    /**
-     * 用户ID
-     */
     private Long userId;
-
-    /**
-     * 通知类型 (使用 NotificationType 枚举)
-     */
     private NotificationType type;
-
-    /**
-     * 通知标题
-     */
     private String title;
-
-    /**
-     * 通知内容
-     */
     private String content;
-
-    /**
-     * 通知状态 (使用 NotificationStatus 枚举: 0-未读, 1-已读)
-     */
     private NotificationStatus status;
-
-    /**
-     * 创建时间
-     */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
+    private LocalDateTime readTime;
 
     /**
-     * 阅读时间
+     * 创建新通知 (领域工厂方法)
      */
-    private LocalDateTime readTime;
+    public static Notification create(Long userId, NotificationType type, String title, String content) {
+        Notification n = new Notification();
+        n.setUserId(userId);
+        n.setType(type);
+        n.setTitle(title);
+        n.setContent(content);
+        n.setStatus(NotificationStatus.UNREAD);
+        return n;
+    }
+
+    /**
+     * 标记为已读 (领域行为)
+     */
+    public void markAsRead() {
+        this.status = NotificationStatus.READ;
+        this.readTime = LocalDateTime.now();
+    }
 }
+

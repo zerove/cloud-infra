@@ -1,5 +1,6 @@
 package com.cloudinfra.file.service;
 
+import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
 import com.cloudinfra.file.mapper.FileMetadataMapper;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,8 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
+@Service
+@Primary
 public class LocalFileService implements IFileService {
 
     @Value("${file.upload-path:uploads}")
@@ -26,26 +29,25 @@ public class LocalFileService implements IFileService {
     private final FileMetadataMapper fileMetadataMapper;
 
     @Override
-    public String upload(MultipartFile file) throws IOException {
+    public String upload(FileContent content) throws IOException {
         Path path = Paths.get(uploadPath);
         if (!Files.exists(path)) {
             Files.createDirectories(path);
         }
 
-        String originalFilename = file.getOriginalFilename();
-        String fileName = UUID.randomUUID() + "_" + originalFilename;
-        File dest = new File(path.toAbsolutePath().toString() + File.separator + fileName);
-        file.transferTo(dest);
+        String fileName = UUID.randomUUID() + "_" + content.fileName();
+        Path destPath = path.resolve(fileName);
+        Files.copy(content.inputStream(), destPath);
 
         FileMetadata metadata = new FileMetadata();
-        metadata.setFileName(originalFilename);
+        metadata.setFileName(content.fileName());
         metadata.setFilePath("/files/" + fileName);
-        metadata.setFileType(file.getContentType());
-        metadata.setFileSize(file.getSize());
+        metadata.setFileType(content.contentType());
+        metadata.setFileSize(content.size());
         metadata.setCreateTime(new Date());
         fileMetadataMapper.insert(metadata);
 
-        log.info("文件已成功上传至本地: {}", dest.getAbsolutePath());
+        log.info("文件已成功上传至本地: {}", destPath.toAbsolutePath());
         return metadata.getFilePath(); 
     }
 

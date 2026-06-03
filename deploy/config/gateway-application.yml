@@ -11,6 +11,10 @@ auth:
         - /v3/api-docs/**
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
     main:
         allow-bean-definition-overriding: true
     application:
@@ -105,10 +109,13 @@ management:
     tracing:
         sampling:
             probability: 1.0
-    otlp:
-        tracing:
-            endpoint: http://localhost:4318/v1/traces
+        otlp:
+            tracing:
+                endpoint: http://localhost:4318/v1/traces
     metrics:
         export:
             prometheus:
                 enabled: true
+
+jwt:
+  secret: "Sisyphus_Secure_Secret_2026_CloudInfra_Ultra_High_Entropy_Key_Value"

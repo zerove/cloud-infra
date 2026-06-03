@@ -21,6 +21,8 @@ spec:
                         value: "nacos-service:8848"
                       - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
                         value: "nacos-service:8848"
+                      - name: SPRING_ELASTICSEARCH_URIS
+                        value: "elasticsearch:9200"
                       - name: SPRING_CONFIG_ADDITIONAL-LOCATION
                         value: "file:/app/config/"
                       - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
@@ -30,11 +32,13 @@ spec:
                         mountPath: /app/config
                   ports:
                       - containerPort: 9500
-                  resources:
-                      requests:
-                          memory: 512Mi
-                      limits:
-                          memory: 2Gi
+                   resources:
+                       requests:
+                           cpu: 250m
+                           memory: 512Mi
+                       limits:
+                           cpu: 1000m
+                           memory: 2Gi
             volumes:
                 - name: config-volume
                   configMap:

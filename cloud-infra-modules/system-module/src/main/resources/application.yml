@@ -1,14 +1,6 @@
 spring:
-  application:
-    name: cloud-system
-  config:
-    import: "optional:nacos:system-module.yaml"
-  cloud:
-    nacos:
-      config:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
-        file-extension: yaml
-        import-check:
-          enabled: false
-      discovery:
-        server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
+  autoconfigure:
+    exclude:
+      - io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
+  main:
+    allow-bean-definition-overriding: true

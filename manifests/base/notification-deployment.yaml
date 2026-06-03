@@ -30,11 +30,13 @@ spec:
                         mountPath: /app/config
                   ports:
                       - containerPort: 9400
-                  resources:
-                      requests:
-                          memory: 512Mi
-                      limits:
-                          memory: 2Gi
+                   resources:
+                       requests:
+                           cpu: 250m
+                           memory: 512Mi
+                       limits:
+                           cpu: 1000m
+                           memory: 2Gi
             volumes:
                 - name: config-volume
                   configMap:

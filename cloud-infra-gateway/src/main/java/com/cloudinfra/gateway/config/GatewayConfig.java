@@ -10,14 +10,14 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnClass(name = "com.alibaba.cloud.nacos.NacosConfigManager")
 public class GatewayConfig {
 
-    @Bean
+    @Bean(name = "customNacosConfigManager")
     @ConditionalOnMissingBean(NacosConfigManager.class)
     public NacosConfigManager nacosConfigManager() {
         return new NacosConfigManager(null);
     }
 
     @Bean
-    public DynamicRouteManager dynamicRouteManager(NacosConfigManager nacosConfigManager) {
-        return new DynamicRouteManager(nacosConfigManager);
+    public DynamicRouteManager dynamicRouteManager(NacosConfigManager customNacosConfigManager) {
+        return new DynamicRouteManager(customNacosConfigManager);
     }
 }

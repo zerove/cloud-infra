@@ -27,16 +27,13 @@ public class CaptchaController {
     @Operation(summary = "生成验证码")
     @GetMapping("/captchaImage")
     public Result<Map<String, Object>> getCode() {
-        // 保存验证码信息
         String uuid = UUID.randomUUID().toString();
         String verifyKey = "captcha_codes:" + uuid;
 
-        // 生成验证码
         LineCaptcha lineCaptcha = CaptchaUtil.createLineCaptcha(120, 40);
         String code = lineCaptcha.getCode();
         String imageBase64 = lineCaptcha.getImageBase64();
 
-        // 放入redis, 2分钟有效
         redisService.set(verifyKey, code, 120 * 1000L);
 
         Map<String, Object> ajax = new HashMap<>();

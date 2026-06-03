@@ -1,6 +1,7 @@
 package com.cloudinfra.file.controller;
 
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.service.IFileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +27,15 @@ public class FileController {
     @PostMapping("/upload")
     public Result<Map<String, String>> upload(@RequestParam("file") MultipartFile file) {
         try {
-            String url = fileService.upload(file);
+            // 将 Web 请求对象转换为领域对象 (Adapter 职责)
+            FileContent content = new FileContent(
+                file.getOriginalFilename(),
+                file.getContentType(),
+                file.getSize(),
+                file.getInputStream()
+            );
+            
+            String url = fileService.upload(content);
             Map<String, String> data = new HashMap<>();
             data.put("url", url);
             data.put("name", file.getOriginalFilename());

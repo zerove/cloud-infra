@@ -17,6 +17,8 @@ management:
 spring:
   application:
     name: cloud-auth
+  main:
+    allow-bean-definition-overriding: true
   cloud:
     nacos:
       discovery:
@@ -28,6 +30,9 @@ spring:
     import: "optional:nacos:auth.yaml"
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
       database: 0
+
+jwt:
+  secret: "Sisyphus_Secure_Secret_2026_CloudInfra_Ultra_High_Entropy_Key_Value"

@@ -5,24 +5,26 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
+        server-addr: nacos-server:8848
         enabled: true
       config:
-        server-addr: nacos:8848
+        server-addr: nacos-server:8848
   main:
     allow-bean-definition-overriding: true
+  autoconfigure:
+    exclude: io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
   datasource:
     type: org.postgresql.ds.PGSimpleDataSource
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:127.0.0.1}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
   data:
     redis:
-      host: localhost
+      host: ${SPRING_DATA_REDIS_HOST:redis}
       port: 6379
       database: 0
 

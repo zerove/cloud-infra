@@ -11,6 +11,10 @@
 
     <artifactId>file-service</artifactId>
 
+    <properties>
+        <main.class>com.cloudinfra.file.FileApplication</main.class>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -24,6 +28,14 @@
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-tracing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-security</artifactId>
         </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
@@ -47,6 +59,10 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
         </dependency>
         <dependency>
             <groupId>io.minio</groupId>
@@ -73,6 +89,13 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

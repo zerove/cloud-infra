@@ -3,36 +3,56 @@ package com.cloudinfra.common.util;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
 import java.util.Date;
 import java.util.Map;
 
 /**
  * JWT 工具类 (标准化版本)
  */
+@Component
 public class JwtUtils {
-    // 标准密钥
-    private static final String SECRET = "CloudInfraSecretKey123456789012345678901234567890";
-    private static final Algorithm ALGORITHM = Algorithm.HMAC256(SECRET);
-    // 过期时间：24小时
-    private static final long EXPIRE_TIME = 24 * 60 * 60 * 1000L;
+    @Value("${auth.jwt.secret:CloudInfraSecretKey123456789012345678901234567890}")
+    private String secret;
+
+    @Value("${auth.jwt.expire-time:86400000}")
+    private long expireTime;
+
+    private Algorithm algorithm;
+
+    @PostConstruct
+    public void init() {
+        System.out.println(">>> [JwtUtils] init() called. Secret: " + (secret != null ? "PRESENT" : "MISSING"));
+        try {
+            this.algorithm = Algorithm.HMAC256(secret);
+            System.out.println(">>> [JwtUtils] Algorithm initialized successfully.");
+        } catch (Exception e) {
+            System.err.println("CRITICAL ERROR initializing JwtUtils algorithm: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
+    }
 
     /**
      * 生成令牌
      */
-    public static String createToken(Map<String, Object> claims, String subject) {
+    public String createToken(Map<String, Object> claims, String subject) {
         return JWT.create()
                 .withSubject(subject)
                 .withPayload(claims)
                 .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + EXPIRE_TIME))
-                .sign(ALGORITHM);
+                .withExpiresAt(new Date(System.currentTimeMillis() + expireTime))
+                .sign(algorithm);
     }
 
     /**
      * 解析令牌
      */
-    public static DecodedJWT parseToken(String token) {
-        return JWT.require(ALGORITHM)
+    public DecodedJWT parseToken(String token) {
+        return JWT.require(algorithm)
                 .build()
                 .verify(token);
     }
@@ -40,35 +60,35 @@ public class JwtUtils {
     /**
      * 从令牌中获取用户名
      */
-    public static String getUsernameFromToken(String token) {
+    public String getUsernameFromToken(String token) {
         return parseToken(token).getSubject();
     }
 
     /**
      * 从令牌中获取 JTI
      */
-    public static String getJtiFromToken(String token) {
+    public String getJtiFromToken(String token) {
         return parseToken(token).getClaim("jti").asString();
     }
 
     /**
      * 从令牌中获取用户ID
      */
-    public static Long getUserIdFromToken(String token) {
+    public Long getUserIdFromToken(String token) {
         return parseToken(token).getClaim("userId").asLong();
     }
 
     /**
      * 从令牌中获取特定声明的列表
      */
-    public static java.util.List<String> getClaimListFromToken(String token, String claimName) {
+    public java.util.List<String> getClaimListFromToken(String token, String claimName) {
         return parseToken(token).getClaim(claimName).asList(String.class);
     }
 
     /**
      * 验证令牌是否有效
      */
-    public static boolean validateToken(String token) {
+    public boolean validateToken(String token) {
         try {
             parseToken(token);
             return true;

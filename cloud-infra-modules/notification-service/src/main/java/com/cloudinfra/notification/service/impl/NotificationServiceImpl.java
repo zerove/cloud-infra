@@ -38,15 +38,11 @@ public class NotificationServiceImpl implements INotificationService {
     @Override
     @Transactional
     public void saveNotification(Long userId, NotificationType type, String title, String content) {
-        Notification notification = new Notification();
-        notification.setUserId(userId);
-        notification.setType(type);
-        notification.setTitle(title);
-        notification.setContent(content);
-        notification.setStatus(NotificationStatus.UNREAD);
+        Notification notification = Notification.create(userId, type, title, content);
         notificationRepository.save(notification);
         log.info("Notification saved for user {}: {}", userId, title);
     }
+
 
     /**
      * 根据用户ID、状态和类型查询通知历史记录。
@@ -64,9 +60,9 @@ public class NotificationServiceImpl implements INotificationService {
     public void markAsRead(Long notificationId) {
         Notification notification = notificationRepository.getById(notificationId);
         if (notification != null) {
-            notification.setStatus(NotificationStatus.READ);
-            notification.setReadTime(LocalDateTime.now());
+            notification.markAsRead();
             notificationRepository.updateById(notification);
         }
     }
+
 }

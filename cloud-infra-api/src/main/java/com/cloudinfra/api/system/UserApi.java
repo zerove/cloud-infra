@@ -2,6 +2,7 @@ package com.cloudinfra.api.system;
 
 import com.cloudinfra.api.system.dto.UserDTO;
 import com.cloudinfra.common.core.domain.Result;
+import java.util.List;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -29,6 +30,10 @@ public interface UserApi {
     @Operation(summary = "根据用户名获取用户信息")
     @GetMapping("/system/user/username/{username}")
     Result<UserDTO> getUserByUsername(@PathVariable("username") String username);
+
+    @Operation(summary = "根据用户ID获取权限列表")
+    @GetMapping("/system/user/permissions/{userId}")
+    Result<List<String>> getPermissionsByUserId(@PathVariable("userId") Long userId);
 
     @Operation(summary = "注册用户")
     @org.springframework.web.bind.annotation.PostMapping("/system/user/register")

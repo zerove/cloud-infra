@@ -9,8 +9,10 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
+
 
 /**
  * 用户对象 sys_user
@@ -50,7 +52,24 @@ public class SysUser extends BaseEntity {
     /** 岗位组 */
     private List<Long> postIds;
 
-    // 迁移辅助方法
-    public void setId(Long id) { this.userId = id; }
-    public Long getId() { return this.userId; }
+
+    /**
+     * 初始化用户密码
+     */
+    public void initializePassword(PasswordEncoder encoder, String initPassword) {
+        String passwordToEncode = (initPassword != null && !initPassword.isEmpty()) 
+            ? initPassword 
+            : "123456";
+        this.password = encoder.encode(passwordToEncode);
+    }
+
+    /**
+     * 更新用户密码
+     */
+    public void updatePassword(PasswordEncoder encoder, String newPassword) {
+        if (newPassword == null || newPassword.isEmpty()) {
+            throw new IllegalArgumentException("New password cannot be empty");
+        }
+        this.password = encoder.encode(newPassword);
+    }
 }

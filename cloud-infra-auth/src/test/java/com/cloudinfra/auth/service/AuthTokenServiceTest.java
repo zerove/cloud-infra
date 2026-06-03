@@ -45,8 +45,5 @@ public class AuthTokenServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.containsKey("token")).isTrue();
         assertThat(result.containsKey("refreshToken")).isTrue();
-        
-        // Optionally verify if the token is valid and has correct subject if we want to be very thorough
-        // But for now, verifying result is enough
     }
 }

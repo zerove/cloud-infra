@@ -14,6 +14,8 @@ spring:
         file-extension: yaml
   config:
     import: "optional:nacos:search-application.yaml"
+    autoconfigure:
+      exclude: org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   elasticsearch:
     uris: http://elasticsearch:9200
   data:

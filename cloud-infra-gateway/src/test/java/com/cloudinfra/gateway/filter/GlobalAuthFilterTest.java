@@ -6,6 +6,5 @@ public class GlobalAuthFilterTest {
 
     @Test
     void testPlaceholder() {
-        // Simple test to ensure the build passes
     }
 }

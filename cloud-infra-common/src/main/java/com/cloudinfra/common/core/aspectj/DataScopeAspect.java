@@ -56,10 +56,8 @@ public class DataScopeAspect {
     }
 
     protected void handleDataScope(final JoinPoint joinPoint, DataScope controllerDataScope) {
-        // 获取当前的用户
         LoginUser loginUser = SecurityUtils.getLoginUser();
         if (loginUser != null) {
-            // 如果是超级管理员，则不过滤数据
             if (loginUser.getUserId() == 1L) {
                 return;
             }

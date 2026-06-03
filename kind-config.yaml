@@ -5,7 +5,13 @@ nodes:
   extraPortMappings:
   - containerPort: 9000
     hostPort: 9000
-    protocol: TCP
+    listenAddress: "0.0.0.0"
+  - containerPort: 9200
+    hostPort: 9200
+    listenAddress: "0.0.0.0"
+  - containerPort: 15672
+    hostPort: 15672
+    listenAddress: "0.0.0.0"
   - containerPort: 8848
     hostPort: 8848
-    protocol: TCP
+    listenAddress: "0.0.0.0"

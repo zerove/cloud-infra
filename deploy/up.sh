@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # 颜色定义
 GREEN='\033[0;32m'
@@ -16,37 +17,78 @@ if ! command -v podman-compose &> /dev/null; then
     exit 1
 fi
 
-# 检查关键配置文件
-required_configs=("auth-application.yml" "gateway-application.yml" "system-application.yml" "notification-application.yml" "search-application.yml")
-for config in "${required_configs[@]}"; do
-    if [ ! -f "$CONFIG_DIR/$config" ]; then
-        echo -e "${RED}错误: 缺少必要配置文件 $CONFIG_DIR/$config${NC}"
-        exit 1
-    fi
-done
-
-echo -e "${GREEN}>>> 正在强制清理环境...${NC}"
+echo -e "${GREEN}>>> 1. 强制清理旧环境...${NC}"
 podman-compose -f "$COMPOSE_FILE" down --remove-orphans
 
-echo -e "${GREEN}>>> 正在启动所有服务...${NC}"
-podman-compose -f "$COMPOSE_FILE" up -d
+echo -e "${GREEN}>>> 2. 构建业务镜像...${NC}"
+# 定义服务与 JAR 路径的映射
+declare -A SERVICE_JARS=(
+    ["auth"]="cloud-infra-auth/target/cloud-infra-auth-1.0.0-SNAPSHOT.jar"
+    ["system"]="cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT.jar"
+    ["gateway"]="cloud-infra-gateway/target/cloud-infra-gateway-1.0.0-SNAPSHOT.jar"
+    ["notification"]="cloud-infra-modules/notification-service/target/notification-service-1.0.0-SNAPSHOT.jar"
+    ["search"]="cloud-infra-modules/search-service/target/search-service-1.0.0-SNAPSHOT.jar"
+)
 
-# 等待 Nacos 就绪
-echo "等待 Nacos 启动..."
+# 切换到项目根目录以确保构建上下文正确
+ROOT_DIR="$( cd "$DIR/.." && pwd )"
+cd "$ROOT_DIR"
+
+for service in "${!SERVICE_JARS[@]}"; do
+    jar_path="${SERVICE_JARS[$service]}"
+    image_name="localhost/deploy_${service}:latest"
+    
+    if [ ! -f "$jar_path" ]; then
+        echo -e "${RED}错误: 找不到 JAR 文件 $jar_path，请先执行 mvn package。${NC}"
+        exit 1
+    fi
+
+    echo "正在构建镜像 $image_name 使用 $jar_path..."
+    podman build --build-arg JAR_FILE="$jar_path" -t "$image_name" -f "$DIR/Dockerfile.jre" .
+done
+
+# 返回到脚本所在目录
+cd "$DIR"
+
+echo -e "${GREEN}>>> 3. 启动基础基础设施...${NC}"
+# 启动不依赖 Nacos 的基础中间件
+podman-compose -f "$COMPOSE_FILE" up -d mysql-nacos postgres redis rabbitmq elasticsearch
+
+echo -e "${GREEN}>>> 4. 等待 MySQL 完全就绪...${NC}"
+# 结合 podman healthcheck 和 端口探测，确保数据库真正可连接
 retry=0
-until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nacos/index.html); do
+until (podman ps --filter "name=mysql-nacos" | grep -q "healthy") || (podman run --rm --network cloud-infra-net alpine sh -c "nc -zv mysql-nacos 3306" > /dev/null 2>&1); do
     printf '.'
     sleep 5
     retry=$((retry+1))
-    if [ $retry -gt 24 ]; then
+    if [ $retry -gt 60 ]; then
+        echo -e "\n${RED}>>> MySQL 启动超时，请检查日志。${NC}"
+        podman logs mysql-nacos
+        exit 1
+    fi
+done
+echo -e "\n${GREEN}>>> MySQL 已就绪。${NC}"
+
+echo -e "${GREEN}>>> 5. 启动协调中心 (Nacos)...${NC}"
+podman-compose -f "$COMPOSE_FILE" up -d nacos
+
+# 等待 Nacos 接口响应
+echo "等待 Nacos 启动并就绪..."
+retry=0
+until $(curl --output /dev/null --silent --head --fail http://localhost:8848/nacos/); do
+    printf '.'
+    sleep 5
+    retry=$((retry+1))
+    if [ $retry -gt 48 ]; then
         echo -e "\n${RED}>>> Nacos 启动超时，请检查日志。${NC}"
+        podman logs nacos-server
         exit 1
     fi
 done
 echo -e "\n${GREEN}>>> Nacos 已就绪。${NC}"
 
 # 同步配置到 Nacos
-echo -e "${GREEN}>>> 正在同步配置到 Nacos...${NC}"
+echo -e "${GREEN}>>> 6. 同步配置到 Nacos...${NC}"
 NACOS_ADDR="localhost:8848"
 NAMESPACE="public"
 GROUP="DEFAULT_GROUP"
@@ -65,19 +107,61 @@ for config in "${configs[@]}"; do
     full_path="$CONFIG_DIR/$file_path"
 
     echo "发布 $data_id (来自 $full_path)..."
-    curl -X POST "http://$NACOS_ADDR/nacos/v1/cs/configs" \
+    curl -s -X POST "http://$NACOS_ADDR/nacos/v1/cs/configs" \
         -d "dataId=$data_id" \
         -d "group=$GROUP" \
         -d "tenant=$NAMESPACE" \
         -d "type=yaml" \
-        --data-urlencode "content@$full_path"
-    echo -e "\n完成."
+        --data-urlencode "content@$full_path" > /dev/null
+    echo "完成."
 done
 
-echo -e "${GREEN}>>> 正在启动业务微服务...${NC}"
-podman-compose -f "$COMPOSE_FILE" up --build -d gateway1 gateway2 auth system notification search skywalking-oap skywalking-ui
+echo -e "${GREEN}>>> 7. 启动业务微服务...${NC}"
+# 顺序启动：Auth/System (核心) -> Others (支撑) -> Gateway (入口)
+podman-compose -f "$COMPOSE_FILE" up -d auth system
+echo "等待核心服务就绪..."
+retry=0
+until (podman ps --filter "name=auth-service" | grep -q "Up") && (podman ps --filter "name=system-service" | grep -q "Up"); do
+    printf '.'
+    sleep 5
+    retry=$((retry+1))
+    if [ $retry -gt 30 ]; then
+        echo -e "\n${RED}>>> 核心服务启动超时。${NC}"
+        exit 1
+    fi
+done
+echo -e "\n${GREEN}>>> 核心服务已就绪。${NC}"
 
-echo -e "${GREEN}>>> 正在同步监控服务发现目标...${NC}"
+podman-compose -f "$COMPOSE_FILE" up -d notification search
+echo "等待支撑服务就绪..."
+retry=0
+until (podman ps --filter "name=notification-service" | grep -q "Up") && (podman ps --filter "name=search-service" | grep -q "Up"); do
+    printf '.'
+    sleep 5
+    retry=$((retry+1))
+    if [ $retry -gt 30 ]; then
+        echo -e "\n${RED}>>> 支撑服务启动超时。${NC}"
+        exit 1
+    fi
+done
+echo -e "\n${GREEN}>>> 支撑服务已就绪。${NC}"
+
+podman-compose -f "$COMPOSE_FILE" up -d gateway
+
+echo "等待网关就绪..."
+retry=0
+until curl -s http://localhost:9000/ | grep -q "Unauthorized" || curl -s http://localhost:9000/ | grep -q "200 OK"; do
+    printf '.'
+    sleep 5
+    retry=$((retry+1))
+    if [ $retry -gt 30 ]; then
+        echo -e "\n${RED}>>> 网关启动超时。${NC}"
+        exit 1
+    fi
+done
+echo -e "\n${GREEN}>>> 网关已就绪。${NC}"
+
+echo -e "${GREEN}>>> 8. 同步监控服务发现目标...${NC}"
 bash "$DIR/service_discovery.sh"
 
 echo -e "${GREEN}>>> 部署完成！${NC}"

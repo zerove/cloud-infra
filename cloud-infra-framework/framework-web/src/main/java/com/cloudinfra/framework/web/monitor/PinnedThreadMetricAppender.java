@@ -13,7 +13,6 @@ public class PinnedThreadMetricAppender extends AppenderBase<ILoggingEvent> {
     private final Counter pinnedThreadCounter = Metrics.counter("gateway.threads.pinned.count");
 
     public PinnedThreadMetricAppender() {
-        System.out.println("DEBUG: PinnedThreadMetricAppender initialized.");
     }
 
     @Override

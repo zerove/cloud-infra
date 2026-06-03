@@ -1,7 +1,7 @@
 package com.cloudinfra.file.service;
 
+import com.cloudinfra.file.domain.FileContent;
 import io.minio.*;
-import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -19,14 +19,14 @@ public class MinioFileService implements IFileService {
     }
 
     @Override
-    public String upload(MultipartFile file) throws IOException {
+    public String upload(FileContent content) throws IOException {
         try {
-            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+            String fileName = System.currentTimeMillis() + "_" + content.fileName();
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(bucketName)
                     .object(fileName)
-                    .stream(file.getInputStream(), file.getSize(), -1)
-                    .contentType(file.getContentType())
+                    .stream(content.inputStream(), content.size(), -1)
+                    .contentType(content.contentType())
                     .build());
             return fileName;
         } catch (Exception e) {

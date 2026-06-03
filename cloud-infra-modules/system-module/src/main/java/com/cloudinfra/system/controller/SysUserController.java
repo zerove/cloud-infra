@@ -7,6 +7,8 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.service.ISysUserService;
+import com.cloudinfra.system.service.ISysPermissionService;
+import java.util.List;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class SysUserController {
 
     private final ISysUserService userService;
+    private final ISysPermissionService permissionService;
 
     @Operation(summary = "查询用户列表")
     @PreAuthorize("@ss.hasPermi('system:user:list')")
@@ -56,5 +59,11 @@ public class SysUserController {
     public Result<Void> register(@Valid @RequestBody SysUser user) {
         userService.insertUser(user);
         return Result.success();
+    }
+
+    @Operation(summary = "根据用户ID获取权限列表")
+    @GetMapping("/permissions/{userId}")
+    public Result<List<String>> getPermissionsByUserId(@PathVariable("userId") Long userId) {
+        return Result.success(permissionService.getPermissionsByUserId(userId));
     }
 }

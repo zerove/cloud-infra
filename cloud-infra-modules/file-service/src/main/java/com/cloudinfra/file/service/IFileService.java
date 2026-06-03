@@ -1,15 +1,15 @@
 package com.cloudinfra.file.service;
 
-import org.springframework.web.multipart.MultipartFile;
+import com.cloudinfra.file.domain.FileContent;
 import java.io.IOException;
 
 public interface IFileService {
     /**
      * 上传文件
-     * @param file 文件对象
+     * @param content 文件领域内容
      * @return 文件访问路径
      */
-    String upload(MultipartFile file) throws IOException;
+    String upload(FileContent content) throws IOException;
 
     /**
      * 删除文件
@@ -18,3 +18,4 @@ public interface IFileService {
      */
     boolean delete(String filePath);
 }
+

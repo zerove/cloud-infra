@@ -8,9 +8,16 @@ import org.springframework.data.elasticsearch.repository.config.EnableElasticsea
 /**
  * 搜索服务启动类
  */
+import org.springframework.context.annotation.Import;
+import com.cloudinfra.framework.redis.config.RedissonConfig;
+import com.cloudinfra.framework.tracing.config.TracingAutoConfiguration;
+import com.cloudinfra.framework.mybatis.config.MybatisPlusConfig;
+import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
+
 @EnableDiscoveryClient
 @EnableElasticsearchRepositories(basePackages = "com.cloudinfra.search.repository")
-@SpringBootApplication(scanBasePackages = {"com.cloudinfra.search", "com.cloudinfra.framework", "com.cloudinfra.search.repository"})
+@SpringBootApplication(scanBasePackages = {"com.cloudinfra"})
+@Import({RedissonConfig.class, TracingAutoConfiguration.class, MybatisPlusConfig.class, PasswordEncoderConfig.class})
 public class SearchApplication {
     public static void main(String[] args) {
         SpringApplication.run(SearchApplication.class, args);

@@ -12,3 +12,6 @@ spring:
           enabled: false
       discovery:
         server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
+spring:
+  main:
+    allow-bean-definition-overriding: true

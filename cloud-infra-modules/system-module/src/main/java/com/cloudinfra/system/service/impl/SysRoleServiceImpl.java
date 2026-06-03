@@ -5,9 +5,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.domain.SysRoleDept;
 import com.cloudinfra.system.domain.SysRoleMenu;
-import com.cloudinfra.system.mapper.SysRoleDeptMapper;
 import com.cloudinfra.system.mapper.SysRoleMapper;
-import com.cloudinfra.system.mapper.SysRoleMenuMapper;
+import com.cloudinfra.system.service.ISysRoleDeptService;
+import com.cloudinfra.system.service.ISysRoleMenuService;
 import com.cloudinfra.system.service.ISysRoleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,9 +18,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> implements ISysRoleService {
-
-    private final SysRoleMenuMapper roleMenuMapper;
-    private final SysRoleDeptMapper roleDeptMapper;
+    
+    private final ISysRoleMenuService roleMenuService;
+    private final ISysRoleDeptService roleDeptService;
 
     @Override
     public List<SysRole> selectRoleList(SysRole role) {
@@ -31,57 +31,51 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     @Transactional
     public int insertRole(SysRole role) {
         save(role);
-        insertRoleMenu(role);
-        return insertRoleDept(role);
+        roleMenuService.saveBatch(buildMenuRelations(role));
+        return roleDeptService.saveBatch(buildDeptRelations(role)) ? 1 : 0;
     }
-
+    
+    
     @Override
     @Transactional
     public int updateRole(SysRole role) {
         updateById(role);
         // 删除原有权限并重新插入
-        roleMenuMapper.delete(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, role.getId()));
-        insertRoleMenu(role);
+        roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, role.getId()));
+        roleMenuService.saveBatch(buildMenuRelations(role));
         
-        roleDeptMapper.delete(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, role.getId()));
-        return insertRoleDept(role);
+        roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, role.getId()));
+        return roleDeptService.saveBatch(buildDeptRelations(role)) ? 1 : 0;
     }
+
 
     @Override
     @Transactional
     public int deleteRoleByIds(Long[] roleIds) {
         for (Long roleId : roleIds) {
-            roleMenuMapper.delete(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, roleId));
-            roleDeptMapper.delete(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, roleId));
+            roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, roleId));
+            roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, roleId));
         }
         return removeByIds(List.of(roleIds)) ? 1 : 0;
     }
 
-    private int insertRoleMenu(SysRole role) {
-        int rows = 1;
-        List<Long> menuIds = role.getMenuIds();
-        if (menuIds != null && !menuIds.isEmpty()) {
-            for (Long menuId : menuIds) {
-                SysRoleMenu rm = new SysRoleMenu();
-                rm.setRoleId(role.getId());
-                rm.setMenuId(menuId);
-                roleMenuMapper.insert(rm);
-            }
-        }
-        return rows;
+    private List<SysRoleMenu> buildMenuRelations(SysRole role) {
+        if (role.getMenuIds() == null || role.getMenuIds().isEmpty()) return List.of();
+        return role.getMenuIds().stream().map(menuId -> {
+            SysRoleMenu rm = new SysRoleMenu();
+            rm.setRoleId(role.getId());
+            rm.setMenuId(menuId);
+            return rm;
+        }).collect(java.util.stream.Collectors.toList());
     }
 
-    private int insertRoleDept(SysRole role) {
-        int rows = 1;
-        List<Long> deptIds = role.getDeptIds();
-        if (deptIds != null && !deptIds.isEmpty()) {
-            for (Long deptId : deptIds) {
-                SysRoleDept rd = new SysRoleDept();
-                rd.setRoleId(role.getId());
-                rd.setDeptId(deptId);
-                roleDeptMapper.insert(rd);
-            }
-        }
-        return rows;
+    private List<SysRoleDept> buildDeptRelations(SysRole role) {
+        if (role.getDeptIds() == null || role.getDeptIds().isEmpty()) return List.of();
+        return role.getDeptIds().stream().map(deptId -> {
+            SysRoleDept rd = new SysRoleDept();
+            rd.setRoleId(role.getId());
+            rd.setDeptId(deptId);
+            return rd;
+        }).collect(java.util.stream.Collectors.toList());
     }
 }

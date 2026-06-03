@@ -1,23 +1,35 @@
 package com.cloudinfra.iot.device.service;
 
-import com.cloudinfra.iot.device.model.Device;
+import com.cloudinfra.iot.device.domain.DeviceShadow;
+import com.cloudinfra.iot.device.infrastructure.DeviceShadowStore;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
-    private final RedisTemplate<String, Object> redisTemplate;
-    private static final String SHADOW_PREFIX = "device:shadow:";
+    private final DeviceShadowStore shadowStore;
 
-    public void updateDeviceShadow(String deviceId, Object state) {
-        redisTemplate.opsForValue().set(SHADOW_PREFIX + deviceId, state, Duration.ofHours(24));
+    public void updateDeviceShadow(String deviceId, Map<String, Object> newState) {
+        DeviceShadow currentShadow = shadowStore.load(deviceId)
+            .orElseGet(() -> DeviceShadow.builder()
+                .deviceId(deviceId)
+                .state(Map.of())
+                .version(0L)
+                .build());
+
+        if (currentShadow.hasStateChanged(newState)) {
+            DeviceShadow updatedShadow = currentShadow.updateState(newState);
+            shadowStore.save(updatedShadow);
+        }
     }
 
     public Object getDeviceShadow(String deviceId) {
-        return redisTemplate.opsForValue().get(SHADOW_PREFIX + deviceId);
+        return shadowStore.load(deviceId)
+            .map(DeviceShadow::getState)
+            .orElse(null);
     }
 }

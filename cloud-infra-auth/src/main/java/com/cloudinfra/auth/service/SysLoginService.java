@@ -32,18 +32,15 @@ public class SysLoginService {
     }
 
     public Result<Map<String, Object>> login(LoginUser loginUser) {
-        // 1. 验证码校验
         validateCaptcha(
             loginUser.getUsername(),
             loginUser.getCaptcha(),
             loginUser.getUuid()
         );
 
-        // 2. 登录限制校验 (Lockout)
         checkLoginLock(loginUser.getUsername());
 
         try {
-            // 3. 用户认证
             authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                     loginUser.getUsername(),
@@ -51,15 +48,11 @@ public class SysLoginService {
                 )
             );
 
-            // 4. 清除登录失败计数
             clearLoginRecord(loginUser.getUsername());
 
-            // 5. 签发 Token
             return Result.success(authTokenService.createToken(loginUser));
         } catch (Exception e) {
-            // 6. 记录登录失败次数
             recordLoginFail(loginUser.getUsername());
-            // 隐藏具体错误，防止账号枚举
             return Result.fail(
                 com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(),
                 "用户名或密码错误"

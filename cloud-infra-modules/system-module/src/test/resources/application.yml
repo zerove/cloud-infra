@@ -14,3 +14,6 @@ spring:
 spring.cloud.nacos.config.enabled: false
 spring.cloud.nacos.discovery.enabled: false
 redis.enabled: false
+spring:
+  main:
+    allow-bean-definition-overriding: true

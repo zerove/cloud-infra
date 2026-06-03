@@ -33,7 +33,5 @@ public class SysRole extends BaseEntity {
 
     @TableLogic
     private Integer deleted;
-
-    public String getDataScope() { return dataScope; }
-    public Long getId() { return id; }
+    
 }

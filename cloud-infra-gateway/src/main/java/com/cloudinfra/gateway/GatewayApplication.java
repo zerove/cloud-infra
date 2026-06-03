@@ -8,42 +8,27 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import com.cloudinfra.common.util.JwtUtils;
+import com.cloudinfra.framework.redis.config.RedissonConfig;
+import com.cloudinfra.framework.tracing.config.TracingAutoConfiguration;
+import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 
 @EnableDiscoveryClient
 @SpringBootApplication(
-    scanBasePackages = { "com.cloudinfra.gateway", "com.cloudinfra.framework" }
+    scanBasePackages = { "com.cloudinfra.gateway", "com.cloudinfra.common" }
 )
+@Import({RedissonConfig.class, TracingAutoConfiguration.class, PasswordEncoderConfig.class})
 public class GatewayApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(GatewayApplication.class, args);
     }
 
-    @Component
-    public static class GatewayAotProcessor
-        implements BeanDefinitionRegistryPostProcessor
-    {
-
-        @Override
-        public void postProcessBeanDefinitionRegistry(
-            BeanDefinitionRegistry registry
-        ) throws BeansException {
-            if (System.getProperty("spring.aot.processing") != null) {
-                if (
-                    registry.containsBeanDefinition(
-                        "gatewayRouterFunctionHolder"
-                    )
-                ) {
-                    registry.removeBeanDefinition(
-                        "gatewayRouterFunctionHolder"
-                    );
-                }
-            }
-        }
-
-        @Override
-        public void postProcessBeanFactory(
-            ConfigurableListableBeanFactory beanFactory
-        ) throws BeansException {}
+    @Bean
+    public JwtUtils jwtUtils() {
+        System.out.println(">>> [GatewayApplication] Manually creating JwtUtils bean...");
+        return new JwtUtils();
     }
 }

@@ -1,75 +1,55 @@
 package com.cloudinfra.gateway.filter;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
-import com.cloudinfra.common.util.JwtUtils;
+import com.cloudinfra.gateway.domain.auth.*;
 import jakarta.annotation.Resource;
-import org.springframework.data.redis.core.RedisTemplate;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.core.Ordered;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Map;
 
 @Component
 public class AuthFilter extends OncePerRequestFilter implements Ordered {
 
     @Resource
-    private RedisTemplate<String, Object> redisTemplate;
-
-    @Value("${auth.white-list:}")
-    private List<String> whiteList;
+    private AuthEvaluator authEvaluator;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String path = request.getRequestURI();
         
-        // 检查白名单
-        for (String pattern : whiteList) {
-            if (path.startsWith(pattern)) {
-                filterChain.doFilter(request, response);
-                return;
+        AuthContext context = new AuthContext(
+            request.getHeader(HttpHeaders.AUTHORIZATION),
+            request.getRequestURI(),
+            request.getMethod(),
+            request.getRemoteAddr(),
+            Map.of()
+        );
+
+        AuthResult result = authEvaluator.evaluate(context);
+
+        if (result.isSuccess()) {
+            if (result.identity() != null) {
+                request.setAttribute("X-User-Id", result.identity().userId().toString());
+                request.setAttribute("X-User-Name", result.identity().username());
             }
-        }
-
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-            return;
-        }
-
-        String token = authHeader.substring(7);
-        try {
-            DecodedJWT jwt = JwtUtils.parseToken(token);
-            String jti = jwt.getClaim("jti").asString();
-            Long userId = jwt.getClaim("userId").asLong();
-            
-            // 检查是否在黑名单中
-            if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti))) {
-                response.sendError(HttpServletResponse.SC_FORBIDDEN);
-                return;
-            }
-
-            // 检查在线会话是否存在（用于强退）
-            String sessionKey = "auth:session:" + userId + ":" + jti;
-            if (Boolean.FALSE.equals(redisTemplate.hasKey(sessionKey))) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "会话已失效或被强退");
-                return;
-            }
-
-            // 将用户 ID 透传至下游 Header
-            request.setAttribute("X-User-Id", userId.toString());
-            request.setAttribute("X-User-Name", jwt.getSubject());
             filterChain.doFilter(request, response);
-        } catch (Exception e) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        } else {
+            handleAuthFailure(response, result);
+        }
+    }
+
+    private void handleAuthFailure(HttpServletResponse response, AuthResult result) throws IOException {
+        switch (result.status()) {
+            case UNAUTHORIZED -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, result.message());
+            case FORBIDDEN -> response.sendError(HttpServletResponse.SC_FORBIDDEN, result.message());
+            case SESSION_EXPIRED -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, result.message());
         }
     }
 

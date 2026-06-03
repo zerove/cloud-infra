@@ -21,6 +21,18 @@ spec:
         env:
         - name: MODE
           value: standalone
+        - name: NACOS_PERSISTENCE_TYPE
+          value: mysql
+        - name: MYSQL_SERVICE_HOST
+          value: mysql-nacos
+        - name: MYSQL_SERVICE_DB_NAME
+          value: nacos_config
+        - name: MYSQL_SERVICE_DB_PARAM
+          value: useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+        - name: MYSQL_SERVICE_USER
+          value: nacos
+        - name: MYSQL_SERVICE_PASSWORD
+          value: nacos
         - name: NACOS_SERVER_PORT
           value: "8848"
         - name: NACOS_SERVER_GRPC_PORT

@@ -21,30 +21,33 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
     @Resource
     private UserService userService;
-@Override
-public Map<String, Object> createToken(LoginUser loginUser) {
-    if (loginUser == null || loginUser.getUserId() == null) {
-        throw new AuthBusinessException(AuthExceptionCode.LOGIN_FAILED);
-    }
 
-    String accessTokenJti = UUID.randomUUID().toString();
-    // ... (其余逻辑不变)
+    @Resource
+    private JwtUtils jwtUtils;
+
+    @Override
+    public Map<String, Object> createToken(LoginUser loginUser) {
+
+        if (loginUser == null || loginUser.getUserId() == null) {
+            throw new AuthBusinessException(AuthExceptionCode.LOGIN_FAILED);
+        }
+
+        String accessTokenJti = UUID.randomUUID().toString();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", loginUser.getUserId());
         claims.put("roleId", loginUser.getRoleId());
         claims.put("jti", accessTokenJti);
         
-        // 关键点：将权限列表放入 JWT Claims
         if (loginUser.getPermissions() != null) {
             claims.put("permissions", loginUser.getPermissions());
         }
 
-        String accessToken = JwtUtils.createToken(claims, loginUser.getUsername());
+        String accessToken = jwtUtils.createToken(claims, loginUser.getUsername());
+
         
-        // 存储在线用户信息，用于监控和踢出
         String sessionKey = "auth:session:" + loginUser.getUserId() + ":" + accessTokenJti;
-        redisService.set(sessionKey, loginUser, 24 * 3600 * 1000L); // 24小时有效
+        redisService.set(sessionKey, loginUser, 24 * 3600 * 1000L);
 
         String refreshToken = UUID.randomUUID().toString();
         redisService.set("refresh_token:" + refreshToken, (Object) String.valueOf(loginUser.getUserId()), 7 * 24 * 3600 * 1000L);
@@ -74,6 +77,12 @@ public Map<String, Object> createToken(LoginUser loginUser) {
 
     @Override
     public void delToken(String token) {
-        // 扩展功能：将 token 加入 Redis 黑名单
+        try {
+            String jti = jwtUtils.getJtiFromToken(token);
+            if (jti != null) {
+                redisService.set("blacklist:" + jti, true, 24 * 3600 * 1000L);
+            }
+        } catch (Exception e) {
+        }
     }
 }

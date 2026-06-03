@@ -23,9 +23,5 @@ spring:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres-server}:5432/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
-
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  type-aliases-package: com.cloudinfra.notification.domain
-
-
+  main:
+    allow-bean-definition-overriding: true

@@ -20,6 +20,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired(required = false)
     private UserDetailsService userDetailsService;
 
+    @Autowired
+    private JwtUtils jwtUtils;
+
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,
@@ -29,11 +32,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             String jwt = token.substring(7);
-            if (JwtUtils.validateToken(jwt)) {
-                String username = JwtUtils.getUsernameFromToken(jwt);
+            if (jwtUtils.validateToken(jwt)) {
+                String username = jwtUtils.getUsernameFromToken(jwt);
                 
                 // 从 JWT 直接提取权限标识列表
-                java.util.List<String> permissions = JwtUtils.getClaimListFromToken(jwt, "permissions");
+                java.util.List<String> permissions = jwtUtils.getClaimListFromToken(jwt, "permissions");
                 java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities = 
                     permissions.stream()
                         .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)

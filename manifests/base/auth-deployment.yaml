@@ -14,7 +14,7 @@ spec:
         spec:
             containers:
                 - name: auth
-                  image: localhost/cloud-infra-auth:latest
+                  image: localhost/cloud-infra-auth:native
                   imagePullPolicy: IfNotPresent
                   env:
                       - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
@@ -32,8 +32,10 @@ spec:
                       - containerPort: 9200
                   resources:
                       requests:
+                          cpu: 250m
                           memory: 512Mi
                       limits:
+                          cpu: 1000m
                           memory: 2Gi
             volumes:
                 - name: config-volume

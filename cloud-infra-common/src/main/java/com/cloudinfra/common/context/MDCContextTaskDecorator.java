@@ -10,8 +10,6 @@ import java.util.Map;
  */
 public class MDCContextTaskDecorator implements TaskDecorator {
 
-    // TRACE_ID field removed as it was reported as unused
-
     @Override
     public Runnable decorate(Runnable runnable) {
         Map<String, String> contextMap = MDC.getCopyOfContextMap();
