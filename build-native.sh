@@ -27,17 +27,24 @@ echo -e "${GREEN}>>> 启动优化构建流程...${NC}"
 echo -e "配置项: \n - 并发度: 单线程 (-T 1) \n - Maven 堆内存: 2GB \n - 目标模块: Gateway, Auth"
 
 # 3. 执行 Native 构建
-# -T 1: 强制单线程构建，防止多个模块同时启动 native-image 导致内存瞬间爆表
-# -Pnative: 激活 Native Profile
-# -DskipTests: 跳过测试
-# -Dnative.image.args: 传递给 native-image 工具的 JVM 参数，限制其最大堆内存
+# 使用 native:compile 直接调用 native-image 工具
+# 注意：native-maven-plugin 0.10.x 对 Spring Boot 4 的 AOT 引擎支持不完整，
+# 如果构建失败，尝试以下方案之一:
+#   a) 升级 native-maven-plugin 至支持 Spring Boot 4 的版本
+#   b) 使用 spring-boot:build-image (Buildpacks) 替代
+#   c) 手动使用 native-image 工具配合正确的 classpath (排除 fat jar BOOT-INF 层级)
 mvn clean package \
     -T 1 \
     -Pnative \
     -DskipTests \
     -Dnative.image.args="-J-Xmx8g" \
     -pl cloud-infra-gateway,cloud-infra-auth \
-    -am
+    -am \
+    && mvn native:compile \
+    -Pnative \
+    -DskipTests \
+    -Dnative.image.args="-J-Xmx8g" \
+    -pl cloud-infra-gateway,cloud-infra-auth
 
 echo -e "${GREEN}>>> Native 二进制文件构建完成。${NC}"
 ls -l cloud-infra-gateway/target/cloud-infra-gateway-binary
