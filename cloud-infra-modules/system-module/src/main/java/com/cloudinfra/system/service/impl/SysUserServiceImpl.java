@@ -13,6 +13,7 @@ import com.cloudinfra.system.exception.SystemBusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import io.seata.spring.annotation.GlobalTransactional;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -96,7 +97,7 @@ public class SysUserServiceImpl implements ISysUserService {
         return userMapper.updateById(user);
     }
 
-    @Transactional(rollbackFor = Exception.class)
+    @GlobalTransactional(rollbackFor = Exception.class)
     public void verifySeataTransaction(Long userId, String newNickName) {
         // 1. 第一次更新
         SysUser user = new SysUser();
