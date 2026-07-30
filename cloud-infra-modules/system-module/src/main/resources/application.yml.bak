@@ -1,0 +1,37 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  cloud:
+    stream:
+      bindings:
+        txMessageOut-out-0:
+          destination: sys.tx.message.retry
+          group: cloud-system-group
+        txMessageConsumer-in-0:
+          destination: sys.tx.message.retry
+          group: cloud-system-group
+        txMessageDlqConsumer-in-0:
+          destination: sys.tx.message.dlq
+          group: cloud-system-group
+      rabbit:
+        bindings:
+          txMessageConsumer-in-0:
+            consumer:
+              auto-bind-dlq: true
+              dlq-name: sys.tx.message.dlq
+              republish-to-dlq: true
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317

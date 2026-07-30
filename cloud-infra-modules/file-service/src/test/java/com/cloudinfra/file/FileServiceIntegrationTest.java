@@ -1,5 +1,6 @@
 package com.cloudinfra.file;
 
+import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
 import com.cloudinfra.file.mapper.FileMetadataMapper;
@@ -7,7 +8,6 @@ import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.test.BaseIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,20 +30,19 @@ public class FileServiceIntegrationTest extends BaseIntegrationTest {
             new java.io.ByteArrayInputStream(contentBytes)
         );
 
-        String fileUrl = fileService.upload(fileContent);
+        FileMetadataVO vo = fileService.upload(1L, fileContent);
 
-
-        assertThat(fileUrl).isNotNull();
-        assertThat(fileUrl).contains(fileName);
+        assertThat(vo).isNotNull();
+        assertThat(vo.fileName()).isEqualTo(fileName);
 
         // 验证数据库元数据
-        var metadata = fileMetadataMapper.selectOne(
+        FileMetadata dbMetadata = fileMetadataMapper.selectOne(
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<FileMetadata>()
-                        .eq("file_path", fileUrl)
+                        .eq("file_path", vo.storagePath())
         );
 
-        assertThat(metadata).isNotNull();
-        assertThat(metadata.getFileName()).isEqualTo(fileName);
-        assertThat(metadata.getFileSize()).isEqualTo(contentBytes.length);
+        assertThat(dbMetadata).isNotNull();
+        assertThat(dbMetadata.getFileName()).isEqualTo(fileName);
+        assertThat(dbMetadata.getFileSize()).isEqualTo(contentBytes.length);
     }
 }

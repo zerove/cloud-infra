@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class SysOperLog implements Serializable {
     @TableId
     private Long operId;
+    private Long userId;
     private String title;
     private Integer businessType;
     private String method;
@@ -25,6 +26,6 @@ public class SysOperLog implements Serializable {
     private String jsonResult;
     private Integer status;
     private String errorMsg;
-    private LocalDateTime operTime;
+    private LocalDateTime createTime;
     private Long costTime;
 }

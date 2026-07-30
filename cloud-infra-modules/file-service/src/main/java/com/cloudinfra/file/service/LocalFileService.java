@@ -6,10 +6,8 @@ import com.cloudinfra.file.mapper.FileMetadataMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import java.io.File;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,15 +18,13 @@ import java.util.UUID;
 @Slf4j
 @RequiredArgsConstructor
 @Service
-@Primary
-public class LocalFileService implements IFileService {
+public class LocalFileService {
 
     @Value("${file.upload-path:uploads}")
     private String uploadPath;
 
     private final FileMetadataMapper fileMetadataMapper;
 
-    @Override
     public String upload(FileContent content) throws IOException {
         Path path = Paths.get(uploadPath);
         if (!Files.exists(path)) {
@@ -51,7 +47,6 @@ public class LocalFileService implements IFileService {
         return metadata.getFilePath(); 
     }
 
-    @Override
     public boolean delete(String filePath) {
         try {
             String fileName = filePath.substring(filePath.lastIndexOf("/") + 1);

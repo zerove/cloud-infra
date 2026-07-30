@@ -70,7 +70,7 @@ public class LogAspect {
             // 构造日志对象
             SysOperLog operLog = new SysOperLog();
             operLog.setStatus(0); // 正常
-            operLog.setOperTime(LocalDateTime.now());
+            operLog.setCreateTime(LocalDateTime.now());
 
             if (e != null) {
                 operLog.setStatus(1); // 异常

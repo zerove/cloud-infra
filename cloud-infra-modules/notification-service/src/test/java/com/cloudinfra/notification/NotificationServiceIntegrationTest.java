@@ -12,8 +12,9 @@ import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Transactional
@@ -27,20 +28,22 @@ public class NotificationServiceIntegrationTest extends BaseIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Test
-    public void testFullNotificationFlow() throws InterruptedException {
-        NotificationRequest request = new NotificationRequest();
-        request.setUserId(1L);
-        request.setTarget("test@example.com");
-        request.setTitle("测试标题");
-        request.setContent("测试内容");
-        request.setType(NotificationType.EMAIL);
+    public void testFullNotificationFlow() {
+        NotificationRequest request = new NotificationRequest(
+            1L,
+            NotificationType.EMAIL,
+            "测试标题",
+            "测试内容",
+            "test@example.com"
+        );
 
         streamBridge.send("notificationConsumer-in-0", request);
 
         // Wait for asynchronous processing
-        Thread.sleep(2000);
-
-        List<Notification> notifications = notificationRepository.findHistory(1L, null, null, 1, 10);
-        assertFalse(notifications.isEmpty(), "Notification should be persisted in DB");
+        await().atMost(5, TimeUnit.SECONDS)
+            .until(() -> {
+                List<Notification> results = notificationRepository.findHistory(1L, null, null, 1, 10);
+                return !results.isEmpty();
+            });
     }
 }

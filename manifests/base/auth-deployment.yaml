@@ -14,33 +14,24 @@ spec:
         spec:
             containers:
                 - name: auth
-                  image: localhost/cloud-infra-auth:native
+                  image: localhost/cloud-infra-auth:latest
                   imagePullPolicy: IfNotPresent
                   env:
                       - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
                         value: "nacos-service:8848"
                       - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
                         value: "nacos-service:8848"
-                      - name: SPRING_CONFIG_ADDITIONAL_LOCATION
-                        value: "file:/app/config/"
-                      - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
-                        value: "true"
-                  volumeMounts:
-                      - name: config-volume
-                        mountPath: /app/config
+                      - name: JAVA_OPTS
+                        value: "-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
                   ports:
                       - containerPort: 9200
                   resources:
                       requests:
                           cpu: 250m
-                          memory: 512Mi
+                          memory: 256Mi
                       limits:
-                          cpu: 1000m
-                          memory: 2Gi
-            volumes:
-                - name: config-volume
-                  configMap:
-                      name: cloud-infra-config
+                          cpu: 500m
+                          memory: 384Mi
 ---
 apiVersion: v1
 kind: Service

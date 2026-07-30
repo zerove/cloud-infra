@@ -7,12 +7,16 @@ import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import com.cloudinfra.system.service.ISysConfigService;
 import com.cloudinfra.system.service.ISysUserService;
+import com.cloudinfra.system.domain.dto.SysUserCreateDTO;
+import com.cloudinfra.system.domain.dto.SysUserUpdateDTO;
+import com.cloudinfra.system.exception.SystemBusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +33,8 @@ public class SysUserServiceImpl implements ISysUserService {
 
     @Override
     public SysUser selectUserById(Long userId) {
-        return userMapper.selectById(userId);
+        return Optional.ofNullable(userMapper.selectById(userId))
+            .orElseThrow(() -> new SystemBusinessException("用户不存在，ID: " + userId));
     }
 
     @Override
@@ -37,23 +42,45 @@ public class SysUserServiceImpl implements ISysUserService {
         return userMapper.selectOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username));
     }
 
+
     @Override
     @Transactional
-    public int insertUser(SysUser user) {
+    public int insertUser(SysUserCreateDTO userDTO) {
+        // 1. 业务唯一性校验
+        if (selectUserByUsername(userDTO.getUsername()) != null) {
+            throw new SystemBusinessException("用户名 [" + userDTO.getUsername() + "] 已存在，请更换");
+        }
+
+        // 2. 转换为 Entity
+        SysUser user = new SysUser();
+        user.setUsername(userDTO.getUsername());
+        user.setNickName(userDTO.getNickName());
+        user.setPassword(userDTO.getPassword());
+        user.setDeptId(userDTO.getDeptId());
+        user.setRoleId(userDTO.getRoleId());
+        user.setPostId(userDTO.getPostId());
+        user.setEmail(userDTO.getEmail());
+        user.setPhoneNumber(userDTO.getPhoneNumber());
+
         String initPassword = configService.selectConfigByKey("sys.user.initPassword");
         user.initializePassword(passwordEncoder, initPassword);
         return userMapper.insert(user);
     }
 
-
     @Override
     @Transactional
-    public int updateUser(SysUser user) {
-        // 此处不更新密码
-        user.setPassword(null);
+    public int updateUser(SysUserUpdateDTO userDTO) {
+        SysUser user = new SysUser();
+        user.setUserId(userDTO.getUserId());
+        user.setNickName(userDTO.getNickName());
+        user.setDeptId(userDTO.getDeptId());
+        user.setRoleId(userDTO.getRoleId());
+        user.setPostId(userDTO.getPostId());
+        user.setEmail(userDTO.getEmail());
+        user.setPhoneNumber(userDTO.getPhoneNumber());
+        
         return userMapper.updateById(user);
     }
-
     @Override
     @Transactional
     public int deleteUserByIds(Long[] userIds) {
@@ -68,4 +95,17 @@ public class SysUserServiceImpl implements ISysUserService {
         user.updatePassword(passwordEncoder, password);
         return userMapper.updateById(user);
     }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void verifySeataTransaction(Long userId, String newNickName) {
+        // 1. 第一次更新
+        SysUser user = new SysUser();
+        user.setUserId(userId);
+        user.setNickName(newNickName);
+        userMapper.updateById(user);
+
+        // 2. 模拟故障抛出异常
+        throw new RuntimeException("Seata Verification Failure");
+    }
+
 }

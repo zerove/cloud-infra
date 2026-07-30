@@ -4,6 +4,9 @@ spring:
       config:
         server-addr: nacos-service:8848
         file-extension: yaml
+        shared-configs:
+          - data-id: actuator-config.yaml
+            refresh: true
         import-check:
           enabled: false
       discovery:

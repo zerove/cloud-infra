@@ -24,20 +24,16 @@
 - Feign 调用弹性优化 (Resilience4j 集成)：已完成。
 - JDK 25 虚拟线程高性能调优：已完成。
 
-- 2026-05-17: 完成 iot-gateway-service 模块初始化，集成 Redis 设备影子机制，实现移动设备状态上报 API。
 - 2026-05-17: 部署 MQTT Broker (EMQX) 至基础设施环境。
-- 2026-05-21: 检查发现 iot-gateway-service 暂未实现 MQTT 协议订阅逻辑，仅具备基础 CRUD 及 Redis 影子操作。
 - 2026-05-21: 检查发现 file-service 已实现基础本地存储逻辑，但缺少分布式对象存储（如 MinIO）支持。
 - 2026-05-21: 确认 cloud-infra-framework 中 Seata 模块已配置，需在业务模块中进一步验证分布式事务。
 
 ## 后续任务规划 (Phase 3 & 4)
 
-1. **[暂不处理] IoT 网关增强：MQTT 集成与事件驱动**
-   - 目标：引入 `spring-integration-mqtt`，实现与 EMQX 的实时双向通信，对接设备影子自动更新逻辑。
-2. **[计划中] 文件服务增强：MinIO 分布式存储对接**
+1. **[计划中] 文件服务增强：MinIO 分布式存储对接**
    - 目标：在 `file-service` 中新增 `MinioFileService` 实现，支持通过配置切换存储引擎。
-3. **[计划中] 分布式事务实战验证**
+2. **[计划中] 分布式事务实战验证**
    - 目标：在 `system-module` 与 `auth-service` 涉及跨库操作的场景中集成 Seata `@GlobalTransactional`，并编写集成测试。
-4. **[计划中] 生产级容器化调优 (Native Image)**
+3. **[计划中] 生产级容器化调优 (Native Image)**
    - 目标：验证 `Dockerfile.native` 的构建过程，优化虚拟线程在 GraalVM 下的运行时表现。
 

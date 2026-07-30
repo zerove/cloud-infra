@@ -7,4 +7,8 @@ public class SystemBusinessException extends BaseException {
     public SystemBusinessException(SystemExceptionCode code) {
         super((int) code.getCode(), code.getMessage());
     }
+
+    public SystemBusinessException(String message) {
+        super(500, message);
+    }
 }

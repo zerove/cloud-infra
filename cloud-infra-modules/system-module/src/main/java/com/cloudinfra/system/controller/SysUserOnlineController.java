@@ -1,9 +1,8 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.core.annotation.Log;
+import com.cloudinfra.common.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
-import com.cloudinfra.common.core.enums.BusinessType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
@@ -30,7 +29,7 @@ public class SysUserOnlineController {
     @Operation(summary = "查询在线用户列表")
     @PreAuthorize("hasAuthority('monitor:online:list')")
     @GetMapping("/list")
-    public Result<List<LoginUser>> list() {
+    public List<LoginUser> list() {
         java.util.Set<String> keys = redisTemplate.keys("auth:session:*");
         List<LoginUser> userOnlineList = new ArrayList<>();
         if (keys != null) {
@@ -43,12 +42,12 @@ public class SysUserOnlineController {
                 }
             }
         }
-        return Result.success(userOnlineList);
+        return userOnlineList;
     }
 
     @Operation(summary = "强退用户")
     @PreAuthorize("hasAuthority('monitor:online:forceLogout')")
-    @Log(title = "在线用户", businessType = BusinessType.FORCE)
+    @AuditLog(module = "ONLINE_USER", action = "FORCE_LOGOUT")
     @DeleteMapping("/{tokenId}")
     public Result<Void> forceLogout(@PathVariable String tokenId) {
         redisTemplate.delete(tokenId);

@@ -1,8 +1,7 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.core.annotation.Log;
+import com.cloudinfra.common.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
-import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysDictData;
 import com.cloudinfra.system.domain.SysDictType;
 import com.cloudinfra.system.service.ISysDictService;
@@ -25,20 +24,20 @@ public class SysDictController {
     @Operation(summary = "查询字典类型列表")
     @PreAuthorize("hasAuthority('system:dict:list')")
     @GetMapping("/type/list")
-    public Result<List<SysDictType>> listTypes() {
-        return Result.success(dictService.selectDictTypeList());
+    public List<SysDictType> listTypes() {
+        return dictService.selectDictTypeList();
     }
 
     @Operation(summary = "查询字典类型详细")
     @PreAuthorize("hasAuthority('system:dict:query')")
     @GetMapping("/type/{id}")
-    public Result<SysDictType> getType(@PathVariable Long id) {
-        return Result.success(dictService.selectDictTypeById(id));
+    public SysDictType getType(@PathVariable Long id) {
+        return dictService.selectDictTypeById(id);
     }
 
     @Operation(summary = "新增字典类型")
     @PreAuthorize("hasAuthority('system:dict:add')")
-    @Log(title = "字典类型", businessType = BusinessType.INSERT)
+    @AuditLog(module = "DICT_TYPE", action = "ADD")
     @PostMapping("/type")
     public Result<Void> addType(@RequestBody SysDictType dictType) {
         dictService.insertDictType(dictType);
@@ -47,7 +46,7 @@ public class SysDictController {
 
     @Operation(summary = "修改字典类型")
     @PreAuthorize("hasAuthority('system:dict:edit')")
-    @Log(title = "字典类型", businessType = BusinessType.UPDATE)
+    @AuditLog(module = "DICT_TYPE", action = "EDIT")
     @PutMapping("/type")
     public Result<Void> editType(@RequestBody SysDictType dictType) {
         dictService.updateDictType(dictType);
@@ -56,7 +55,7 @@ public class SysDictController {
 
     @Operation(summary = "删除字典类型")
     @PreAuthorize("hasAuthority('system:dict:remove')")
-    @Log(title = "字典类型", businessType = BusinessType.DELETE)
+    @AuditLog(module = "DICT_TYPE", action = "DELETE")
     @DeleteMapping("/type/{ids}")
     public Result<Void> removeType(@PathVariable Long[] ids) {
         dictService.deleteDictTypeByIds(ids);
@@ -65,13 +64,13 @@ public class SysDictController {
 
     @Operation(summary = "根据字典类型查询字典数据")
     @GetMapping("/data/type/{dictType}")
-    public Result<List<SysDictData>> dictDataByType(@PathVariable String dictType) {
-        return Result.success(dictService.selectDictDataByType(dictType));
+    public List<SysDictData> dictDataByType(@PathVariable String dictType) {
+        return dictService.selectDictDataByType(dictType);
     }
 
     @Operation(summary = "新增字典数据")
     @PreAuthorize("hasAuthority('system:dict:add')")
-    @Log(title = "字典数据", businessType = BusinessType.INSERT)
+    @AuditLog(module = "DICT_DATA", action = "ADD")
     @PostMapping("/data")
     public Result<Void> addData(@RequestBody SysDictData dictData) {
         dictService.insertDictData(dictData);
@@ -80,7 +79,7 @@ public class SysDictController {
 
     @Operation(summary = "修改字典数据")
     @PreAuthorize("hasAuthority('system:dict:edit')")
-    @Log(title = "字典数据", businessType = BusinessType.UPDATE)
+    @AuditLog(module = "DICT_DATA", action = "EDIT")
     @PutMapping("/data")
     public Result<Void> editData(@RequestBody SysDictData dictData) {
         dictService.updateDictData(dictData);
@@ -89,7 +88,7 @@ public class SysDictController {
 
     @Operation(summary = "删除字典数据")
     @PreAuthorize("hasAuthority('system:dict:remove')")
-    @Log(title = "字典数据", businessType = BusinessType.DELETE)
+    @AuditLog(module = "DICT_DATA", action = "DELETE")
     @DeleteMapping("/data/{ids}")
     public Result<Void> removeData(@PathVariable Long[] ids) {
         dictService.deleteDictDataByIds(ids);
@@ -98,7 +97,7 @@ public class SysDictController {
 
     @Operation(summary = "清除字典缓存")
     @PreAuthorize("hasAuthority('system:dict:remove')")
-    @Log(title = "字典插件", businessType = BusinessType.CLEAN)
+    @AuditLog(module = "DICT_CACHE", action = "CLEAR")
     @DeleteMapping("/type/clearCache")
     public Result<Void> clearCache() {
         dictService.clearDictCache();

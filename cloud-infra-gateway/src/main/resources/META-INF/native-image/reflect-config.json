@@ -1,0 +1,14 @@
+[
+  {
+    "name": "org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource",
+    "allDeclaredFields": true,
+    "allDeclaredMethods": true,
+    "allPublicConstructors": true
+  },
+  {
+    "name": "com.ulisesbocchio.jasyptspringboot.EncryptablePropertySourceConverter",
+    "allDeclaredFields": true,
+    "allDeclaredMethods": true,
+    "allPublicConstructors": true
+  }
+]

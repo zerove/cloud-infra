@@ -12,6 +12,7 @@ import com.cloudinfra.framework.mybatis.config.MybatisPlusConfig;
 import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 
 @EnableDiscoveryClient
+@org.springframework.cloud.openfeign.EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableTransactionManagement
 @SpringBootApplication(
     scanBasePackages = {"com.cloudinfra"},

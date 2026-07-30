@@ -11,9 +11,13 @@ spring:
       - org.redisson.spring.starter.RedissonAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
-spring.cloud.nacos.config.enabled: false
-spring.cloud.nacos.discovery.enabled: false
-redis.enabled: false
-spring:
   main:
     allow-bean-definition-overriding: true
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+
+redis.enabled: false

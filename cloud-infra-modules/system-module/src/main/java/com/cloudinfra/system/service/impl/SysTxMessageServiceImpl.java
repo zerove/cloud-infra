@@ -25,6 +25,14 @@ public class SysTxMessageServiceImpl extends ServiceImpl<SysTxMessageMapper, Sys
     }
 
     @Override
+    public void updateRetryCount(Long id, Integer count) {
+        SysTxMessage message = new SysTxMessage();
+        message.setId(id);
+        message.setRetryCount(count);
+        updateById(message);
+    }
+
+    @Override
     public List<SysTxMessage> findPendingMessages() {
         return list(new LambdaQueryWrapper<SysTxMessage>()
                 .eq(SysTxMessage::getStatus, 0)

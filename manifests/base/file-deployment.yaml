@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: file-service
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: file
+    template:
+        metadata:
+            labels:
+                app: file
+        spec:
+            containers:
+                - name: file
+                  image: localhost/cloud-infra-file:latest
+                  imagePullPolicy: IfNotPresent
+                  env:
+                      - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
+                        value: "nacos-service:8848"
+                      - name: JAVA_OPTS
+                        value: "-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+                  ports:
+                      - containerPort: 9306
+                  resources:
+                      requests:
+                          cpu: 250m
+                          memory: 256Mi
+                      limits:
+                          cpu: 500m
+                          memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: file-service
+spec:
+    ports:
+        - port: 9306
+          targetPort: 9306
+    selector:
+        app: file

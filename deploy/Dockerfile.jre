@@ -1,6 +1,0 @@
-FROM docker.io/eclipse-temurin:25-jre
-WORKDIR /app
-ARG JAR_FILE
-COPY $JAR_FILE app.jar
-ENV JAVA_OPTS="-XX:+UseZGC -Xms256m -Xmx512m"
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

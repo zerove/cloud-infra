@@ -1,0 +1,18 @@
+package com.cloudinfra.common.core.exception;
+
+import lombok.Getter;
+
+/**
+ * 系统异常
+ * 用于处理不可预见的系统内部错误
+ */
+@Getter
+public class SystemException extends BaseException {
+    public SystemException(Integer code, String errorCode, String message) {
+        super(code, errorCode, message);
+    }
+
+    public SystemException(String message) {
+        super(500, "SYSTEM_INTERNAL_ERROR", message);
+    }
+}

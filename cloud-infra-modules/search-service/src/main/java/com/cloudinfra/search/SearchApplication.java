@@ -15,6 +15,7 @@ import com.cloudinfra.framework.mybatis.config.MybatisPlusConfig;
 import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 
 @EnableDiscoveryClient
+@org.springframework.cloud.openfeign.EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableElasticsearchRepositories(basePackages = "com.cloudinfra.search.repository")
 @SpringBootApplication(scanBasePackages = {"com.cloudinfra"})
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, MybatisPlusConfig.class, PasswordEncoderConfig.class})

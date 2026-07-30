@@ -1,0 +1,49 @@
+server:
+  port: 9200
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+  endpoint:
+    health:
+      enabled: false
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: cloud-auth
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        enabled: true
+      config:
+        server-addr: 127.0.0.1:8848
+  datasource:
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres-server}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 600000
+      connection-timeout: 30000
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0

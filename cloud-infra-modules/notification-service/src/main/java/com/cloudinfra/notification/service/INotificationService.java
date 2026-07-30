@@ -1,43 +1,28 @@
 package com.cloudinfra.notification.service;
 
-import com.cloudinfra.api.notification.enums.NotificationStatus;
-import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.domain.Notification;
+import com.cloudinfra.notification.domain.NotificationLog;
+import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import java.util.List;
 
-/**
- * 通知服务接口，定义了通知的发送、存储、查询及状态更新等核心业务逻辑。
- */
 public interface INotificationService {
-    void sendEmail(String to, String subject, String content);
-    void sendSms(String phone, String content);
-    
     /**
-     * 保存通知记录到数据库。
-     *
-     * @param userId   用户ID
-     * @param type     通知类型
-     * @param title    通知标题
-     * @param content  通知内容
+     * 发送通知 (支持立即发送或定时调度)
      */
-    void saveNotification(Long userId, NotificationType type, String title, String content);
+    void sendNotification(NotificationSendRequest request);
 
     /**
-     * 根据用户ID、状态和类型查询通知历史记录。
-     *
-     * @param userId   用户ID
-     * @param status   通知状态（已读/未读）
-     * @param type     通知类型
-     * @param page     页码
-     * @param size     每页数量
-     * @return 通知历史记录列表
+     * 获取用户通知历史
      */
-    List<Notification> getHistory(Long userId, NotificationStatus status, NotificationType type, Integer page, Integer size);
+    List<Notification> getNotificationHistory(Long userId);
 
     /**
-     * 将指定ID的通知标记为已读。
-     *
-     * @param notificationId 通知记录ID
+     * 根据关键词检索通知 (检索标题和内容)
      */
-    void markAsRead(Long notificationId);
+    List<Notification> searchNotifications(String keyword);
+
+    /**
+     * 获取用户发送审计日志
+     */
+    List<NotificationLog> getLogs(Long userId);
 }

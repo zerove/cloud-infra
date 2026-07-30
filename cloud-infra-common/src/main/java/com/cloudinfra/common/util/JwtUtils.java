@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,27 +26,48 @@ public class JwtUtils {
 
     @PostConstruct
     public void init() {
-        System.out.println(">>> [JwtUtils] init() called. Secret: " + (secret != null ? "PRESENT" : "MISSING"));
         try {
             this.algorithm = Algorithm.HMAC256(secret);
-            System.out.println(">>> [JwtUtils] Algorithm initialized successfully.");
         } catch (Exception e) {
-            System.err.println("CRITICAL ERROR initializing JwtUtils algorithm: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
+            throw new RuntimeException("Failed to initialize JwtUtils algorithm", e);
         }
     }
 
     /**
      * 生成令牌
+     * 使用标准 withClaim API，避免 withPayload(Map) 的内部行为不确定性
      */
     public String createToken(Map<String, Object> claims, String subject) {
-        return JWT.create()
+        var builder = JWT.create()
                 .withSubject(subject)
-                .withPayload(claims)
                 .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + expireTime))
-                .sign(algorithm);
+                .withExpiresAt(new Date(System.currentTimeMillis() + expireTime));
+
+        for (Map.Entry<String, Object> entry : claims.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof String v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof Long v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof Integer v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof Boolean v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof Date v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof List<?> v) {
+                builder.withClaim(key, v);
+            } else if (value instanceof Map<?, ?> v) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> casted = (Map<String, Object>) v;
+                builder.withClaim(key, casted);
+            } else {
+                builder.withClaim(key, String.valueOf(value));
+            }
+        }
+
+        return builder.sign(algorithm);
     }
 
     /**

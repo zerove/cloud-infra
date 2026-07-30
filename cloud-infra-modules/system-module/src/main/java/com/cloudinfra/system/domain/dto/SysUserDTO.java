@@ -21,7 +21,7 @@ public class SysUserDTO extends PageDTO {
     @Email(message = "邮箱格式不正确")
     private String email;
     
-    private String phone;
+    private String phoneNumber;
     
     private Integer status;
 }

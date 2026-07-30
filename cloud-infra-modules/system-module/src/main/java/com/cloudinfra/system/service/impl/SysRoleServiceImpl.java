@@ -1,6 +1,8 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.domain.SysRoleDept;
@@ -9,11 +11,15 @@ import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.service.ISysRoleDeptService;
 import com.cloudinfra.system.service.ISysRoleMenuService;
 import com.cloudinfra.system.service.ISysRoleService;
+import com.cloudinfra.system.domain.dto.SysRoleCreateDTO;
+import com.cloudinfra.system.domain.dto.SysRoleUpdateDTO;
+import com.cloudinfra.system.converter.SysRoleConverter;
+import com.cloudinfra.system.exception.SystemBusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,33 +27,58 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     
     private final ISysRoleMenuService roleMenuService;
     private final ISysRoleDeptService roleDeptService;
+    private final SysRoleConverter roleConverter;
 
     @Override
     public List<SysRole> selectRoleList(SysRole role) {
-        return list();
+        LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<>();
+        if (role.getRoleName() != null) {
+            wrapper.like(SysRole::getRoleName, role.getRoleName());
+        }
+        if (role.getRoleKey() != null) {
+            wrapper.eq(SysRole::getRoleKey, role.getRoleKey());
+        }
+        return list(wrapper);
+    }
+
+    @Override
+    public IPage<SysRole> selectRoleList(Page<SysRole> page, SysRole role) {
+        LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<>();
+        if (role.getRoleName() != null) {
+            wrapper.like(SysRole::getRoleName, role.getRoleName());
+        }
+        if (role.getRoleKey() != null) {
+            wrapper.eq(SysRole::getRoleKey, role.getRoleKey());
+        }
+        return page(page, wrapper);
     }
 
     @Override
     @Transactional
-    public int insertRole(SysRole role) {
+    public int insertRole(SysRoleCreateDTO roleDTO) {
+        if (this.getOne(new LambdaQueryWrapper<SysRole>().eq(SysRole::getRoleKey, roleDTO.getRoleKey())) != null) {
+            throw new SystemBusinessException("角色编码 [" + roleDTO.getRoleKey() + "] 已存在");
+        }
+
+        SysRole role = roleConverter.createDtoToEntity(roleDTO);
         save(role);
+        
         roleMenuService.saveBatch(buildMenuRelations(role));
         return roleDeptService.saveBatch(buildDeptRelations(role)) ? 1 : 0;
     }
     
-    
     @Override
     @Transactional
-    public int updateRole(SysRole role) {
+    public int updateRole(SysRoleUpdateDTO roleDTO) {
+        SysRole role = roleConverter.updateDtoToEntity(roleDTO);
         updateById(role);
-        // 删除原有权限并重新插入
+        
         roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, role.getId()));
         roleMenuService.saveBatch(buildMenuRelations(role));
         
         roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, role.getId()));
         return roleDeptService.saveBatch(buildDeptRelations(role)) ? 1 : 0;
     }
-
 
     @Override
     @Transactional
@@ -66,7 +97,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             rm.setRoleId(role.getId());
             rm.setMenuId(menuId);
             return rm;
-        }).collect(java.util.stream.Collectors.toList());
+        }).collect(Collectors.toList());
     }
 
     private List<SysRoleDept> buildDeptRelations(SysRole role) {
@@ -76,6 +107,6 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             rd.setRoleId(role.getId());
             rd.setDeptId(deptId);
             return rd;
-        }).collect(java.util.stream.Collectors.toList());
+        }).collect(Collectors.toList());
     }
 }

@@ -21,28 +21,17 @@ spec:
                         value: "nacos-service:8848"
                       - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
                         value: "nacos-service:8848"
-                      - name: JAVA_TOOL_OPTIONS
-                        value: "-XX:+UseZGC -Xms256m -Xmx512m -Dspring.threads.virtual.enabled=true"
-                      - name: SPRING_CONFIG_ADDITIONAL-LOCATION
-                        value: "file:/app/config/"
-                      - name: SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING
-                        value: "true"
+                      - name: JAVA_OPTS
+                        value: "-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
                   ports:
                       - containerPort: 9300
-                  volumeMounts:
-                      - name: config-volume
-                        mountPath: /app/config
-                   resources:
-                       requests:
-                           cpu: 250m
-                           memory: 512Mi
-                       limits:
-                           cpu: 1000m
-                           memory: 2Gi
-            volumes:
-                - name: config-volume
-                  configMap:
-                      name: cloud-infra-config
+                  resources:
+                      requests:
+                          cpu: 250m
+                          memory: 256Mi
+                      limits:
+                          cpu: 500m
+                          memory: 384Mi
 ---
 apiVersion: v1
 kind: Service

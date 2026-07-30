@@ -1,0 +1,3 @@
+com.cloudinfra.framework.web.config.VirtualThreadConfig
+com.cloudinfra.framework.web.config.ActuatorConfig
+com.cloudinfra.framework.web.config.CloudInfraRuntimeHints
