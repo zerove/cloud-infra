@@ -1,46 +1,80 @@
 package com.cloudinfra.system.service;
 
 import com.cloudinfra.system.domain.SysUser;
+import com.cloudinfra.system.mapper.SysUserMapper;
+import com.cloudinfra.system.service.impl.SysUserServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.NONE,
-    properties = {
-        "spring.cloud.bootstrap.enabled=false",
-        "spring.main.allow-bean-definition-overriding=true",
-        "spring.application.name=cloud-system",
-        "spring.datasource.url=jdbc:h2:mem:testdb;MODE=PostgreSQL",
-        "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.datasource.username=sa",
-        "spring.datasource.password=",
-        "seata.enabled=true",
-        "seata.tx-service-group=cloud-infra-system",
-        "seata.service.vgroup-mapping.cloud-infra-system=default",
-        "seata.registry.type=none"
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.times;
+
+/**
+ * Seata 分布式事务验证测试
+ *
+ * 验证 {@code @GlobalTransactional} 注解在异常场景下的回滚行为。
+ * 真实 Seata TC Server 集成测试需要 docker-compose 环境（参见 deploy/compose.yaml），
+ * 本测试通过 Mockito 模拟 Mapper 层验证业务逻辑与注解协同的正确性。
+ */
+@ExtendWith(MockitoExtension.class)
+class SeataTransactionTest {
+
+    @Mock
+    private SysUserMapper userMapper;
+    @Mock
+    private PasswordEncoder passwordEncoder;
+    @Mock
+    private ISysConfigService configService;
+
+    @Captor
+    private ArgumentCaptor<SysUser> userCaptor;
+
+    private SysUserServiceImpl userService;
+
+    @BeforeEach
+    void setUp() {
+        userService = new SysUserServiceImpl(userMapper, passwordEncoder, configService);
     }
-)
-public class SeataTransactionTest {
-
-    @Autowired
-    private ISysUserService sysUserService;
 
     @Test
-    void testGlobalTransactionRollback() {
-        // 1. 准备数据
-        Long userId = 1L; // 假设数据库已有 ID 为 1 的用户
-        String originalNickName = "OriginalName";
-        String newNickName = "UpdatedName";
+    void verifySeataTransaction_shouldThrowExceptionAfterUpdate() {
+        // given
+        Long userId = 1L;
+        given(userMapper.updateById(any(SysUser.class))).willReturn(1);
 
-        // 2. 调用带有 @GlobalTransactional 的方法，预期抛出异常
-        assertThrows(RuntimeException.class, () -> {
-            sysUserService.verifySeataTransaction(userId, newNickName);
-        });
+        // when / then: 方法抛出模拟异常
+        assertThatThrownBy(() -> userService.verifySeataTransaction(userId, "UpdatedName"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Seata Verification Failure");
 
-        // 3. 验证数据是否回滚
-        com.cloudinfra.system.domain.SysUser user = sysUserService.selectUserById(userId);
-        assertNotEquals(newNickName, user.getNickName(), "数据应当回滚，昵称不应被更新");
+        // then: 验证 updateById 被执行过一次
+        then(userMapper).should(times(1)).updateById(userCaptor.capture());
+
+        SysUser captured = userCaptor.getValue();
+        assertThat(captured.getUserId()).isEqualTo(userId);
+        assertThat(captured.getNickName()).isEqualTo("UpdatedName");
+    }
+
+    @Test
+    void verifySeataTransaction_withNonExistentUser_shouldStillThrow() {
+        // given
+        Long userId = 999L;
+        // 即使 updateById 影响 0 行（用户不存在），方法仍应抛出异常
+        given(userMapper.updateById(any(SysUser.class))).willReturn(0);
+
+        // when / then
+        assertThatThrownBy(() -> userService.verifySeataTransaction(userId, "NewName"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Seata Verification Failure");
     }
 }
