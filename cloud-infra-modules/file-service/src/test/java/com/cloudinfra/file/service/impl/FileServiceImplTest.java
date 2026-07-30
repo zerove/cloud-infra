@@ -61,7 +61,6 @@ class FileServiceImplTest {
             meta.setId(42L);
             return 1;
         });
-        given(metadataMapper.selectById(42L)).willReturn(null); // not used in upload, just in case
 
         // when
         FileMetadataVO result = fileService.upload(userId, content);
