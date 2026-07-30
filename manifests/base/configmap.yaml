@@ -4,4 +4,4 @@ metadata:
   name: cloud-infra-config
 data:
   SPRING_CLOUD_NACOS_SERVER_ADDR: "nacos-service:8848"
-  JAVA_OPTS: "-XX:+UseZGC -Xms256m -Xmx512m -Dspring.threads.virtual.enabled=true"
+  JAVA_OPTS: "-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"

@@ -10,7 +10,25 @@ spring:
         file-extension: yaml
         import-check:
           enabled: false
+        shared-configs:
+          - data-id: actuator-config.yaml
+            refresh: true
       discovery:
         server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:nacos:8848}
   main:
     allow-bean-definition-overriding: true
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317

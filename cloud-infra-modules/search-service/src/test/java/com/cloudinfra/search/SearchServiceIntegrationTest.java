@@ -73,7 +73,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
         doc1.setOperName("管理员");
         doc1.setMethod("POST");
         doc1.setOperUrl("/sys/user/add");
-        doc1.setOperTime(LocalDateTime.now());
+        doc1.setCreateTime(LocalDateTime.now());
         operLogRepository.save(doc1);
 
         OperLogDocument doc2 = new OperLogDocument();
@@ -82,7 +82,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
         doc2.setOperName("操作员");
         doc2.setMethod("PUT");
         doc2.setOperUrl("/sys/post/update");
-        doc2.setOperTime(LocalDateTime.now());
+        doc2.setCreateTime(LocalDateTime.now());
         operLogRepository.save(doc2);
 
         // 2. Wait for indexing
@@ -118,7 +118,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
             doc.setOperId((long) i);
             doc.setTitle("Test Log " + i);
             doc.setOperName("User" + i);
-            doc.setOperTime(LocalDateTime.now());
+            doc.setCreateTime(LocalDateTime.now());
             operLogRepository.save(doc);
         }
 

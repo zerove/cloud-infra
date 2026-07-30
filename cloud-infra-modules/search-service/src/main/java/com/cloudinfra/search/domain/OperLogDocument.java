@@ -49,5 +49,5 @@ public class OperLogDocument {
     private String errorMsg;
 
     @Field(type = FieldType.Date, format = DateFormat.date_hour_minute_second_millis)
-    private LocalDateTime operTime;
+    private LocalDateTime createTime;
 }

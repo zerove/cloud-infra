@@ -16,12 +16,9 @@ public class SecurityUtils {
      * 获取当前登录用户
      */
     public static LoginUser getLoginUser() {
-        try {
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() instanceof LoginUser) {
-                return (LoginUser) authentication.getPrincipal();
-            }
-        } catch (Exception e) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser;
         }
         return null;
     }

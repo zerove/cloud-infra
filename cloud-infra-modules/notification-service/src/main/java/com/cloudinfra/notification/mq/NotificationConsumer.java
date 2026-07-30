@@ -1,7 +1,7 @@
 package com.cloudinfra.notification.mq;
 
 import com.cloudinfra.api.notification.dto.NotificationRequest;
-import com.cloudinfra.api.notification.enums.NotificationType;
+import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import com.cloudinfra.notification.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,21 +19,17 @@ public class NotificationConsumer {
         return request -> {
             log.info("接收到通知消息: {}", request);
             try {
-                String target = request.getTarget();
-                String content = request.getContent();
-                String title = request.getTitle() != null ? request.getTitle() : "系统通知";
-
-                if (NotificationType.EMAIL.equals(request.getType())) {
-                    notificationService.sendEmail(target, title, content);
-                } else if (NotificationType.SMS.equals(request.getType())) {
-                    notificationService.sendSms(target, content);
-                } else {
-                    log.warn("不支持的通知类型或未指定发送渠道: {}", request.getType());
-                }
-
-                // PERSISTENCE: Save to DB after sending
-                notificationService.saveNotification(request.getUserId(), request.getType(), title, content);
-
+                var sendRequest = new NotificationSendRequest(
+                    request.userId(),
+                    request.title(),
+                    request.content(),
+                    request.type(),
+                    null,
+                    null,
+                    null,
+                    null
+                );
+                notificationService.sendNotification(sendRequest);
             } catch (Exception e) {
                 log.error("处理通知失败: {}", request, e);
             }

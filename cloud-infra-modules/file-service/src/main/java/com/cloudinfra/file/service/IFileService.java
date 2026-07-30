@@ -1,21 +1,37 @@
 package com.cloudinfra.file.service;
 
+import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
+import com.cloudinfra.file.domain.FileVersion;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
 
 public interface IFileService {
-    /**
-     * 上传文件
-     * @param content 文件领域内容
-     * @return 文件访问路径
-     */
-    String upload(FileContent content) throws IOException;
+    FileMetadataVO upload(Long userId, FileContent content) throws IOException;
 
     /**
-     * 删除文件
-     * @param filePath 文件路径
-     * @return 是否成功
+     * 更新现有文件并创建新版本
      */
-    boolean delete(String filePath);
+    FileMetadataVO update(Long fileId, FileContent content) throws IOException;
+
+    InputStream download(Long fileId, Long userId) throws IOException;
+
+    /**
+     * 下载指定版本的文件
+     */
+    InputStream downloadVersion(Long fileId, Integer version, Long userId) throws IOException;
+
+    /**
+     * 获取文件版本历史
+     */
+    List<FileVersion> getVersionHistory(Long fileId);
+
+    /**
+     * 根据关键词搜索文件
+     */
+    List<FileMetadataVO> searchFiles(String keyword);
+
+    boolean delete(Long fileId);
 }
 

@@ -1,16 +1,14 @@
 package com.cloudinfra.gateway.config;
 
 import com.alibaba.cloud.nacos.NacosConfigManager;
+import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.AbstractListener;
 import com.alibaba.nacos.api.config.listener.Listener;
 import jakarta.annotation.PostConstruct;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -27,48 +25,34 @@ public class DynamicRouteManager {
     private static final String DATA_ID = "gateway-routes.yaml";
     private static final String GROUP = "DEFAULT_GROUP";
 
-    private final NacosConfigManager nacosConfigManager;
+    private final ConfigService configService;
     private final Map<String, Object> routeMap = new ConcurrentHashMap<>();
 
     public DynamicRouteManager(NacosConfigManager nacosConfigManager) {
-        this.nacosConfigManager = nacosConfigManager;
+        try {
+            this.configService = nacosConfigManager.getConfigService();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize Nacos ConfigService", e);
+        }
     }
 
     @PostConstruct
     public void init() {
         try {
-            // 使用反射调用 nacosConfigManager.getConfigService().getConfig(...)
-            Class<?> clazz = nacosConfigManager.getClass();
-            Object configService = clazz
-                .getMethod("getConfigService")
-                .invoke(nacosConfigManager);
-            String configInfo = (String) configService
-                .getClass()
-                .getMethod("getConfig", String.class, String.class, long.class)
-                .invoke(configService, DATA_ID, GROUP, 5000L);
-
+            String configInfo = configService.getConfig(DATA_ID, GROUP, 5000L);
             updateRoutes(configInfo);
 
-            configService
-                .getClass()
-                .getMethod(
-                    "addListener",
-                    String.class,
-                    String.class,
-                    Listener.class
-                )
-                .invoke(
-                    configService,
-                    DATA_ID,
-                    GROUP,
-                    new AbstractListener() {
-                        @Override
-                        public void receiveConfigInfo(String configInfo) {
-                            log.info("检测到路由配置变更，开始更新...");
-                            updateRoutes(configInfo);
-                        }
+            configService.addListener(
+                DATA_ID,
+                GROUP,
+                new AbstractListener() {
+                    @Override
+                    public void receiveConfigInfo(String configInfo) {
+                        log.info("检测到路由配置变更，开始更新...");
+                        updateRoutes(configInfo);
                     }
-                );
+                }
+            );
         } catch (Exception e) {
             log.error("Nacos 路由监听初始化失败", e);
         }

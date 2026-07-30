@@ -16,4 +16,5 @@ public class FileMetadata {
     private Long fileSize;
     private String uploader;
     private Date createTime;
+    private Integer currentVersion = 1;
 }

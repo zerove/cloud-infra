@@ -1,7 +1,6 @@
 package com.cloudinfra.file.config;
 
 import com.cloudinfra.file.mapper.FileMetadataMapper;
-import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.file.service.LocalFileService;
 import com.cloudinfra.file.service.MinioFileService;
 import io.minio.MinioClient;
@@ -15,13 +14,13 @@ public class FileServiceConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "file.type", havingValue = "local", matchIfMissing = true)
-    public IFileService localFileService(FileMetadataMapper fileMetadataMapper) {
+    public LocalFileService localFileService(FileMetadataMapper fileMetadataMapper) {
         return new LocalFileService(fileMetadataMapper);
     }
 
     @Bean
     @ConditionalOnProperty(name = "file.type", havingValue = "minio")
-    public IFileService minioFileService(MinioClient minioClient, 
+    public MinioFileService minioFileService(MinioClient minioClient, 
                                        @Value("${file.minio.bucket-name}") String bucketName) {
         return new MinioFileService(minioClient, bucketName);
     }

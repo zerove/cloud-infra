@@ -41,6 +41,13 @@ spec:
         - containerPort: 8848
         - containerPort: 9848
         - containerPort: 9849
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
 ---
 apiVersion: v1
 kind: Service

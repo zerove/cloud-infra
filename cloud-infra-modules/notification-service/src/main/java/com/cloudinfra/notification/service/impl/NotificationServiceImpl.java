@@ -1,68 +1,191 @@
 package com.cloudinfra.notification.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
-import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.notification.domain.Notification;
-import com.cloudinfra.notification.repository.NotificationRepository;
+import com.cloudinfra.notification.domain.NotificationLog;
+import com.cloudinfra.notification.domain.NotificationTemplate;
+import com.cloudinfra.notification.domain.ScheduledNotification;
+import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
+import com.cloudinfra.notification.mapper.NotificationLogMapper;
+import com.cloudinfra.notification.mapper.NotificationMapper;
+import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
+import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
+import com.cloudinfra.notification.service.ChannelFactory;
 import com.cloudinfra.notification.service.INotificationService;
+import com.cloudinfra.notification.service.NotificationRouter;
+import com.cloudinfra.notification.service.NotificationQuotaService;
+import com.cloudinfra.notification.service.channel.NotificationChannel;
+import com.cloudinfra.notification.util.TemplateProcessor;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDateTime;
-import java.util.List;
 
-/**
- * 通知服务实现类，负责具体通知渠道（邮件、短信）的投递逻辑及通知记录的持久化管理。
- */
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements INotificationService {
 
-    private final NotificationRepository notificationRepository;
+    private final NotificationMapper notificationMapper;
+    private final NotificationLogMapper logMapper;
+    private final NotificationTemplateMapper templateMapper;
+    private final NotificationRouter notificationRouter;
+    private final ChannelFactory channelFactory;
+    private final ScheduledNotificationMapper scheduleMapper;
+    private final NotificationQuotaService quotaService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
-    public void sendEmail(String to, String subject, String content) {
-        log.info("Sending Email to: {}, Subject: {}, Content: {}", to, subject, content);
-    }
+    @Transactional(rollbackFor = Exception.class)
+    public void sendNotification(NotificationSendRequest request) {
+        // 1. 请求参数校验
+        request.validate();
 
-    @Override
-    public void sendSms(String phone, String content) {
-        log.info("Sending SMS to: {}, Content: {}", phone, content);
-    }
+        // 2. 发送频率配额校验 (基于 Redis 的日计数)
+        quotaService.checkQuota(request.userId());
 
-    /**
-     * 保存通知记录到数据库。
-     */
-    @Override
-    @Transactional
-    public void saveNotification(Long userId, NotificationType type, String title, String content) {
-        Notification notification = Notification.create(userId, type, title, content);
-        notificationRepository.save(notification);
-        log.info("Notification saved for user {}: {}", userId, title);
-    }
+        // 3. 检查是否为定时发送
+        if (request.scheduleTime() != null) {
+            scheduleNotification(request);
+            return;
+        }
 
+        // 4. 处理内容：模版渲染 vs 纯文本
+        String finalTitle;
+        String finalContent;
 
-    /**
-     * 根据用户ID、状态和类型查询通知历史记录。
-     */
-    @Override
-    public List<Notification> getHistory(Long userId, NotificationStatus status, NotificationType type, Integer page, Integer size) {
-        return notificationRepository.findHistory(userId, status, type, page, size);
-    }
+        if (request.templateCode() != null && !request.templateCode().isBlank()) {
+            NotificationTemplate template = templateMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationTemplate>()
+                    .eq(NotificationTemplate::getTemplateCode, request.templateCode())
+            );
 
-    /**
-     * 将指定ID的通知标记为已读。
-     */
-    @Override
-    @Transactional
-    public void markAsRead(Long notificationId) {
-        Notification notification = notificationRepository.getById(notificationId);
-        if (notification != null) {
-            notification.markAsRead();
-            notificationRepository.updateById(notification);
+            if (template == null) {
+                log.warn("未找到模版: {}, 将退回到纯文本模式", request.templateCode());
+                finalTitle = request.title();
+                finalContent = request.content();
+            } else {
+                finalTitle = TemplateProcessor.process(template.getTitleTemplate(), request.params());
+                finalContent = TemplateProcessor.process(template.getContentTemplate(), request.params());
+            }
+        } else {
+            finalTitle = request.title();
+            finalContent = request.content();
+        }
+
+        // 5. 智能路由：计算最终触达渠道
+        List<NotificationChannel> targetChannels = notificationRouter.route(request);
+
+        // 6. 持久化通知主记录 (状态: UNREAD - 待处理)
+        Notification notification = new Notification();
+        notification.setUserId(request.userId());
+        notification.setTitle(finalTitle);
+        notification.setContent(finalContent);
+        notification.setType(request.type());
+        notification.setStatus(NotificationStatus.UNREAD);
+        notificationMapper.insert(notification);
+
+        // 7. 使用虚拟线程并发发送并记录详细日志
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
+                .map(channel -> CompletableFuture.supplyAsync(() -> {
+                    long startTime = System.currentTimeMillis();
+                    String code = channel.getChannelCode();
+                    try {
+                        channel.send(request.userId(), finalTitle, finalContent);
+                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
+                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, request.userId());
+                        return true;
+                    } catch (Exception e) {
+                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
+                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
+                        return false;
+                    }
+                }, executor))
+                .collect(Collectors.toList());
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            
+            // 8. 只要有一个渠道发送成功，状态即标记为 SENT
+            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
+            notification.setStatus(anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD);
+        } catch (Exception e) {
+            log.error("通知编排异常: {}", e.getMessage());
+        } finally {
+            notificationMapper.updateById(notification);
         }
     }
 
+    private void scheduleNotification(NotificationSendRequest request) {
+        ScheduledNotification schedule = new ScheduledNotification();
+        schedule.setUserId(request.userId());
+        schedule.setTemplateCode(request.templateCode());
+        schedule.setType(request.type().name());
+        schedule.setScheduleTime(request.scheduleTime());
+        try {
+            schedule.setParamsJson(objectMapper.writeValueAsString(request.params()));
+        } catch (JsonProcessingException e) {
+            log.error("参数序列化失败: {}", e.getMessage());
+            throw new RuntimeException("Failed to serialize params", e);
+        }
+        scheduleMapper.insert(schedule);
+        log.info("通知已加入调度队列, 预计执行时间: {}", request.scheduleTime());
+    }
+
+    private void saveLog(Long notificationId, String channelCode, String status, String error, long duration) {
+        NotificationLog logEntry = new NotificationLog();
+        logEntry.setNotificationId(notificationId);
+        logEntry.setChannelCode(channelCode);
+        logEntry.setStatus(status);
+        logEntry.setErrorMessage(error);
+        logEntry.setDuration(duration);
+        logMapper.insert(logEntry);
+    }
+
+    @Override
+    public List<NotificationLog> getLogs(Long userId) {
+        // 1. 获取用户的所有通知 ID
+        List<Notification> notifications = notificationMapper.selectList(
+            new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
+        );
+        if (notifications == null || notifications.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> notificationIds = notifications.stream()
+            .map(Notification::getId)
+            .collect(Collectors.toList());
+
+        // 2. 根据通知 ID 集合检索所有渠道日志
+        return logMapper.selectList(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationLog>()
+                .in(NotificationLog::getNotificationId, notificationIds)
+                .orderByDesc(NotificationLog::getCreateTime)
+        );
+    }
+
+    @Override
+    public List<Notification> searchNotifications(String keyword) {
+        return notificationMapper.selectList(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Notification>()
+                .and(wrapper -> wrapper.like(Notification::getTitle, keyword)
+                                       .or()
+                                       .like(Notification::getContent, keyword))
+        );
+    }
+
+    @Override
+    public List<Notification> getNotificationHistory(Long userId) {
+        return notificationMapper.selectList(
+            new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
+        );
+    }
 }

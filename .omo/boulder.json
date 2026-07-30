@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "active_work_id": "wsl2-containerization-03b2574f",
+  "works": {
+    "wsl2-containerization-03b2574f": {
+      "work_id": "wsl2-containerization-03b2574f",
+      "active_plan": "/home/zeron/dev/cloud-infra/.omo/plans/wsl2-containerization.md",
+      "plan_name": "wsl2-containerization",
+      "status": "active",
+      "started_at": "2026-05-29T05:03:49.296Z",
+      "updated_at": "2026-05-29T05:03:49.296Z",
+      "session_ids": [
+        "ses_18e1123d9ffeBOyJPNDMGxpwrV"
+      ],
+      "session_origins": {
+        "ses_18e1123d9ffeBOyJPNDMGxpwrV": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {}
+    }
+  },
+  "active_plan": "/home/zeron/dev/cloud-infra/.omo/plans/wsl2-containerization.md",
+  "started_at": "2026-05-29T05:03:49.296Z",
+  "status": "active",
+  "updated_at": "2026-05-29T05:03:49.296Z",
+  "session_ids": [
+    "ses_18e1123d9ffeBOyJPNDMGxpwrV"
+  ],
+  "session_origins": {
+    "ses_18e1123d9ffeBOyJPNDMGxpwrV": "direct"
+  },
+  "plan_name": "wsl2-containerization",
+  "task_sessions": {},
+  "agent": "atlas"
+}

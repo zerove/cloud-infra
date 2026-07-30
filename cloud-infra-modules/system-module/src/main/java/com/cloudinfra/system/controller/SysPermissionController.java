@@ -1,5 +1,6 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.common.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysPermissionEntity;
 import com.cloudinfra.system.service.ISysPermissionService;
@@ -16,12 +17,14 @@ public class SysPermissionController {
     private final ISysPermissionService sysPermissionService;
 
     @GetMapping("/list")
-    public Result<List<SysPermissionEntity>> list() {
-        return Result.success(sysPermissionService.list());
+    public List<SysPermissionEntity> list() {
+        return sysPermissionService.list();
     }
 
+    @AuditLog(module = "PERMISSION", action = "ADD")
     @PostMapping
-    public Result<?> add(@RequestBody SysPermissionEntity permission) {
-        return Result.success(sysPermissionService.save(permission));
+    public Result<Void> add(@RequestBody SysPermissionEntity permission) {
+        sysPermissionService.save(permission);
+        return Result.success();
     }
 }

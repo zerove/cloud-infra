@@ -28,7 +28,11 @@ public enum NotificationType {
     /**
      * 告警通知
      */
-    ALERT("ALERT", "告警通知");
+    ALERT("ALERT", "告警通知"),
+    /**
+     * 服务工单通知
+     */
+    SERVICE_TICKET("SERVICE_TICKET", "服务工单通知");
 
     private final String code;
     private final String description;

@@ -1,6 +1,0 @@
-spring:
-  autoconfigure:
-    exclude:
-      - io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
-  main:
-    allow-bean-definition-overriding: true

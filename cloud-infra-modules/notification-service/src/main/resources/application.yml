@@ -13,6 +13,9 @@ spring:
       config:
         server-addr: nacos:8848
         file-extension: yaml
+        shared-configs:
+          - data-id: actuator-config.yaml
+            refresh: true
   config:
     import: "optional:nacos:notification-service.yaml"
   threads:
@@ -25,3 +28,18 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:root}
   main:
     allow-bean-definition-overriding: true
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317

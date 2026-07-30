@@ -30,12 +30,21 @@ public class SysUser extends BaseEntity {
     @Size(min = 3, max = 20, message = "用户名长度必须在3-20个字符之间")
     private String username;
 
+    /** 用户昵称 */
+    private String nickName;
+
     /** 手机号码 */
     @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号码格式不正确")
-    private String phone;
+    private String phoneNumber;
 
     /** 部门ID */
     private Long deptId;
+
+    /** 角色ID */
+    private Long roleId;
+
+    /** 岗位ID */
+    private Long postId;
 
     /** 帐号状态（0正常 1停用） */
     private Integer status;

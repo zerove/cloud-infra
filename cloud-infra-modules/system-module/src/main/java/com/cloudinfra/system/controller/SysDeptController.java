@@ -1,17 +1,22 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.core.annotation.Log;
-import com.cloudinfra.common.core.enums.BusinessType;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cloudinfra.common.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysDept;
+import com.cloudinfra.system.domain.vo.SysDeptVO;
+import com.cloudinfra.system.domain.dto.SysDeptCreateDTO;
+import com.cloudinfra.system.domain.dto.SysDeptUpdateDTO;
 import com.cloudinfra.system.service.ISysDeptService;
+import com.cloudinfra.system.converter.SysDeptConverter;
+import java.util.List;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @Tag(name = "部门管理")
 @RestController
@@ -20,36 +25,43 @@ import java.util.List;
 public class SysDeptController {
 
     private final ISysDeptService deptService;
+    private final SysDeptConverter deptConverter;
 
     @Operation(summary = "查询部门列表")
     @PreAuthorize("@ss.hasPermi('system:dept:list')")
     @GetMapping("/list")
-    public Result<List<SysDept>> list(SysDept dept) {
-        List<SysDept> depts = deptService.selectDeptList(dept);
-        return Result.success(depts);
+    public IPage<SysDeptVO> list(SysDept dept, 
+                                 @RequestParam(defaultValue = "1") Integer pageNum,
+                                 @RequestParam(defaultValue = "10") Integer pageSize) {
+        Page<SysDept> page = new Page<>(pageNum, pageSize);
+        IPage<SysDept> depts = deptService.selectDeptList(page, dept);
+        return depts.convert(deptConverter::entityToVo);
     }
 
     @Operation(summary = "新增部门")
     @PreAuthorize("@ss.hasPermi('system:dept:add')")
-    @Log(title = "部门管理", businessType = BusinessType.INSERT)
+    @AuditLog(module = "DEPT", action = "ADD")
     @PostMapping
-    public Result<Void> add(@RequestBody SysDept dept) {
-        return deptService.insertDept(dept) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "新增部门失败");
+    public Result<Void> add(@Valid @RequestBody SysDeptCreateDTO deptDTO) {
+        deptService.insertDept(deptDTO);
+        return Result.success();
     }
 
     @Operation(summary = "修改部门")
     @PreAuthorize("@ss.hasPermi('system:dept:edit')")
-    @Log(title = "部门管理", businessType = BusinessType.UPDATE)
+    @AuditLog(module = "DEPT", action = "EDIT")
     @PutMapping
-    public Result<Void> edit(@RequestBody SysDept dept) {
-        return deptService.updateDept(dept) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "修改部门失败");
+    public Result<Void> edit(@Valid @RequestBody SysDeptUpdateDTO deptDTO) {
+        deptService.updateDept(deptDTO);
+        return Result.success();
     }
 
     @Operation(summary = "删除部门")
     @PreAuthorize("@ss.hasPermi('system:dept:remove')")
-    @Log(title = "部门管理", businessType = BusinessType.DELETE)
+    @AuditLog(module = "DEPT", action = "DELETE")
     @DeleteMapping("/{deptId}")
     public Result<Void> remove(@PathVariable Long deptId) {
-        return deptService.deleteDeptById(deptId) ? Result.success() : Result.fail(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode(), "删除部门失败");
+        deptService.deleteDeptById(deptId);
+        return Result.success();
     }
 }

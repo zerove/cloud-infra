@@ -8,7 +8,7 @@ import java.io.InputStream;
 /**
  * MinIO 文件服务实现
  */
-public class MinioFileService implements IFileService {
+public class MinioFileService {
 
     private final MinioClient minioClient;
     private final String bucketName;
@@ -18,7 +18,6 @@ public class MinioFileService implements IFileService {
         this.bucketName = bucketName;
     }
 
-    @Override
     public String upload(FileContent content) throws IOException {
         try {
             String fileName = System.currentTimeMillis() + "_" + content.fileName();
@@ -34,7 +33,6 @@ public class MinioFileService implements IFileService {
         }
     }
 
-    @Override
     public boolean delete(String filePath) {
         try {
             minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucketName).object(filePath).build());

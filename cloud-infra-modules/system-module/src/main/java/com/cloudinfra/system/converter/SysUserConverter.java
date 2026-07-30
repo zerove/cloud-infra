@@ -18,27 +18,26 @@ public class SysUserConverter {
         entity.setUsername(dto.getUsername());
         entity.setPassword(dto.getPassword());
         entity.setEmail(dto.getEmail());
-        entity.setPhone(dto.getPhone());
+        entity.setPhoneNumber(dto.getPhoneNumber());
         entity.setStatus(dto.getStatus());
         return entity;
     }
 
     public SysUserVO entityToVo(SysUser entity) {
         if (entity == null) return null;
-        SysUserVO vo = new SysUserVO();
-        vo.setId(entity.getUserId());
-        vo.setUsername(entity.getUsername());
-        vo.setEmail(entity.getEmail());
-        vo.setPhone(entity.getPhone());
-        vo.setStatus(entity.getStatus());
-        if (entity.getCreateTime() != null) {
-            vo.setCreateTime(entity.getCreateTime());
-        }
-        return vo;
+        return new SysUserVO(
+            entity.getUserId(),
+            entity.getUsername(),
+            entity.getEmail(),
+            entity.getPhoneNumber(),
+            entity.getStatus(),
+            entity.getCreateTime(),
+            null
+        );
     }
 
     public List<SysUserVO> entityListToVoList(List<SysUser> list) {
-        if (list == null) return null;
+        if (list == null) return List.of();
         return list.stream().map(this::entityToVo).collect(Collectors.toList());
     }
 }

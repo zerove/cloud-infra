@@ -39,7 +39,7 @@ public class SearchConsumer {
                 document.setJsonResult(operLog.getJsonResult());
                 document.setStatus(operLog.getStatus());
                 document.setErrorMsg(operLog.getErrorMsg());
-                document.setOperTime(operLog.getOperTime());
+                document.setCreateTime(operLog.getCreateTime());
                 
                 operLogRepository.save(document);
                 log.info("操作日志已成功同步至 ES: {}", operLog.getOperId());

@@ -4,12 +4,15 @@ kind: Kustomization
 resources:
     - auth-deployment.yaml
     - configmap.yaml
+    - elasticsearch.yaml
+    - file-deployment.yaml
     - gateway-deployment.yaml
     - hpa.yaml
     - ingress.yaml
     - nacos-pvc.yaml
     - nacos.yaml
     - notification-deployment.yaml
+    - rabbitmq.yaml
     - redis.yaml
     - search-deployment.yaml
     - system-deployment.yaml

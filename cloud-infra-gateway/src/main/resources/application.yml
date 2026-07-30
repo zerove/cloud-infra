@@ -7,9 +7,23 @@ spring:
                 import-check:
                     enabled: false
                 fail-fast: false
+                shared-configs:
+                  - data-id: actuator-config.yaml
+                    refresh: true
     config:
         import: optional:nacos:gateway.yaml
-    autoconfigure:
-        exclude:
-            - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-            - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317

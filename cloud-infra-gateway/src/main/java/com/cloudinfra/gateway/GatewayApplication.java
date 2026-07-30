@@ -16,8 +16,9 @@ import com.cloudinfra.framework.tracing.config.TracingAutoConfiguration;
 import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 
 @EnableDiscoveryClient
+@org.springframework.cloud.openfeign.EnableFeignClients(basePackages = "com.cloudinfra.api")
 @SpringBootApplication(
-    scanBasePackages = { "com.cloudinfra.gateway", "com.cloudinfra.common" }
+    scanBasePackages = { "com.cloudinfra" }
 )
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, PasswordEncoderConfig.class})
 public class GatewayApplication {
@@ -28,7 +29,6 @@ public class GatewayApplication {
 
     @Bean
     public JwtUtils jwtUtils() {
-        System.out.println(">>> [GatewayApplication] Manually creating JwtUtils bean...");
         return new JwtUtils();
     }
 }

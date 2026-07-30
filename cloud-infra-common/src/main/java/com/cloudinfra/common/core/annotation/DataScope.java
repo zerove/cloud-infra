@@ -3,14 +3,20 @@ package com.cloudinfra.common.core.annotation;
 import java.lang.annotation.*;
 
 /**
- * 数据权限控制注解
+ * 数据权限注解
+ * 标记需要进行数据权限过滤的方法
  */
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
 @Documented
 public @interface DataScope {
-    // 部门表别名
-    String deptAlias() default "d";
-    // 用户表别名
-    String userAlias() default "u";
+    /**
+     * 部门别名
+     */
+    String deptAlias() default "";
+
+    /**
+     * 用户别名
+     */
+    String userAlias() default "";
 }

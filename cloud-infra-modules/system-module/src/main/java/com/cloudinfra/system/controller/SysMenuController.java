@@ -1,17 +1,20 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.core.annotation.Log;
+import com.cloudinfra.common.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
-import com.cloudinfra.common.core.enums.BusinessType;
 import com.cloudinfra.system.domain.SysMenu;
+import com.cloudinfra.system.domain.vo.SysMenuVO;
+import com.cloudinfra.system.domain.dto.SysMenuCreateDTO;
+import com.cloudinfra.system.domain.dto.SysMenuUpdateDTO;
 import com.cloudinfra.system.service.ISysMenuService;
+import com.cloudinfra.system.converter.SysMenuConverter;
+import java.util.List;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @Tag(name = "菜单管理")
 @RestController
@@ -20,50 +23,53 @@ import java.util.List;
 public class SysMenuController {
 
     private final ISysMenuService menuService;
+    private final SysMenuConverter menuConverter;
 
     @Operation(summary = "查询菜单列表")
-    @PreAuthorize("hasAuthority('system:menu:list')")
+    @PreAuthorize("@ss.hasPermi('system:menu:list')")
     @GetMapping("/list")
-    public Result<List<SysMenu>> list(SysMenu menu) {
+    public List<SysMenuVO> list(SysMenu menu) {
         List<SysMenu> menus = menuService.selectMenuList(menu);
-        return Result.success(menus);
+        return menuConverter.entityListToVoList(menus);
     }
 
     @Operation(summary = "查询菜单树")
-    @PreAuthorize("hasAuthority('system:menu:list')")
+    @PreAuthorize("@ss.hasPermi('system:menu:list')")
     @GetMapping("/tree")
-    public Result<List<SysMenu>> tree() {
-        return Result.success(menuService.selectMenuTree());
+    public List<SysMenuVO> tree() {
+        List<SysMenu> menus = menuService.selectMenuTree();
+        return menuConverter.entityListToVoList(menus);
     }
 
     @Operation(summary = "查询菜单详细")
-    @PreAuthorize("hasAuthority('system:menu:query')")
+    @PreAuthorize("@ss.hasPermi('system:menu:query')")
     @GetMapping("/{menuId}")
-    public Result<SysMenu> getInfo(@PathVariable Long menuId) {
-        return Result.success(menuService.getById(menuId));
+    public SysMenuVO getInfo(@PathVariable Long menuId) {
+        SysMenu menu = menuService.getById(menuId);
+        return menuConverter.entityToVo(menu);
     }
 
     @Operation(summary = "新增菜单")
-    @PreAuthorize("hasAuthority('system:menu:add')")
-    @Log(title = "菜单管理", businessType = BusinessType.INSERT)
+    @PreAuthorize("@ss.hasPermi('system:menu:add')")
+    @AuditLog(module = "MENU", action = "ADD")
     @PostMapping
-    public Result<Void> add(@RequestBody SysMenu menu) {
-        menuService.insertMenu(menu);
+    public Result<Void> add(@Valid @RequestBody SysMenuCreateDTO menuDTO) {
+        menuService.insertMenu(menuDTO);
         return Result.success();
     }
 
     @Operation(summary = "修改菜单")
-    @PreAuthorize("hasAuthority('system:menu:edit')")
-    @Log(title = "菜单管理", businessType = BusinessType.UPDATE)
+    @PreAuthorize("@ss.hasPermi('system:menu:edit')")
+    @AuditLog(module = "MENU", action = "EDIT")
     @PutMapping
-    public Result<Void> edit(@RequestBody SysMenu menu) {
-        menuService.updateMenu(menu);
+    public Result<Void> edit(@Valid @RequestBody SysMenuUpdateDTO menuDTO) {
+        menuService.updateMenu(menuDTO);
         return Result.success();
     }
 
     @Operation(summary = "删除菜单")
-    @PreAuthorize("hasAuthority('system:menu:remove')")
-    @Log(title = "菜单管理", businessType = BusinessType.DELETE)
+    @PreAuthorize("@ss.hasPermi('system:menu:remove')")
+    @AuditLog(module = "MENU", action = "DELETE")
     @DeleteMapping("/{menuId}")
     public Result<Void> remove(@PathVariable Long menuId) {
         menuService.deleteMenuById(menuId);

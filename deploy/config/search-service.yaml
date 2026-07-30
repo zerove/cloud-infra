@@ -1,0 +1,34 @@
+server:
+  port: 9304
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos-server:8848
+        enabled: true
+      config:
+        server-addr: nacos-server:8848
+  main:
+    allow-bean-definition-overriding: true
+  elasticsearch:
+    uris: http://elasticsearch:9200
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: 6379
+      database: 0
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  server:
+    port: 9305
+  endpoints:
+    web:
+      exposure:
+        include: "*"

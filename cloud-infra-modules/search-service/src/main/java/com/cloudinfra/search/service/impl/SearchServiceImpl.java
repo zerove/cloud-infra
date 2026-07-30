@@ -35,8 +35,8 @@ public class SearchServiceImpl implements SearchService {
         
         // 2. 执行搜索 (Repository 承担基础设施执行)
         Page<OperLogDocument> page = operLogRepository.findByKeyword(
-            query.getKeyword(), 
-            PageRequest.of(request.getPage() - 1, request.getSize())
+            query.keyword(), 
+            PageRequest.of(request.getPageNum() - 1, request.getPageSize())
         );
 
         // 3. 转换为 DTO (确保 ES 类型不泄露至 Controller)
@@ -54,7 +54,7 @@ public class SearchServiceImpl implements SearchService {
                 dto.setJsonResult(doc.getJsonResult());
                 dto.setStatus(doc.getStatus());
                 dto.setErrorMsg(doc.getErrorMsg());
-                dto.setOperTime(doc.getOperTime());
+                dto.setOperTime(doc.getCreateTime());
                 return dto;
             })
             .collect(Collectors.toList());

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cloudinfra.system.mapper.SysDeptMapper">
+
+    <select id="selectDeptTree" resultType="com.cloudinfra.system.domain.SysDept">
+        WITH RECURSIVE dept_tree AS (
+            SELECT dept_id, parent_id, ancestors, dept_name, order_num, leader, phone, email, status, del_flag
+            FROM sys_dept
+            WHERE parent_id = 0 AND del_flag = '0'
+            UNION ALL
+            SELECT d.dept_id, d.parent_id, d.ancestors, d.dept_name, d.order_num, d.leader, d.phone, d.email, d.status, d.del_flag
+            FROM sys_dept d
+            INNER JOIN dept_tree dt ON d.parent_id = dt.dept_id
+            WHERE d.del_flag = '0'
+        )
+        SELECT * FROM dept_tree ORDER BY ancestors, order_num
+    </select>
+
+</mapper>
