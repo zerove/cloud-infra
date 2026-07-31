@@ -51,5 +51,23 @@ public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
                 }
             }
         }
+        
+        // 注册 hutool SpringUtil 相关类（用于 AOT 初始化）
+        try {
+            Class<?> springUtilClass = ClassUtils.forName("cn.hutool.extra.spring.SpringUtil", classLoader);
+            hints.reflection().registerType(springUtilClass, MemberCategory.INVOKE_DECLARED_CONSTRUCTORS, 
+                MemberCategory.INVOKE_DECLARED_METHODS, MemberCategory.DECLARED_FIELDS);
+        } catch (ClassNotFoundException e) {
+            // Ignore if hutool not present
+        }
+        
+        // 注册 SpringUtil__BeanDefinitions 相关类（用于 Spring AOT 生成的配置类）
+        try {
+            Class<?> springUtilBeanDefClass = ClassUtils.forName("cn.hutool.extra.spring.SpringUtil__BeanDefinitions", classLoader);
+            hints.reflection().registerType(springUtilBeanDefClass, MemberCategory.INVOKE_DECLARED_CONSTRUCTORS, 
+                MemberCategory.INVOKE_DECLARED_METHODS, MemberCategory.DECLARED_FIELDS);
+        } catch (ClassNotFoundException e) {
+            // Ignore
+        }
     }
 }

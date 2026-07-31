@@ -70,6 +70,11 @@
             <artifactId>hutool-json</artifactId>
         </dependency>
         <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-extra</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-alibaba-sentinel-gateway</artifactId>
         </dependency>
@@ -121,6 +126,11 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <docker>
+                        <host>${docker.host}</host>
+                    </docker>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -132,16 +142,8 @@
             <plugin>
                 <groupId>org.graalvm.buildtools</groupId>
                 <artifactId>native-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>build-native</id>
-                        <goals>
-                            <goal>compile-no-fork</goal>
-                        </goals>
-                        <phase>package</phase>
-                    </execution>
-                </executions>
                 <configuration>
+                    <skip>true</skip>
                     <imageName>cloud-infra-gateway-binary</imageName>
                     <mainClass>com.cloudinfra.gateway.GatewayApplication</mainClass>
                     <buildArgs>

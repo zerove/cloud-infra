@@ -303,6 +303,11 @@
             <properties>
                 <spring-boot.aot.skip>false</spring-boot.aot.skip>
                 <native.image.skip>false</native.image.skip>
+                <!-- Buildpacks Native Image 构建配置 -->
+                <spring-boot.build-image.builder>paketobuildpacks/builder:tiny</spring-boot.build-image.builder>
+                <spring-boot.build-image.env.BP_NATIVE_IMAGE>true</spring-boot.build-image.env.BP_NATIVE_IMAGE>
+                <spring-boot.build-image.env.BP_JVM_VERSION>25</spring-boot.build-image.env.BP_JVM_VERSION>
+                <spring-boot.build-image.publish>false</spring-boot.build-image.publish>
             </properties>
         </profile>
         </profiles>
