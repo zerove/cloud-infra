@@ -67,13 +67,44 @@ with open(config_path, 'w') as f:
 print(f'生成反射配置: {len(config)} 个类')
 PYEOF
 
-echo "=== 7. 生成最终 classpath ==="
+echo "=== 7. 生成动态代理配置（jboss-logging/hibernate-validator） ==="
+cat > "$BUILD_DIR/proxy-config.json" << 'EOF'
+[
+  ["org.hibernate.validator.internal.util.logging.Log"],
+  ["org.hibernate.validator.internal.util.logging.Messages"]
+]
+EOF
+# 实现类通过 Class.forName 加载，需反射注册
+python3 - "$BUILD_DIR/aot-reflect-config.json" << 'PYEOF'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    config = json.load(f)
+existing = {item['name'] for item in config}
+for impl in [
+    'org.hibernate.validator.internal.util.logging.Log_$logger',
+    'org.hibernate.validator.internal.util.logging.Messages_$bundle',
+]:
+    if impl not in existing:
+        config.append({
+            'name': impl,
+            'allDeclaredConstructors': True,
+            'allDeclaredMethods': True,
+            'allDeclaredFields': True
+        })
+with open(path, 'w') as f:
+    json.dump(config, f, indent=2)
+print('已追加 hibernate-validator 日志实现类反射注册')
+PYEOF
+
+echo "=== 8. 生成最终 classpath ==="
 { echo -n "spring-aot-resources.jar:spring-aot-classes:BOOT-INF/classes:"; paste -sd: cp_list.txt; } > cp.txt
 
 echo "=== 8. 启动 native-image 构建 ==="
 setsid native-image \
     -cp @cp.txt \
     -H:ReflectionConfigurationFiles="$BUILD_DIR/aot-reflect-config.json" \
+    -H:DynamicProxyConfigurationFiles="$BUILD_DIR/proxy-config.json" \
     --initialize-at-build-time=org.redisson.misc.BiHashMap \
     --initialize-at-build-time=org.redisson.liveobject.core.RedissonObjectBuilder\$CodecMethodRef \
     -H:+SharedArenaSupport \
