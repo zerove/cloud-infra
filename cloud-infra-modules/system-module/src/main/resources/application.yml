@@ -52,6 +52,18 @@ spring:
         rollback-retry-count: 5
         default-global-transaction-timeout: 60000
 
+  # Flyway 数据库迁移配置
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    baseline-description: "Initial schema"
+    locations: classpath:db/migration
+    encoding: UTF-8
+    validate-on-migrate: true
+    clean-disabled: false
+    out-of-order: false
+
 management:
   server:
     port: 9301
