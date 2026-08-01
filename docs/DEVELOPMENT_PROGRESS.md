@@ -40,9 +40,21 @@
 2. **[已完成] 分布式事务实战验证**
    - 已完成：SysUserServiceImpl 添加 @GlobalTransactional，SeataTransactionTest 覆盖异常回滚场景。
 3. **[已完成] 生产级容器化调优 (Native Image)**
-   - 已完成：native-maven-plugin 0.10.4 + 生命周期绑定 + build-native.sh 更新。
-   - ⚠️ 注意：native-maven-plugin 0.10.x 对 Spring Boot 4 AOT 引擎兼容性不完整，
-     构建已可触发 native-image 工具但 fat jar classpath 导致主类不可识别。
-     - 临时方案：使用 docker build 配合手动 native-image 工具调用
-     - 长期方案：等待 native-maven-plugin 发布 Spring Boot 4 兼容版本，或使用 Buildpacks
+   - 已完成：build-native-image.sh 一键构建脚本（解压→classpath→AOT→反射→代理→构建）。
+   - ✅ Native binary 完整启动验证通过：
+     - Started GatewayApplication in 1.4-1.5s（JVM 需 14-19s，快 10 倍）
+     - Tomcat 双端口 18080 + 9301
+     - 管理端口 :9301/management/health → 200 UP
+     - 进程稳定运行（60+ 秒无退出）
+   - 已解决的全部 Native 特有错误：
+     1. AOT 类名过期（mvn install 重新安装模块）
+     2. jasypt 动态 Class.forName（反射注册）
+     3. Redisson/Netty Arena API（-H:+SharedArenaSupport）
+     4. Spring Boot 4 tracing 模块拆分（spring-boot-micrometer-tracing 依赖）
+     5. hibernate-validator jboss-logging 动态代理（proxy-config.json + 反射）
+     6. JMX/TomcatMetrics（排除 TomcatMetricsAutoConfiguration）
+   - ⚠️ 已知限制：nacos-client 3.1.1 的 shaded Netty 在 GraalVM Native 下
+     HTTP/2 协议协商失败（gRPC 9848 端口），属第三方库限制：
+     - 应用降级运行正常（本地快照配置 + 健康检查 200 UP）
+     - 生产方案：等待 nacos-client 官方 Native 支持，或 sidecar 注册方案
 
