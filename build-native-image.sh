@@ -110,6 +110,6 @@ setsid native-image \
     -H:+SharedArenaSupport \
     com.cloudinfra.gateway.GatewayApplication \
     -o cloud-infra-gateway-binary \
-    -J-Xmx7g -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
+    -J-Xmx6g -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
 echo "native-image 已在后台启动 (PID=$!)"
 echo "监控: tail -f $BUILD_DIR/native-build.log"

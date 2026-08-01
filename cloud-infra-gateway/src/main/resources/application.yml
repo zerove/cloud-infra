@@ -10,6 +10,9 @@ spring:
                 shared-configs:
                   - data-id: actuator-config.yaml
                     refresh: true
+    autoconfigure:
+        exclude:
+          - org.springframework.boot.tomcat.autoconfigure.metrics.TomcatMetricsAutoConfiguration
     config:
         import: optional:nacos:gateway.yaml
 
@@ -21,6 +24,10 @@ management:
       base-path: /management
       exposure:
         include: "*"
+  metrics:
+    binders:
+      tomcat:
+        enabled: false
   tracing:
     enabled: true
     sampling:
