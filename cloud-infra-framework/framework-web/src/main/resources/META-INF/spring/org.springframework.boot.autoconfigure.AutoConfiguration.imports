@@ -2,3 +2,4 @@ com.cloudinfra.framework.web.config.VirtualThreadConfig
 com.cloudinfra.framework.web.config.ActuatorConfig
 com.cloudinfra.framework.web.config.CloudInfraRuntimeHints
 com.cloudinfra.framework.web.config.ConfigValidationAutoConfiguration
+com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration
