@@ -28,7 +28,13 @@ public class TracePropagationTest extends BaseIntegrationTest {
 
     @org.springframework.boot.SpringBootConfiguration
     @org.springframework.context.annotation.ComponentScan
-    static class TestConfig {}
+    static class TestConfig {
+
+        @org.springframework.context.annotation.Bean
+        public io.micrometer.tracing.Tracer tracer() {
+            return org.mockito.Mockito.mock(io.micrometer.tracing.Tracer.class);
+        }
+    }
 
     @Autowired
     private AsyncService asyncService;
