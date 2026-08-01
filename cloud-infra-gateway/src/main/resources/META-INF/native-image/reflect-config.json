@@ -1,14 +1,182 @@
 [
   {
-    "name": "org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource",
-    "allDeclaredFields": true,
+    "name": "com.cloudinfra.gateway.GatewayApplication",
+    "allDeclaredConstructors": true,
     "allDeclaredMethods": true,
-    "allPublicConstructors": true
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.ulisesbocchio.jasyptspringboot.EncryptablePropertySourceConverter",
-    "allDeclaredFields": true,
+    "allDeclaredConstructors": true,
     "allDeclaredMethods": true,
-    "allPublicConstructors": true
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.hibernate.validator.internal.util.logging.Log_$logger",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.hibernate.validator.internal.util.logging.Messages_$bundle",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.ProtocolNegotiators$PlaintextProtocolNegotiatorClientFactory",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.ProtocolNegotiators$PlaintextUpgradeHandler",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.GrpcHttp2ConnectionHandler",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.NettyClientHandler",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.Http2ClientUpgradeCodec",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.Http2ConnectionHandler",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2Connection",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2LocalFlowController",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2FrameWriter",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2FrameReader",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent0",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.buffer.PooledByteBufAllocator",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.buffer.UnpooledByteBufAllocator",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.Redisson",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.RedissonMultiLock",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.api.RLock",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.client.codec.Codec",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.client.codec.StringCodec",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.config.Config",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.misc.BiHashMap",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "org.redisson.liveobject.core.RedissonObjectBuilder$CodecMethodRef",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.cloudinfra.framework.web.util.SpringContextHolder",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.cloudinfra.common.core.domain.Result",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   }
 ]
