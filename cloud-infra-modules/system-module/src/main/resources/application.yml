@@ -4,6 +4,7 @@ spring:
   cloud:
     stream:
       bindings:
+        # 事务消息
         txMessageOut-out-0:
           destination: sys.tx.message.retry
           group: cloud-system-group
@@ -13,6 +14,26 @@ spring:
         txMessageDlqConsumer-in-0:
           destination: sys.tx.message.dlq
           group: cloud-system-group
+        # 用户事件
+        user-events-out-0:
+          destination: user.events
+          content-type: application/json
+          producer:
+            required-groups: notification-service
+        user-events-in-0:
+          destination: user.events
+          group: cloud-system-group
+        # 数据变更事件
+        data-change-events-out-0:
+          destination: data.change.events
+          content-type: application/json
+        data-change-events-in-0:
+          destination: data.change.events
+          group: cloud-system-group
+        # 操作日志事件（搜索服务）
+        search-operlog-out-0:
+          destination: search.operlog
+          content-type: application/json
       rabbit:
         bindings:
           txMessageConsumer-in-0:
