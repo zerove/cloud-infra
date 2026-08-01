@@ -1,20 +1,36 @@
 spring:
-    cloud:
-        refresh:
-            enabled: false
-        nacos:
-            config:
-                import-check:
-                    enabled: false
-                fail-fast: false
-                shared-configs:
-                  - data-id: actuator-config.yaml
-                    refresh: true
-    autoconfigure:
-        exclude:
-          - org.springframework.boot.tomcat.autoconfigure.metrics.TomcatMetricsAutoConfiguration
-    config:
-        import: optional:nacos:gateway.yaml
+   cloud:
+       refresh:
+           enabled: false
+       nacos:
+           config:
+               import-check:
+                   enabled: false
+               fail-fast: false
+               shared-configs:
+                 - data-id: actuator-config.yaml
+                   refresh: true
+   autoconfigure:
+       exclude:
+         - org.springframework.boot.tomcat.autoconfigure.metrics.TomcatMetricsAutoConfiguration
+   config:
+       import: optional:nacos:gateway.yaml
+
+server:
+  compression:
+    enabled: true
+    mime-types:
+      - text/html
+      - text/xml
+      - text/plain
+      - text/css
+      - text/javascript
+      - application/javascript
+      - application/json
+      - application/xml
+      - application/rss+xml
+      - image/svg+xml
+    min-response-size: 1024
 
 management:
   server:
