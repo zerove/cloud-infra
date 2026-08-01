@@ -100,7 +100,8 @@ class ConfigValidationProperties {
             "NACOS_ADDR",
             "SPRING_DATASOURCE_HOST",
             "SPRING_DATASOURCE_USERNAME",
-            "SPRING_DATASOURCE_PASSWORD"
+            "SPRING_DATASOURCE_PASSWORD",
+            "AUTH_JWT_SECRET"
     );
 
     public boolean isEnabled() {
