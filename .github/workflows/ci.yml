@@ -1,0 +1,179 @@
+name: Cloud-Infra CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  MAVEN_OPTS: "-Xmx4g"
+  JAVA_VERSION: '25'
+
+jobs:
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run tests
+        run: mvn clean test -DskipTests=false --batch-mode
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+          retention-days: 7
+
+  native-build:
+    name: Native Image Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          version: '25.0.1'
+          java-version: ${{ env.JAVA_VERSION }}
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build Native Image (Gateway)
+        run: |
+          cd cloud-infra-gateway
+          mvn clean package -Pnative -DskipTests --batch-mode
+          
+      - name: Verify Native Binary
+        run: |
+          cd cloud-infra-gateway/target
+          ls -la cloud-infra-gateway-binary
+          file cloud-infra-gateway-binary
+          
+      - name: Upload Native Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-infra-gateway-native
+          path: cloud-infra-gateway/target/cloud-infra-gateway-binary
+          retention-days: 30
+
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build all modules
+        run: mvn clean package -DskipTests --batch-mode
+
+      - name: Build Docker images
+        run: |
+          # Build images for each module
+          for module in cloud-infra-gateway cloud-infra-auth cloud-infra-modules/system-module cloud-infra-modules/file-service cloud-infra-modules/notification-service cloud-infra-modules/search-service; do
+            echo "Building $module..."
+            podman build -t localhost/$(basename $module):${{ github.sha }} $module
+          done
+
+      - name: Login to registry (if configured)
+        if: env.REGISTRY_URL != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Push images (if registry configured)
+        if: env.REGISTRY_URL != ''
+        run: |
+          for module in cloud-infra-gateway cloud-infra-auth cloud-infra-modules/system-module cloud-infra-modules/file-service cloud-infra-modules/notification-service cloud-infra-modules/search-service; do
+            IMAGE=localhost/$(basename $module):${{ github.sha }}
+            TARGET=${{ env.REGISTRY_URL }}/cloud-infra/$(basename $module):${{ github.sha }}
+            podman tag $IMAGE $TARGET
+            podman push $TARGET
+          done
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build-images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # 这里添加实际的部署逻辑，如 kubectl apply, helm upgrade 等
+          # kubectl apply -f deploy/k8s/staging/
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build-images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # 这里添加实际的部署逻辑
+          # kubectl apply -f deploy/k8s/production/

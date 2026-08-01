@@ -92,9 +92,34 @@ for impl in [
             'allDeclaredMethods': True,
             'allDeclaredFields': True
         })
+# 添加 grpc shaded netty h2c 明文协商关键类（nacos-client 自带配置缺失）
+for grpc_cls in [
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.ProtocolNegotiators$PlaintextProtocolNegotiatorClientFactory',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.ProtocolNegotiators$PlaintextUpgradeHandler',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.GrpcHttp2ConnectionHandler',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.grpc.netty.NettyClientHandler',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.Http2ClientUpgradeCodec',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.Http2ConnectionHandler',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2Connection',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2LocalFlowController',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2FrameWriter',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.handler.codec.http2.DefaultHttp2FrameReader',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.util.internal.PlatformDependent0',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.buffer.PooledByteBufAllocator',
+    'com.alibaba.nacos.shaded.io.grpc.netty.shaded.io.netty.buffer.UnpooledByteBufAllocator',
+]:
+    if grpc_cls not in existing:
+        config.append({
+            'name': grpc_cls,
+            'allDeclaredConstructors': True,
+            'allDeclaredMethods': True,
+            'allDeclaredFields': True
+        })
 with open(path, 'w') as f:
     json.dump(config, f, indent=2)
-print('已追加 hibernate-validator 日志实现类反射注册')
+print('已追加 hibernate-validator 日志实现类 + grpc h2c 协商类反射注册')
 PYEOF
 
 echo "=== 8. 生成最终 classpath ==="
@@ -110,6 +135,6 @@ setsid native-image \
     -H:+SharedArenaSupport \
     com.cloudinfra.gateway.GatewayApplication \
     -o cloud-infra-gateway-binary \
-    -J-Xmx6g -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
+    -J-Xmx7g -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
 echo "native-image 已在后台启动 (PID=$!)"
 echo "监控: tail -f $BUILD_DIR/native-build.log"

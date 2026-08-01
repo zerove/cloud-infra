@@ -1,0 +1,12 @@
+[
+  ["org.hibernate.validator.internal.util.logging.Log"],
+  ["org.hibernate.validator.internal.util.logging.Messages"],
+  ["com.alibaba.nacos.api.config.listener.Listener"],
+  ["com.alibaba.nacos.api.exception.NacosException"],
+  ["org.redisson.api.RLock"],
+  ["org.redisson.api.RedissonClient"],
+  ["org.springframework.security.access.AccessDecisionManager"],
+  ["org.springframework.security.web.access.intercept.FilterSecurityInterceptor"],
+  ["org.springframework.cloud.gateway.filter.GatewayFilter"],
+  ["org.springframework.cloud.gateway.filter.GlobalFilter"]
+]

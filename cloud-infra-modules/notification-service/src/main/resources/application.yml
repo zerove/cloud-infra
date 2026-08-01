@@ -7,11 +7,11 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: nacos:8848
+        server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:nacos-service:8848}}
         ip: ${POD_IP:127.0.0.1}
         prefer-ip-address: true
       config:
-        server-addr: nacos:8848
+        server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:nacos-service:8848}}
         file-extension: yaml
         shared-configs:
           - data-id: actuator-config.yaml
