@@ -9,6 +9,7 @@ import java.util.concurrent.Executor;
 
 /**
  * 链路追踪自动配置类
+ * 提供任务执行器（MDC 上下文传播），Tracer 由 micrometer 自动配置提供
  */
 @AutoConfiguration
 public class TracingAutoConfiguration {
