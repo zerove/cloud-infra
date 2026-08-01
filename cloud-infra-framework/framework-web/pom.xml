@@ -54,5 +54,14 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- 数据库连接池优化依赖 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
     </dependencies>
 </project>
