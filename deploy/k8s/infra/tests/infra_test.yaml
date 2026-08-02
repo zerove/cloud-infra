@@ -1,0 +1,100 @@
+# Infra Chart Unit Tests
+
+suiteName: "Infra Chart Tests"
+
+tests:
+  - it: Should render nacos deployment when enabled
+    template: templates/nacos.yaml
+    set:
+      nacos.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*nacos.*"
+
+  - it: Should render redis deployment when enabled
+    template: templates/redis.yaml
+    set:
+      redis.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*redis.*"
+
+  - it: Should render postgresql deployment when enabled
+    template: templates/postgresql.yaml
+    set:
+      postgresql.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*postgresql.*"
+
+  - it: Should render rabbitmq deployment when enabled
+    template: templates/rabbitmq.yaml
+    set:
+      rabbitmq.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*rabbitmq.*"
+
+  - it: Should render elasticsearch deployment when enabled
+    template: templates/elasticsearch.yaml
+    set:
+      elasticsearch.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*elasticsearch.*"
+
+  - it: Should render zipkin deployment when enabled
+    template: templates/zipkin.yaml
+    set:
+      zipkin.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*zipkin.*"
+
+  - it: Should render otel-collector deployment when enabled
+    template: templates/otel-collector.yaml
+    set:
+      otelCollector.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*otel-collector.*"
+
+  - it: Should render minio deployment when enabled
+    template: templates/minio.yaml
+    set:
+      minio.enabled: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*minio.*"

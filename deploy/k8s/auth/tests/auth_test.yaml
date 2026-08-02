@@ -1,0 +1,124 @@
+# auth Chart Unit Tests
+
+suiteName: "auth Chart Tests"
+
+tests:
+  - it: Should create deployment with correct name
+    template: templates/deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*auth.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].name
+          pattern: ".*auth.*"
+
+  - it: Should create service with correct port
+    template: templates/service.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].port
+          value: 8081
+
+  - it: Should create management service
+    template: templates/service.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.ports[0].port
+          value: 9301
+
+  - it: Should create configmap
+    template: templates/configmap.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*config"
+
+  - it: Should create HPA
+    template: templates/hpa.yaml
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - matchRegex:
+          path: metadata.name
+          pattern: ".*auth.*"
+
+  - it: Should create network policy
+    template: templates/networkpolicy.yaml
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+
+  - it: Should configure liveness and readiness probes
+    template: templates/deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          pattern: ".*health/liveness.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          pattern: ".*health/readiness.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          pattern: ".*health/startup.*"
+
+  - it: Should configure security context
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+
+  - it: Should configure replica count when autoscaling disabled
+    template: templates/deployment.yaml
+    set:
+      autoscaling.enabled: false
+      replicaCount: 5
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 5
+
+  - it: Should configure resource limits
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: "1000m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "512Mi"
+
+  - it: Should configure network policy when enabled
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicy:
+        allowExternal: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+
+  - it: Should not create network policy egress when disabled
+    template: templates/networkpolicy.yaml
+    set:
+      networkPolicy:
+        allowExternal: false
+    asserts:
+      - isKind:
+          of: NetworkPolicy

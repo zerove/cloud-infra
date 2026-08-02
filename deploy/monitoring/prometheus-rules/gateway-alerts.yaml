@@ -1,0 +1,244 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloud-infra-gateway-alerts
+  namespace: cloud-infra
+  labels:
+    app.kubernetes.io/name: cloud-infra-gateway
+    prometheus: cloud-infra
+spec:
+  groups:
+    - name: cloud-infra-gateway.rules
+      interval: 30s
+      rules:
+        # === 可用性告警 ===
+        - alert: GatewayDown
+          expr: up{job="cloud-infra-gateway"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "网关服务不可用"
+            description: "网关服务 {{ $labels.instance }} 已下线超过 1 分钟"
+            runbook_url: "https://wiki.cloud-infra.io/runbooks/gateway-down"
+
+        - alert: GatewayHighErrorRate
+          expr: |
+            sum(rate(http_server_requests_seconds_count{application="cloud-infra-gateway", status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count{application="cloud-infra-gateway"}[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "网关错误率过高"
+            description: "网关 5xx 错误率超过 5%，持续 2 分钟"
+            runbook_url: "https://wiki.cloud-infra.io/runbooks/gateway-high-error-rate"
+
+        # === 性能告警 ===
+        - alert: GatewayHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(http_server_requests_seconds_bucket{application="cloud-infra-gateway"}[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "网关 P99 延迟过高"
+            description: "网关 P99 延迟超过 1 秒，持续 5 分钟"
+
+        - alert: GatewayHighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_server_requests_seconds_bucket{application="cloud-infra-gateway"}[5m]))
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "网关 P95 延迟过高"
+
+        # === 资源告警 ===
+        - alert: GatewayHighMemoryUsage
+          expr: |
+            (container_memory_usage_bytes{pod=~"cloud-infra-gateway-.*"} / container_spec_memory_limit_bytes{pod=~"cloud-infra-gateway-.*"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "网关内存使用率过高"
+            description: "内存使用率超过 85%"
+
+        - alert: GatewayHighCPUUsage
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{pod=~"cloud-infra-gateway-.*"}[5m]))
+            /
+            sum(container_spec_cpu_quota{pod=~"cloud-infra-gateway-.*"} / container_spec_cpu_period{pod=~"cloud-infra-gateway-.*"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "网关 CPU 使用率过高"
+
+        # === 连接/队列告警 ===
+        - alert: GatewayHighConnectionCount
+          expr: |
+            sum(tomcat_threads_current_threads{pod=~"cloud-infra-gateway-.*"}) > 200
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "网关线程数过高"
+
+        # === 业务指标 ===
+        - alert: GatewayHighRequestRate
+          expr: |
+            sum(rate(http_server_requests_seconds_count{application="cloud-infra-gateway"}[5m])) > 10000
+          for: 5m
+          labels:
+            severity: info
+            team: platform
+          annotations:
+            summary: "网关请求量异常激增"
+
+    - name: cloud-infra-common.rules
+      interval: 30s
+      rules:
+        # === 通用 JVM 指标 ===
+        - alert: JVMHighMemoryUsage
+          expr: |
+            (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "JVM 堆内存使用率过高"
+            description: "应用 {{ $labels.application }} 堆内存使用率超过 85%"
+
+        - alert: JVMHighGCTime
+          expr: |
+            rate(jvm_gc_pause_seconds_sum[5m]) / rate(jvm_gc_pause_seconds_count[5m]) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "JVM GC 暂停时间过长"
+            description: "应用 {{ $labels.application }} GC 平均暂停超过 500ms"
+
+        - alert: JVMHighThreadCount
+          expr: |
+            jvm_threads_live > 500
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "JVM 线程数过高"
+
+        # === 数据库连接池 ===
+        - alert: HikariPoolExhausted
+          expr: |
+            hikaricp_hikari_pool_active_connections / hikaricp_hikari_pool_max_connections > 0.9
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "数据库连接池耗尽"
+            description: "连接池使用率超过 90%"
+
+        # === Redis ===
+        - alert: RedisHighMemoryUsage
+          expr: |
+            redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Redis 内存使用率过高"
+
+        - alert: RedisConnectionExhausted
+          expr: |
+            redis_connected_clients / redis_config_maxclients > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Redis 连接数耗尽"
+
+        # === RabbitMQ ===
+        - alert: RabbitMQQueueBacklog
+          expr: |
+            rabbitmq_queue_messages_ready > 10000
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "RabbitMQ 队列积压"
+            description: "队列 {{ $labels.queue }} 消息积压超过 10000"
+
+        - alert: RabbitMQNoConsumers
+          expr: |
+            rabbitmq_queue_consumers == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "RabbitMQ 队列无消费者"
+            description: "队列 {{ $labels.queue }} 无消费者消费"
+
+        # === Elasticsearch ===
+        - alert: ElasticsearchClusterRed
+          expr: |
+            elasticsearch_cluster_health_status{status="red"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Elasticsearch 集群状态红色"
+
+        - alert: ElasticsearchHighDiskUsage
+          expr: |
+            elasticsearch_node_disk_usage_percent > 85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Elasticsearch 磁盘使用率过高"
+
+        # === 磁盘/节点 ===
+        - alert: DiskSpaceCritical
+          expr: |
+            (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "节点磁盘空间不足"
+
+        - alert: NodeNotReady
+          expr: |
+            kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "节点不可用"

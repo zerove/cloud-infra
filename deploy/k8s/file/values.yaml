@@ -1,47 +1,37 @@
-# Default values for cloud-infra-file
 replicaCount: 2
-
 image:
   repository: cloud-infra-file
   pullPolicy: IfNotPresent
-  tag: "latest"
-
+  tag: latest
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
+nameOverride: ''
+fullnameOverride: ''
 serviceAccount:
   create: true
   annotations: {}
-  name: ""
-
+  name: ''
 podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "8083"
-  prometheus.io/path: "/actuator/prometheus"
-
+  prometheus.io/scrape: 'true'
+  prometheus.io/port: '8083'
+  prometheus.io/path: /actuator/prometheus
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-
 securityContext:
   capabilities:
     drop:
-      - ALL
+    - ALL
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
-
 service:
   type: ClusterIP
   port: 8083
   targetPort: 8083
-
 managementService:
   enabled: true
   port: 9301
   targetPort: 9301
-
 resources:
   limits:
     cpu: 1000m
@@ -49,80 +39,74 @@ resources:
   requests:
     cpu: 500m
     memory: 256Mi
-
 autoscaling:
   enabled: true
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - cloud-infra-file
-          topologyKey: kubernetes.io/hostname
-
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - cloud-infra-file
+        topologyKey: kubernetes.io/hostname
 env:
-  - name: SPRING_PROFILES_ACTIVE
-    value: "k8s"
-  - name: NACOS_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.addr
-  - name: NACOS_CONFIG_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.config.addr
-  - name: NACOS_DISCOVERY_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.discovery.addr
-  - name: SPRING_DATASOURCE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: cloud-infra-secrets
-        key: postgres.host
-  - name: SPRING_DATASOURCE_USERNAME
-    valueFrom:
-      secretKeyRef:
-        name: cloud-infra-secrets
-        key: postgres.username
-  - name: SPRING_DATASOURCE_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: cloud-infra-secrets
-        key: postgres.password
-  - name: MINIO_ENDPOINT
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: minio.endpoint
-  - name: MINIO_ACCESS_KEY
-    valueFrom:
-      secretKeyRef:
-        name: cloud-infra-secrets
-        key: minio.access-key
-  - name: MINIO_SECRET_KEY
-    valueFrom:
-      secretKeyRef:
-        name: cloud-infra-secrets
-        key: minio.secret-key
-
+- name: SPRING_PROFILES_ACTIVE
+  value: k8s
+- name: NACOS_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.addr
+- name: NACOS_CONFIG_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.config.addr
+- name: NACOS_DISCOVERY_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.discovery.addr
+- name: SPRING_DATASOURCE_HOST
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: postgres.host
+- name: SPRING_DATASOURCE_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: postgres.username
+- name: SPRING_DATASOURCE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: postgres.password
+- name: MINIO_ENDPOINT
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: minio.endpoint
+- name: MINIO_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: minio.access-key
+- name: MINIO_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: minio.secret-key
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness
@@ -131,7 +115,6 @@ livenessProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
-
 readinessProbe:
   httpGet:
     path: /actuator/health/readiness
@@ -140,7 +123,6 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
-
 startupProbe:
   httpGet:
     path: /actuator/health/startup
@@ -149,89 +131,45 @@ startupProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 30
-
 configMap:
   enabled: true
   data:
-    application.yml: |
-      spring:
-        application:
-          name: cloud-file
-        main:
-          allow-bean-definition-overriding: true
-        config:
-          import: "optional:nacos:file-service.yaml"
-        cloud:
-          nacos:
-            config:
-              server-addr: ${NACOS_CONFIG_ADDR}
-              file-extension: yaml
-              import-check:
-                enabled: false
-              shared-configs:
-                - data-id: actuator-config.yaml
-                  refresh: true
-            discovery:
-              server-addr: ${NACOS_DISCOVERY_ADDR}
-        threads:
-          virtual:
-            enabled: true
-        servlet:
-          multipart:
-            max-file-size: 1024MB
-            max-request-size: 1024MB
-      file:
-        storage:
-          type: auto
-        upload:
-          dir: /data/uploads
-      management:
-        server:
-          port: 9301
-        endpoints:
-          web:
-            base-path: /management
-            exposure:
-              include: "*"
-        tracing:
-          sampling:
-            probability: 1.0
-        otlp:
-          tracing:
-            endpoint: http://otel-collector:4317
-        tracing:
-          enabled: true
-          sampling:
-            probability: 1.0
-          zipkin:
-            enabled: true
-            endpoint: http://zipkin:9411/api/v2/spans
-            sender:
-              type: web
-          otel:
-            exporter:
-              zipkin:
-                endpoint: http://zipkin:9411/api/v2/spans
-              otlp:
-                endpoint: http://otel-collector:4317
-
+    application.yml: "spring:\n  application:\n    name: cloud-file\n  main:\n   \
+      \ allow-bean-definition-overriding: true\n  config:\n    import: \"optional:nacos:file-service.yaml\"\
+      \n  cloud:\n    nacos:\n      config:\n        server-addr: ${NACOS_CONFIG_ADDR}\n\
+      \        file-extension: yaml\n        import-check:\n          enabled: false\n\
+      \        shared-configs:\n          - data-id: actuator-config.yaml\n      \
+      \      refresh: true\n      discovery:\n        server-addr: ${NACOS_DISCOVERY_ADDR}\n\
+      \  threads:\n    virtual:\n      enabled: true\n  servlet:\n    multipart:\n\
+      \      max-file-size: 1024MB\n      max-request-size: 1024MB\nfile:\n  storage:\n\
+      \    type: auto\n  upload:\n    dir: /data/uploads\nmanagement:\n  server:\n\
+      \    port: 9301\n  endpoints:\n    web:\n      base-path: /management\n    \
+      \  exposure:\n        include: \"*\"\n  tracing:\n    sampling:\n      probability:\
+      \ 1.0\n  otlp:\n    tracing:\n      endpoint: http://otel-collector:4317\n \
+      \ tracing:\n    enabled: true\n    sampling:\n      probability: 1.0\n    zipkin:\n\
+      \      enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n    \
+      \  sender:\n        type: web\n    otel:\n      exporter:\n        zipkin:\n\
+      \          endpoint: http://zipkin:9411/api/v2/spans\n        otlp:\n      \
+      \    endpoint: http://otel-collector:4317\n"
 secret:
   enabled: true
   data:
-    postgres.host: ""
-    postgres.username: ""
-    postgres.password: ""
-    minio.access-key: ""
-    minio.secret-key: ""
-
+    postgres.host: ''
+    postgres.username: ''
+    postgres.password: ''
+    minio.access-key: ''
+    minio.secret-key: ''
 persistence:
   enabled: true
-  storageClass: ""
+  storageClass: ''
   accessMode: ReadWriteOnce
   size: 20Gi
   mountPath: /data/uploads
-
 serviceMonitor:
   enabled: true
   interval: 30s
   scrapeTimeout: 10s
+  networkPolicy:
+    allowExternal: false
+networkPolicy:
+  allowExternal: false
