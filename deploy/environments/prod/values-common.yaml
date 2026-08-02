@@ -1,0 +1,44 @@
+# prod 环境公共配置
+global:
+  domain: "cloud-infra.io"
+  imageRegistry: "registry.cn-hangzhou.aliyuncs.com/cloud-infra"
+  imagePullSecrets:
+    - name: registry-secret-prod
+
+# 资源配置 (prod 环境大规模)
+resources:
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+  requests:
+    cpu: 1000m
+    memory: 512Mi
+
+# 数据库连接池 (prod 大规模)
+hikari:
+  maxPoolSize: 50
+  minIdle: 10
+
+# 副本数 (prod 多实例)
+replicaCount: 3
+
+# 自动扩缩容
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+# 存储 (prod 大容量)
+persistence:
+  size: 100Gi
+
+# 日志级别
+logging:
+  level: WARN
+
+# 功能开关
+features:
+  debug: false
+  swagger: false

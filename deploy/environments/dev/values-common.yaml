@@ -1,0 +1,42 @@
+# dev 环境公共配置
+global:
+  domain: "dev.cloud-infra.io"
+  imageRegistry: "registry.cn-hangzhou.aliyuncs.com/cloud-infra-dev"
+  imagePullSecrets:
+    - name: registry-secret-dev
+
+# 资源配置 (dev 环境资源较小)
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 250m
+    memory: 128Mi
+
+# 数据库连接池 (dev 较小)
+hikari:
+  maxPoolSize: 10
+  minIdle: 2
+
+# 副本数 (dev 单实例)
+replicaCount: 1
+
+# 自动扩缩容 (dev 关闭或保守)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+
+# 存储 (dev 较小)
+persistence:
+  size: 5Gi
+
+# 日志级别 (dev 详细)
+logging:
+  level: DEBUG
+
+# 功能开关
+features:
+  debug: true
+  swagger: true

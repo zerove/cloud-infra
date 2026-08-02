@@ -1,0 +1,41 @@
+# staging 环境 gateway 服务配置
+# 继承自 values-common.yaml 和 values-secrets.yaml
+
+service:
+  port: 9000
+  type: ClusterIP
+
+managementService:
+  port: 9301
+
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+# 服务特定配置
+service:
+  port: 9000
+  type: ClusterIP
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+managementService:
+  port: 9301
