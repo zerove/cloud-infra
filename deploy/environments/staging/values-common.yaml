@@ -1,0 +1,44 @@
+# staging 环境公共配置
+global:
+  domain: "staging.cloud-infra.io"
+  imageRegistry: "registry.cn-hangzhou.aliyuncs.com/cloud-infra-staging"
+  imagePullSecrets:
+    - name: registry-secret-staging
+
+# 资源配置 (staging 环境中等)
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+# 数据库连接池
+hikari:
+  maxPoolSize: 20
+  minIdle: 5
+
+# 副本数 (staging 双实例)
+replicaCount: 2
+
+# 自动扩缩容
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# 存储
+persistence:
+  size: 20Gi
+
+# 日志级别
+logging:
+  level: INFO
+
+# 功能开关
+features:
+  debug: false
+  swagger: true

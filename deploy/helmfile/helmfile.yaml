@@ -1,0 +1,146 @@
+# helmfile.yaml - 多环境 Helm 部署编排
+# 用法: helmfile -e dev|staging|prod apply
+
+repositories:
+  - name: cloud-infra
+    url: https://github.com/zerove/cloud-infra/tree/main/deploy/k8s
+
+# 全局默认值
+environments:
+  dev:
+    values:
+      - environments/dev/values-common.yaml
+      - environments/dev/values-secrets.yaml
+  staging:
+    values:
+      - environments/staging/values-common.yaml
+      - environments/staging/values-secrets.yaml
+  prod:
+    values:
+      - environments/prod/values-common.yaml
+      - environments/prod/values-secrets.yaml
+
+# 通用配置默认值
+defaults:
+  wait: true
+  timeout: 600
+  atomic: true
+  cleanup-on-fail: true
+  create-namespace: true
+
+# 发布定义
+releases:
+  # 基础设施 (最先部署)
+  - name: cloud-infra-infra
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-infra
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-infra.yaml
+    needs:
+      - cloud-infra-nacos
+      - cloud-infra-postgresql
+      - cloud-infra-redis
+      - cloud-infra-rabbitmq
+      - cloud-infra-elasticsearch
+      - cloud-infra-zipkin
+      - cloud-infra-otel-collector
+      - cloud-infra-minio
+    labels:
+      tier: infra
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/part-of=cloud-infra-infra -n cloud-infra --timeout=300s"
+
+  # 网关 (第二层)
+  - name: cloud-infra-gateway
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-gateway
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-gateway.yaml
+    needs:
+      - cloud-infra-infra
+    labels:
+      tier: gateway
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-gateway -n cloud-infra --timeout=120s"
+
+  # 认证服务
+  - name: cloud-infra-auth
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-auth
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-auth.yaml
+    needs:
+      - cloud-infra-infra
+    labels:
+      tier: platform
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-auth -n cloud-infra --timeout=120s"
+
+  # 系统服务
+  - name: cloud-infra-system
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-system
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-system.yaml
+    needs:
+      - cloud-infra-infra
+      - cloud-infra-auth
+    labels:
+      tier: platform
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-system -n cloud-infra --timeout=120s"
+
+  # 文件服务
+  - name: cloud-infra-file
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-file
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-file.yaml
+    needs:
+      - cloud-infra-infra
+    labels:
+      tier: business
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-file -n cloud-infra --timeout=120s"
+
+  # 通知服务
+  - name: cloud-infra-notification
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-notification
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-notification.yaml
+    needs:
+      - cloud-infra-infra
+    labels:
+      tier: business
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-notification -n cloud-infra --timeout=120s"
+
+  # 搜索服务
+  - name: cloud-infra-search
+    namespace: cloud-infra
+    chart: cloud-infra/cloud-infra-search
+    version: "{{ .Values.global.chartVersion | default \"1.0.0\" }}"
+    values:
+      - ../environments/{{ .Environment.Name }}/values-search.yaml
+    needs:
+      - cloud-infra-infra
+      - cloud-infra-elasticsearch
+    labels:
+      tier: business
+    test:
+      - command: "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloud-infra-search -n cloud-infra --timeout=120s"
+
+# 全局默认配置
+global:
+  chartVersion: "1.0.0"
+  imageRegistry: "registry.cn-hangzhou.aliyuncs.com/cloud-infra"
+  imagePullSecrets:
+    - name: registry-secret
+  domain: "cloud-infra.io"
