@@ -1,0 +1,13 @@
+apiVersion: v2
+name: cloud-infra-search
+description: Cloud-Infra Search Service Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0-SNAPSHOT"
+keywords:
+  - cloud-infra
+  - search
+  - spring-boot
+maintainers:
+  - name: cloud-infra team
+    email: team@cloud-infra.io

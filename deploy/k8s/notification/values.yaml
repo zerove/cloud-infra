@@ -1,0 +1,238 @@
+# Default values for cloud-infra-notification
+replicaCount: 2
+
+image:
+  repository: cloud-infra-notification
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8084"
+  prometheus.io/path: "/actuator/prometheus"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 8084
+  targetPort: 8084
+
+managementService:
+  enabled: true
+  port: 9301
+  targetPort: 9301
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - cloud-infra-notification
+          topologyKey: kubernetes.io/hostname
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "k8s"
+  - name: NACOS_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.addr
+  - name: NACOS_CONFIG_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.config.addr
+  - name: NACOS_DISCOVERY_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.discovery.addr
+  - name: SPRING_DATASOURCE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.host
+  - name: SPRING_DATASOURCE_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.username
+  - name: SPRING_DATASOURCE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.password
+  - name: SPRING_RABBITMQ_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: rabbitmq.host
+  - name: SPRING_RABBITMQ_USERNAME
+    value: "guest"
+  - name: SPRING_RABBITMQ_PASSWORD
+    value: "guest"
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 9301
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 9301
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/startup
+    port: 9301
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+configMap:
+  enabled: true
+  data:
+    application.yml: |
+      spring:
+        application:
+          name: cloud-notification
+        main:
+          allow-bean-definition-overriding: true
+        config:
+          import: "optional:nacos:notification-service.yaml"
+        cloud:
+          nacos:
+            discovery:
+              server-addr: ${NACOS_DISCOVERY_ADDR}
+              ip: ${POD_IP}
+              prefer-ip-address: true
+            config:
+              server-addr: ${NACOS_CONFIG_ADDR}
+              file-extension: yaml
+              shared-configs:
+                - data-id: actuator-config.yaml
+                  refresh: true
+          stream:
+            bindings:
+              user-events-in-0:
+                destination: user.events
+                group: cloud-notification-group
+                consumer:
+                  max-attempts: 3
+                  back-off-initial-interval: 1000
+                  back-off-multiplier: 2.0
+                  back-off-max-interval: 10000
+              notification-send-out-0:
+                destination: notification.send
+                content-type: application/json
+            rabbit:
+              bindings:
+                user-events-in-0:
+                  consumer:
+                    auto-bind-dlq: true
+                    dlq-name: user.events.dlq
+                    republish-to-dlq: true
+        threads:
+          virtual:
+            enabled: true
+        rabbitmq:
+          host: ${SPRING_RABBITMQ_HOST}
+          port: 5672
+          username: ${SPRING_RABBITMQ_USERNAME}
+          password: ${SPRING_RABBITMQ_PASSWORD}
+      management:
+        server:
+          port: 9301
+        endpoints:
+          web:
+            base-path: /management
+            exposure:
+              include: "*"
+        tracing:
+          sampling:
+            probability: 1.0
+        otlp:
+          tracing:
+            endpoint: http://otel-collector:4317
+        tracing:
+          enabled: true
+          sampling:
+            probability: 1.0
+          zipkin:
+            enabled: true
+            endpoint: http://zipkin:9411/api/v2/spans
+            sender:
+              type: web
+          otel:
+            exporter:
+              zipkin:
+                endpoint: http://zipkin:9411/api/v2/spans
+              otlp:
+                endpoint: http://otel-collector:4317
+
+secret:
+  enabled: true
+  data:
+    postgres.host: ""
+    postgres.username: ""
+    postgres.password: ""
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s

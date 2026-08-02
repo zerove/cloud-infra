@@ -1,0 +1,246 @@
+# Default values for cloud-infra-gateway
+replicaCount: 2
+
+image:
+  repository: cloud-infra-gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9000"
+  prometheus.io/path: "/actuator/prometheus"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 9000
+  targetPort: 9000
+
+managementService:
+  enabled: true
+  port: 9301
+  targetPort: 9301
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: gateway.cloud-infra.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: cloud-infra-gateway-tls
+      hosts:
+        - gateway.cloud-infra.io
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - cloud-infra-gateway
+          topologyKey: kubernetes.io/hostname
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "k8s"
+  - name: NACOS_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.addr
+  - name: NACOS_CONFIG_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.config.addr
+  - name: NACOS_DISCOVERY_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.discovery.addr
+  - name: SPRING_DATASOURCE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.host
+  - name: SPRING_DATASOURCE_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.username
+  - name: SPRING_DATASOURCE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.password
+  - name: NACOS_CONFIG_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.config.addr
+  - name: NACOS_DISCOVERY_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.discovery.addr
+  - name: AUTH_JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: jwt.secret
+  - name: AUTH_JWT_EXPIRE_TIME
+    value: "86400000"
+  - name: AUTH_JWT_ALGORITHM
+    value: "HS256"
+  - name: AUTH_JWT_CACHE_ENABLED
+    value: "true"
+  - name: AUTH_JWT_CACHE_MAX_SIZE
+    value: "10000"
+  - name: AUTH_JWT_CACHE_TTL
+    value: "300"
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 9301
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 9301
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/startup
+    port: 9301
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+configMap:
+  enabled: true
+  data:
+    application.yml: |
+      spring:
+        cloud:
+          nacos:
+            config:
+              server-addr: ${NACOS_CONFIG_ADDR}
+              file-extension: yaml
+              shared-configs:
+                - data-id: actuator-config.yaml
+                  refresh: true
+              import-check:
+                enabled: false
+            discovery:
+              server-addr: ${NACOS_DISCOVERY_ADDR}
+        config:
+          import: optional:nacos:gateway.yaml
+      autoconfigure:
+        exclude:
+          - org.springframework.boot.tomcat.autoconfigure.metrics.TomcatMetricsAutoConfiguration
+      threads:
+        virtual:
+          enabled: true
+    management:
+      server:
+        port: 9301
+      endpoints:
+        web:
+          base-path: /management
+          exposure:
+            include: "*"
+      tracing:
+        sampling:
+          probability: 1.0
+      otlp:
+        tracing:
+          endpoint: http://otel-collector:4317
+      tracing:
+        enabled: true
+        sampling:
+          probability: 1.0
+        zipkin:
+          enabled: true
+          endpoint: http://zipkin:9411/api/v2/spans
+          sender:
+            type: web
+        otel:
+          exporter:
+            zipkin:
+              endpoint: http://zipkin:9411/api/v2/spans
+            otlp:
+              endpoint: http://otel-collector:4317
+
+secret:
+  enabled: true
+  data:
+    postgres.host: ""
+    postgres.username: ""
+    postgres.password: ""
+    jwt.secret: ""
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
