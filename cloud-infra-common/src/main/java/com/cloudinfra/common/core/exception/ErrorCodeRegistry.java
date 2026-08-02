@@ -132,12 +132,12 @@ public class ErrorCodeRegistry {
     }
 
     /**
-     * 根据错误码推断模块
+     * 根据错误码推断模块（数值区间匹配）
      */
     private String inferModule(int code) {
-        String codeStr = String.valueOf(code);
         for (Map.Entry<String, String> entry : MODULE_PREFIX.entrySet()) {
-            if (codeStr.startsWith(entry.getKey())) {
+            int prefix = Integer.parseInt(entry.getKey());
+            if (code >= prefix && code < prefix + 1000) {
                 return entry.getValue();
             }
         }
