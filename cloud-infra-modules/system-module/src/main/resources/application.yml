@@ -85,6 +85,27 @@ spring:
     clean-disabled: false
     out-of-order: false
 
+  # gRPC 服务配置
+  grpc:
+    server:
+      port: 9090
+      reflection: true
+      max-inbound-message-size: 10485760
+      max-inbound-metadata-size: 8192
+      keep-alive-time: 30
+      keep-alive-timeout: 10
+      permit-keep-alive-time: 10
+      max-connection-idle: 300
+      max-connection-age: 3600
+      max-connection-age-grace: 120
+      flow-control-window: 1048576
+      min-time-between-keep-alive: 10
+    client:
+      max-inbound-message-size: 10485760
+      keep-alive-time: 30
+      keep-alive-timeout: 10
+      keep-alive-without-calls: true
+
 management:
   server:
     port: 9301
