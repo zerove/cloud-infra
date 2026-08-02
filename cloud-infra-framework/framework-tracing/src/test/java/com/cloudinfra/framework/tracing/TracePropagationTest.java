@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    webEnvironment = SpringBootTest.WebEnvironment.NONE,
     classes = TracePropagationTest.TestConfig.class
 )
 @ActiveProfiles("test")

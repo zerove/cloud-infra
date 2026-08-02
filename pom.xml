@@ -46,6 +46,7 @@
         </properties>
 
         <modules>
+        <module>cloud-infra-bom</module>
         <module>cloud-infra-starter</module>
         <module>cloud-infra-common</module>
         <module>cloud-infra-framework</module>
