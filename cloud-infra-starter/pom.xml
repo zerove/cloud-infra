@@ -10,32 +10,53 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>cloud-infra-starter</artifactId>
+    <name>cloud-infra-starter</name>
+    <description>Cloud-Infra 平台聚合 Starter - 一个依赖引入全部平台能力</description>
 
     <dependencies>
+        <!-- 核心能力 -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-common</artifactId>
         </dependency>
+
+        <!-- 安全 -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-security</artifactId>
         </dependency>
+
+        <!-- Web 底座 -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-web</artifactId>
         </dependency>
+
+        <!-- 数据访问 -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-mybatis</artifactId>
         </dependency>
+
+        <!-- 缓存 -->
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-redis</artifactId>
+        </dependency>
+
+        <!-- 追踪 -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-tracing</artifactId>
         </dependency>
+
+        <!-- 自动装配 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
+
+        <!-- Spring Boot 基础 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>

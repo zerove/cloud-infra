@@ -82,6 +82,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
+        <!-- SpringDoc API 文档聚合 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
         <!-- 压缩支持 - Spring Boot 内置 Gzip，通过配置启用 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
