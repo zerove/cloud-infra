@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloud-infra-infra.fullname" . }}-nacos
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: nacos
+    app.kubernetes.io/part-of: cloud-infra-infra
+{{- if .Values.nacos.enabled }}
+spec:
+  replicas: {{ .Values.nacos.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nacos
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nacos
+        app.kubernetes.io/part-of: cloud-infra-infra
+    spec:
+      containers:
+        - name: nacos
+          image: {{ .Values.nacos.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8848
+              name: http
+            - containerPort: 9848
+              name: grpc
+          env:
+            - name: MODE
+              value: {{ .Values.nacos.mode }}
+            - name: NACOS_AUTH_ENABLE
+              value: {{ .Values.nacos.authEnabled | quote }}
+            - name: JVM_XMS
+              value: "256m"
+            - name: JVM_XMX
+              value: "512m"
+          resources:
+            {{- toYaml .Values.nacos.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /nacos/v1/cs/configs?dataId=health
+              port: 8848
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      {{- if .Values.nacos.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: /home/nacos/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "cloud-infra-infra.fullname" . }}-nacos-data
+      {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-infra-nacos
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: nacos
+    app.kubernetes.io/part-of: cloud-infra-infra
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8848
+      targetPort: 8848
+      name: http
+    - port: 9848
+      targetPort: 9848
+      name: grpc
+  selector:
+    app.kubernetes.io/name: nacos
+{{- if .Values.nacos.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cloud-infra-infra.fullname" . }}-nacos-data
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.nacos.persistence.size }}
+{{- end }}

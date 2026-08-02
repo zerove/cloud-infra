@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloud-infra-infra.fullname" . }}-zipkin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: zipkin
+    app.kubernetes.io/part-of: cloud-infra-infra
+{{- if .Values.zipkin.enabled }}
+spec:
+  replicas: {{ .Values.zipkin.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zipkin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zipkin
+        app.kubernetes.io/part-of: cloud-infra-infra
+    spec:
+      containers:
+        - name: zipkin
+          image: {{ .Values.zipkin.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9411
+              name: http
+          env:
+            - name: STORAGE_TYPE
+              value: {{ .Values.zipkin.storage.type }}
+          resources:
+            {{- toYaml .Values.zipkin.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9411
+            initialDelaySeconds: 15
+            periodSeconds: 10
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: zipkin
+    app.kubernetes.io/part-of: cloud-infra-infra
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9411
+      targetPort: 9411
+      name: http
+  selector:
+    app.kubernetes.io/name: zipkin

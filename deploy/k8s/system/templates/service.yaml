@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloud-infra-system.fullname" . }}
+  labels:
+    {{- include "cloud-infra-system.labels" . | nindent 4 }}
+    app.kubernetes.io/component: system
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cloud-infra-system.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloud-infra-system.fullname" . }}-management
+  labels:
+    {{- include "cloud-infra-system.labels" . | nindent 4 }}
+    app.kubernetes.io/component: management
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.managementService.port }}
+      targetPort: {{ .Values.managementService.targetPort }}
+      protocol: TCP
+      name: management
+  selector:
+    {{- include "cloud-infra-system.selectorLabels" . | nindent 4 }}
