@@ -41,6 +41,12 @@
             <version>${swagger-annotations.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Javax Annotations for Generated annotation (protobuf generated code uses javax.annotation) -->
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
+        </dependency>
         <!-- gRPC 支持 -->
         <dependency>
             <groupId>io.grpc</groupId>
