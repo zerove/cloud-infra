@@ -202,35 +202,35 @@ configMap:
       threads:
         virtual:
           enabled: true
-    management:
-      server:
-        port: 9301
-      endpoints:
-        web:
-          base-path: /management
-          exposure:
-            include: "*"
-      tracing:
-        sampling:
-          probability: 1.0
-      otlp:
+      management:
+        server:
+          port: 9301
+        endpoints:
+          web:
+            base-path: /management
+            exposure:
+              include: "*"
         tracing:
-          endpoint: http://otel-collector:4317
-      tracing:
-        enabled: true
-        sampling:
-          probability: 1.0
-        zipkin:
+          sampling:
+            probability: 1.0
+        otlp:
+          tracing:
+            endpoint: http://otel-collector:4317
+        tracing:
           enabled: true
-          endpoint: http://zipkin:9411/api/v2/spans
-          sender:
-            type: web
-        otel:
-          exporter:
-            zipkin:
-              endpoint: http://zipkin:9411/api/v2/spans
-            otlp:
-              endpoint: http://otel-collector:4317
+          sampling:
+            probability: 1.0
+          zipkin:
+            enabled: true
+            endpoint: http://zipkin:9411/api/v2/spans
+            sender:
+              type: web
+          otel:
+            exporter:
+              zipkin:
+                endpoint: http://zipkin:9411/api/v2/spans
+              otlp:
+                endpoint: http://otel-collector:4317
 
 secret:
   enabled: true
