@@ -1,0 +1,19 @@
+apiVersion: v2
+name: cloud-infra-infra
+description: Cloud-Infra Infrastructure Components (Nacos, Redis, PostgreSQL, RabbitMQ, Elasticsearch, Zipkin, OTel Collector)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - cloud-infra
+  - infrastructure
+  - nacos
+  - redis
+  - postgresql
+  - rabbitmq
+  - elasticsearch
+  - zipkin
+  - otel
+maintainers:
+  - name: cloud-infra team
+    email: team@cloud-infra.io

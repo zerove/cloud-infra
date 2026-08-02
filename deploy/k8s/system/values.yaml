@@ -1,0 +1,301 @@
+# Default values for cloud-infra-system
+replicaCount: 2
+
+image:
+  repository: cloud-infra-system
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8082"
+  prometheus.io/path: "/actuator/prometheus"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+
+managementService:
+  enabled: true
+  port: 9301
+  targetPort: 9301
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - cloud-infra-system
+          topologyKey: kubernetes.io/hostname
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "k8s"
+  - name: NACOS_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.addr
+  - name: NACOS_CONFIG_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.config.addr
+  - name: NACOS_DISCOVERY_ADDR
+    valueFrom:
+      configMapKeyRef:
+        name: cloud-infra-config
+        key: nacos.discovery.addr
+  - name: SPRING_DATASOURCE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.host
+  - name: SPRING_DATASOURCE_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.username
+  - name: SPRING_DATASOURCE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: postgres.password
+  - name: HIKARI_MAX_POOL_SIZE
+    value: "20"
+  - name: HIKARI_MIN_IDLE
+    value: "5"
+  - name: HIKARI_IDLE_TIMEOUT
+    value: "30000"
+  - name: HIKARI_MAX_LIFETIME
+    value: "600000"
+  - name: HIKARI_CONNECTION_TIMEOUT
+    value: "30000"
+  - name: HIKARI_VALIDATION_TIMEOUT
+    value: "5000"
+  - name: HIKARI_LEAK_DETECTION
+    value: "60000"
+  - name: HIKARI_TEST_QUERY
+    value: "SELECT 1"
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 9301
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 9301
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/startup
+    port: 9301
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+configMap:
+  enabled: true
+  data:
+    application.yml: |
+      spring:
+        main:
+          allow-bean-definition-overriding: true
+        cloud:
+          nacos:
+            discovery:
+              server-addr: ${NACOS_DISCOVERY_ADDR}
+              enabled: true
+            config:
+              server-addr: ${NACOS_CONFIG_ADDR}
+            stream:
+              bindings:
+                txMessageOut-out-0:
+                  destination: sys.tx.message.retry
+                  group: cloud-system-group
+                txMessageConsumer-in-0:
+                  destination: sys.tx.message.retry
+                  group: cloud-system-group
+                txMessageDlqConsumer-in-0:
+                  destination: sys.tx.message.dlq
+                  group: cloud-system-group
+              rabbit:
+                bindings:
+                  txMessageConsumer-in-0:
+                    consumer:
+                      auto-bind-dlq: true
+                      dlq-name: sys.tx.message.dlq
+                      republish-to-dlq: true
+        seata:
+          enabled: true
+          application-id: ${spring.application.name}
+          tx-service-group: ${spring.application.name}-tx-group
+          service:
+            vgroup-mapping:
+              cloud-infra-system: default
+          registry:
+            type: nacos
+            nacos:
+              server-addr: ${NACOS_DISCOVERY_ADDR}
+              namespace: ${spring.cloud.nacos.discovery.namespace}
+          config:
+            type: nacos
+            nacos:
+              server-addr: ${NACOS_CONFIG_ADDR}
+              namespace: ${spring.cloud.nacos.config.namespace}
+          client:
+            rm:
+              async-commit-buffer-limit: 1000
+              report-success-enable: true
+              lock:
+                retry-interval: 10
+                retry-times: 30
+              report-retry-count: 5
+            tm:
+              commit-retry-count: 5
+              rollback-retry-count: 5
+              default-global-transaction-timeout: 60000
+        threads:
+          virtual:
+            enabled: true
+        data:
+          redis:
+            host: ${SPRING_DATA_REDIS_HOST}
+            port: 6379
+            database: 0
+        datasource:
+          driver-class-name: org.postgresql.Driver
+          url: jdbc:postgresql://${SPRING_DATASOURCE_HOST}:5432/cloud_infra
+          username: ${SPRING_DATASOURCE_USERNAME}
+          password: ${SPRING_DATASOURCE_PASSWORD}
+          hikari:
+            maximum-pool-size: ${HIKARI_MAX_POOL_SIZE}
+            minimum-idle: ${HIKARI_MIN_IDLE}
+            idle-timeout: ${HIKARI_IDLE_TIMEOUT}
+            max-lifetime: ${HIKARI_MAX_LIFETIME}
+            connection-timeout: ${HIKARI_CONNECTION_TIMEOUT}
+            validation-timeout: ${HIKARI_VALIDATION_TIMEOUT}
+            leak-detection-threshold: ${HIKARI_LEAK_DETECTION}
+            connection-test-query: ${HIKARI_TEST_QUERY}
+            pool-name: cloud-infra-hikari-pool
+            read-only: false
+            data-source-properties:
+              cachePrepStmts: true
+              prepStmtCacheSize: 250
+              prepStmtCacheSqlLimit: 2048
+              useServerPrepStmts: true
+              reWriteBatchedInserts: true
+              ApplicationName: cloud-infra-system
+        threads:
+          virtual:
+            enabled: true
+        data:
+          redis:
+            host: ${SPRING_DATA_REDIS_HOST}
+            port: 6379
+            database: 0
+      management:
+        server:
+          port: 9301
+        endpoints:
+          web:
+            base-path: /management
+            exposure:
+              include: "*"
+        endpoint:
+          health:
+            show-details: always
+        metrics:
+          export:
+            prometheus:
+              enabled: true
+        tracing:
+          sampling:
+            probability: 1.0
+        otlp:
+          tracing:
+            endpoint: http://otel-collector:4317
+        tracing:
+          enabled: true
+          sampling:
+            probability: 1.0
+          zipkin:
+            enabled: true
+            endpoint: http://zipkin:9411/api/v2/spans
+            sender:
+              type: web
+          otel:
+            exporter:
+              zipkin:
+                endpoint: http://zipkin:9411/api/v2/spans
+              otlp:
+                endpoint: http://otel-collector:4317
+
+secret:
+  enabled: true
+  data:
+    postgres.host: ""
+    postgres.username: ""
+    postgres.password: ""
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s

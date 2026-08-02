@@ -1,0 +1,164 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: cloud-infra-gateway
+  namespace: cloud-infra
+  labels:
+    app.kubernetes.io/name: cloud-infra-gateway
+    app.kubernetes.io/part-of: cloud-infra
+spec:
+  replicas: 4
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloud-infra-gateway
+      app.kubernetes.io/part-of: cloud-infra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloud-infra-gateway
+        app.kubernetes.io/part-of: cloud-infra
+    spec:
+      containers:
+        - name: cloud-infra-gateway
+          image: cloud-infra-gateway:latest
+          ports:
+            - containerPort: 9000
+              name: http
+            - containerPort: 9301
+              name: management
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 9301
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 9301
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+  strategy:
+    canary:
+      # 金丝雀发布策略
+      canaryService: cloud-infra-gateway-canary
+      stableService: cloud-infra-gateway
+      trafficRouting:
+        # 基于 Nginx Ingress 的流量切分
+        nginx:
+          stableIngress: cloud-infra-gateway
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 5m
+        - analysis:
+            # 自动分析：基于 Prometheus 指标自动判定
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service-name
+                value: cloud-infra-gateway-canary
+            # 失败阈值
+            threshold: 99
+        - setWeight: 25
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service-name
+                value: cloud-infra-gateway-canary
+        - setWeight: 50
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service-name
+                value: cloud-infra-gateway-canary
+        - setWeight: 75
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: success-rate
+            args:
+              - name: service-name
+                value: cloud-infra-gateway-canary
+        - setWeight: 100
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: cloud-infra
+spec:
+  metrics:
+    - name: success-rate
+      interval: 30s
+      # 连续失败 5 次则回滚
+      count: 5
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            sum(rate(http_server_requests_seconds_count{application=~"{{args.service-name}}", status!~"5.."}[1m]))
+            /
+            sum(rate(http_server_requests_seconds_count{application=~"{{args.service-name}}"}[1m]))
+          # 阈值：成功率低于 99% 判定失败
+          threshold: 99
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency-p99
+  namespace: cloud-infra
+spec:
+  metrics:
+    - name: latency-p99
+      interval: 30s
+      count: 5
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(http_server_requests_seconds_bucket{application=~"{{args.service-name}}"}[1m]))
+            )
+          # 阈值：P99 延迟超过 100ms 判定失败
+          threshold: 100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-infra-gateway-canary
+  namespace: cloud-infra
+  labels:
+    app.kubernetes.io/name: cloud-infra-gateway
+    app.kubernetes.io/part-of: cloud-infra
+    app.kubernetes.io/role: canary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: http
+    - port: 9301
+      targetPort: 9301
+      name: management
+  selector:
+    app.kubernetes.io/name: cloud-infra-gateway
+    app.kubernetes.io/part-of: cloud-infra
+    app.kubernetes.io/role: canary
