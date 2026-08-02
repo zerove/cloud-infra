@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -27,7 +26,6 @@ public class MultiLevelCacheService {
     private static final Logger log = LoggerFactory.getLogger(MultiLevelCacheService.class);
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final CacheManager cacheManager;
     
     // L1 缓存实例（按名称隔离）
     private final Cache<String, Object> defaultL1Cache = Caffeine.newBuilder()
@@ -37,9 +35,8 @@ public class MultiLevelCacheService {
         .recordStats()
         .build();
 
-    public MultiLevelCacheService(RedisTemplate<String, Object> redisTemplate, CacheManager cacheManager) {
+    public MultiLevelCacheService(RedisTemplate<String, Object> redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.cacheManager = cacheManager;
     }
 
     /**
