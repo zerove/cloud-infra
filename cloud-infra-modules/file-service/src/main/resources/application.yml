@@ -18,6 +18,23 @@ spring:
       discovery:
         server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:nacos-service:8848}}
 
+# Zipkin/OpenTelemetry 追踪配置
+tracing:
+  enabled: true
+  sampling:
+    probability: 1.0
+  zipkin:
+    enabled: true
+    endpoint: http://zipkin:9411/api/v2/spans
+    sender:
+      type: web
+  otel:
+    exporter:
+      zipkin:
+        endpoint: http://zipkin:9411/api/v2/spans
+      otlp:
+        endpoint: http://otel-collector:4317
+
 management:
   server:
     port: 9301
