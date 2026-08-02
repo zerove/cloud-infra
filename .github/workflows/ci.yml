@@ -1,21 +1,24 @@
-name: Cloud-Infra CI/CD
+name: Cloud-Infra CI/CD Pipeline
 
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main, develop]
 
 env:
   MAVEN_OPTS: "-Xmx4g"
   JAVA_VERSION: '25'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    name: Unit & Integration Tests
+  # ========== 代码质量检查 ==========
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,8 +38,45 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Run tests
-        run: mvn clean test -DskipTests=false --batch-mode
+      - name: Run Checkstyle
+        run: mvn checkstyle:check --batch-mode
+
+      - name: Run SpotBugs
+        run: mvn spotbugs:check --batch-mode
+
+      - name: Run PMD
+        run: mvn pmd:check --batch-mode
+
+      - name: Verify formatting
+        run: mvn formatter:validate --batch-mode
+
+  # ========== 单元测试 ==========
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run unit tests
+        run: mvn test -DskipTests=false --batch-mode
 
       - name: Upload test reports
         uses: actions/upload-artifact@v4
@@ -48,13 +88,212 @@ jobs:
             **/target/failsafe-reports/
           retention-days: 7
 
-  native-build:
-    name: Native Image Build
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: '**/target/surefire-reports/*.xml'
+          reporter: java-junit
+
+  # ========== 集成测试 ==========
+  integration-tests:
+    name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: test
+    needs: code-quality
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cloud_infra_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports: [5672:5672, 15672:15672]
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        options: >-
+          --health-cmd "rabbitmqctl status"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 5
+      elasticsearch:
+        image: elasticsearch:8.12.2
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+        ports: [9200:9200, 9300:9300]
+        options: >-
+          --health-cmd "curl -f http://localhost:9200/_cluster/health"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 10
+        ulimits:
+          memlock:
+            soft: -1
+            hard: -1
+          nofile:
+            soft: 65536
+            hard: 65536
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run integration tests
+        run: mvn verify -DskipUnitTests=true -DskipITs=false --batch-mode
+
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-reports
+          path: |
+            **/target/failsafe-reports/
+          retention-days: 7
+
+  # ========== 代码覆盖率 ==========
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: unit-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run tests with coverage
+        run: mvn test jacoco:report --batch-mode
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./**/target/site/jacoco/jacoco.xml
+          fail_ci_if_error: false
+
+  # ========== 构建镜像 ==========
+  build-images:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    strategy:
+      matrix:
+        service: [gateway, auth, system, file, notification, search]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build module
+        run: |
+          cd cloud-infra-modules/${{ matrix.service }}
+          mvn clean package -DskipTests --batch-mode
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: cloud-infra-modules/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ========== Native Image 构建 ==========
+  native-build:
+    name: Native Image Build (Gateway)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [unit-tests, integration-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,17 +314,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build Native Image (Gateway)
+      - name: Build Native Image
         run: |
           cd cloud-infra-gateway
           mvn clean package -Pnative -DskipTests --batch-mode
-          
+
       - name: Verify Native Binary
         run: |
           cd cloud-infra-gateway/target
           ls -la cloud-infra-gateway-binary
           file cloud-infra-gateway-binary
-          
+
       - name: Upload Native Binary
         uses: actions/upload-artifact@v4
         with:
@@ -93,13 +332,174 @@ jobs:
           path: cloud-infra-gateway/target/cloud-infra-gateway-binary
           retention-days: 30
 
-  build-images:
-    name: Build Docker Images
+  # ========== 安全扫描 ==========
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: test
-    if: github.event_name == 'push'
-    
+    timeout-minutes: 30
+    needs: [unit-tests, integration-tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run OWASP Dependency Check
+        run: mvn org.owasp:dependency-check-maven:check --batch-mode
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/java
+
+  # ========== Helm Chart 测试 ==========
+  helm-test:
+    name: Helm Chart Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [unit-tests, integration-tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Lint all charts
+        run: |
+          cd deploy/k8s
+          for chart in gateway auth system file notification search infra; do
+            echo "=== Linting $chart ==="
+            helm lint $chart
+          done
+
+      - name: Template all charts
+        run: |
+          cd deploy/k8s
+          for chart in gateway auth system file notification search infra; do
+            echo "=== Template $chart ==="
+            helm template $chart --namespace cloud-infra > /dev/null
+          done
+
+      - name: Run chart tests
+        run: |
+          cd deploy/k8s
+          for chart in gateway auth system file notification search infra; do
+            echo "=== Testing $chart ==="
+            helm unittest $chart 2>/dev/null || echo "No unit tests for $chart"
+          done
+
+  # ========== 部署到 Staging ==========
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build-images, security-scan, helm-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_STAGING }}
+
+      - name: Deploy to Staging
+        run: |
+          helmfile -e staging apply --skip-diff-on-install
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/cloud-infra-gateway -n cloud-infra --timeout=300s
+          kubectl rollout status deployment/cloud-infra-auth -n cloud-infra --timeout=300s
+          kubectl rollout status deployment/cloud-infra-system -n cloud-infra --timeout=300s
+          kubectl rollout status deployment/cloud-infra-file -n cloud-infra --timeout=300s
+          kubectl rollout status deployment/cloud-infra-notification -n cloud-infra --timeout=300s
+          kubectl rollout status deployment/cloud-infra-search -n cloud-infra --timeout=300s
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://staging.cloud-infra.io/actuator/health || exit 1
+          curl -f https://staging.cloud-infra.io/actuator/health -H "Authorization: Bearer $STAGING_TOKEN" || exit 1
+
+  # ========== 部署到 Production ==========
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [build-images, security-scan, helm-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG_PROD }}
+
+      - name: Deploy to Production (Canary)
+        run: |
+          # 使用 Argo Rollouts 进行金丝雀发布
+          kubectl argo rollouts set image cloud-infra-gateway \
+            cloud-infra-gateway=ghcr.io/zerove/cloud-infra-gateway:${{ github.sha }} \
+            -n cloud-infra
+
+      - name: Monitor rollout
+        run: |
+          kubectl argo rollouts get rollout cloud-infra-gateway -n cloud-infra --watch
+
+      - name: Verify deployment
+        run: |
+          # 等待 Canary 完成
+          kubectl argo rollouts get rollout cloud-infra-gateway -n cloud-infra --watch
+          
+          # 健康检查
+          curl -f https://cloud-infra.io/actuator/health || exit 1
+          curl -f https://cloud-infra.io/actuator/health -H "Authorization: Bearer $PROD_TOKEN" || exit 1
+
+      - name: Notify deployment
+        if: always()
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          payload: |
+            {
+              "text": "Production deployment ${{ job.status }}",
+              "blocks": [
+                {"type": "section", "text": {"type": "mrkdwn", "text": "*Cloud-Infra Production Deployment* ${{ job.status }}"}},
+                {"type": "section", "fields": [{"type": "mrkdwn", "text": "*Commit:* ${{ github.sha }}"}, {"type": "mrkdwn", "text": "*Branch:* ${{ github.ref }}"}]}
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ========== 性能基准测试 ==========
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -119,61 +519,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build all modules
-        run: mvn clean package -DskipTests --batch-mode
-
-      - name: Build Docker images
+      - name: Build Native Image
         run: |
-          # Build images for each module
-          for module in cloud-infra-gateway cloud-infra-auth cloud-infra-modules/system-module cloud-infra-modules/file-service cloud-infra-modules/notification-service cloud-infra-modules/search-service; do
-            echo "Building $module..."
-            podman build -t localhost/$(basename $module):${{ github.sha }} $module
-          done
+          cd cloud-infra-gateway
+          mvn clean package -Pnative -DskipTests --batch-mode
 
-      - name: Login to registry (if configured)
-        if: env.REGISTRY_URL != ''
-        uses: docker/login-action@v3
+      - name: Run Benchmark
+        run: |
+          chmod +x benchmark.sh
+          ./benchmark.sh
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
         with:
-          registry: ${{ env.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          name: benchmark-results
+          path: benchmark-results/
+          retention-days: 30
 
-      - name: Push images (if registry configured)
-        if: env.REGISTRY_URL != ''
-        run: |
-          for module in cloud-infra-gateway cloud-infra-auth cloud-infra-modules/system-module cloud-infra-modules/file-service cloud-infra-modules/notification-service cloud-infra-modules/search-service; do
-            IMAGE=localhost/$(basename $module):${{ github.sha }}
-            TARGET=${{ env.REGISTRY_URL }}/cloud-infra/$(basename $module):${{ github.sha }}
-            podman tag $IMAGE $TARGET
-            podman push $TARGET
-          done
-
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build-images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    environment: staging
-    
-    steps:
-      - name: Deploy to staging
-        run: |
-          echo "Deploying to staging environment..."
-          # 这里添加实际的部署逻辑，如 kubectl apply, helm upgrade 等
-          # kubectl apply -f deploy/k8s/staging/
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build-images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-    
-    steps:
-      - name: Deploy to production
-        run: |
-          echo "Deploying to production environment..."
-          # 这里添加实际的部署逻辑
-          # kubectl apply -f deploy/k8s/production/
+      - name: Comment benchmark results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('benchmark-results/benchmark-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            })

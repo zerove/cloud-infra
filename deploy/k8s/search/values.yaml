@@ -1,47 +1,37 @@
-# Default values for cloud-infra-search
 replicaCount: 2
-
 image:
   repository: cloud-infra-search
   pullPolicy: IfNotPresent
-  tag: "latest"
-
+  tag: latest
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
+nameOverride: ''
+fullnameOverride: ''
 serviceAccount:
   create: true
   annotations: {}
-  name: ""
-
+  name: ''
 podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "8085"
-  prometheus.io/path: "/actuator/prometheus"
-
+  prometheus.io/scrape: 'true'
+  prometheus.io/port: '8085'
+  prometheus.io/path: /actuator/prometheus
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
-
 securityContext:
   capabilities:
     drop:
-      - ALL
+    - ALL
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
-
 service:
   type: ClusterIP
   port: 8085
   targetPort: 8085
-
 managementService:
   enabled: true
   port: 9301
   targetPort: 9301
-
 resources:
   limits:
     cpu: 1000m
@@ -49,60 +39,54 @@ resources:
   requests:
     cpu: 500m
     memory: 256Mi
-
 autoscaling:
   enabled: true
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values:
-                  - cloud-infra-search
-          topologyKey: kubernetes.io/hostname
-
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - cloud-infra-search
+        topologyKey: kubernetes.io/hostname
 env:
-  - name: SPRING_PROFILES_ACTIVE
-    value: "k8s"
-  - name: NACOS_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.addr
-  - name: NACOS_CONFIG_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.config.addr
-  - name: NACOS_DISCOVERY_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.discovery.addr
-  - name: ELASTICSEARCH_HOST
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: elasticsearch.host
-  - name: SPRING_RABBITMQ_HOST
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: rabbitmq.host
-
+- name: SPRING_PROFILES_ACTIVE
+  value: k8s
+- name: NACOS_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.addr
+- name: NACOS_CONFIG_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.config.addr
+- name: NACOS_DISCOVERY_ADDR
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: nacos.discovery.addr
+- name: ELASTICSEARCH_HOST
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: elasticsearch.host
+- name: SPRING_RABBITMQ_HOST
+  valueFrom:
+    configMapKeyRef:
+      name: cloud-infra-config
+      key: rabbitmq.host
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness
@@ -111,7 +95,6 @@ livenessProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
-
 readinessProbe:
   httpGet:
     path: /actuator/health/readiness
@@ -120,7 +103,6 @@ readinessProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
-
 startupProbe:
   httpGet:
     path: /actuator/health/startup
@@ -129,75 +111,36 @@ startupProbe:
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 30
-
 configMap:
   enabled: true
   data:
-    application.yml: |
-      spring:
-        application:
-          name: cloud-search
-        main:
-          allow-bean-definition-overriding: true
-        config:
-          import: "optional:nacos:search-service.yaml"
-        cloud:
-          nacos:
-            config:
-              server-addr: ${NACOS_CONFIG_ADDR}
-              file-extension: yaml
-              import-check:
-                enabled: false
-              shared-configs:
-                - data-id: actuator-config.yaml
-                  refresh: true
-            discovery:
-              server-addr: ${NACOS_DISCOVERY_ADDR}
-        elasticsearch:
-          uris: ${ELASTICSEARCH_HOST}:9200
-        rabbitmq:
-          host: ${SPRING_RABBITMQ_HOST}
-          port: 5672
-          username: guest
-          password: guest
-      management:
-        server:
-          port: 9301
-        endpoints:
-          web:
-            base-path: /management
-            exposure:
-              include: "*"
-        tracing:
-          sampling:
-            probability: 1.0
-        otlp:
-          tracing:
-            endpoint: http://otel-collector:4317
-        tracing:
-          enabled: true
-          sampling:
-            probability: 1.0
-          zipkin:
-            enabled: true
-            endpoint: http://zipkin:9411/api/v2/spans
-            sender:
-              type: web
-          otel:
-            exporter:
-              zipkin:
-                endpoint: http://zipkin:9411/api/v2/spans
-              otlp:
-                endpoint: http://otel-collector:4317
-
+    application.yml: "spring:\n  application:\n    name: cloud-search\n  main:\n \
+      \   allow-bean-definition-overriding: true\n  config:\n    import: \"optional:nacos:search-service.yaml\"\
+      \n  cloud:\n    nacos:\n      config:\n        server-addr: ${NACOS_CONFIG_ADDR}\n\
+      \        file-extension: yaml\n        import-check:\n          enabled: false\n\
+      \        shared-configs:\n          - data-id: actuator-config.yaml\n      \
+      \      refresh: true\n      discovery:\n        server-addr: ${NACOS_DISCOVERY_ADDR}\n\
+      \  elasticsearch:\n    uris: ${ELASTICSEARCH_HOST}:9200\n  rabbitmq:\n    host:\
+      \ ${SPRING_RABBITMQ_HOST}\n    port: 5672\n    username: guest\n    password:\
+      \ guest\nmanagement:\n  server:\n    port: 9301\n  endpoints:\n    web:\n  \
+      \    base-path: /management\n      exposure:\n        include: \"*\"\n  tracing:\n\
+      \    sampling:\n      probability: 1.0\n  otlp:\n    tracing:\n      endpoint:\
+      \ http://otel-collector:4317\n  tracing:\n    enabled: true\n    sampling:\n\
+      \      probability: 1.0\n    zipkin:\n      enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n\
+      \      sender:\n        type: web\n    otel:\n      exporter:\n        zipkin:\n\
+      \          endpoint: http://zipkin:9411/api/v2/spans\n        otlp:\n      \
+      \    endpoint: http://otel-collector:4317\n"
 secret:
   enabled: true
   data:
-    postgres.host: ""
-    postgres.username: ""
-    postgres.password: ""
-
+    postgres.host: ''
+    postgres.username: ''
+    postgres.password: ''
 serviceMonitor:
   enabled: true
   interval: 30s
   scrapeTimeout: 10s
+  networkPolicy:
+    allowExternal: false
+networkPolicy:
+  allowExternal: false

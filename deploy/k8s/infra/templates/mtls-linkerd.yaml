@@ -1,0 +1,112 @@
+# Linkerd mTLS 配置
+# 适用于 cloud-infra 平台的服务间 mTLS
+
+---
+# 1. Linkerd 安装
+# linkerd install --crds | kubectl apply -f -
+# linkerd install | kubectl apply -f -
+# linkerd check
+
+---
+# 2. 为 cloud-infra 命名空间启用 mTLS
+---
+apiVersion: linkerd.io/v1alpha2
+kind: Server
+metadata:
+  name: cloud-infra-mtls
+  namespace: cloud-infra
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: cloud-infra
+  port: 9090
+  protocol: HTTP/1.1
+---
+apiVersion: linkerd.io/v1alpha2
+kind: ServerAuthorization
+metadata:
+  name: cloud-infra-authz
+  namespace: cloud-infra
+spec:
+  server: cloud-infra-mtls
+  client:
+    meshTLS:
+      identities:
+        - cloud-infra-gateway.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+        - cloud-infra-auth.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+        - cloud-infra-system.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+        - cloud-infra-file.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+        - cloud-infra-notification.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+        - cloud-infra-search.cloud-infra.serviceaccount.identity.linkerd.cluster.local
+---
+# 3. 为每个服务启用 mTLS
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-gateway
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-auth
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-system
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-file
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-notification
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloud-infra-search
+  namespace: cloud-infra
+  annotations:
+    linkerd.io/inject: enabled
+---
+# 4. 证书轮转配置
+---
+apiVersion: linkerd.io/v1alpha2
+kind: Certificate
+metadata:
+  name: linkerd-identity-trust-anchors
+  namespace: linkerd
+spec:
+  issuer:
+    scheme: io.linkerd.certificate.kubernetes.io/tls
+  # 证书有效期 24 小时，自动轮转
+  trustAnchors:
+    - pem: |
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+---
+# 5. 验证 mTLS 状态
+# linkerd check --namespace cloud-infra
+# linkerd viz stat deploy -n cloud-infra
+# linkerd viz tap deploy/cloud-infra-gateway -n cloud-infra
