@@ -139,8 +139,8 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
                 assertThat(searchResponse.getData()).hasSize(10);
             });
 
-        // 4. Test page 1 (Remaining 5)
-        webTestClient.get().uri("/search/operlog?keyword=Test&page=1&size=10")
+        // 4. Test page 1 (Remaining 5) - API uses pageNum (1-based), so pageNum=2 for second page
+        webTestClient.get().uri("/search/operlog?keyword=Test&pageNum=2&pageSize=10")
             .exchange()
             .expectStatus().isOk()
             .expectBody(new ParameterizedTypeReference<Result<SearchResponse<OperLogDTO>>>() {})

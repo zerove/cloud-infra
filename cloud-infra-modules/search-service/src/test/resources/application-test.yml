@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:search_db;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: 0
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+      service-registry:
+        auto-registration:
+          enabled: false
+  elasticsearch:
+    uris: ${spring.elasticsearch.uris:http://localhost:9200}
