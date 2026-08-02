@@ -8,8 +8,8 @@
 # ============================================================
 set -e
 
-# 项目根目录
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 项目根目录（脚本位于项目根目录下）
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULES_DIR="$ROOT_DIR/cloud-infra-modules"
 
 print_usage() {

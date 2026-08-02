@@ -252,6 +252,11 @@
                 <artifactId>cloud-infra-test-support</artifactId>
                 <version>${revision}</version>
             </dependency>
+            <dependency>
+                <groupId>com.cloudinfra</groupId>
+                <artifactId>cloud-infra-starter</artifactId>
+                <version>${revision}</version>
+            </dependency>
         </dependencies>
         </dependencyManagement>
 

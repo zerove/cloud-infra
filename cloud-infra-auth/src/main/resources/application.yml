@@ -28,7 +28,7 @@ spring:
         ttl-seconds: ${AUTH_JWT_CACHE_TTL:300}
 
 # Zipkin/OpenTelemetry 追踪配置
-tracing:
+# tracing: (removed dead zipkin/otel config)
   enabled: true
   sampling:
     probability: 1.0
