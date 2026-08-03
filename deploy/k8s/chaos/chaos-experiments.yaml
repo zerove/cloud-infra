@@ -1,0 +1,136 @@
+# Cloud-Infra Chaos Mesh 实验清单
+# 前提: 已安装 Chaos Mesh (helm install chaos-mesh chaos-mesh/chaos-mesh)
+# 文档: https://chaos-mesh.org/docs/
+
+# ============================================================
+# 实验 1: Pod 故障注入 - 验证优雅关闭与自动恢复
+# 随机删除 gateway Pod, 验证 K8s 自动重建与 ArgoCD 自愈
+# ============================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: gateway-pod-kill
+  namespace: cloud-infra
+  labels:
+    experiment: cloud-infra-chaos
+spec:
+  selector:
+    namespaces:
+      - cloud-infra
+    labelSelectors:
+      app.kubernetes.io/name: gateway
+  mode: one
+  action: pod-kill
+  duration: "60s"
+
+---
+# ============================================================
+# 实验 2: 网络延迟注入 - 验证熔断器 (Resilience4j)
+# 对 system 服务注入 800ms 延迟, 验证熔断器在 2s 阈值内触发
+# ============================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: system-network-delay
+  namespace: cloud-infra
+  labels:
+    experiment: cloud-infra-chaos
+spec:
+  selector:
+    namespaces:
+      - cloud-infra
+    labelSelectors:
+      app.kubernetes.io/name: system
+  mode: one
+  action: delay
+  duration: "90s"
+  delay:
+    latency: "800ms"
+    jitter: "100ms"
+    correlation: "50"
+  direction: both
+  target:
+    selector:
+      namespaces:
+        - cloud-infra
+      labelSelectors:
+        app.kubernetes.io/name: gateway
+
+---
+# ============================================================
+# 实验 3: CPU 压力注入 - 验证 HPA 自动扩容
+# 对 file 服务注入 CPU 压力, 验证 HPA 基于 CPU 使用率扩容
+# ============================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: file-cpu-stress
+  namespace: cloud-infra
+  labels:
+    experiment: cloud-infra-chaos
+spec:
+  selector:
+    namespaces:
+      - cloud-infra
+    labelSelectors:
+      app.kubernetes.io/name: file
+  mode: one
+  duration: "120s"
+  stressors:
+    cpu:
+      workers: 2
+      load: 80
+
+---
+# ============================================================
+# 实验 4: 内存压力注入 - 验证 OOM 保护与 JVM 内存配置
+# 对 search 服务注入内存压力, 验证 OOMKilled 后自动重启
+# ============================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: search-memory-stress
+  namespace: cloud-infra
+  labels:
+    experiment: cloud-infra-chaos
+spec:
+  selector:
+    namespaces:
+      - cloud-infra
+    labelSelectors:
+      app.kubernetes.io/name: search
+  mode: one
+  duration: "90s"
+  stressors:
+    memory:
+      workers: 1
+      size: "512MB"
+
+---
+# ============================================================
+# 实验 5: Redis 故障注入 - 验证多级缓存降级
+# 中断 Redis 流量, 验证 Caffeine L1 缓存兜底
+# ============================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: redis-network-partition
+  namespace: cloud-infra
+  labels:
+    experiment: cloud-infra-chaos
+spec:
+  selector:
+    namespaces:
+      - cloud-infra
+    labelSelectors:
+      app.kubernetes.io/name: redis
+  mode: all
+  action: partition
+  duration: "60s"
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - cloud-infra
+      labelSelectors:
+        app.kubernetes.io/name: auth

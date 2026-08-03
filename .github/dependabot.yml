@@ -1,0 +1,45 @@
+# Dependabot 自动依赖更新
+# 支持 Maven (pom.xml) 与 GitHub Actions
+version: 2
+updates:
+  # Maven 依赖更新 (每周一检查)
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "maven"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    ignore:
+      # 主要版本升级需人工评估
+      - dependency-name: "org.springframework.boot"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.cloud"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.alibaba.cloud"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.mybatis"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions 更新 (每周二检查)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
