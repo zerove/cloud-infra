@@ -79,7 +79,7 @@ jobs:
         run: mvn test -DskipTests=false --batch-mode
 
       - name: Upload test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-reports
@@ -177,7 +177,7 @@ jobs:
         run: mvn verify -DskipUnitTests=true -DskipITs=false --batch-mode
 
       - name: Upload integration test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: integration-test-reports
@@ -326,7 +326,7 @@ jobs:
           file cloud-infra-gateway-binary
 
       - name: Upload Native Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloud-infra-gateway-native
           path: cloud-infra-gateway/target/cloud-infra-gateway-binary
@@ -530,7 +530,7 @@ jobs:
           ./benchmark.sh
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: benchmark-results/
