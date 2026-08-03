@@ -28,6 +28,37 @@ spec:
           env:
             - name: STORAGE_TYPE
               value: {{ .Values.zipkin.storage.type }}
+            {{- if eq .Values.zipkin.storage.type "elasticsearch" }}
+            # Elasticsearch 存储配置
+            - name: ES_HOSTS
+              value: {{ .Values.zipkin.storage.elasticsearch.hosts | quote }}
+            - name: ES_INDEX
+              value: {{ .Values.zipkin.storage.elasticsearch.index | default "zipkin" | quote }}
+            - name: ES_INDEX_REPLICAS
+              value: {{ .Values.zipkin.storage.elasticsearch.indexReplicas | default "0" | quote }}
+            - name: ES_INDEX_SHARDS
+              value: {{ .Values.zipkin.storage.elasticsearch.indexShards | default "1" | quote }}
+            - name: ES_PIPELINE
+              value: {{ .Values.zipkin.storage.elasticsearch.pipeline | default "" | quote }}
+            {{- if .Values.zipkin.storage.elasticsearch.username }}
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-infra-secrets
+                  key: elasticsearch.username
+            {{- end }}
+            {{- if .Values.zipkin.storage.elasticsearch.password }}
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloud-infra-secrets
+                  key: elasticsearch.password
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.zipkin.storage.type "mem" }}
+            - name: MEM_MAX_SPANS
+              value: "500000"
+            {{- end }}
           resources:
             {{- toYaml .Values.zipkin.resources | nindent 12 }}
           readinessProbe:

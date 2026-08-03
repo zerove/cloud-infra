@@ -1,0 +1,95 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-infra-pgbouncer-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: cloud-infra
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{ .Values.postgresql.auth.database }} = host={{ .Values.postgresql.service.host | default "cloud-infra-postgresql" }} port=5432 dbname={{ .Values.postgresql.auth.database }}
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = {{ .Values.pgbouncer.maxClientConn }}
+    default_pool_size = {{ .Values.pgbouncer.defaultPoolSize }}
+    min_pool_size = {{ .Values.pgbouncer.minPoolSize }}
+    reserve_pool_size = {{ .Values.pgbouncer.reservePoolSize }}
+    server_idle_timeout = 300
+    server_lifetime = 3600
+    server_connect_timeout = 5
+    query_wait_timeout = 120
+    log_connections = 0
+    log_disconnections = 0
+    pidfile = /var/run/pgbouncer/pgbouncer.pid
+
+  userlist.txt: |
+    "{{ .Values.postgresql.auth.username }}" "{{ .Values.postgresql.auth.password }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-infra-pgbouncer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/part-of: cloud-infra
+spec:
+  selector:
+    app.kubernetes.io/name: pgbouncer
+  ports:
+    - name: postgresql
+      port: 6432
+      targetPort: 6432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-infra-pgbouncer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/part-of: cloud-infra
+spec:
+  replicas: {{ .Values.pgbouncer.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgbouncer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgbouncer
+        app.kubernetes.io/part-of: cloud-infra
+    spec:
+      containers:
+        - name: pgbouncer
+          image: {{ .Values.pgbouncer.image }}
+          ports:
+            - name: pgbouncer
+              containerPort: 6432
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgbouncer
+          resources:
+            {{- toYaml .Values.pgbouncer.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: cloud-infra-pgbouncer-config
+{{- end }}
