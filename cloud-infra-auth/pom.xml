@@ -17,7 +17,7 @@
     <dependencies>
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <artifactId>mybatis-plus</artifactId>
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
@@ -123,6 +123,11 @@
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-test-support</artifactId>
             <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -5,3 +5,4 @@ com.cloudinfra.framework.web.config.ConfigValidationAutoConfiguration
 com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration
 com.cloudinfra.framework.web.config.Resilience4jAutoConfiguration
 com.cloudinfra.framework.web.config.GracefulShutdownAutoConfiguration
+com.cloudinfra.framework.web.config.Jackson2CompatibilityAutoConfiguration
