@@ -38,6 +38,12 @@ public class UserDTO {
     private Long deptId;
 
     /**
+     * 角色ID
+     */
+    @Schema(description = "角色ID", example = "1")
+    private Long roleId;
+
+    /**
      * 角色列表
      */
     @Schema(description = "角色标识集合")

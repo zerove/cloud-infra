@@ -7,4 +7,6 @@ import com.cloudinfra.common.core.domain.model.LoginUser;
  */
 public interface UserService {
     LoginUser getUserById(Long userId);
+
+    LoginUser getUserByUsername(String username);
 }

@@ -10,7 +10,7 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.apache.ibatis.reflection.SystemMetaObject;
 
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
-import com.cloudinfra.common.annotation.DataScope;
+import com.cloudinfra.common.core.annotation.DataScope;
 import com.cloudinfra.common.util.SecurityUtils;
 
 public class DataScopeInterceptor implements InnerInterceptor {

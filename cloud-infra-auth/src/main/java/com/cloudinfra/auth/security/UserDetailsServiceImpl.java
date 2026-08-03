@@ -1,7 +1,9 @@
 package com.cloudinfra.auth.security;
 
+import com.cloudinfra.auth.domain.SecurityUser;
 import com.cloudinfra.auth.service.UserService;
-import java.util.List;
+import com.cloudinfra.common.core.domain.model.LoginUser;
+import java.util.Collections;
 import java.util.stream.Collectors;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -21,24 +23,21 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username)
         throws UsernameNotFoundException {
-        var user = userService.getUserById(Long.valueOf(username));
-        if (user == null) {
+        LoginUser user = userService.getUserByUsername(username);
+        if (user == null || user.getUserId() == null) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
-
-        // Permissions might be in LoginUser already
-        List<SimpleGrantedAuthority> authorities = user
-            .getPermissions()
-            .stream()
-            .map(SimpleGrantedAuthority::new)
-            .collect(Collectors.toList());
-
-        return org.springframework.security.core.userdetails.User.withUsername(
-            user.getUsername()
-        )
-            .password("") // Password handling needs to be addressed separately
-            .authorities(authorities)
-            .build();
+        return new SecurityUser(
+            user.getUserId(),
+            user.getUsername(),
+            user.getPassword() == null ? "" : user.getPassword(),
+            user.getPermissions() == null
+                ? Collections.emptyList()
+                : user.getPermissions()
+                    .stream()
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList())
+        );
     }
 }

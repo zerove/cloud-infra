@@ -2,7 +2,7 @@ package com.cloudinfra.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.cloudinfra.common.annotation.AuditLog;
+import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.annotation.DataScope;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysUser;
@@ -68,9 +68,43 @@ public class SysUserController {
         return Result.success();
     }
 
+    @Operation(summary = "根据用户ID获取用户信息（Feign 契约）")
+    @GetMapping("/{userId}")
+    public Result<com.cloudinfra.api.system.dto.UserDTO> getUserById(@PathVariable("userId") Long userId) {
+        SysUser user = userService.selectUserById(userId);
+        if (user == null) {
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+        }
+        return Result.success(toUserDTO(user));
+    }
+
+    @Operation(summary = "根据用户名获取用户信息（Feign 契约）")
+    @GetMapping("/username/{username}")
+    public Result<com.cloudinfra.api.system.dto.UserDTO> getUserByUsername(@PathVariable("username") String username) {
+        SysUser user = userService.selectUserByUsername(username);
+        if (user == null) {
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+        }
+        return Result.success(toUserDTO(user));
+    }
+
     @Operation(summary = "根据用户ID获取权限列表")
     @GetMapping("/permissions/{userId}")
-    public List<String> getPermissionsByUserId(@PathVariable("userId") Long userId) {
-        return permissionService.getPermissionsByUserId(userId);
+    public Result<java.util.List<String>> getPermissionsByUserId(@PathVariable("userId") Long userId) {
+        return Result.success(permissionService.getPermissionsByUserId(userId));
+    }
+
+    /**
+     * 将用户实体转换为 Feign 契约 DTO
+     */
+    private com.cloudinfra.api.system.dto.UserDTO toUserDTO(SysUser user) {
+        return com.cloudinfra.api.system.dto.UserDTO.builder()
+            .userId(user.getUserId())
+            .username(user.getUsername())
+            .deptId(user.getDeptId())
+            .roleId(user.getRoleId())
+            .password(user.getPassword())
+            .permissions(new java.util.HashSet<>(permissionService.getPermissionsByUserId(user.getUserId())))
+            .build();
     }
 }

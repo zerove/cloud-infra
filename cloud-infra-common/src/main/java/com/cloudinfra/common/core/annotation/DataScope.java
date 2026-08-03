@@ -1,5 +1,7 @@
 package com.cloudinfra.common.core.annotation;
 
+import com.cloudinfra.common.enums.DataScopeEnum;
+
 import java.lang.annotation.*;
 
 /**
@@ -19,4 +21,9 @@ public @interface DataScope {
      * 用户别名
      */
     String userAlias() default "";
+
+    /**
+     * 数据权限类型
+     */
+    DataScopeEnum type() default DataScopeEnum.ALL;
 }

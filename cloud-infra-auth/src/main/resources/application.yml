@@ -27,22 +27,7 @@ spring:
         max-size: ${AUTH_JWT_CACHE_MAX_SIZE:10000}
         ttl-seconds: ${AUTH_JWT_CACHE_TTL:300}
 
-# Zipkin/OpenTelemetry 追踪配置
-# tracing: (removed dead zipkin/otel config)
-  enabled: true
-  sampling:
-    probability: 1.0
-  zipkin:
-    enabled: true
-    endpoint: http://zipkin:9411/api/v2/spans
-    sender:
-      type: web
-  otel:
-    exporter:
-      zipkin:
-        endpoint: http://zipkin:9411/api/v2/spans
-      otlp:
-        endpoint: http://otel-collector:4317
+# 追踪配置由 management.tracing 与 management.otlp 统一管理
 
 management:
   server:

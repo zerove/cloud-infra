@@ -1,6 +1,6 @@
 package com.cloudinfra.system.controller;
 
-import com.cloudinfra.common.annotation.AuditLog;
+import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.service.RBACService;
 import lombok.RequiredArgsConstructor;

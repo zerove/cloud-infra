@@ -1,14 +1,14 @@
 package com.cloudinfra.system.exception;
 
+import com.cloudinfra.common.core.exception.BaseException;
 import com.cloudinfra.common.core.exception.SystemExceptionCode;
-import com.cloudinfra.common.exception.BaseException;
 
 public class SystemBusinessException extends BaseException {
     public SystemBusinessException(SystemExceptionCode code) {
-        super((int) code.getCode(), code.getMessage());
+        super((int) code.getCode(), code.name(), code.getMessage());
     }
 
     public SystemBusinessException(String message) {
-        super(500, message);
+        super(500, "SYSTEM_ERROR", message);
     }
 }

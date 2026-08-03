@@ -43,6 +43,10 @@
         <spring-boot.aot.skip>true</spring-boot.aot.skip>
         <native.image.skip>true</native.image.skip>
         <spring-boot.repackage.skip>false</spring-boot.repackage.skip>
+
+        <!-- 测试分离控制：单测走 surefire，集成测试走 failsafe -->
+        <skipUnitTests>false</skipUnitTests>
+        <skipITs>true</skipITs>
         </properties>
 
         <modules>
@@ -266,6 +270,40 @@
         </dependencyManagement>
 
         <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <skip>${skipUnitTests}</skip>
+                    <excludes>
+                        <exclude>**/*IntegrationTest.java</exclude>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <skip>${skipITs}</skip>
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -291,11 +329,7 @@
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
                     <configuration>
-                        <cds>
-                            <training>
-                                <enabled>true</enabled>
-                            </training>
-                        </cds>
+                        <!-- Spring Boot 4.0.5 移除 cds 参数，CDS 无需 Maven 配置 -->
                     </configuration>
                 </plugin>
                 <plugin>
@@ -303,6 +337,49 @@
                     <artifactId>native-maven-plugin</artifactId>
                     <version>0.10.4</version>
                     <extensions>true</extensions>
+                </plugin>
+                <!-- ========== 代码质量门禁插件 ========== -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>3.5.0</version>
+                    <configuration>
+                        <configLocation>${maven.multiModuleProjectDirectory}/checkstyle.xml</configLocation>
+                        <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                        <failOnViolation>true</failOnViolation>
+                        <violationSeverity>warning</violationSeverity>
+                        <consoleOutput>true</consoleOutput>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.spotbugs</groupId>
+                    <artifactId>spotbugs-maven-plugin</artifactId>
+                    <version>4.10.3.0</version>
+                    <configuration>
+                        <effort>Max</effort>
+                        <threshold>Low</threshold>
+                        <failOnError>true</failOnError>
+                        <excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
+                        <includeTests>false</includeTests>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-pmd-plugin</artifactId>
+                    <version>3.28.0</version>
+                    <configuration>
+                        <failOnViolation>true</failOnViolation>
+                        <includeTests>false</includeTests>
+                        <rulesets>
+                            <ruleset>category/java/bestpractices.xml</ruleset>
+                            <ruleset>category/java/errorprone.xml</ruleset>
+                        </rulesets>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>0.8.12</version>
                 </plugin>
             </plugins>
         </pluginManagement>
