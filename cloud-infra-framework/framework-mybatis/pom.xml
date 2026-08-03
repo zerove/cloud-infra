@@ -40,8 +40,17 @@
             <artifactId>cloud-infra-common</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>framework-web</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <artifactId>mybatis-plus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>3.0.3</version>
         </dependency>
         <!-- Outbox 事件模式依赖 -->
         <dependency>

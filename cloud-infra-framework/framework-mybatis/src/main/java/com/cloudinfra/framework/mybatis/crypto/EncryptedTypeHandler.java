@@ -3,7 +3,6 @@ package com.cloudinfra.framework.mybatis.crypto;
 import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.security.GeneralSecurityException;
 import javax.crypto.Cipher;
@@ -29,7 +28,6 @@ import java.util.Base64;
  *
  * 密钥通过 ENCRYPTION_KEY 环境变量或 cloud-infra.crypto.key 配置提供
  */
-@Component
 public class EncryptedTypeHandler extends BaseTypeHandler<String> {
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";

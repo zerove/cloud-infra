@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: cloud-auth
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: 0
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
+  auth:
+    jwt:
+      secret: CloudInfraSecretKey123456789012345678901234567890
+      expire-time: 86400000
+      algorithm: HS256
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: 0
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false

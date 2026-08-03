@@ -1,15 +1,14 @@
 package com.cloudinfra.framework.web.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
  * Resilience4j 配置属性
  * 支持通过配置文件动态调整熔断、限流、重试、隔离参数
+ * 由 Resilience4jAutoConfiguration 的 @EnableConfigurationProperties 注册
  */
-@Component
 @ConfigurationProperties(prefix = "resilience4j")
 public class Resilience4jProperties {
 

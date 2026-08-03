@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -22,8 +23,15 @@ import javax.sql.DataSource;
  * - 监控指标暴露
  * - 慢查询检测
  * - 连接泄漏检测
+ *
+ * 注意: 显式声明在 Spring Boot 自带 DataSource 自动配置之前，确保自定义
+ * DataSource bean 先注册。MyBatis-Plus 3.5.6 的 @AutoConfigureAfter 仍引用
+ * Spring Boot 3 的旧类路径 (org.springframework.boot.autoconfigure.jdbc.*)，
+ * 在 Spring Boot 4 下排序失效，需配合 framework-mybatis 中的
+ * MybatisPlusOrderingAutoConfiguration 形成排序链。
  */
 @AutoConfiguration
+@AutoConfigureBefore(org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class)
 public class DataSourceOptimizationAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceOptimizationAutoConfiguration.class);

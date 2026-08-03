@@ -4,6 +4,7 @@ import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -11,6 +12,7 @@ import java.util.Optional;
 /**
  * 链路追踪工具类
  * 提供统一的 API 用于操作当前 Span，屏蔽底层 Micrometer/OTel 实现细节
+ * Tracer 为可选依赖: 未配置追踪后端时使用 NOOP 实现, 不影响应用启动
  */
 @Component
 public class TraceUtils {
@@ -18,8 +20,8 @@ public class TraceUtils {
     private static final Logger log = LoggerFactory.getLogger(TraceUtils.class);
     private final Tracer tracer;
 
-    public TraceUtils(Tracer tracer) {
-        this.tracer = tracer;
+    public TraceUtils(ObjectProvider<Tracer> tracerProvider) {
+        this.tracer = tracerProvider.getIfAvailable(() -> Tracer.NOOP);
     }
 
     /**

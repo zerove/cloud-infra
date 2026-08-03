@@ -79,7 +79,7 @@ class NotificationServiceImplTest {
 
         // then
         then(quotaService).should().checkQuota(1L);
-        then(notificationMapper).should(times(2)).updateById(any()); // status update + final save
+        then(notificationMapper).should(times(1)).updateById(any()); // final save in finally block
         then(emailChannel).should().send(1L, "Hello", "World");
         then(logMapper).should().insert(any(NotificationLog.class));
     }
@@ -191,7 +191,7 @@ class NotificationServiceImplTest {
 
         // then
         // Status should remain UNREAD since all channels failed
-        then(notificationMapper).should(times(2)).updateById(any());
+        then(notificationMapper).should(times(1)).updateById(any());
         then(logMapper).should().insert(any(NotificationLog.class));
     }
 
@@ -227,7 +227,11 @@ class NotificationServiceImplTest {
     void getLogs_shouldReturnLogList() {
         // given
         Long userId = 1L;
+        Notification notification = new Notification();
+        notification.setId(1L);
+        List<Notification> notifications = List.of(notification);
         List<NotificationLog> expected = List.of(new NotificationLog());
+        given(notificationMapper.selectList(any())).willReturn(notifications);
         given(logMapper.selectList(any())).willReturn(expected);
 
         // when

@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
@@ -79,8 +80,7 @@ public class ConfigValidationAutoConfiguration {
     }
 }
 
-@Configuration
-@EnableConfigurationProperties(ConfigValidationProperties.class)
+@ConfigurationProperties(prefix = "cloud-infra.config-validation")
 class ConfigValidationProperties {
 
     /**

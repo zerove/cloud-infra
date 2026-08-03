@@ -9,9 +9,22 @@ spring:
     username: sa
     password: 
     driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: 0
   cloud:
     nacos:
       config:
         enabled: false
+      discovery:
+        enabled: false
+      service-registry:
+        auto-registration:
+          enabled: false
   config:
     import: "optional:classpath:application.yml"
