@@ -47,7 +47,7 @@ public class MybatisPlusPlatformAutoConfiguration {
     @ConditionalOnMissingBean
     public SqlSessionFactory sqlSessionFactory(
         DataSource dataSource,
-        @Value("${mybatis-plus.type-aliases-package:com.cloudinfra.**.domain}") String typeAliasesPackage,
+        @Value("${mybatis-plus.type-aliases-package:com.cloudinfra.**.domain,com.cloudinfra.**.domain.model}") String typeAliasesPackage,
         @Value("${mybatis-plus.mapper-locations:classpath*:/mapper/**/*.xml}") String mapperLocations,
         ObjectProvider<MybatisPlusInterceptor> interceptorProvider,
         ObjectProvider<TypeHandler<?>> typeHandlerProvider,

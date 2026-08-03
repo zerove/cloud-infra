@@ -2,6 +2,7 @@ package com.cloudinfra.auth.service;
 
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.impl.AuthTokenServiceImpl;
+import com.cloudinfra.common.util.JwtUtils;
 import com.cloudinfra.framework.redis.service.RedisService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +25,9 @@ public class AuthTokenServiceTest {
 
     @Mock
     private UserService userService;
+
+    @Mock
+    private JwtUtils jwtUtils;
 
     @InjectMocks
     private AuthTokenServiceImpl authTokenService;
@@ -39,6 +44,7 @@ public class AuthTokenServiceTest {
 
         when(redisService.get(anyString())).thenReturn(userId.toString());
         when(userService.getUserById(userId)).thenReturn(loginUser);
+        when(jwtUtils.createToken(any(), anyString())).thenReturn("new-access-token");
 
         Map<String, Object> result = authTokenService.refreshToken(refreshToken);
 

@@ -7,11 +7,17 @@ import lombok.NoArgsConstructor;
 import java.util.Set;
 import java.util.List;
 import com.cloudinfra.common.core.domain.entity.SysRole;
+import org.apache.ibatis.type.Alias;
 
+/**
+ * 登录用户领域模型（通用）
+ * 注意: @Alias("commonLoginUser") 避免与 auth 模块 LoginUser 简单类名冲突
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Alias("commonLoginUser")
 public class LoginUser {
     private Long userId;
     private String username;
