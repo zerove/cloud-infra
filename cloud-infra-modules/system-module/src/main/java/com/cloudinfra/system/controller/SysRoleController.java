@@ -2,7 +2,7 @@ package com.cloudinfra.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.cloudinfra.common.annotation.AuditLog;
+import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.domain.vo.SysRoleVO;

@@ -1,6 +1,7 @@
 # Ignore build outputs
 **/target/
 **/target-*/
+.gradle/
 .classpath
 .project
 .settings/
@@ -8,6 +9,7 @@
 .vscode/
 .omg/
 *.log
+deploy_log.txt
 
 # Ignore deployment/local infrastructure data
 deploy/data/

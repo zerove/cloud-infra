@@ -82,7 +82,7 @@ spring:
     locations: classpath:db/migration
     encoding: UTF-8
     validate-on-migrate: true
-    clean-disabled: false
+    clean-disabled: true
     out-of-order: false
 
   # gRPC 服务配置
@@ -106,22 +106,7 @@ spring:
       keep-alive-timeout: 10
       keep-alive-without-calls: true
 
-# Zipkin/OpenTelemetry 追踪配置
-# tracing: (removed dead zipkin/otel config)
-  enabled: true
-  sampling:
-    probability: 1.0
-  zipkin:
-    enabled: true
-    endpoint: http://zipkin:9411/api/v2/spans
-    sender:
-      type: web
-  otel:
-    exporter:
-      zipkin:
-        endpoint: http://zipkin:9411/api/v2/spans
-      otlp:
-        endpoint: http://otel-collector:4317
+# 追踪配置由 management.tracing 与 management.otlp 统一管理
 
 management:
   server:

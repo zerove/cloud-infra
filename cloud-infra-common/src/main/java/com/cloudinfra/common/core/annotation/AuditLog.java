@@ -1,11 +1,12 @@
-package com.cloudinfra.common.annotation;
+package com.cloudinfra.common.core.annotation;
 
 import java.lang.annotation.*;
 
 /**
  * 审计日志注解
+ * 标记需要进行审计记录的业务方法
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface AuditLog {

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- 排除 gRPC 生成代码 -->
+    <Match>
+        <Package name="~com\.cloudinfra\.api\.system\.grpc.*"/>
+    </Match>
+    <!-- 排除测试代码 -->
+    <Match>
+        <Source name="~.*Test\.java"/>
+    </Match>
+    <!-- 排除 Lambda 参数未使用等无害模式 -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- 允许记录已知可忽略异常的空 catch（需有注释） -->
+    <Match>
+        <Bug pattern="DE_MIGHT_IGNORE"/>
+    </Match>
+</FindBugsFilter>

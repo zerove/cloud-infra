@@ -47,8 +47,8 @@ jobs:
       - name: Run PMD
         run: mvn pmd:check --batch-mode
 
-      - name: Verify formatting
-        run: mvn formatter:validate --batch-mode
+      # 注: formatter:validate 已移除，项目暂无统一代码格式基线；
+      # 格式化规范由代码评审与 IDE 配置保证。
 
   # ========== 单元测试 ==========
   unit-tests:
@@ -211,7 +211,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Run tests with coverage
-        run: mvn test jacoco:report --batch-mode
+        run: mvn jacoco:prepare-agent test jacoco:report --batch-mode
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

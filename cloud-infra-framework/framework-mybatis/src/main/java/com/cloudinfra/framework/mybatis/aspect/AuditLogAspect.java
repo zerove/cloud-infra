@@ -1,6 +1,6 @@
 package com.cloudinfra.framework.mybatis.aspect;
 
-import com.cloudinfra.common.annotation.AuditLog;
+import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.context.UserContext;
 import com.cloudinfra.common.core.audit.IAuditLogService;
 import lombok.RequiredArgsConstructor;
