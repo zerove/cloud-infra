@@ -2,6 +2,7 @@ package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.AuthTokenService;
+import com.cloudinfra.auth.service.SysLoginService;
 import com.cloudinfra.common.core.domain.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,9 @@ public class AuthControllerTest {
     @Mock
     private AuthTokenService authTokenService;
 
+    @Mock
+    private SysLoginService loginService;
+
     @InjectMocks
     private AuthController authController;
 
@@ -30,7 +34,7 @@ public class AuthControllerTest {
 
     @Test
     void shouldLoginSuccess() {
-        when(authTokenService.createToken(any())).thenReturn(Map.of("token", "mock-token"));
+        when(loginService.login(any())).thenReturn(Result.success(Map.of("token", "mock-token")));
 
         LoginUser loginUser = new LoginUser();
         loginUser.setUsername("testuser");
@@ -40,5 +44,16 @@ public class AuthControllerTest {
         assertThat(response).isNotNull();
         assertThat(response.getData().get("token")).isEqualTo("mock-token");
         assertThat(response.getCode()).isEqualTo(200);
+    }
+
+    @Test
+    void shouldRefreshTokenSuccess() {
+        when(authTokenService.refreshToken("test-refresh-token"))
+            .thenReturn(Map.of("token", "new-token", "refreshToken", "new-refresh"));
+
+        Result<Map<String, Object>> response = authController.refresh("test-refresh-token");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getData().get("token")).isEqualTo("new-token");
     }
 }

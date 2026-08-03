@@ -1,13 +1,11 @@
 package com.cloudinfra.auth;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@TestPropertySource(locations = "classpath:application-test.yml")
-@EnableAutoConfiguration(exclude = {com.cloudinfra.framework.redis.config.RedissonConfig.class})
+@ActiveProfiles("test")
 public class AuthIntegrationTest {
 
     @Test
