@@ -121,7 +121,15 @@ zipkin:
   service:
     port: 9411
   storage:
-    type: memory
+    type: mem  # mem (内存) 或 elasticsearch (ES 持久化)
+    elasticsearch:
+      hosts: "http://cloud-infra-elasticsearch:9200"
+      index: "zipkin"
+      indexReplicas: 0
+      indexShards: 1
+      pipeline: ""
+      username: ""
+      password: ""
 
 otelCollector:
   enabled: true
@@ -218,3 +226,84 @@ secret:
     jwt.secret: ""
     minio.access-key: ""
     minio.secret-key: ""
+
+# Bitnami SealedSecrets 密钥管理
+# 生成方式见 deploy/k8s/scripts/seal-secrets.sh
+sealedSecrets:
+  enabled: false
+  name: cloud-infra-sealed-secrets
+  # 使用 kubeseal 加密后的密钥数据
+  # 示例: echo -n 'password' | kubeseal --raw --name cloud-infra-sealed-secrets --namespace cloud-infra
+  encryptedData: {}
+
+# Alertmanager 告警路由
+alertmanager:
+  enabled: false
+  image: prom/alertmanager:v0.27.0
+  replicas: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  smtp:
+    host: smtp.example.com
+    port: 587
+    from: alert@cloud-infra.io
+    username: ""
+    password: ""
+    requireTLS: true
+  webhook:
+    host: cloud-infra-webhook
+    port: 8080
+  dingtalk:
+    enabled: false
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+  wecom:
+    enabled: false
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+  email:
+    enabled: false
+    to: "ops@cloud-infra.io"
+
+# PgBouncer 连接池 (PostgreSQL 高可用/连接管理)
+pgbouncer:
+  enabled: false
+  image: edoburu/pgbouncer:1.21.0
+  replicas: 1
+  maxClientConn: 500
+  defaultPoolSize: 50
+  minPoolSize: 10
+  reservePoolSize: 5
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 200m
+      memory: 128Mi
+
+# Loki + Promtail 日志收集
+loki:
+  enabled: false
+  image: grafana/loki:2.9.4
+  promtailImage: grafana/promtail:2.9.4
+  replicas: 1
+  storageSize: 20Gi
+  retentionPeriod: 168h
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  promtailResources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
