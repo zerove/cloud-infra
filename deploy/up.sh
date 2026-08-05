@@ -73,8 +73,20 @@ for i in $(seq 1 15); do
     sleep 2
 done
 
+# 等待 Prometheus 就绪
+echo "=== 8. 等待 Prometheus 就绪 ==="
+for i in $(seq 1 10); do
+    if curl -sf http://localhost:9090/-/healthy > /dev/null 2>&1; then
+        echo "Prometheus 已就绪"
+        break
+    fi
+    [ $i -eq 10 ] && { echo "⚠️ Prometheus 启动超时，请手动检查监控服务"; }
+    echo "等待 Prometheus... ($i/10)"
+    sleep 2
+done
+
 # 同步配置到 Nacos
-echo "=== 8. 同步配置到 Nacos ==="
+echo "=== 9. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
 for file in "$CONFIG_DIR"/*.yaml; do
     filename=$(basename "$file")
