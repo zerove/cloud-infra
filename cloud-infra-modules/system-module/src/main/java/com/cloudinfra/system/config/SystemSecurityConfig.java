@@ -3,6 +3,8 @@ package com.cloudinfra.system.config;
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
+import com.cloudinfra.framework.web.interceptor.FeignAuthInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -11,6 +13,9 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /**
  * 业务服务安全配置
@@ -60,17 +65,38 @@ public class SystemSecurityConfig {
                         "/webjars/**",
                         "/swagger-resources/**"
                     ).permitAll()
-                    // 内部 Feign 契约端点（服务间信任调用，无用户 Header）
-                    .requestMatchers(
+                    // 内部 Feign 契约端点：仅允许携带内部调用标识的请求
+                    .requestMatchers(internalCallMatcher(
                         "/system/user/{userId}",
                         "/system/user/username/{username}",
                         "/system/user/permissions/{userId}",
                         "/system/user/register",
                         "/system/service/**"
-                    ).permitAll()
+                    )).permitAll()
                     .anyRequest().authenticated()
             )
             .addFilterBefore(headerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    /**
+     * 复合 RequestMatcher：仅当请求路径匹配指定模式 且 携带 X-Internal-Call Header 时才匹配。
+     * 外部请求经网关时 Header 被置空，因此无法伪造。
+     */
+    private RequestMatcher internalCallMatcher(String... antPatterns) {
+        PathPatternRequestMatcher[] pathMatchers =
+            java.util.Arrays.stream(antPatterns)
+                .map(PathPatternRequestMatcher::pathPattern)
+                .toArray(PathPatternRequestMatcher[]::new);
+
+        OrRequestMatcher pathMatcher = new OrRequestMatcher(pathMatchers);
+
+        return request -> {
+            if (!pathMatcher.matches(request)) {
+                return false;
+            }
+            String internalHeader = request.getHeader(FeignAuthInterceptor.INTERNAL_CALL_HEADER);
+            return FeignAuthInterceptor.INTERNAL_CALL_VALUE.equals(internalHeader);
+        };
     }
 }
