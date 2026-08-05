@@ -1,6 +1,9 @@
 # Stage 1: Runtime Stage
 FROM eclipse-temurin:25-jre-jammy
 WORKDIR /app
+RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra 
+RUN chown -R cloudinfra:cloudinfra /app 
+USER cloudinfra
 
 # 复制编译好的 JAR (需在宿主机提前执行 mvn clean package)
 COPY target/*.jar app.jar

@@ -44,12 +44,37 @@ for i in $(seq 1 10); do
         echo "Redis 已就绪"
         break
     fi
+    [ $i -eq 10 ] && { echo "❌ Redis 启动超时"; exit 1; }
     echo "等待 Redis... ($i/10)"
     sleep 2
 done
 
+# 等待 RabbitMQ 就绪
+echo "=== 6. 等待 RabbitMQ 就绪 ==="
+for i in $(seq 1 10); do
+    if curl -sf http://localhost:15672 > /dev/null 2>&1; then
+        echo "RabbitMQ 已就绪"
+        break
+    fi
+    [ $i -eq 10 ] && { echo "❌ RabbitMQ 启动超时"; exit 1; }
+    echo "等待 RabbitMQ... ($i/10)"
+    sleep 2
+done
+
+# 等待 Elasticsearch 就绪
+echo "=== 7. 等待 Elasticsearch 就绪 ==="
+for i in $(seq 1 15); do
+    if curl -sf http://localhost:9200 > /dev/null 2>&1; then
+        echo "Elasticsearch 已就绪"
+        break
+    fi
+    [ $i -eq 15 ] && { echo "❌ Elasticsearch 启动超时"; exit 1; }
+    echo "等待 Elasticsearch... ($i/15)"
+    sleep 2
+done
+
 # 同步配置到 Nacos
-echo "=== 6. 同步配置到 Nacos ==="
+echo "=== 8. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
 for file in "$CONFIG_DIR"/*.yaml; do
     filename=$(basename "$file")
