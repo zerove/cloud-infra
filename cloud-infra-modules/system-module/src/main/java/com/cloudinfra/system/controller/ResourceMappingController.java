@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.service.ResourceMappingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Set;
@@ -32,6 +33,7 @@ public class ResourceMappingController {
      * 绑定资源到节点
      */
     @AuditLog(module = "RESOURCE", action = "BIND")
+    @PreAuthorize("@ss.hasPermi('system:resource:bind')")
     @PostMapping("/bind")
     public Result<Void> bindResource(
             @RequestParam String resourceId,

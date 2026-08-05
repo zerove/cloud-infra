@@ -25,7 +25,7 @@ spring:
         enabled: false
   auth:
     jwt:
-      secret: CloudInfraSecretKey123456789012345678901234567890
+      secret: TestOnlySecretKey_abcdefghijklmnopqrstuvwxyz_0123456789
       expire-time: 86400000
       algorithm: HS256
 ---

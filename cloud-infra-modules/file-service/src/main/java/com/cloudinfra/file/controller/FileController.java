@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.service.IFileService;
+import com.cloudinfra.file.service.FilePermissionService;
 import com.cloudinfra.file.util.FileValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +26,7 @@ import java.io.InputStream;
 public class FileController {
     private final IFileService fileService;
     private final FileValidator fileValidator;
+    private final FilePermissionService permissionService;
 
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
@@ -70,7 +72,17 @@ public class FileController {
 
     @Operation(summary = "删除文件")
     @DeleteMapping("/delete/{fileId}")
-    public Result<Void> delete(@PathVariable Long fileId) {
+    public Result<Void> delete(
+            @PathVariable Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        // 未认证请求（绕过网关直连）无 userId，拒绝删除
+        if (userId == null) {
+            return Result.fail(401, "未认证的删除请求");
+        }
+        // 权限校验：删除属于写操作，要求 WRITE 权限
+        if (!permissionService.hasAccess(userId, fileId, "WRITE")) {
+            return Result.fail(403, "无权删除该文件");
+        }
         if (fileService.delete(fileId)) {
             return Result.success();
         }

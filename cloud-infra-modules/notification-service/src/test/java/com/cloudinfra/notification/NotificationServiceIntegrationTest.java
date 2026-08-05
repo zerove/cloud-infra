@@ -13,6 +13,7 @@ import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.service.NotificationRouter;
 import com.cloudinfra.notification.service.channel.NotificationChannel;
 import com.cloudinfra.notification.service.impl.NotificationServiceImpl;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ class NotificationServiceIntegrationTest {
     private ChannelFactory channelFactory;
     private ScheduledNotificationMapper scheduleMapper;
     private NotificationQuotaService quotaService;
+    private ObjectMapper objectMapper;
 
     private NotificationServiceImpl notificationService;
 
@@ -48,6 +50,7 @@ class NotificationServiceIntegrationTest {
         channelFactory = mock(ChannelFactory.class);
         scheduleMapper = mock(ScheduledNotificationMapper.class);
         quotaService = mock(NotificationQuotaService.class);
+        objectMapper = mock(ObjectMapper.class);
 
         notificationService = new NotificationServiceImpl(
             notificationMapper,
@@ -56,7 +59,8 @@ class NotificationServiceIntegrationTest {
             notificationRouter,
             channelFactory,
             scheduleMapper,
-            quotaService
+            quotaService,
+            objectMapper
         );
     }
 

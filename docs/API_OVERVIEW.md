@@ -10,13 +10,14 @@
 - **路由 `/search/**`** $ightarrow$ `cloud-infra-modules:search-service`
 - **路由 `/notification/**`** $ightarrow$ `cloud-infra-modules:notification-service`
 
-## 2. 认证服务 (端口: 9200)
+## 2. 认证服务 (端口: 8081)
 处理身份识别与访问管理。
 - `POST /auth/login`: 用户登录并返回 JWT。
-- `POST /auth/captcha`: 验证码管理。
-- `GET /auth/user/info`: 获取当前用户资料与权限列表。
+- `POST /auth/captchaImage`: 生成验证码图片（Base64）。
+- `POST /auth/refresh`: 刷新 Token（请求头携带 `Refresh-Token`）。
+- `POST /auth/register`: 用户注册（幂等）。
 
-## 3. 系统模块 (端口: 9300)
+## 3. 系统模块 (端口: 8082)
 RBAC 与系统配置的管理核心。
 - **用户管理**: `/system/user` (增删改查, 状态控制, 岗位分配)
 - **角色管理**: `/system/role` (权限分配, 角色-用户关联)
@@ -24,18 +25,24 @@ RBAC 与系统配置的管理核心。
 - **菜单/权限**: `/system/menu` 和 `/system/permission` (RBAC 基础定义)
 - **系统配置**: `/system/config` (应用动态 K-V 配置)
 
-## 4. 文件服务
+## 4. 文件服务 (端口: 8083)
 对象存储抽象层。
 - `/file/upload`: 文件上传。
 - `/file/download`: 文件下载。
 - `/file/sys/file`: 文件元数据管理。
 
-## 5. 搜索服务
+## 5. 搜索服务 (端口: 8085)
 基于 Elasticsearch 的搜索实现。
 - `/search/query`: 全文检索索引实体。
 - `/search/sync`: 触发指定数据的重新索引。
 
-## 6. 通知服务
+## 6. 通知服务 (端口: 8084)
 异步消息交付。
 - `/notification/send`: 发送通知 (邮件, 短信等)。
 - `/notification/history`: 查询用户通知历史。
+
+## 7. 管理端口 (统一 9301, ADR-008)
+所有服务的管理端点独立于业务端口，统一为 `:9301/management/...`。
+- 健康检查: `/management/health`
+- 指标: `/management/prometheus`
+- 本地 compose 部署时映射到宿主机: gateway=9301, auth=9302, system=9303, file=9304, notification=9305, search=9306

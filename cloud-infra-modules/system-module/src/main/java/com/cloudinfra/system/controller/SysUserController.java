@@ -3,7 +3,6 @@ package com.cloudinfra.system.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.common.core.annotation.AuditLog;
-import com.cloudinfra.common.core.annotation.DataScope;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.domain.vo.SysUserVO;
@@ -32,7 +31,6 @@ public class SysUserController {
 
     @Operation(summary = "查询用户列表")
     @PreAuthorize("@ss.hasPermi('system:user:list')")
-    @DataScope(deptAlias = "u", userAlias = "u")
     @GetMapping("/list")
     public IPage<SysUserVO> list(SysUser user, 
                                  @RequestParam(defaultValue = "1") Integer pageNum,

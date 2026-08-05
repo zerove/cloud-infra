@@ -11,7 +11,6 @@
                 <!-- 性能预警：前缀百分号会导致索引失效，建议大表迁移至 Elasticsearch -->
                 AND u.username like concat('%', #{user.username}, '%')
             </if>
-            ${user.params.dataScope}
         </where>
     </select>
 
