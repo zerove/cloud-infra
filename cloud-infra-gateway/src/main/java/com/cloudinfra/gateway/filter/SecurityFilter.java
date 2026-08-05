@@ -68,6 +68,8 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
                 headers.put("X-User-Name", identity.username());
             }
             headers.put(TRACE_ID, traceId);
+            // 剥离外部伪造的内部调用标识，防止绕过 Feign 端点鉴权
+            headers.put("X-Internal-Call", "");
             
             IdentityRequestWrapper requestWrapper = new IdentityRequestWrapper(request, headers);
 
