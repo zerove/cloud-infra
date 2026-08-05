@@ -1,24 +1,36 @@
 server:
-  port: 9304
+  port: 8085
   shutdown: graceful
 
 spring:
+  rabbitmq:
+    host: cloud-rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+  cloud:
+    stream:
+      rabbit:
+        binder:
+          nodes: cloud-rabbitmq:5672
+          username: guest
+          password: guest
   lifecycle:
     timeout-per-shutdown-phase: 30s
   cloud:
     nacos:
       discovery:
-        server-addr: nacos-server:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         enabled: true
       config:
-        server-addr: nacos-server:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
   main:
     allow-bean-definition-overriding: true
   elasticsearch:
-    uris: http://elasticsearch:9200
+    uris: ${ELASTICSEARCH_URIS:http://cloud-elasticsearch:9200}
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:redis}
+      host: ${SPRING_DATA_REDIS_HOST:cloud-redis}
       port: 6379
       database: 0
   threads:
@@ -27,8 +39,9 @@ spring:
 
 management:
   server:
-    port: 9305
+    port: 9301
   endpoints:
     web:
+      base-path: /management
       exposure:
         include: "*"

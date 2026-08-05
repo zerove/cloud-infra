@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.service.RBACService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public class RBACController {
     private final RBACService rbacService;
 
     @AuditLog(module = "RBAC", action = "ASSIGN_ROLE")
+    @PreAuthorize("@ss.hasPermi('system:rbac:assign-role')")
     @PostMapping("/user/{userId}/roles")
     public Result<Void> assignRolesToUser(@PathVariable Long userId, @RequestBody List<Long> roleIds) {
         rbacService.assignRolesToUser(userId, roleIds);
@@ -23,6 +25,7 @@ public class RBACController {
     }
 
     @AuditLog(module = "RBAC", action = "ASSIGN_PERMISSION")
+    @PreAuthorize("@ss.hasPermi('system:rbac:assign-perm')")
     @PostMapping("/role/{roleId}/permissions")
     public Result<Void> assignPermissionsToRole(@PathVariable Long roleId, @RequestBody List<Long> permissionIds) {
         rbacService.assignPermissionsToRole(roleId, permissionIds);

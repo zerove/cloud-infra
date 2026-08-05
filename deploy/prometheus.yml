@@ -1,0 +1,46 @@
+# Cloud-Infra 本地开发 Prometheus 抓取配置
+# 各服务管理端口容器内统一 9301，指标路径 /management/prometheus (ADR-008)
+# 宿主机映射：gateway=9301, auth=9302, system=9303, file=9304, notification=9305, search=9306
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'cloud-infra-gateway'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9301']
+
+  - job_name: 'cloud-infra-auth'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9302']
+
+  - job_name: 'cloud-infra-system'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9303']
+
+  - job_name: 'cloud-infra-file'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9304']
+
+  - job_name: 'cloud-infra-notification'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9305']
+
+  - job_name: 'cloud-infra-search'
+    metrics_path: /management/prometheus
+    static_configs:
+      - targets: ['localhost:9306']
+
+  - job_name: 'nacos'
+    metrics_path: /nacos/actuator/prometheus
+    static_configs:
+      - targets: ['localhost:8848']

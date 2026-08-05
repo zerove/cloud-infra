@@ -1,21 +1,29 @@
 server:
-  port: 9200
+  port: 8081
   shutdown: graceful
 
 management:
+  server:
+    port: 9301
   endpoints:
     web:
+      base-path: /management
       exposure:
         include: prometheus,health,info
   endpoint:
     health:
-      enabled: false
+      show-details: always
   metrics:
     export:
       prometheus:
         enabled: true
 
 spring:
+  rabbitmq:
+    host: cloud-rabbitmq
+    port: 5672
+    username: guest
+    password: guest
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
@@ -25,16 +33,22 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
   cloud:
+    stream:
+      rabbit:
+        binder:
+          nodes: cloud-rabbitmq:5672
+          username: guest
+          password: guest
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: cloud-nacos:8848
         enabled: true
       config:
-        server-addr: 127.0.0.1:8848
+        server-addr: cloud-nacos:8848
   datasource:
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres-server}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:20}
@@ -59,14 +73,14 @@ spring:
         ApplicationName: cloud-infra-auth
   data:
     redis:
-      host: 127.0.0.1
+      host: cloud-redis
       port: 6379
       database: 0
 
-# JWT 配置
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入，长度 >= 32）
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:CloudInfraSecretKey123456789012345678901234567890}
+    secret: ${AUTH_JWT_SECRET:CHANGE_ME_please_set_a_random_secret_32chars_min}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
     algorithm: ${AUTH_JWT_ALGORITHM:HS256}
     cache:

@@ -6,6 +6,7 @@ import com.cloudinfra.framework.plugin.IServicePlugin;
 import com.cloudinfra.system.plugin.PluginManager;
 import com.cloudinfra.system.plugin.PluginRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -41,6 +42,7 @@ public class PluginController {
      * 手动卸载插件
      */
     @AuditLog(module = "PLUGIN", action = "UNLOAD")
+    @PreAuthorize("@ss.hasPermi('system:plugin:unload')")
     @DeleteMapping("/{pluginId}")
     public Result<Void> unload(@PathVariable String pluginId) {
         pluginManager.unloadPlugin(pluginId);

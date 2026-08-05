@@ -38,10 +38,8 @@ public class AuthTokenServiceImpl implements AuthTokenService {
         claims.put("userId", loginUser.getUserId());
         claims.put("roleId", loginUser.getRoleId());
         claims.put("jti", accessTokenJti);
-        
-        if (loginUser.getPermissions() != null) {
-            claims.put("permissions", loginUser.getPermissions());
-        }
+        // 注意：权限列表不写入 JWT（避免 Token 膨胀与过期权限漂移），
+        // 下游鉴权统一通过 IPermissionProvider（Feign 拉取 + 缓存）获取。
 
         String accessToken = jwtUtils.createToken(claims, loginUser.getUsername());
 
@@ -60,29 +58,57 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
     @Override
     public Map<String, Object> refreshToken(String refreshToken) {
-        Object userIdObj = redisService.get("refresh_token:" + refreshToken);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
+        }
+        String refreshKey = "refresh_token:" + refreshToken;
+        Object userIdObj = redisService.get(refreshKey);
         if (userIdObj == null) {
             throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
         }
-        
-        Long userId = Long.parseLong(userIdObj.toString());
+
+        Long userId;
+        try {
+            userId = Long.parseLong(userIdObj.toString());
+        } catch (NumberFormatException e) {
+            // 脏数据：删除无效 refresh token
+            redisService.delete(refreshKey);
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
+        }
         LoginUser loginUser = userService.getUserById(userId);
 
         if (loginUser == null) {
             throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
         }
-        
+
+        // Token 轮换：旧 refresh token 一次性使用，防止重放攻击
+        redisService.delete(refreshKey);
+
         return createToken(loginUser);
     }
 
     @Override
     public void delToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
+        }
         try {
             String jti = jwtUtils.getJtiFromToken(token);
-            if (jti != null) {
-                redisService.set("blacklist:" + jti, true, 24 * 3600 * 1000L);
+            if (jti == null) {
+                throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
             }
+            // 1. 会话清理：删除 auth:session:{userId}:{jti}
+            Long userId = jwtUtils.getUserIdFromToken(token);
+            if (userId != null) {
+                redisService.delete("auth:session:" + userId + ":" + jti);
+            }
+            // 2. 加入黑名单（覆盖原 TTL，防止已签发的 token 在过期前继续使用）
+            redisService.set("blacklist:" + jti, true, 24 * 3600 * 1000L);
+        } catch (AuthBusinessException e) {
+            throw e;
         } catch (Exception e) {
+            // Token 无法解析：记录日志而非静默吞掉，便于问题排查
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
         }
     }
 }

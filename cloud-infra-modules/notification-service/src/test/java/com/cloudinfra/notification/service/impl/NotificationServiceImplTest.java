@@ -14,6 +14,7 @@ import com.cloudinfra.notification.mapper.NotificationMapper;
 import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
 import com.cloudinfra.notification.service.ChannelFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.service.NotificationRouter;
 import com.cloudinfra.notification.service.channel.NotificationChannel;
@@ -45,6 +46,7 @@ class NotificationServiceImplTest {
     @Mock private ChannelFactory channelFactory;
     @Mock private ScheduledNotificationMapper scheduleMapper;
     @Mock private NotificationQuotaService quotaService;
+    @Mock private ObjectMapper objectMapper;
 
     private NotificationServiceImpl notificationService;
 
@@ -52,7 +54,7 @@ class NotificationServiceImplTest {
     void setUp() {
         notificationService = new NotificationServiceImpl(
             notificationMapper, logMapper, templateMapper,
-            notificationRouter, channelFactory, scheduleMapper, quotaService
+            notificationRouter, channelFactory, scheduleMapper, quotaService, objectMapper
         );
     }
 
@@ -190,8 +192,8 @@ class NotificationServiceImplTest {
         notificationService.sendNotification(request);
 
         // then
-        // Status should remain UNREAD since all channels failed
-        then(notificationMapper).should(times(1)).updateById(any());
+        // Status should remain UNREAD since all channels failed, no status change update needed
+        then(notificationMapper).should(never()).updateById(any());
         then(logMapper).should().insert(any(NotificationLog.class));
     }
 
