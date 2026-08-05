@@ -5,12 +5,6 @@ server:
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
-auth:
-  white-list:
-    - /auth/
-
-spring:
   threads:
     virtual:
       enabled: true
@@ -20,10 +14,10 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: cloud-nacos:8848
         enabled: true
       config:
-        server-addr: 127.0.0.1:8848
+        server-addr: cloud-nacos:8848
     gateway:
       discovery:
         locator:
@@ -37,16 +31,22 @@ spring:
               - Path=/system/**
             filters:
               - StripPrefix=1
-    sentinel:
-      transport:
-        dashboard: localhost:8080
-      datasource:
-        ds1:
-          nacos:
-            server-addr: localhost:8848
-            dataId: sentinel-gateway-rules
-            groupId: DEFAULT_GROUP
-            rule-type: gw-flow
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:CHANGE_ME_please_set_a_random_secret_32chars_min}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
+  white-list:
+    - /auth/login
+    - /auth/refresh
+    - /auth/register
+    - /auth/captchaImage
+    - /actuator/health
+    - /actuator/info
+    - /actuator/prometheus
+    - /v3/api-docs
+    - /swagger-ui/
+    - /webjars/
 
 knife4j:
   gateway:
@@ -57,8 +57,11 @@ knife4j:
       version: openapi3
 
 management:
+  server:
+    port: 9301
   endpoints:
     web:
+      base-path: /management
       exposure:
         include: prometheus,health,info
   tracing:

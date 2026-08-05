@@ -2,8 +2,8 @@
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 COPY target/*.jar app.jar
-# 复制 CDS 存档（不存在时 JVM 自动降级）
-COPY target/*.cds /app/application.cds 2>/dev/null || true
+# 复制 CDS 存档（不存在时忽略）
+RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
 ENV JAVA_OPTS="-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"

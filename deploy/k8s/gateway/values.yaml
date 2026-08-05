@@ -124,16 +124,6 @@ env:
       secretKeyRef:
         name: cloud-infra-secrets
         key: postgres.password
-  - name: NACOS_CONFIG_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.config.addr
-  - name: NACOS_DISCOVERY_ADDR
-    valueFrom:
-      configMapKeyRef:
-        name: cloud-infra-config
-        key: nacos.discovery.addr
   - name: AUTH_JWT_SECRET
     valueFrom:
       secretKeyRef:
@@ -216,21 +206,6 @@ configMap:
         otlp:
           tracing:
             endpoint: http://otel-collector:4317
-        tracing:
-          enabled: true
-          sampling:
-            probability: 1.0
-          zipkin:
-            enabled: true
-            endpoint: http://zipkin:9411/api/v2/spans
-            sender:
-              type: web
-          otel:
-            exporter:
-              zipkin:
-                endpoint: http://zipkin:9411/api/v2/spans
-              otlp:
-                endpoint: http://otel-collector:4317
 
 secret:
   enabled: true

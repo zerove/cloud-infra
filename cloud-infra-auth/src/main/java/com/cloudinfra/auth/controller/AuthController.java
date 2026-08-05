@@ -2,8 +2,11 @@ package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.SysLoginService;
+import com.cloudinfra.common.core.annotation.Idempotent;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.common.core.enums.ResultCode;
+import com.cloudinfra.common.util.PasswordValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
@@ -39,18 +42,23 @@ public class AuthController {
 
     @Operation(summary = "注册")
     @PostMapping("/register")
-    @com.cloudinfra.common.core.annotation.Idempotent
+    @Idempotent
     public Result<Void> register(@RequestBody LoginUser registerUser) {
-        if (
-            !com.cloudinfra.common.util.PasswordValidator.isValid(
-                registerUser.getPassword()
-            )
-        ) {
+        if (!PasswordValidator.isValid(registerUser.getPassword())) {
             return Result.fail(
-                com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(),
+                ResultCode.ERROR.getCode(),
                 "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位"
             );
         }
         return loginService.register(registerUser);
+    }
+
+    @Operation(summary = "退出登录")
+    @PostMapping("/logout")
+    public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            authTokenService.delToken(authorization.substring(7));
+        }
+        return Result.success();
     }
 }

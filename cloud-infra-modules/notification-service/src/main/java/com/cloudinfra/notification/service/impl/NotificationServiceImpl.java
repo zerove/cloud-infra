@@ -23,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -42,7 +44,7 @@ public class NotificationServiceImpl implements INotificationService {
     private final ChannelFactory channelFactory;
     private final ScheduledNotificationMapper scheduleMapper;
     private final NotificationQuotaService quotaService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -94,35 +96,8 @@ public class NotificationServiceImpl implements INotificationService {
         notification.setStatus(NotificationStatus.UNREAD);
         notificationMapper.insert(notification);
 
-        // 7. 使用虚拟线程并发发送并记录详细日志
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
-                .map(channel -> CompletableFuture.supplyAsync(() -> {
-                    long startTime = System.currentTimeMillis();
-                    String code = channel.getChannelCode();
-                    try {
-                        channel.send(request.userId(), finalTitle, finalContent);
-                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
-                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, request.userId());
-                        return true;
-                    } catch (Exception e) {
-                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
-                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
-                        return false;
-                    }
-                }, executor))
-                .collect(Collectors.toList());
-
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            
-            // 8. 只要有一个渠道发送成功，状态即标记为 SENT
-            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
-            notification.setStatus(anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD);
-        } catch (Exception e) {
-            log.error("通知编排异常: {}", e.getMessage());
-        } finally {
-            notificationMapper.updateById(notification);
-        }
+        // 7. 事务提交后分发渠道（避免长事务持有 DB 连接）
+        registerDispatchAfterCommit(notification, targetChannels);
     }
 
     private void scheduleNotification(NotificationSendRequest request) {
@@ -139,6 +114,66 @@ public class NotificationServiceImpl implements INotificationService {
         }
         scheduleMapper.insert(schedule);
         log.info("通知已加入调度队列, 预计执行时间: {}", request.scheduleTime());
+    }
+
+    /**
+     * 事务提交后分发渠道
+     *
+     * 通过 TransactionSynchronization 保证渠道发送（IO 密集、失败重试）在
+     * 主记录持久化事务提交之后执行，避免长事务持有数据库连接、渠道失败回滚 DB。
+     */
+    private void registerDispatchAfterCommit(Notification notification, List<NotificationChannel> targetChannels) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        dispatchChannels(notification, targetChannels);
+                    }
+                }
+            );
+        } else {
+            // 无事务上下文（如 MQ 回调中的非事务路径）：直接分发
+            dispatchChannels(notification, targetChannels);
+        }
+    }
+
+    /**
+     * 并发分发到各渠道（非事务，独立记录渠道日志）
+     */
+    private void dispatchChannels(Notification notification, List<NotificationChannel> targetChannels) {
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
+                .map(channel -> CompletableFuture.supplyAsync(() -> {
+                    long startTime = System.currentTimeMillis();
+                    String code = channel.getChannelCode();
+                    try {
+                        channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
+                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
+                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
+                        return true;
+                    } catch (Exception e) {
+                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
+                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
+                        return false;
+                    }
+                }, executor))
+                .collect(Collectors.toList());
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            // 只要有一个渠道发送成功，状态即标记为 SENT
+            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
+            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
+            if (newStatus != notification.getStatus()) {
+                Notification update = new Notification();
+                update.setId(notification.getId());
+                update.setStatus(newStatus);
+                notificationMapper.updateById(update);
+            }
+        } catch (Exception e) {
+            log.error("通知编排异常: {}", e.getMessage());
+        }
     }
 
     private void saveLog(Long notificationId, String channelCode, String status, String error, long duration) {

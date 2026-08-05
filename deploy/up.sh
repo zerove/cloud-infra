@@ -27,7 +27,7 @@ for i in $(seq 1 30); do
 done
 
 # 等待 PostgreSQL 就绪
-echo "=== 4. 等待 PostgreSQL 就绪 ===""
+echo "=== 4. 等待 PostgreSQL 就绪 ==="
 for i in $(seq 1 15); do
     if pg_isready -h localhost -p 5432 -U postgres > /dev/null 2>&1; then
         echo "PostgreSQL 已就绪"
@@ -38,7 +38,7 @@ for i in $(seq 1 15); do
 done
 
 # 等待 Redis 就绪
-echo "=== 5. 等待 Redis 就绪 ===""
+echo "=== 5. 等待 Redis 就绪 ==="
 for i in $(seq 1 10); do
     if redis-cli -h localhost ping > /dev/null 2>&1; then
         echo "Redis 已就绪"
@@ -49,7 +49,7 @@ for i in $(seq 1 10); do
 done
 
 # 同步配置到 Nacos
-echo "=== 6. 同步配置到 Nacos ===""
+echo "=== 6. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
 for file in "$CONFIG_DIR"/*.yaml; do
     filename=$(basename "$file")
@@ -63,7 +63,7 @@ done
 echo "配置同步完成"
 
 echo ""
-echo "=== 本地开发环境已就绪 ===""
+echo "=== 本地开发环境已就绪 ==="
 echo "  Nacos:      $NACOS_URL/nacos"
 echo "  PostgreSQL: localhost:5432/cloud_infra"
 echo "  Redis:      localhost:6379"

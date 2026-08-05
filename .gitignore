@@ -13,6 +13,18 @@ deploy_log.txt
 
 # Ignore deployment/local infrastructure data
 deploy/data/
+deploy/nacos/
+seata/
+nacos-mysql.sql
+
+# 本地环境变量与凭证（含默认口令，禁止入库）
+.env
+.env.local
+
+# 清理临时跟踪文件
+notification_api_tracker.md
+search_service_tracker.md
+task_tracker.md
 
 # Ignore system files
 .DS_Store

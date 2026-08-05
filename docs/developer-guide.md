@@ -30,7 +30,7 @@ Use Nacos for environment-specific configurations. Local `application.yml` shoul
 
 ### 4.2 Actuator Engineering (Management Port)
 To ensure monitoring tools can reach all services consistently:
-- **Management Port**: `9301`
+- **Management Port**: `9301` (容器内统一，宿主机映射见 compose)
 - **Base Path**: `/management`
 - **Configuration**:
   ```yaml
@@ -43,6 +43,17 @@ To ensure monitoring tools can reach all services consistently:
         exposure:
           include: "*"
   ```
+
+### 4.3 Service Port Conventions
+业务端口（与 K8s/compose/Nacos 一致）:
+- gateway: `9000` (网关入口)
+- auth: `8081`
+- system-module: `8082`
+- file-service: `8083`
+- notification-service: `8084`
+- search-service: `8085`
+
+新增服务请按序分配下一个端口（8086+），并同步更新 `deploy/config/`、`deploy/compose.yaml` 与 K8s Chart。
 
 ## 5. Reliability & Messaging
 ### 5.1 Event-Driven Architecture

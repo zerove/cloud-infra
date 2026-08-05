@@ -3,8 +3,8 @@ FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 # 明确复制 repackaged fat jar，排除 .original 文件
 COPY target/cloud-infra-gateway-*.jar app.jar
-# 复制 CDS 存档（不存在时 JVM 自动降级）
-COPY target/*.cds /app/application.cds 2>/dev/null || true
+# 复制 CDS 存档（不存在时忽略）
+RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
 # SerialGC: 小堆最省内存的 GC（~10MB 开销，远低于 ZGC 的 ~100MB）

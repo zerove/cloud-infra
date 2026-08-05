@@ -1,15 +1,20 @@
 package com.cloudinfra.auth.service;
 
+import com.cloudinfra.api.system.UserApi;
+import com.cloudinfra.api.system.dto.UserDTO;
 import com.cloudinfra.auth.domain.SecurityUser;
 import com.cloudinfra.auth.exception.AuthBusinessException;
 import com.cloudinfra.auth.exception.AuthExceptionCode;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.common.core.enums.ResultCode;
+import java.time.Duration;
 import java.util.Map;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,17 +26,17 @@ public class SysLoginService {
     private final AuthTokenService authTokenService;
     private final AuthenticationManager authenticationManager;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final com.cloudinfra.api.system.UserApi userApi;
-    private final com.cloudinfra.auth.service.UserService userService;
-    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final UserApi userApi;
+    private final UserService userService;
+    private final PasswordEncoder passwordEncoder;
 
     public SysLoginService(
         AuthTokenService authTokenService,
         AuthenticationManager authenticationManager,
         RedisTemplate<String, Object> redisTemplate,
-        com.cloudinfra.api.system.UserApi userApi,
-        com.cloudinfra.auth.service.UserService userService,
-        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder
+        UserApi userApi,
+        UserService userService,
+        PasswordEncoder passwordEncoder
     ) {
         this.authTokenService = authTokenService;
         this.authenticationManager = authenticationManager;
@@ -73,15 +78,14 @@ public class SysLoginService {
         } catch (Exception e) {
             recordLoginFail(loginUser.getUsername());
             return Result.fail(
-                com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(),
+                ResultCode.ERROR.getCode(),
                 AuthExceptionCode.LOGIN_FAILED.getMsg()
             );
         }
     }
 
     public Result<Void> register(LoginUser registerUser) {
-        com.cloudinfra.api.system.dto.UserDTO userDTO =
-            new com.cloudinfra.api.system.dto.UserDTO();
+        UserDTO userDTO = new UserDTO();
         userDTO.setUsername(registerUser.getUsername());
         userDTO.setPassword(passwordEncoder.encode(registerUser.getPassword()));
 
@@ -119,11 +123,11 @@ public class SysLoginService {
                 .set(
                     "login_lock:" + username,
                     "locked",
-                    java.time.Duration.ofMinutes(LOCK_DURATION_MINUTES)
+                    Duration.ofMinutes(LOCK_DURATION_MINUTES)
                 );
             redisTemplate.delete(countKey);
         } else {
-            redisTemplate.expire(countKey, java.time.Duration.ofMinutes(LOCK_DURATION_MINUTES));
+            redisTemplate.expire(countKey, Duration.ofMinutes(LOCK_DURATION_MINUTES));
         }
     }
 
