@@ -47,9 +47,9 @@
         <!-- 测试分离控制：单测走 surefire，集成测试走 failsafe -->
         <skipUnitTests>false</skipUnitTests>
         <skipITs>true</skipITs>
-        </properties>
+    </properties>
 
-        <modules>
+    <modules>
         <module>cloud-infra-bom</module>
         <module>cloud-infra-starter</module>
         <module>cloud-infra-common</module>
@@ -59,9 +59,9 @@
         <module>cloud-infra-auth</module>
         <module>cloud-infra-modules</module>
         <module>cloud-infra-test-support</module>
-        </modules>
+    </modules>
 
-        <dependencyManagement>
+    <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -267,9 +267,9 @@
                 <version>${revision}</version>
             </dependency>
         </dependencies>
-        </dependencyManagement>
+    </dependencyManagement>
 
-        <build>
+    <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -383,9 +383,9 @@
                 </plugin>
             </plugins>
         </pluginManagement>
-        </build>
+    </build>
 
-        <profiles>
+    <profiles>
         <profile>
             <id>native</id>
             <properties>
@@ -398,5 +398,5 @@
                 <spring-boot.build-image.publish>false</spring-boot.build-image.publish>
             </properties>
         </profile>
-        </profiles>
+    </profiles>
 </project>

@@ -72,7 +72,7 @@ generate_secret_value() {
       value="${JWT_SECRET:-$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)}"
       ;;
     minio.access-key)
-      value="${MINIO_ACCESS_KEY:-minioadmin}"
+      value="${MINIO_ACCESS_KEY:-$(openssl rand -base64 18 | tr -d '/+=' | head -c 18)}"
       ;;
     minio.secret-key)
       value="${MINIO_SECRET_KEY:-$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)}"

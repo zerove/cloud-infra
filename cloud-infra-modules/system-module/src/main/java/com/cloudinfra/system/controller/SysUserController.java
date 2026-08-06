@@ -61,8 +61,8 @@ public class SysUserController {
     @Operation(summary = "注册用户")
     @AuditLog(module = "USER", action = "REGISTER")
     @PostMapping("/register")
-    public Result<Void> register(@Valid @RequestBody SysUserCreateDTO userDTO) {
-        userService.insertUser(userDTO);
+    public Result<Void> register(@Valid @RequestBody com.cloudinfra.api.system.dto.RegisterUserDTO userDTO) {
+        userService.registerUser(userDTO);
         return Result.success();
     }
 
@@ -92,11 +92,50 @@ public class SysUserController {
         return Result.success(permissionService.getPermissionsByUserId(userId));
     }
 
+    @Operation(summary = "获取用户完整安全上下文（内部 Feign 契约，签名保护）")
+    @GetMapping("/detail/{userId}")
+    public Result<com.cloudinfra.common.core.domain.model.LoginUser> getUserDetail(@PathVariable("userId") Long userId) {
+        return Result.success(userService.getLoginUserById(userId));
+    }
+
+    @Operation(summary = "根据用户ID获取登录凭据（内部签名保护）")
+    @GetMapping("/credential/{userId}")
+    public Result<com.cloudinfra.api.system.dto.UserCredentialDTO> getUserCredentialById(@PathVariable("userId") Long userId) {
+        SysUser user = userService.selectUserById(userId);
+        if (user == null) {
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+        }
+        return Result.success(toUserCredentialDTO(user));
+    }
+
+    @Operation(summary = "根据用户名获取登录凭据（内部签名保护）")
+    @GetMapping("/credential/username/{username}")
+    public Result<com.cloudinfra.api.system.dto.UserCredentialDTO> getUserCredentialByUsername(@PathVariable("username") String username) {
+        SysUser user = userService.selectUserByUsername(username);
+        if (user == null) {
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+        }
+        return Result.success(toUserCredentialDTO(user));
+    }
+
     /**
      * 将用户实体转换为 Feign 契约 DTO
      */
     private com.cloudinfra.api.system.dto.UserDTO toUserDTO(SysUser user) {
         return com.cloudinfra.api.system.dto.UserDTO.builder()
+            .userId(user.getUserId())
+            .username(user.getUsername())
+            .deptId(user.getDeptId())
+            .roleId(user.getRoleId())
+            .permissions(new java.util.HashSet<>(permissionService.getPermissionsByUserId(user.getUserId())))
+            .build();
+    }
+
+    /**
+     * 将用户实体转换为登录凭据 DTO（携带密码哈希，仅内部签名调用使用）
+     */
+    private com.cloudinfra.api.system.dto.UserCredentialDTO toUserCredentialDTO(SysUser user) {
+        return com.cloudinfra.api.system.dto.UserCredentialDTO.builder()
             .userId(user.getUserId())
             .username(user.getUsername())
             .deptId(user.getDeptId())

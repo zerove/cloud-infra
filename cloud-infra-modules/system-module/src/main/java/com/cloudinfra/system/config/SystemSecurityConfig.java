@@ -3,8 +3,9 @@ package com.cloudinfra.system.config;
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
-import com.cloudinfra.framework.web.interceptor.FeignAuthInterceptor;
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -26,6 +27,9 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
  *
  * 直连场景（绕过网关）：HeaderAuthenticationFilter 在无 Header 时放行，
  * 由各 Controller 的 @PreAuthorize 兜底（SecurityContext 为空时拒绝）。
+ *
+ * 内部 Feign 契约端点：仅当请求携带基于共享密钥的 HMAC 签名（含时间戳/随机数）
+ * 且签名有效时才放行，防止外部伪造内部调用标识。
  */
 @Configuration
 @EnableWebSecurity
@@ -35,6 +39,9 @@ public class SystemSecurityConfig {
     private final HeaderAuthenticationFilter headerAuthenticationFilter;
     private final AuthenticationEntryPointImpl authenticationEntryPoint;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
+
+    @Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
+    private String internalCallSecret;
 
     public SystemSecurityConfig(
         HeaderAuthenticationFilter headerAuthenticationFilter,
@@ -65,11 +72,14 @@ public class SystemSecurityConfig {
                         "/webjars/**",
                         "/swagger-resources/**"
                     ).permitAll()
-                    // 内部 Feign 契约端点：仅允许携带内部调用标识的请求
+                    // 内部 Feign 契约端点：仅允许签名有效的内部调用
                     .requestMatchers(internalCallMatcher(
                         "/system/user/{userId}",
                         "/system/user/username/{username}",
                         "/system/user/permissions/{userId}",
+                        "/system/user/detail/{userId}",
+                        "/system/user/credential/{userId}",
+                        "/system/user/credential/username/{username}",
                         "/system/user/register",
                         "/system/service/**"
                     )).permitAll()
@@ -80,8 +90,8 @@ public class SystemSecurityConfig {
     }
 
     /**
-     * 复合 RequestMatcher：仅当请求路径匹配指定模式 且 携带 X-Internal-Call Header 时才匹配。
-     * 外部请求经网关时 Header 被置空，因此无法伪造。
+     * 复合 RequestMatcher：仅当请求路径匹配指定模式 且 内部签名有效时才匹配。
+     * 外部请求经网关时签名头被置空，因此无法伪造。
      */
     private RequestMatcher internalCallMatcher(String... antPatterns) {
         PathPatternRequestMatcher[] pathMatchers =
@@ -95,8 +105,18 @@ public class SystemSecurityConfig {
             if (!pathMatcher.matches(request)) {
                 return false;
             }
-            String internalHeader = request.getHeader(FeignAuthInterceptor.INTERNAL_CALL_HEADER);
-            return FeignAuthInterceptor.INTERNAL_CALL_VALUE.equals(internalHeader);
+            String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
+            String timestampHeader = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
+            String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
+            if (timestampHeader == null || nonce == null) {
+                return false;
+            }
+            try {
+                long timestamp = Long.parseLong(timestampHeader);
+                return InternalCallCrypto.verify(internalCallSecret, sign, timestamp, nonce);
+            } catch (NumberFormatException e) {
+                return false;
+            }
         };
     }
 }

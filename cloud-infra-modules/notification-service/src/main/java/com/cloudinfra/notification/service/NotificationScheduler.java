@@ -7,12 +7,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 通知调度引擎 - 负责定时通知的扫描与触发行
@@ -22,19 +25,45 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NotificationScheduler {
 
+    private static final String SCHEDULE_LOCK_KEY = "notification:schedule:lock";
+    private static final Duration LOCK_TTL = Duration.ofSeconds(30);
+
     private final ScheduledNotificationMapper scheduleMapper;
     private final INotificationService notificationService;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 每分钟扫描一次到期的通知任务
+     * 通过 Redis SET NX EX 分布式锁保证多副本部署下同一时刻仅一个实例执行扫描，
+     * 且逐条任务标记先处理（CAS），避免重复发送。
      */
     @Scheduled(cron = "0 * * * * *")
-    @Transactional
     public void processScheduledNotifications() {
+        // 1. 获取分布式锁（非阻塞，拿不到说明其他副本正在扫描）
+        String lockValue = UUID.randomUUID().toString();
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(
+            SCHEDULE_LOCK_KEY, lockValue, LOCK_TTL);
+        if (!Boolean.TRUE.equals(acquired)) {
+            log.info("其他实例正在执行通知调度扫描，本次跳过");
+            return;
+        }
+
+        try {
+            scanAndProcess();
+        } finally {
+            // 释放锁（仅当值匹配，防止误删他人锁）
+            String current = redisTemplate.opsForValue().get(SCHEDULE_LOCK_KEY);
+            if (lockValue.equals(current)) {
+                redisTemplate.delete(SCHEDULE_LOCK_KEY);
+            }
+        }
+    }
+
+    private void scanAndProcess() {
         log.info("开始扫描到期通知任务...");
         
-        // 1. 查找所有待处理且已到期的通知
+        // 查找所有待处理且已到期的通知
         List<ScheduledNotification> dueTasks = scheduleMapper.selectList(
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ScheduledNotification>()
                 .eq(ScheduledNotification::getProcessed, false)
@@ -50,7 +79,14 @@ public class NotificationScheduler {
 
         for (ScheduledNotification task : dueTasks) {
             try {
-                // 2. 将调度任务转换为发送请求
+                // 原子抢占：仅当 processed=false 时标记为 true，防止并发重复处理
+                int claimed = scheduleMapper.markProcessedIfPending(task.getId());
+                if (claimed == 0) {
+                    log.info("调度任务 {} 已被其他实例处理，跳过", task.getId());
+                    continue;
+                }
+
+                // 将调度任务转换为发送请求
                 NotificationSendRequest request = new NotificationSendRequest(
                     task.getUserId(),
                     null, // 模版发送不需要 title
@@ -62,16 +98,14 @@ public class NotificationScheduler {
                     null // 已到期，无需再次调度
                 );
 
-                // 3. 执行发送
+                // 执行发送
                 notificationService.sendNotification(request);
-                
-                // 4. 标记为已处理
-                task.setProcessed(true);
-                scheduleMapper.updateById(task);
                 
                 log.info("调度任务 {} 发送成功", task.getId());
             } catch (Exception e) {
                 log.error("调度任务 {} 执行失败: {}", task.getId(), e.getMessage());
+                // 失败不重试：保持 processed=true（同 sendNotification 失败语义），
+                // 避免失败任务无限循环重发；如需重试可引入退避重试状态机。
             }
         }
     }

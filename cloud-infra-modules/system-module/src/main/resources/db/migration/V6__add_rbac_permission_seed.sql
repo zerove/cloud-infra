@@ -4,7 +4,10 @@ INSERT INTO sys_permission (id, name, perms, path, method) VALUES
 (13, '权限分配', 'system:rbac:assign-perm', '/system/rbac/role/{roleId}/permissions', 'POST'),
 (14, '权限新增', 'system:permission:add', '/system/permission', 'POST'),
 (15, '资源绑定', 'system:resource:bind', '/system/resource-mapping/bind', 'POST'),
-(16, '插件卸载', 'system:plugin:unload', '/system/plugins/{pluginId}', 'DELETE')
+(16, '插件卸载', 'system:plugin:unload', '/system/plugins/{pluginId}', 'DELETE'),
+(17, 'AI 问答', 'system:ai:chat', '/system/ai/chat', 'GET'),
+(18, '审计查询', 'system:audit:list', '/system/audit/timeline', 'GET'),
+(19, '监控快照', 'system:monitoring:list', '/system/monitoring/snapshot', 'GET')
 ON CONFLICT (id) DO NOTHING;
 
 -- 超级管理员（role_id=1）自动获得全量权限

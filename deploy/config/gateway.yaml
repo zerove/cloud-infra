@@ -11,6 +11,11 @@ spring:
   main:
     lazy-initialization: true
     allow-bean-definition-overriding: true
+  datasource:
+    hikari:
+      connection-timeout: 30000
+      validation-timeout: 5000
+      initialization-fail-timeout: -1
   cloud:
     nacos:
       discovery:
@@ -29,6 +34,30 @@ spring:
             uri: lb://system-module
             predicates:
               - Path=/system/**
+            filters:
+              - StripPrefix=1
+          - id: auth-service
+            uri: lb://cloud-auth
+            predicates:
+              - Path=/auth/**
+            filters:
+              - StripPrefix=1
+          - id: file-service
+            uri: lb://file-service
+            predicates:
+              - Path=/file/**
+            filters:
+              - StripPrefix=1
+          - id: notification-service
+            uri: lb://notification-service
+            predicates:
+              - Path=/notification/**
+            filters:
+              - StripPrefix=1
+          - id: search-service
+            uri: lb://search-service
+            predicates:
+              - Path=/search/**
             filters:
               - StripPrefix=1
 
@@ -74,10 +103,3 @@ management:
     export:
       prometheus:
         enabled: true
-
-spring:
-  datasource:
-    hikari:
-      connection-timeout: 30000
-      validation-timeout: 5000
-      initialization-fail-timeout: -1

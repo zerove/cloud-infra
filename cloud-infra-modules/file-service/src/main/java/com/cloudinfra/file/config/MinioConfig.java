@@ -4,6 +4,7 @@ import io.minio.MinioClient;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 /**
  * MinIO 对象存储客户端配置
@@ -20,6 +21,7 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient(MinioProperties properties) {
+        properties.validate();
         return MinioClient.builder()
                 .endpoint(properties.getEndpoint())
                 .credentials(properties.getAccessKey(), properties.getSecretKey())
@@ -36,19 +38,38 @@ public class MinioConfig {
         private String endpoint = "http://localhost:9000";
 
         /**
-         * 访问密钥
+         * 访问密钥（默认空，必须通过 MINIO_ACCESS_KEY 或配置注入）
          */
-        private String accessKey = "minioadmin";
+        private String accessKey;
 
         /**
-         * 秘密密钥
+         * 秘密密钥（默认空，必须通过 MINIO_SECRET_KEY 或配置注入）
          */
-        private String secretKey = "minioadmin";
+        private String secretKey;
 
         /**
          * 默认存储桶名称
          */
         private String bucket = "cloud-infra";
+
+        /**
+         * 启动校验：禁止使用公开默认凭证，禁止缺失凭证。
+         * 生产环境必须通过 MINIO_ACCESS_KEY / MINIO_SECRET_KEY（或 file.storage.minio.*）注入强凭证。
+         */
+        public void validate() {
+            if (!StringUtils.hasText(accessKey) || !StringUtils.hasText(secretKey)) {
+                throw new IllegalStateException(
+                    "MinIO 凭证未配置：请通过环境变量 MINIO_ACCESS_KEY / MINIO_SECRET_KEY "
+                    + "或配置 file.storage.minio.access-key / secret-key 设置独立凭证"
+                );
+            }
+            if ("minioadmin".equals(accessKey) && "minioadmin".equals(secretKey)) {
+                throw new IllegalStateException(
+                    "MinIO 使用公开默认凭证 minioadmin/minioadmin，禁止用于任何环境："
+                    + "请配置独立高强度凭证"
+                );
+            }
+        }
 
         public String getEndpoint() { return endpoint; }
         public void setEndpoint(String endpoint) { this.endpoint = endpoint; }

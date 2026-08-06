@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.SystemException;
 import com.cloudinfra.system.plugin.PluginRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -19,6 +20,7 @@ public class AiController {
     /**
      * AI 智能问答接口
      */
+    @PreAuthorize("@ss.hasPermi('system:ai:chat')")
     @GetMapping("/chat")
     public String chat(@RequestParam String query) {
         // 从插件注册表获取 AI 助手服务

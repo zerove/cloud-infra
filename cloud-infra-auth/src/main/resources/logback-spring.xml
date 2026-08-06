@@ -1,4 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <include resource="logback-common.xml"/>
+    <!-- 自包含 logback 配置（不依赖 cloud-infra-common 的 include，避免 fat jar 嵌套资源无法加载） -->
+
+    <!-- 标准控制台输出（开发环境人类可读） -->
+    <appender name="CONSOLE_STD" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - [traceId=%X{traceId:-none} spanId=%X{spanId:-none}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- JSON 控制台输出（生产环境日志采集） -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <version/>
+                <logLevel/>
+                <threadName/>
+                <loggerName/>
+                <message/>
+                <mdc/>
+                <stackTrace/>
+                <arguments/>
+            </providers>
+        </encoder>
+    </appender>
+
+    <!-- 按 Profile 选择输出格式 -->
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_STD"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+    </springProfile>
 </configuration>

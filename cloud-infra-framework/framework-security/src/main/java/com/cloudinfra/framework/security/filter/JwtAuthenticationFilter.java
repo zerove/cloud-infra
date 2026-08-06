@@ -1,5 +1,6 @@
 package com.cloudinfra.framework.security.filter;
 
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.util.JwtUtils;
 import jakarta.servlet.FilterChain;
@@ -44,14 +45,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtUtils.getUserIdFromToken(jwt);
 
                 if (userId != null) {
-                    List<String> permissions = permissionProvider.getPermissionsByUserId(userId);
-                    List<SimpleGrantedAuthority> authorities = permissions.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList());
+                    LoginUser loginUser = permissionProvider.getUserContext(userId);
+                    if (loginUser == null) {
+                        loginUser = LoginUser.builder()
+                            .userId(userId)
+                            .username(username)
+                            .permissions(new java.util.HashSet<>(permissionProvider.getPermissionsByUserId(userId)))
+                            .build();
+                    }
+
+                    List<SimpleGrantedAuthority> authorities =
+                        (loginUser.getPermissions() == null ? List.<String>of() : loginUser.getPermissions())
+                            .stream()
+                            .map(SimpleGrantedAuthority::new)
+                            .collect(Collectors.toList());
 
                     UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
-                            username,
+                            loginUser,
                             null,
                             authorities
                         );

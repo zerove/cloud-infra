@@ -3,6 +3,7 @@ package com.cloudinfra.system.controller;
 import com.cloudinfra.system.domain.UnifiedAuditRecord;
 import com.cloudinfra.system.service.AuditAggregatorService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public class AuditController {
     /**
      * 获取用户全链路行为时间线
      */
+    @PreAuthorize("@ss.hasPermi('system:audit:list')")
     @GetMapping("/timeline")
     public List<UnifiedAuditRecord> getTimeline(
             @RequestParam Long userId) {

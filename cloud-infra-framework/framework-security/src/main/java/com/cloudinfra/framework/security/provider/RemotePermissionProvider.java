@@ -2,6 +2,7 @@ package com.cloudinfra.framework.security.provider;
 
 import com.cloudinfra.api.system.UserApi;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import org.springframework.stereotype.Component;
 import java.util.List;
@@ -27,7 +28,17 @@ public class RemotePermissionProvider implements IPermissionProvider {
     }
 
     @Override
-    @org.springframework.cache.annotation.CacheEvict(value = "permissions", key = "#userId")
+    @org.springframework.cache.annotation.Cacheable(value = "userContexts", key = "#userId")
+    public LoginUser getUserContext(Long userId) {
+        Result<LoginUser> result = userApi.getUserDetail(userId);
+        if (result != null && result.isSuccess()) {
+            return result.getData();
+        }
+        return null;
+    }
+
+    @Override
+    @org.springframework.cache.annotation.CacheEvict(value = { "permissions", "userContexts" }, key = "#userId")
     public void clearPermissionCache(Long userId) {
         // Cache is cleared via @CacheEvict
     }
