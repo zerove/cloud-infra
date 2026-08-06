@@ -39,3 +39,7 @@ cp.txt
 rebuild-native.sh
 spring-aot-resources.jar
 tools/
+
+# Agent runtime data (local only)
+.omo/
+.opencode/

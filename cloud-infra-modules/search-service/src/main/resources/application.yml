@@ -1,6 +1,6 @@
 spring:
   application:
-    name: cloud-search
+    name: search-service
   # 默认数据源配置（供自动配置启动，Nacos 配置会覆盖）
   datasource:
     url: jdbc:postgresql://cloud-postgres:5432/cloud_infra
