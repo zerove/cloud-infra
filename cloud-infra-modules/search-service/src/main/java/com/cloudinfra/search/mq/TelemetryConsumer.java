@@ -21,6 +21,7 @@ public class TelemetryConsumer {
     private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = "iot.telemetry.queue")
+    @SuppressWarnings("unchecked")
     public void handleTelemetry(byte[] payload) {
         try {
             // 1. 解析 Payload

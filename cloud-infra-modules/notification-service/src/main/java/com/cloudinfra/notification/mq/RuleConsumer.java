@@ -29,6 +29,7 @@ public class RuleConsumer {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @RabbitListener(queues = "iot.telemetry.queue")
+    @SuppressWarnings("unchecked")
     public void handleTelemetry(byte[] payload) {
         try {
             // 1. 解析遥测数据

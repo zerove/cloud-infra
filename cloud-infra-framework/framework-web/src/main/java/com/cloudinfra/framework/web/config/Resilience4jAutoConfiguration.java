@@ -38,6 +38,7 @@ public class Resilience4jAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @SuppressWarnings("unchecked")
     public CircuitBreakerConfig circuitBreakerConfig() {
         // 将字符串列表转换为 Class 数组
         Class<? extends Throwable>[] exceptionClasses = properties.getCircuitBreaker().getRecordExceptions().stream()
@@ -84,6 +85,7 @@ public class Resilience4jAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @SuppressWarnings("unchecked")
     public RetryConfig retryConfig() {
         Class<? extends Throwable>[] retryExceptions = properties.getRetry().getRetryExceptions().stream()
             .map(this::loadExceptionClass)

@@ -20,8 +20,7 @@ public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
         // 注册通用 Result 模型
         hints.reflection().registerType(com.cloudinfra.common.core.domain.Result.class,
             MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
-            MemberCategory.INVOKE_DECLARED_METHODS,
-            MemberCategory.DECLARED_FIELDS);
+            MemberCategory.INVOKE_DECLARED_METHODS);
 
         // 注册 MyBatis Plus 注解
         hints.reflection().registerType(TableName.class, MemberCategory.INVOKE_DECLARED_METHODS);
@@ -31,8 +30,7 @@ public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
             Class<?> springContextHolder = ClassUtils.forName("com.cloudinfra.framework.web.util.SpringContextHolder", classLoader);
             hints.reflection().registerType(springContextHolder,
                 MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
-                MemberCategory.INVOKE_DECLARED_METHODS,
-                MemberCategory.DECLARED_FIELDS);
+                MemberCategory.INVOKE_DECLARED_METHODS);
         } catch (ClassNotFoundException e) {
             // Ignore if not present
         }
