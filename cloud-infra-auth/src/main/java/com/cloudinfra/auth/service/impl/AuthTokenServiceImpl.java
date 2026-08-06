@@ -25,6 +25,24 @@ public class AuthTokenServiceImpl implements AuthTokenService {
     @Resource
     private JwtUtils jwtUtils;
 
+    /**
+     * 访问令牌会话 TTL（毫秒）。默认 24 小时 = 86400000。
+     */
+    @org.springframework.beans.factory.annotation.Value("${auth.token.access-ttl-ms:86400000}")
+    private long accessTtlMs;
+
+    /**
+     * 刷新令牌 TTL（毫秒）。默认 7 天 = 604800000。
+     */
+    @org.springframework.beans.factory.annotation.Value("${auth.token.refresh-ttl-ms:604800000}")
+    private long refreshTtlMs;
+
+    /**
+     * 令牌黑名单 TTL（毫秒）。默认 24 小时 = 86400000。
+     */
+    @org.springframework.beans.factory.annotation.Value("${auth.token.blacklist-ttl-ms:86400000}")
+    private long blacklistTtlMs;
+
     @Override
     public Map<String, Object> createToken(LoginUser loginUser) {
 
@@ -45,10 +63,10 @@ public class AuthTokenServiceImpl implements AuthTokenService {
 
         
         String sessionKey = "auth:session:" + loginUser.getUserId() + ":" + accessTokenJti;
-        redisService.set(sessionKey, loginUser, 24 * 3600 * 1000L);
+        redisService.set(sessionKey, loginUser, accessTtlMs);
 
         String refreshToken = UUID.randomUUID().toString();
-        redisService.set("refresh_token:" + refreshToken, (Object) String.valueOf(loginUser.getUserId()), 7 * 24 * 3600 * 1000L);
+        redisService.set("refresh_token:" + refreshToken, (Object) String.valueOf(loginUser.getUserId()), refreshTtlMs);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", accessToken);
@@ -103,7 +121,7 @@ public class AuthTokenServiceImpl implements AuthTokenService {
                 redisService.delete("auth:session:" + userId + ":" + jti);
             }
             // 2. 加入黑名单（覆盖原 TTL，防止已签发的 token 在过期前继续使用）
-            redisService.set("blacklist:" + jti, true, 24 * 3600 * 1000L);
+            redisService.set("blacklist:" + jti, true, blacklistTtlMs);
         } catch (AuthBusinessException e) {
             throw e;
         } catch (Exception e) {

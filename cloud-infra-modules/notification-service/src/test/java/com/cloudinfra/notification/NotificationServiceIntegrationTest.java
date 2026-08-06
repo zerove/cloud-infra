@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,7 +61,8 @@ class NotificationServiceIntegrationTest {
             channelFactory,
             scheduleMapper,
             quotaService,
-            objectMapper
+            objectMapper,
+            Executors.newVirtualThreadPerTaskExecutor()
         );
     }
 

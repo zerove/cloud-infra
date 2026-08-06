@@ -87,3 +87,7 @@ auth:
       enabled: ${AUTH_JWT_CACHE_ENABLED:true}
       max-size: ${AUTH_JWT_CACHE_MAX_SIZE:10000}
       ttl-seconds: ${AUTH_JWT_CACHE_TTL:300}
+  token:
+    access-ttl-ms: ${AUTH_TOKEN_ACCESS_TTL_MS:86400000}
+    refresh-ttl-ms: ${AUTH_TOKEN_REFRESH_TTL_MS:604800000}
+    blacklist-ttl-ms: ${AUTH_TOKEN_BLACKLIST_TTL_MS:86400000}

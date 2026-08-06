@@ -29,7 +29,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,6 +44,7 @@ public class NotificationServiceImpl implements INotificationService {
     private final ScheduledNotificationMapper scheduleMapper;
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
+    private final ExecutorService dispatchExecutor;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -142,37 +142,34 @@ public class NotificationServiceImpl implements INotificationService {
      * 并发分发到各渠道（非事务，独立记录渠道日志）
      */
     private void dispatchChannels(Notification notification, List<NotificationChannel> targetChannels) {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
-                .map(channel -> CompletableFuture.supplyAsync(() -> {
-                    long startTime = System.currentTimeMillis();
-                    String code = channel.getChannelCode();
-                    try {
-                        channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
-                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
-                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
-                        return true;
-                    } catch (Exception e) {
-                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
-                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
-                        return false;
-                    }
-                }, executor))
-                .collect(Collectors.toList());
+        // 使用共享虚拟线程执行器，避免每次分发都新建/销毁线程池
+        List<CompletableFuture<Boolean>> futures = targetChannels.stream()
+            .map(channel -> CompletableFuture.supplyAsync(() -> {
+                long startTime = System.currentTimeMillis();
+                String code = channel.getChannelCode();
+                try {
+                    channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
+                    saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
+                    log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
+                    return true;
+                } catch (Exception e) {
+                    saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
+                    log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
+                    return false;
+                }
+            }, dispatchExecutor))
+            .collect(Collectors.toList());
 
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-            // 只要有一个渠道发送成功，状态即标记为 SENT
-            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
-            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
-            if (newStatus != notification.getStatus()) {
-                Notification update = new Notification();
-                update.setId(notification.getId());
-                update.setStatus(newStatus);
-                notificationMapper.updateById(update);
-            }
-        } catch (Exception e) {
-            log.error("通知编排异常: {}", e.getMessage());
+        // 只要有一个渠道发送成功，状态即标记为 SENT
+        boolean anySuccess = futures.stream().anyMatch(f -> f.join());
+        NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
+        if (newStatus != notification.getStatus()) {
+            Notification update = new Notification();
+            update.setId(notification.getId());
+            update.setStatus(newStatus);
+            notificationMapper.updateById(update);
         }
     }
 

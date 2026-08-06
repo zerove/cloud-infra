@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,7 +55,8 @@ class NotificationServiceImplTest {
     void setUp() {
         notificationService = new NotificationServiceImpl(
             notificationMapper, logMapper, templateMapper,
-            notificationRouter, channelFactory, scheduleMapper, quotaService, objectMapper
+            notificationRouter, channelFactory, scheduleMapper, quotaService, objectMapper,
+            Executors.newVirtualThreadPerTaskExecutor()
         );
     }
 

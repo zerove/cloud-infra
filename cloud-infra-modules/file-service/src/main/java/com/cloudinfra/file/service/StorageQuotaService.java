@@ -1,5 +1,6 @@
 package com.cloudinfra.file.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.file.domain.StorageQuota;
@@ -17,39 +18,49 @@ public class StorageQuotaService {
     private final StorageQuotaMapper quotaMapper;
 
     /**
-     * 校验存储配额是否充足
+     * 预检查配额是否充足（仅用于友好提示，不保证原子性）。
+     * 真正的强校验与扣减由 {@link #tryReserve} 原子完成。
      */
     public void checkQuota(Long userId, long fileSize) {
-        StorageQuota quota = quotaMapper.selectOne(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StorageQuota>()
-                .eq(StorageQuota::getUserId, userId)
-        );
-
-        // 如果没有定义配额，默认允许上传 (或可以定义一个全局默认值)
+        StorageQuota quota = getQuota(userId);
         if (quota == null) return;
-
         if (quota.getUsedSizeBytes() + fileSize > quota.getMaxSizeBytes()) {
-            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED, 
-                String.format("存储空间不足。已用: %d, 上限: %d, 尝试上传: %d", 
-                quota.getUsedSizeBytes(), quota.getMaxSizeBytes(), fileSize));
+            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED,
+                String.format("存储空间不足。已用: %d, 上限: %d, 尝试上传: %d",
+                    quota.getUsedSizeBytes(), quota.getMaxSizeBytes(), fileSize));
         }
     }
 
     /**
-     * 更新存储用量
-     * @param userId 用户ID
-     * @param delta 增量 (正数为增加，负数为减少)
+     * 原子预留存储空间：用量增加与配额上限校验在同一条 UPDATE 中完成，
+     * 消除 check-then-act 竞态窗口。
+     *
+     * @throws BusinessException 配额不足时抛出 RESOURCE_EXHAUSTED
      */
-    @Transactional
-    public void updateUsage(Long userId, long delta) {
-        StorageQuota quota = quotaMapper.selectOne(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StorageQuota>()
+    public void tryReserve(Long userId, long size) {
+        if (userId == null || size <= 0) return;
+        int rows = quotaMapper.atomicUpdateUsage(userId, size);
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED,
+                "存储空间不足或配额未配置，无法完成上传");
+        }
+    }
+
+    /**
+     * 释放存储空间（删除文件时扣减用量）。
+     * 对未配置配额（无记录）的用户静默跳过。
+     */
+    public void release(Long userId, long size) {
+        if (userId == null || size <= 0) return;
+        StorageQuota quota = getQuota(userId);
+        if (quota == null) return;
+        quotaMapper.atomicUpdateUsage(userId, -size);
+    }
+
+    private StorageQuota getQuota(Long userId) {
+        return quotaMapper.selectOne(
+            new LambdaQueryWrapper<StorageQuota>()
                 .eq(StorageQuota::getUserId, userId)
         );
-
-        if (quota == null) return;
-
-        quota.setUsedSizeBytes(quota.getUsedSizeBytes() + delta);
-        quotaMapper.updateById(quota);
     }
 }

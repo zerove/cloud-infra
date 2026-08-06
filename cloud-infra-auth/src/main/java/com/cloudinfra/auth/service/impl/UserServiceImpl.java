@@ -1,7 +1,7 @@
 package com.cloudinfra.auth.service.impl;
 
 import com.cloudinfra.api.system.UserApi;
-import com.cloudinfra.api.system.dto.UserDTO;
+import com.cloudinfra.api.system.dto.UserCredentialDTO;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.UserService;
@@ -17,29 +17,30 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginUser getUserById(Long userId) {
-        return toLoginUser(userApi.getUserById(userId));
+        return toLoginUser(userApi.getUserCredentialById(userId));
     }
 
     @Override
     public LoginUser getUserByUsername(String username) {
-        return toLoginUser(userApi.getUserByUsername(username));
+        return toLoginUser(userApi.getUserCredentialByUsername(username));
     }
 
     /**
-     * 将 Feign 返回的 UserDTO 转换为登录用户模型（完整携带密码与权限）
+     * 将 Feign 返回的登录凭据转换为登录用户模型（携带密码哈希与权限）。
+     * 凭据端点仅限内部签名调用，密码哈希不落入普通用户查询链路。
      */
-    private LoginUser toLoginUser(Result<UserDTO> result) {
+    private LoginUser toLoginUser(Result<UserCredentialDTO> result) {
         if (result == null || !com.cloudinfra.common.core.enums.ResultCode.SUCCESS.getCode().equals(result.getCode()) || result.getData() == null) {
             return null;
         }
-        UserDTO userDTO = result.getData();
+        UserCredentialDTO dto = result.getData();
         return LoginUser.builder()
-                .userId(userDTO.getUserId())
-                .username(userDTO.getUsername())
-                .deptId(userDTO.getDeptId())
-                .roleId(userDTO.getRoleId())
-                .password(userDTO.getPassword())
-                .permissions(userDTO.getPermissions() == null ? new HashSet<>() : new HashSet<>(userDTO.getPermissions()))
+                .userId(dto.getUserId())
+                .username(dto.getUsername())
+                .deptId(dto.getDeptId())
+                .roleId(dto.getRoleId())
+                .password(dto.getPassword())
+                .permissions(dto.getPermissions() == null ? new HashSet<>() : new HashSet<>(dto.getPermissions()))
                 .build();
     }
 }

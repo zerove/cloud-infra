@@ -45,9 +45,3 @@ management:
       base-path: /management
       exposure:
         include: "*"
-spring:
-  datasource:
-    hikari:
-      connection-timeout: 30000
-      validation-timeout: 5000
-      initialization-fail-timeout: -1

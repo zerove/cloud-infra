@@ -72,7 +72,7 @@ class FileServiceImplTest {
         assertThat(result.storagePath()).isEqualTo("/uploads/test.txt");
 
         then(quotaService).should().checkQuota(userId, content.size());
-        then(quotaService).should().updateUsage(userId, content.size());
+        then(quotaService).should().tryReserve(userId, content.size());
         then(metadataMapper).should().insert(any(FileMetadata.class));
         then(versionMapper).should().insert(any(FileVersion.class));
     }
@@ -150,17 +150,19 @@ class FileServiceImplTest {
     void delete_existingFile_shouldReturnTrue() {
         // given
         Long fileId = 1L;
+        Long userId = 10L;
         FileMetadata metadata = new FileMetadata();
         metadata.setId(fileId);
         metadata.setFilePath("/uploads/doc.pdf");
 
         given(metadataMapper.selectById(fileId)).willReturn(metadata);
+        given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(true);
         given(storageFactory.getStrategy()).willReturn(storageStrategy);
         given(storageStrategy.delete(metadata.getFilePath())).willReturn(true);
         given(metadataMapper.deleteById(fileId)).willReturn(1);
 
         // when
-        boolean result = fileService.delete(fileId);
+        boolean result = fileService.delete(fileId, userId);
 
         // then
         assertThat(result).isTrue();
@@ -173,7 +175,7 @@ class FileServiceImplTest {
         given(metadataMapper.selectById(anyLong())).willReturn(null);
 
         // when
-        boolean result = fileService.delete(99L);
+        boolean result = fileService.delete(99L, 1L);
 
         // then
         assertThat(result).isFalse();

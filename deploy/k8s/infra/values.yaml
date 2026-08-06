@@ -172,8 +172,8 @@ minio:
   image: minio/minio:latest
   replicas: 1
   auth:
-    rootUser: minioadmin
-    rootPassword: minioadmin
+    rootUser: cloud-infra-minio-dev
+    rootPassword: CloudInfraMinioDevSecret2024
   resources:
     limits:
       cpu: 500m

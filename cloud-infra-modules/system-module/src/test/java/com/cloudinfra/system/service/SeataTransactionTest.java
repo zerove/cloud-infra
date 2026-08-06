@@ -1,7 +1,9 @@
 package com.cloudinfra.system.service;
 
 import com.cloudinfra.system.domain.SysUser;
+import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
+import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.service.impl.SysUserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,9 +34,15 @@ class SeataTransactionTest {
     @Mock
     private SysUserMapper userMapper;
     @Mock
+    private SysUserRoleMapper userRoleMapper;
+    @Mock
+    private SysRoleMapper roleMapper;
+    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private ISysConfigService configService;
+    @Mock
+    private ISysPermissionService permissionService;
 
     @Captor
     private ArgumentCaptor<SysUser> userCaptor;
@@ -43,7 +51,9 @@ class SeataTransactionTest {
 
     @BeforeEach
     void setUp() {
-        userService = new SysUserServiceImpl(userMapper, passwordEncoder, configService);
+        userService = new SysUserServiceImpl(
+            userMapper, userRoleMapper, roleMapper, passwordEncoder, configService, permissionService
+        );
     }
 
     @Test
