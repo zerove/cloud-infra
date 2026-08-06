@@ -1,5 +1,6 @@
 package com.cloudinfra.gateway.filter;
 
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.gateway.domain.auth.*;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
@@ -68,8 +69,10 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
                 headers.put("X-User-Name", identity.username());
             }
             headers.put(TRACE_ID, traceId);
-            // 剥离外部伪造的内部调用标识，防止绕过 Feign 端点鉴权
-            headers.put("X-Internal-Call", "");
+            // 剥离外部伪造的内部调用标识（签名/时间戳/随机数），防止绕过 Feign 端点鉴权
+            headers.put(InternalCallCrypto.HEADER_SIGN, "");
+            headers.put(InternalCallCrypto.HEADER_TIMESTAMP, "");
+            headers.put(InternalCallCrypto.HEADER_NONCE, "");
             
             IdentityRequestWrapper requestWrapper = new IdentityRequestWrapper(request, headers);
 

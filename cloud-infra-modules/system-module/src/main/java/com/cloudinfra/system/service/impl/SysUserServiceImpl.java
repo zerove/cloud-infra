@@ -3,9 +3,15 @@ package com.cloudinfra.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cloudinfra.common.core.domain.entity.SysRole;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.system.domain.SysUser;
+import com.cloudinfra.system.domain.SysUserRole;
 import com.cloudinfra.system.mapper.SysUserMapper;
+import com.cloudinfra.system.mapper.SysUserRoleMapper;
+import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.service.ISysConfigService;
+import com.cloudinfra.system.service.ISysPermissionService;
 import com.cloudinfra.system.service.ISysUserService;
 import com.cloudinfra.system.domain.dto.SysUserCreateDTO;
 import com.cloudinfra.system.domain.dto.SysUserUpdateDTO;
@@ -18,14 +24,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class SysUserServiceImpl implements ISysUserService {
     
     private final SysUserMapper userMapper;
+    private final SysUserRoleMapper userRoleMapper;
+    private final SysRoleMapper roleMapper;
     private final PasswordEncoder passwordEncoder;
     private final ISysConfigService configService;
+    private final ISysPermissionService permissionService;
 
     @Override
     public IPage<SysUser> selectUserList(Page<SysUser> page, SysUser user) {
@@ -41,6 +51,31 @@ public class SysUserServiceImpl implements ISysUserService {
     @Override
     public SysUser selectUserByUsername(String username) {
         return userMapper.selectOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username));
+    }
+
+    @Override
+    public LoginUser getLoginUserById(Long userId) {
+        SysUser user = selectUserById(userId);
+
+        // 加载角色（含数据权限范围）
+        List<Long> roleIds = userRoleMapper.selectList(
+                new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId))
+            .stream()
+            .map(SysUserRole::getRoleId)
+            .collect(Collectors.toList());
+
+        List<SysRole> roles = roleIds.isEmpty()
+            ? List.of()
+            : roleMapper.selectBatchIds(roleIds);
+
+        return LoginUser.builder()
+            .userId(user.getUserId())
+            .username(user.getUsername())
+            .deptId(user.getDeptId())
+            .roleId(user.getRoleId())
+            .roles(roles)
+            .permissions(new java.util.HashSet<>(permissionService.getPermissionsByUserId(userId)))
+            .build();
     }
 
 
@@ -65,6 +100,27 @@ public class SysUserServiceImpl implements ISysUserService {
 
         String initPassword = configService.selectConfigByKey("sys.user.initPassword");
         user.initializePassword(passwordEncoder, initPassword);
+        return userMapper.insert(user);
+    }
+
+    @Override
+    @Transactional
+    public int registerUser(com.cloudinfra.api.system.dto.RegisterUserDTO userDTO) {
+        // 业务唯一性校验
+        if (selectUserByUsername(userDTO.getUsername()) != null) {
+            throw new SystemBusinessException("用户名 [" + userDTO.getUsername() + "] 已存在，请更换");
+        }
+
+        SysUser user = new SysUser();
+        user.setUsername(userDTO.getUsername());
+        user.setNickName(userDTO.getNickName());
+        user.setDeptId(userDTO.getDeptId());
+        user.setRoleId(userDTO.getRoleId());
+        user.setPostId(userDTO.getPostId());
+        user.setEmail(userDTO.getEmail());
+        user.setPhoneNumber(userDTO.getPhoneNumber());
+        // 注册时使用请求明文密码（不覆盖为系统初始化默认密码）
+        user.updatePassword(passwordEncoder, userDTO.getPassword());
         return userMapper.insert(user);
     }
 

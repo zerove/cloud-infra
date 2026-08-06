@@ -1,0 +1,19 @@
+# 共享 Actuator 管理端点配置（所有微服务通过 Nacos shared-configs 加载）
+# 修改后需重新执行 ./deploy/up.sh 同步至 Nacos
+management:
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: health,info,prometheus,metrics,env,beans,conditions
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name:unknown}
+  info:
+    env:
+      enabled: true

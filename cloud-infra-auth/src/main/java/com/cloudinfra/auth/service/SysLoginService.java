@@ -1,7 +1,6 @@
 package com.cloudinfra.auth.service;
 
 import com.cloudinfra.api.system.UserApi;
-import com.cloudinfra.api.system.dto.UserDTO;
 import com.cloudinfra.auth.domain.SecurityUser;
 import com.cloudinfra.auth.exception.AuthBusinessException;
 import com.cloudinfra.auth.exception.AuthExceptionCode;
@@ -22,6 +21,8 @@ public class SysLoginService {
 
     private static final int MAX_LOGIN_FAIL_TIMES = 5;
     private static final long LOCK_DURATION_MINUTES = 10;
+    private static final int MAX_REGISTER_PER_WINDOW = 5;
+    private static final Duration REGISTER_WINDOW = Duration.ofHours(1);
 
     private final AuthTokenService authTokenService;
     private final AuthenticationManager authenticationManager;
@@ -84,12 +85,30 @@ public class SysLoginService {
         }
     }
 
-    public Result<Void> register(LoginUser registerUser) {
-        UserDTO userDTO = new UserDTO();
-        userDTO.setUsername(registerUser.getUsername());
-        userDTO.setPassword(passwordEncoder.encode(registerUser.getPassword()));
+    public Result<Void> register(LoginUser registerUser, String clientIp) {
+        checkRegisterRateLimit(registerUser.getUsername(), clientIp);
+
+        com.cloudinfra.api.system.dto.RegisterUserDTO userDTO =
+            com.cloudinfra.api.system.dto.RegisterUserDTO.builder()
+                .username(registerUser.getUsername())
+                .password(registerUser.getPassword()) // 明文密码由 system 模块 BCrypt 加密
+                .build();
 
         return userApi.registerUser(userDTO);
+    }
+
+    /**
+     * 注册频率限制：同一用户名 + IP 在 1 小时内最多注册 5 次，防批量注册滥用。
+     */
+    private void checkRegisterRateLimit(String username, String clientIp) {
+        String key = "register:rate:" + username + ":" + (clientIp == null ? "unknown" : clientIp);
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1) {
+            redisTemplate.expire(key, REGISTER_WINDOW);
+        }
+        if (count != null && count > MAX_REGISTER_PER_WINDOW) {
+            throw new AuthBusinessException(AuthExceptionCode.REGISTER_RATE_LIMITED);
+        }
     }
 
     private void validateCaptcha(String username, String code, String uuid) {

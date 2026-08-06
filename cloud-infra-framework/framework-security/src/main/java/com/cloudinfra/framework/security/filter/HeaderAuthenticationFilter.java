@@ -14,6 +14,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.filter.OncePerRequestFilter;
+import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 
 @Component
@@ -33,14 +34,26 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         String username = request.getHeader("X-User-Name");
         
         if (userId != null && username != null) {
-            List<String> permissions = permissionProvider.getPermissionsByUserId(Long.valueOf(userId));
-            List<SimpleGrantedAuthority> authorities = permissions.stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
-            
+            // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用
+            LoginUser loginUser = permissionProvider.getUserContext(Long.valueOf(userId));
+            if (loginUser == null) {
+                // 兜底：基于 Header 构建最小上下文
+                loginUser = LoginUser.builder()
+                    .userId(Long.valueOf(userId))
+                    .username(username)
+                    .permissions(new java.util.HashSet<>(permissionProvider.getPermissionsByUserId(Long.valueOf(userId))))
+                    .build();
+            }
+
+            List<SimpleGrantedAuthority> authorities =
+                (loginUser.getPermissions() == null ? List.<String>of() : loginUser.getPermissions())
+                    .stream()
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList());
+
             UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(
-                    username,
+                    loginUser,
                     null,
                     authorities
                 );

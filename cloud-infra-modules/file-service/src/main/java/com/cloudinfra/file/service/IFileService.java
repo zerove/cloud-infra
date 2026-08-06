@@ -13,7 +13,7 @@ public interface IFileService {
     /**
      * 更新现有文件并创建新版本
      */
-    FileMetadataVO update(Long fileId, FileContent content) throws IOException;
+    FileMetadataVO update(Long fileId, FileContent content, Long userId) throws IOException;
 
     InputStream download(Long fileId, Long userId) throws IOException;
 
@@ -32,6 +32,6 @@ public interface IFileService {
      */
     List<FileMetadataVO> searchFiles(String keyword);
 
-    boolean delete(Long fileId);
+    boolean delete(Long fileId, Long userId);
 }
 

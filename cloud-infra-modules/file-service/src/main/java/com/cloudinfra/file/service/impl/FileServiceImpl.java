@@ -39,21 +39,22 @@ public class FileServiceImpl implements IFileService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FileMetadataVO upload(Long userId, FileContent content) throws IOException {
-        // 1. 存储配额校验
+        // 1. 存储配额预检查（友好提示） + 原子预留（真正强校验）
         quotaService.checkQuota(userId, content.size());
+        quotaService.tryReserve(userId, content.size());
 
         // 2. 物理上传
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
         String storedPath = strategy.upload(content.fileName(), content.inputStream());
         
-        // 3. 创建主元数据
+        // 3. 创建主元数据（记录真实上传者）
         FileMetadata metadata = new FileMetadata();
         metadata.setFileName(content.fileName());
         metadata.setFilePath(storedPath);
         metadata.setFileType(content.contentType());
         metadata.setFileSize(content.size());
         metadata.setCreateTime(new Date());
-        metadata.setUploader("system"); 
+        metadata.setUploader(String.valueOf(userId));
         metadata.setCurrentVersion(1);
         metadataMapper.insert(metadata);
         
@@ -65,22 +66,28 @@ public class FileServiceImpl implements IFileService {
         version.setCreateTime(LocalDateTime.now());
         versionMapper.insert(version);
         
-        // 5. 更新存储用量
-        quotaService.updateUsage(userId, content.size());
-        
         return mapToVo(metadata);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FileMetadataVO update(Long fileId, FileContent content) throws IOException {
+    public FileMetadataVO update(Long fileId, FileContent content, Long userId) throws IOException {
         FileMetadata metadata = metadataMapper.selectById(fileId);
         if (metadata == null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "File not found");
         }
-        
-        // 更新操作通常不进行全量配额校验，但可在实际业务中实现增量校验
-        
+
+        // 写权限校验（含上传者本人或授权用户）
+        if (!permissionService.hasAccess(userId, fileId, "WRITE")) {
+            throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to update this file");
+        }
+
+        // 增量配额预留：新版本大小 - 旧版本大小（原子）
+        long delta = content.size() - (metadata.getFileSize() == null ? 0 : metadata.getFileSize());
+        if (delta > 0) {
+            quotaService.tryReserve(userId, delta);
+        }
+
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
         String storedPath = strategy.upload(content.fileName(), content.inputStream());
 
@@ -146,25 +153,48 @@ public class FileServiceImpl implements IFileService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean delete(Long fileId) {
+    public boolean delete(Long fileId, Long userId) {
         FileMetadata metadata = metadataMapper.selectById(fileId);
         if (metadata == null) {
             return false;
         }
-        
+
+        // 写权限校验（含上传者本人或授权用户）
+        if (!permissionService.hasAccess(userId, fileId, "WRITE")) {
+            throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to delete this file");
+        }
+
         StorageStrategy strategy = storageFactory.getStrategy();
         boolean deleted = strategy.delete(metadata.getFilePath());
         
         if (deleted) {
-            // 注意：生产环境下应通过关联查询获取 uploaderId 进行用量扣减
-            // 示例：quotaService.updateUsage(metadata.getUploaderId(), -metadata.getFileSize());
-            
+            // 释放配额：优先使用元数据中的真实上传者，回退到当前操作者
+            Long ownerId = parseUploader(metadata.getUploader());
+            if (ownerId == null) {
+                ownerId = userId;
+            }
+            if (metadata.getFileSize() != null) {
+                quotaService.release(ownerId, metadata.getFileSize());
+            }
+
             versionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
                 .eq(FileVersion::getFileId, fileId));
             return metadataMapper.deleteById(fileId) > 0;
         }
         
         return false;
+    }
+
+    /**
+     * 解析 uploader 字段为 Long（兼容历史字符串与数字格式）
+     */
+    private Long parseUploader(String uploader) {
+        if (uploader == null || uploader.isBlank()) return null;
+        try {
+            return Long.valueOf(uploader.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public List<FileMetadataVO> searchFiles(String keyword) {

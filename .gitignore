@@ -36,6 +36,7 @@ Thumbs.db
 # Native Image build artifacts
 **/target/native-build/
 cp.txt
+dependency-reduced-pom.xml
 rebuild-native.sh
 spring-aot-resources.jar
 tools/
