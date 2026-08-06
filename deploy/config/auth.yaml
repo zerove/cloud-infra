@@ -77,10 +77,10 @@ spring:
       port: 6379
       database: 0
 
-# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入，长度 >= 32）
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:CHANGE_ME_please_set_a_random_secret_32chars_min}
+    secret: ${AUTH_JWT_SECRET:sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
     algorithm: ${AUTH_JWT_ALGORITHM:HS256}
     cache:

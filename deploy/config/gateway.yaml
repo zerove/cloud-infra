@@ -63,7 +63,7 @@ spring:
 
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:CHANGE_ME_please_set_a_random_secret_32chars_min}
+    secret: ${AUTH_JWT_SECRET:sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
   white-list:
     - /auth/login
