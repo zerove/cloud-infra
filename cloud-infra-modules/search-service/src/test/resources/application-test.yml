@@ -20,3 +20,7 @@ spring:
           enabled: false
   elasticsearch:
     uris: ${spring.elasticsearch.uris:http://localhost:9200}
+
+auth:
+  jwt:
+    secret: "test-secret-key-for-integration-testing-minimum-32-chars"
