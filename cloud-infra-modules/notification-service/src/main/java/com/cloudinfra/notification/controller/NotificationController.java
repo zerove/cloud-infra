@@ -30,10 +30,17 @@ public class NotificationController implements NotificationApi {
     @Operation(summary = "发送通知")
     @PostMapping("/send")
     public Result<NotificationResponse> send(@Valid @RequestBody NotificationRequest request) {
-        // 这里简化处理，直接返回成功
-        notificationService.sendNotification(new NotificationSendRequest(
-                request.userId(), request.title(), request.content(), request.type(),
-                null, null, null, null));
+        NotificationSendRequest sendRequest = new NotificationSendRequest(
+                request.userId(),
+                request.title(),
+                request.content(),
+                request.type(),
+                request.channels(),        // 目标渠道
+                request.templateCode(),    // 模版编码
+                request.params(),          // 模版参数
+                request.scheduleTime()     // 定时发送时间
+        );
+        notificationService.sendNotification(sendRequest);
         return Result.success(new NotificationResponse(null, "SENT"));
     }
 

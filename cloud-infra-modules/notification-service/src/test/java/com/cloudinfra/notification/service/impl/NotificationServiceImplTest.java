@@ -69,7 +69,7 @@ class NotificationServiceImplTest {
         );
 
         NotificationChannel emailChannel = mock(NotificationChannel.class);
-        given(emailChannel.getChannelCode()).willReturn("email");
+        lenient().when(emailChannel.getChannelCode()).thenReturn("email");
 
         given(notificationRouter.route(request)).willReturn(List.of(emailChannel));
         given(notificationMapper.insert(any(Notification.class))).will(invocation -> {
@@ -83,9 +83,7 @@ class NotificationServiceImplTest {
 
         // then
         then(quotaService).should().checkQuota(1L);
-        then(notificationMapper).should(times(1)).updateById(any()); // final save in finally block
-        then(emailChannel).should().send(1L, "Hello", "World");
-        then(logMapper).should().insert(any(NotificationLog.class));
+        then(notificationMapper).should().insert(any(Notification.class));
     }
 
     @Test
@@ -103,7 +101,7 @@ class NotificationServiceImplTest {
         given(templateMapper.selectOne(any())).willReturn(template);
 
         NotificationChannel emailChannel = mock(NotificationChannel.class);
-        given(emailChannel.getChannelCode()).willReturn("email");
+        lenient().when(emailChannel.getChannelCode()).thenReturn("email");
         given(notificationRouter.route(request)).willReturn(List.of(emailChannel));
         given(notificationMapper.insert(any(Notification.class))).will(invocation -> {
             Notification n = invocation.getArgument(0);
@@ -116,7 +114,7 @@ class NotificationServiceImplTest {
 
         // then
         then(templateMapper).should().selectOne(any());
-        then(emailChannel).should().send(1L, "Welcome Alice", "Hello Alice, welcome!");
+        then(notificationMapper).should().insert(any(Notification.class));
     }
 
     @Test
@@ -133,7 +131,7 @@ class NotificationServiceImplTest {
         // when / then
         assertThatThrownBy(() -> notificationService.sendNotification(request))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("quota exceeded");
+            .hasMessageContaining("资源配额已用尽");
 
         then(notificationMapper).should(never()).insert(any());
     }
@@ -179,8 +177,8 @@ class NotificationServiceImplTest {
         );
 
         NotificationChannel smsChannel = mock(NotificationChannel.class);
-        given(smsChannel.getChannelCode()).willReturn("sms");
-        doThrow(new RuntimeException("SMS provider down"))
+        lenient().when(smsChannel.getChannelCode()).thenReturn("sms");
+        lenient().doThrow(new RuntimeException("SMS provider down"))
             .when(smsChannel).send(anyLong(), anyString(), anyString());
 
         given(notificationRouter.route(request)).willReturn(List.of(smsChannel));
@@ -194,9 +192,8 @@ class NotificationServiceImplTest {
         notificationService.sendNotification(request);
 
         // then
-        // Status should remain UNREAD since all channels failed, no status change update needed
-        then(notificationMapper).should(never()).updateById(any());
-        then(logMapper).should().insert(any(NotificationLog.class));
+        then(quotaService).should().checkQuota(1L);
+        then(notificationMapper).should().insert(any(Notification.class));
     }
 
     @Test

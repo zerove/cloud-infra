@@ -28,3 +28,7 @@ spring:
           enabled: false
   config:
     import: "optional:classpath:application.yml"
+
+auth:
+  jwt:
+    secret: "test-secret-key-for-integration-testing-minimum-32-chars"

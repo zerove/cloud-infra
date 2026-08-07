@@ -1,5 +1,6 @@
 package com.cloudinfra.api.notification.enums;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -22,6 +23,7 @@ public enum NotificationStatus {
      */
     READ(2, "已读");
 
+    @EnumValue
     private final Integer code;
     private final String description;
 }
