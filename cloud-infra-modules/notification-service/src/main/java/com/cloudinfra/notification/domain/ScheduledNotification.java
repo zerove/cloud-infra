@@ -27,11 +27,14 @@ public class ScheduledNotification {
     private Boolean processed = false;
 
     /**
-     * 将 paramsJson 转换为 Map
+     * 将 paramsJson 转换为 Map（复用调用方注入的单例 ObjectMapper，避免每次 new）
      */
-    public Map<String, Object> getParams() {
+    public Map<String, Object> getParams(ObjectMapper objectMapper) {
+        if (paramsJson == null || paramsJson.isBlank()) {
+            return Collections.emptyMap();
+        }
         try {
-            return new ObjectMapper().readValue(paramsJson, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(paramsJson, new TypeReference<Map<String, Object>>() {});
         } catch (JsonProcessingException e) {
             return Collections.emptyMap();
         }

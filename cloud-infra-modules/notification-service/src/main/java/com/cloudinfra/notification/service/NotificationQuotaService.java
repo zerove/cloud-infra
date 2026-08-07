@@ -1,7 +1,7 @@
 package com.cloudinfra.notification.service;
 
 import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
+import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,8 +42,7 @@ public class NotificationQuotaService {
         if (currentCount != null && currentCount > DEFAULT_DAILY_LIMIT) {
             // 如果超限，将计数减回去 (避免误扣)
             redisTemplate.opsForValue().decrement(key);
-            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED, 
-                "当日通知发送额度已用完 (上限: " + DEFAULT_DAILY_LIMIT + ")");
+            throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
     }
 }

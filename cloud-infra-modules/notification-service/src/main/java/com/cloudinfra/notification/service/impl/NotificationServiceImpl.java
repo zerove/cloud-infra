@@ -140,37 +140,39 @@ public class NotificationServiceImpl implements INotificationService {
 
     /**
      * 并发分发到各渠道（非事务，独立记录渠道日志）
+     * 异步执行，不阻塞调用线程：分发完成后更新通知状态。
      */
     private void dispatchChannels(Notification notification, List<NotificationChannel> targetChannels) {
-        // 使用共享虚拟线程执行器，避免每次分发都新建/销毁线程池
-        List<CompletableFuture<Boolean>> futures = targetChannels.stream()
-            .map(channel -> CompletableFuture.supplyAsync(() -> {
-                long startTime = System.currentTimeMillis();
-                String code = channel.getChannelCode();
-                try {
-                    channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
-                    saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
-                    log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
-                    return true;
-                } catch (Exception e) {
-                    saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
-                    log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
-                    return false;
-                }
-            }, dispatchExecutor))
-            .collect(Collectors.toList());
+        dispatchExecutor.execute(() -> {
+            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
+                .map(channel -> CompletableFuture.supplyAsync(() -> {
+                    long startTime = System.currentTimeMillis();
+                    String code = channel.getChannelCode();
+                    try {
+                        channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
+                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
+                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
+                        return true;
+                    } catch (Exception e) {
+                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
+                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
+                        return false;
+                    }
+                }, dispatchExecutor))
+                .collect(Collectors.toList());
 
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // 只要有一个渠道发送成功，状态即标记为 SENT
-        boolean anySuccess = futures.stream().anyMatch(f -> f.join());
-        NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
-        if (newStatus != notification.getStatus()) {
-            Notification update = new Notification();
-            update.setId(notification.getId());
-            update.setStatus(newStatus);
-            notificationMapper.updateById(update);
-        }
+            // 只要有一个渠道发送成功，状态即标记为 SENT
+            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
+            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
+            if (newStatus != notification.getStatus()) {
+                Notification update = new Notification();
+                update.setId(notification.getId());
+                update.setStatus(newStatus);
+                notificationMapper.updateById(update);
+            }
+        });
     }
 
     private void saveLog(Long notificationId, String channelCode, String status, String error, long duration) {
@@ -199,7 +201,8 @@ public class NotificationServiceImpl implements INotificationService {
         // 2. 根据通知 ID 集合检索所有渠道日志
         return logMapper.selectList(
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationLog>()
-                .in(NotificationLog::getNotificationId, notificationIds)
+                .in(notificationIds.isEmpty(),
+                    NotificationLog::getNotificationId, notificationIds)
                 .orderByDesc(NotificationLog::getCreateTime)
         );
     }
@@ -215,9 +218,14 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public List<Notification> getNotificationHistory(Long userId) {
-        return notificationMapper.selectList(
+    public List<Notification> getNotificationHistory(Long userId, int page, int size) {
+        LambdaQueryWrapper<Notification> wrapper =
             new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
-        );
+                .orderByDesc(Notification::getCreateTime);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> p =
+            notificationMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                wrapper);
+        return p.getRecords();
     }
 }

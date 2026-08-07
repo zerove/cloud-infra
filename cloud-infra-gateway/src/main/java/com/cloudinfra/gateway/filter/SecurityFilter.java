@@ -90,6 +90,9 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
             case UNAUTHORIZED -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, result.message());
             case FORBIDDEN -> response.sendError(HttpServletResponse.SC_FORBIDDEN, result.message());
             case SESSION_EXPIRED -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, result.message());
+            // 防御性兜底：未知认证状态返回 500，避免过滤器链中断导致客户端挂起
+            default -> response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                "Unknown auth status: " + result.status());
         }
     }
 
