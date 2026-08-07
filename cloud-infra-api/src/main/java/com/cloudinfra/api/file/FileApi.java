@@ -3,6 +3,7 @@ package com.cloudinfra.api.file;
 import com.cloudinfra.api.file.dto.*;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
@@ -19,6 +20,7 @@ public interface FileApi {
     @PostMapping(value = "/file/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @CircuitBreaker(name = "fileService")
     @Retry(name = "fileService")
+    @RateLimiter(name = "fileService")
     Result<FileInfoResponse> upload(@RequestPart("file") MultipartFile file, @RequestPart("metadata") FileUploadRequest metadata);
 
     /**

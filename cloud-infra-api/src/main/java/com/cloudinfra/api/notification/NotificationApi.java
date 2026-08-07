@@ -5,6 +5,7 @@ import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +19,7 @@ public interface NotificationApi {
     @PostMapping("/notification/send")
     @CircuitBreaker(name = "notificationService")
     @Retry(name = "notificationService")
+    @RateLimiter(name = "notificationService")
     Result<NotificationResponse> send(@RequestBody NotificationRequest request);
 
     /**
