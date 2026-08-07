@@ -8,7 +8,8 @@ public enum SystemExceptionCode implements IResultCode {
     DEPT_LEVEL_EXCEED(3001, "部门层级最多支持 5 级"),
     DEPT_HAS_CHILD(3002, "存在下级部门，禁止删除"),
     DEPT_IN_USE(3003, "部门下存在关联用户，禁止删除"),
-    POST_IN_USE(4001, "岗位存在关联用户，禁止删除");
+    POST_IN_USE(4001, "岗位存在关联用户，禁止删除"),
+    RESOURCE_EXHAUSTED(5001, "资源配额已用尽");
 
     private final int code;
     private final String msg;

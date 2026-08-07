@@ -31,7 +31,7 @@ public class NotificationScheduler {
     private final ScheduledNotificationMapper scheduleMapper;
     private final INotificationService notificationService;
     private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * 每分钟扫描一次到期的通知任务
@@ -94,7 +94,7 @@ public class NotificationScheduler {
                     com.cloudinfra.api.notification.enums.NotificationType.valueOf(task.getType()),
                     null, // 使用模版默认渠道
                     task.getTemplateCode(),
-                    task.getParams(),
+                    task.getParams(objectMapper),
                     null // 已到期，无需再次调度
                 );
 

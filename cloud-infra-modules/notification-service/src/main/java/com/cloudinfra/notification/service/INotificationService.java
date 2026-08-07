@@ -12,9 +12,11 @@ public interface INotificationService {
     void sendNotification(NotificationSendRequest request);
 
     /**
-     * 获取用户通知历史
+     * 获取用户通知历史（分页）
+     * @param page 页码（从 1 开始）
+     * @param size 每页条数
      */
-    List<Notification> getNotificationHistory(Long userId);
+    List<Notification> getNotificationHistory(Long userId, int page, int size);
 
     /**
      * 根据关键词检索通知 (检索标题和内容)

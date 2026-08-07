@@ -47,8 +47,10 @@ public class NotificationController implements NotificationApi {
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
         
-        // 暂未实现分页过滤，直接返回所有历史
-        List<Notification> notifications = notificationService.getNotificationHistory(userId);
+        // 校验分页参数（size 上限 100，防止大分页拖垮 DB）
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        List<Notification> notifications = notificationService.getNotificationHistory(userId, safePage, safeSize);
         List<NotificationHistoryResponse> responses = notifications.stream()
                 .map(n -> new NotificationHistoryResponse(
                     n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime()))
