@@ -15,15 +15,14 @@ spring:
           nodes: cloud-rabbitmq:5672
           username: guest
           password: guest
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
-  cloud:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         enabled: true
       config:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   main:
     allow-bean-definition-overriding: true
   elasticsearch:
@@ -36,6 +35,12 @@ spring:
   threads:
     virtual:
       enabled: true
+
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
 management:
   server:
