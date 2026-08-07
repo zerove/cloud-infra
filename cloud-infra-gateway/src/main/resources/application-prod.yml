@@ -1,0 +1,14 @@
+spring:
+  config:
+    import: "nacos:gateway.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: true
+
+# 生产环境：严格要求 Nacos 可达，配置缺失即启动失败
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

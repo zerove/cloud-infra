@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: "optional:nacos:auth.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: false

@@ -33,8 +33,6 @@ spring:
       port: 6379
       database: 0
 
-  config:
-    import: "optional:nacos:search-service.yaml"
   cloud:
     nacos:
       config:
