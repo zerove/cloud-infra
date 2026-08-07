@@ -2,6 +2,8 @@ package com.cloudinfra.gateway.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.lang.reflect.Field;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -20,17 +22,25 @@ class GatewayConfigTest {
     }
 
     @Test
-    void shouldCreateCorsFilter() {
+    void shouldCreateCorsFilter() throws Exception {
         GatewayConfig config = new GatewayConfig();
+        setAllowedOrigins(config, List.of("http://localhost:*"));
         CorsFilter corsFilter = config.corsFilter();
         assertThat(corsFilter).isNotNull();
     }
 
     @Test
-    void shouldRegisterCorsMappings() {
+    void shouldRegisterCorsMappings() throws Exception {
         GatewayConfig config = new GatewayConfig();
+        setAllowedOrigins(config, List.of("http://localhost:*"));
         CorsRegistry registry = new CorsRegistry();
         // 不应抛异常
         config.addCorsMappings(registry);
+    }
+
+    private void setAllowedOrigins(GatewayConfig config, List<String> origins) throws Exception {
+        Field field = GatewayConfig.class.getDeclaredField("allowedOrigins");
+        field.setAccessible(true);
+        field.set(config, origins);
     }
 }

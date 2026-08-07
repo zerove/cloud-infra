@@ -36,3 +36,15 @@ spring:
   config:
     activate:
       on-profile: test
+
+auth:
+  jwt:
+    secret: "test-secret-key-for-integration-testing-minimum-32-chars"
+
+file:
+  storage:
+    minio:
+      endpoint: "http://localhost:9000"
+      access-key: "test-access-key"
+      secret-key: "test-secret-key-minimum-32-chars-long"
+      bucket: "cloud-infra-test"
