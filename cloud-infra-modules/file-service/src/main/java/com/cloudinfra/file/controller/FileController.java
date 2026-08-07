@@ -173,4 +173,13 @@ public class FileController {
             return Result.fail(403, "无权删除该文件");
         }
     }
+
+    @Operation(summary = "根据关键词搜索文件")
+    @GetMapping("/search")
+    public Result<java.util.List<FileMetadataVO>> search(@RequestParam String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return Result.fail(400, "搜索关键词不能为空");
+        }
+        return Result.success(fileService.searchFiles(keyword.trim()));
+    }
 }

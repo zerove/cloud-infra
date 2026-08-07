@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,8 +48,11 @@ public class FileServiceImpl implements IFileService {
         // 2. 物理上传
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
         String storedPath = strategy.upload(content.fileName(), content.inputStream());
-        
-        // 3. 创建主元数据（记录真实上传者）
+
+        // 3. 注册回滚补偿：若后续 DB 操作失败导致事务回滚，删除已落盘的孤儿文件
+        registerFileOnCleanup(strategy, storedPath);
+
+        // 4. 创建主元数据（记录真实上传者）
         FileMetadata metadata = new FileMetadata();
         metadata.setFileName(content.fileName());
         metadata.setFilePath(storedPath);
@@ -58,7 +63,7 @@ public class FileServiceImpl implements IFileService {
         metadata.setCurrentVersion(1);
         metadataMapper.insert(metadata);
         
-        // 4. 创建初始版本快照 v1
+        // 5. 创建初始版本快照 v1
         FileVersion version = new FileVersion();
         version.setFileId(metadata.getId());
         version.setVersionNumber(1);
@@ -67,6 +72,32 @@ public class FileServiceImpl implements IFileService {
         versionMapper.insert(version);
         
         return mapToVo(metadata);
+    }
+
+    /**
+     * 注册事务回滚补偿：仅当事务最终回滚（ROLLED_BACK）时删除已写入的文件，
+     * 避免失败上传留下孤儿文件占用存储。
+     */
+    private void registerFileOnCleanup(StorageStrategy strategy, String storedPath) {
+        if (storedPath == null || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    return;
+                }
+                try {
+                    boolean removed = strategy.delete(storedPath);
+                    if (removed) {
+                        log.debug("事务回滚，已清理孤儿文件: {}", storedPath);
+                    }
+                } catch (Exception e) {
+                    log.warn("事务回滚后清理孤儿文件失败: {}", storedPath, e);
+                }
+            }
+        });
     }
 
     @Override
@@ -90,6 +121,9 @@ public class FileServiceImpl implements IFileService {
 
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
         String storedPath = strategy.upload(content.fileName(), content.inputStream());
+
+        // 注册回滚补偿：事务回滚时删除新落盘的版本文件，避免孤儿文件
+        registerFileOnCleanup(strategy, storedPath);
 
         int newVersion = metadata.getCurrentVersion() + 1;
         metadata.setCurrentVersion(newVersion);
