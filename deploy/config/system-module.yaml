@@ -121,6 +121,16 @@ resilience4j:
     limit-refresh-period-ms: 1000
     limit-for-period: 100
     timeout-duration-ms: 500
+    # 下游服务限流实例(与 cloud-infra-api Feign 注解 name 对应, 写操作防刷)
+    instances:
+      notificationService:
+        limit-refresh-period: 1s
+        limit-for-period: 100
+        timeout-duration: 500ms
+      fileService:
+        limit-refresh-period: 1s
+        limit-for-period: 100
+        timeout-duration: 500ms
   retry:
     max-attempts: 3
     wait-duration-ms: 500

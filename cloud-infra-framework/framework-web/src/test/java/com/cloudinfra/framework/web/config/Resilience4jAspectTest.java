@@ -2,6 +2,8 @@ package com.cloudinfra.framework.web.config;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 验证 Resilience4j {@code @Retry}/{@code @CircuitBreaker} 注解切面在
+ * 验证 Resilience4j {@code @Retry}/{@code @CircuitBreaker}/{@code @RateLimiter} 注解切面在
  * Spring AOP 代理 Bean 上真实生效(由 {@link Resilience4jAutoConfiguration}
  * 导入官方自动配置注册切面)。
  */
@@ -29,7 +31,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "resilience4j.circuitbreaker.instances.testCircuit.minimum-number-of-calls=2",
         "resilience4j.circuitbreaker.instances.testCircuit.sliding-window-size=2",
         "resilience4j.circuitbreaker.instances.testCircuit.failure-rate-threshold=50",
-        "resilience4j.circuitbreaker.instances.testCircuit.wait-duration-in-open-state=1s"
+        "resilience4j.circuitbreaker.instances.testCircuit.wait-duration-in-open-state=1s",
+        "resilience4j.ratelimiter.instances.testLimiter.limit-for-period=2",
+        "resilience4j.ratelimiter.instances.testLimiter.limit-refresh-period=10s",
+        "resilience4j.ratelimiter.instances.testLimiter.timeout-duration=0s"
 })
 class Resilience4jAspectTest {
 
@@ -57,6 +62,16 @@ class Resilience4jAspectTest {
                 .isInstanceOf(IOException.class);
         // max-attempts=3,全部失败
         assertThat(testService.attempts()).isEqualTo(3);
+    }
+
+    @Test
+    void rateLimiter_shouldRejectCallsBeyondLimit() {
+        testService.reset();
+        // 周期内允许 2 次,第 3 次被限流拒绝
+        assertThat(testService.limited()).isEqualTo("ok");
+        assertThat(testService.limited()).isEqualTo("ok");
+        assertThatThrownBy(testService::limited)
+                .isInstanceOf(RequestNotPermitted.class);
     }
 
     @Test
@@ -97,6 +112,11 @@ class Resilience4jAspectTest {
         public String flakyCircuit() throws IOException {
             attempts.incrementAndGet();
             throw new IOException("circuit failure");
+        }
+
+        @RateLimiter(name = "testLimiter")
+        public String limited() {
+            return "ok";
         }
 
         void reset() {
