@@ -36,10 +36,13 @@ services:
       - cloud-infra
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
+      # Nacos v3 的 /nacos/ 首页与 v1 console 端点不返回 200（410 Gone 或 404），
+      # 使用命名服务 list API 作为真实可用性探测（返回 200 JSON）
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/ns/service/list?pageNo=1&pageSize=10"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   # ========== 数据库 ==========
   postgres:
@@ -105,7 +108,7 @@ services:
 
   # ========== 搜索引擎 ==========
   elasticsearch:
-    image: elasticsearch:8.12.2
+    image: elasticsearch:9.0.2
     container_name: cloud-elasticsearch
     mem_limit: 1g
     ports:

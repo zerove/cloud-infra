@@ -39,6 +39,12 @@ spring:
     username: guest
     password: guest
 
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:***REMOVED-LEAKED-DEV-JWT-SECRET***}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
+
 management:
   server:
     port: 9301

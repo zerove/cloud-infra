@@ -15,17 +15,16 @@ spring:
           nodes: cloud-rabbitmq:5672
           username: guest
           password: guest
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
-  application:
-    name: cloud-file
-  cloud:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         enabled: true
       config:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: cloud-file
   threads:
     virtual:
       enabled: true
@@ -65,13 +64,19 @@ spring:
       max-file-size: 1024MB
       max-request-size: 1024MB
 
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:***REMOVED-LEAKED-DEV-JWT-SECRET***}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
+
 file:
   storage:
     type: auto
     minio:
       endpoint: ${MINIO_ENDPOINT:http://cloud-minio:9000}
-      access-key: ${MINIO_ACCESS_KEY:}
-      secret-key: ${MINIO_SECRET_KEY:}
+      access-key: ${MINIO_ACCESS_KEY:minio-dev-user}
+      secret-key: ${MINIO_SECRET_KEY:minio-dev-secret-12345678}
       bucket: ${MINIO_BUCKET:cloud-infra}
   upload:
     dir: /data/uploads
