@@ -4,6 +4,8 @@ import com.cloudinfra.api.notification.dto.*;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.Result;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -14,12 +16,16 @@ public interface NotificationApi {
      * 发送通知
      */
     @PostMapping("/notification/send")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
     Result<NotificationResponse> send(@RequestBody NotificationRequest request);
 
     /**
      * 获取通知历史记录
      */
     @GetMapping("/notification/history")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
     Result<List<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
@@ -31,6 +37,7 @@ public interface NotificationApi {
      * 将通知标记为已读
      */
     @PutMapping("/notification/read/{id}")
+    @CircuitBreaker(name = "notificationService")
     Result<Void> markAsRead(@PathVariable("id") Long id);
 
     /**

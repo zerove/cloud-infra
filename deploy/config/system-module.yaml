@@ -100,6 +100,23 @@ resilience4j:
       - java.io.IOException
       - java.util.concurrent.TimeoutException
       - org.springframework.web.client.ResourceAccessException
+    # 下游服务熔断实例(与 cloud-infra-api Feign 注解 name 对应)
+    instances:
+      notificationService:
+        failure-rate-threshold: 50
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+      fileService:
+        failure-rate-threshold: 50
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+      searchService:
+        failure-rate-threshold: 50
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
   ratelimiter:
     limit-refresh-period-ms: 1000
     limit-for-period: 100
@@ -112,6 +129,17 @@ resilience4j:
     retry-exceptions:
       - java.io.IOException
       - java.util.concurrent.TimeoutException
+    # 下游服务重试实例(与 cloud-infra-api Feign 注解 name 对应)
+    instances:
+      notificationService:
+        max-attempts: 3
+        wait-duration: 500ms
+      fileService:
+        max-attempts: 3
+        wait-duration: 500ms
+      searchService:
+        max-attempts: 3
+        wait-duration: 500ms
     ignore-exceptions:
       - java.lang.IllegalArgumentException
       - java.lang.IllegalStateException
