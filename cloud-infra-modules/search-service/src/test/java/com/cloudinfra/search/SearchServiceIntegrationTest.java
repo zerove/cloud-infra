@@ -2,12 +2,17 @@ package com.cloudinfra.search;
 
 import com.cloudinfra.api.search.dto.*;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.search.dto.IndexDetailVO;
+import com.cloudinfra.search.dto.IndexInfoVO;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
 import com.cloudinfra.test.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -25,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.cloud.nacos.config.enabled=false",
         "spring.cloud.nacos.discovery.enabled=false",
@@ -65,6 +71,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @Order(1)
     public void testMultiFieldSearch() {
         // 1. Prepare data
         OperLogDocument doc1 = new OperLogDocument();
@@ -111,6 +118,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @Order(2)
     public void testPagination() {
         // 1. Prepare data
         for (int i = 0; i < 15; i++) {
@@ -150,5 +158,85 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
                 assertThat(searchResponse.getTotal()).isEqualTo(15);
                 assertThat(searchResponse.getData()).hasSize(5);
             });
+    }
+
+    @Test
+    @Order(3)
+    public void testIndexAdminListRebuildDetailDelete() {
+        // 1. 列出索引,应包含平台已知索引 sys_oper_log
+        webTestClient.get().uri("/search/admin/indexes")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(new ParameterizedTypeReference<Result<List<IndexInfoVO>>>() {})
+            .consumeWith(result -> {
+                assertThat(result.getResponseBody()).isNotNull();
+                assertThat(result.getResponseBody().isSuccess()).isTrue();
+                List<IndexInfoVO> indexes = result.getResponseBody().getData();
+                assertThat(indexes).extracting(IndexInfoVO::getIndexName).contains("sys_oper_log");
+            });
+
+        // 2. 重建 sys_oper_log(清空数据)
+        webTestClient.post().uri("/search/admin/indexes/sys_oper_log/rebuild")
+            .exchange()
+            .expectStatus().isOk();
+
+        // 3. 重建后详情: mapping 非空、文档数为 0
+        webTestClient.get().uri("/search/admin/indexes/sys_oper_log")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(new ParameterizedTypeReference<Result<IndexDetailVO>>() {})
+            .consumeWith(result -> {
+                assertThat(result.getResponseBody()).isNotNull();
+                IndexDetailVO detail = result.getResponseBody().getData();
+                assertThat(detail).isNotNull();
+                assertThat(detail.getIndexName()).isEqualTo("sys_oper_log");
+                assertThat(detail.getMapping()).isNotEmpty();
+                assertThat(detail.getDocCount()).isZero();
+            });
+
+        // 4. 写入一条后文档数变为 1
+        OperLogDocument doc = new OperLogDocument();
+        doc.setOperId(999L);
+        doc.setTitle("索引管理测试");
+        doc.setOperName("admin");
+        doc.setMethod("GET");
+        doc.setOperUrl("/search/admin/indexes");
+        doc.setCreateTime(LocalDateTime.now());
+        operLogRepository.save(doc);
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(operLogRepository.findById(999L)).isPresent();
+        });
+
+        // 5. 删除索引后详情返回空 mapping
+        webTestClient.delete().uri("/search/admin/indexes/sys_oper_log")
+            .exchange()
+            .expectStatus().isOk();
+        webTestClient.get().uri("/search/admin/indexes/sys_oper_log")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody(new ParameterizedTypeReference<Result<IndexDetailVO>>() {})
+            .consumeWith(result -> {
+                IndexDetailVO detail = result.getResponseBody().getData();
+                assertThat(detail.getMapping()).isEmpty();
+            });
+
+        // 6. 恢复索引,避免影响后续测试的 setUp deleteAll
+        webTestClient.post().uri("/search/admin/indexes/sys_oper_log/rebuild")
+            .exchange()
+            .expectStatus().isOk();
+    }
+
+    @Test
+    @Order(4)
+    public void testIndexAdminUnknownIndexBadRequest() {
+        // 重建未知索引返回 400
+        webTestClient.post().uri("/search/admin/indexes/unknown-index/rebuild")
+            .exchange()
+            .expectStatus().isBadRequest();
+
+        // 删除不存在的索引返回 400
+        webTestClient.delete().uri("/search/admin/indexes/not-exist")
+            .exchange()
+            .expectStatus().isBadRequest();
     }
 }
