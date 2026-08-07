@@ -176,8 +176,9 @@ public class DataScopeInterceptor implements InnerInterceptor {
             if (deptId == null) {
                 return "1=0";
             }
-            return alias(deptAlias) + "dept_id IN (SELECT id FROM sys_dept WHERE id = " + deptId
-                + " OR find_in_set(" + deptId + ", ancestors))";
+            // PostgreSQL: ancestors 存逗号分隔路径（如 '0,1'），用 string_to_array + ANY 判断子孙关系
+            return alias(deptAlias) + "dept_id IN (SELECT dept_id FROM sys_dept WHERE dept_id = " + deptId
+                + " OR " + deptId + " = ANY(string_to_array(ancestors, ','))::bigint[])";
         }
         if (DATA_SCOPE_SELF.equals(scope)) {
             if (userAlias == null || userAlias.isBlank() || userId == null) {
