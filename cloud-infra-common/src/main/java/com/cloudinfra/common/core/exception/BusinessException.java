@@ -20,6 +20,11 @@ public class BusinessException extends BaseException {
         super(errorCode);
     }
 
+    public BusinessException(SystemExceptionCode systemExceptionCode) {
+        super((int) systemExceptionCode.getCode(), systemExceptionCode.name(),
+            systemExceptionCode.getMessage());
+    }
+
     public BusinessException(String message) {
         super(400, "BUSINESS_ERROR", message);
     }

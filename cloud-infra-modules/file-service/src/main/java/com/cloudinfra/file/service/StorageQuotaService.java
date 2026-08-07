@@ -2,7 +2,7 @@ package com.cloudinfra.file.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
+import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import com.cloudinfra.file.domain.StorageQuota;
 import com.cloudinfra.file.mapper.StorageQuotaMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +25,7 @@ public class StorageQuotaService {
         StorageQuota quota = getQuota(userId);
         if (quota == null) return;
         if (quota.getUsedSizeBytes() + fileSize > quota.getMaxSizeBytes()) {
-            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED,
-                String.format("存储空间不足。已用: %d, 上限: %d, 尝试上传: %d",
-                    quota.getUsedSizeBytes(), quota.getMaxSizeBytes(), fileSize));
+            throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
     }
 
@@ -41,8 +39,7 @@ public class StorageQuotaService {
         if (userId == null || size <= 0) return;
         int rows = quotaMapper.atomicUpdateUsage(userId, size);
         if (rows == 0) {
-            throw new BusinessException(ErrorCode.RESOURCE_EXHAUSTED,
-                "存储空间不足或配额未配置，无法完成上传");
+            throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
     }
 

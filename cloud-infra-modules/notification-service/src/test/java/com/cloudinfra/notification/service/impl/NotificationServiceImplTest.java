@@ -3,7 +3,7 @@ package com.cloudinfra.notification.service.impl;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
+import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.NotificationTemplate;
@@ -127,7 +127,7 @@ class NotificationServiceImplTest {
             List.of("email"), null, null, null
         );
 
-        doThrow(new BusinessException(ErrorCode.RESOURCE_EXHAUSTED, "quota exceeded"))
+        doThrow(new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED))
             .when(quotaService).checkQuota(1L);
 
         // when / then
@@ -203,11 +203,15 @@ class NotificationServiceImplTest {
     void getNotificationHistory_shouldReturnList() {
         // given
         Long userId = 1L;
-        List<Notification> expected = List.of(new Notification());
-        given(notificationMapper.selectList(any())).willReturn(expected);
+        Notification notification = new Notification();
+        notification.setId(1L);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> page =
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 10);
+        page.setRecords(List.of(notification));
+        given(notificationMapper.selectPage(any(), any())).willReturn(page);
 
         // when
-        List<Notification> result = notificationService.getNotificationHistory(userId);
+        List<Notification> result = notificationService.getNotificationHistory(userId, 1, 10);
 
         // then
         assertThat(result).hasSize(1);

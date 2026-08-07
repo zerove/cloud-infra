@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TestController {
     @GetMapping("/test/throw-base-exception")
     public void throwBase() {
-        throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        throw new BusinessException(ErrorCode.NOT_FOUND);
     }
 
     @GetMapping("/test/throw-generic-exception")

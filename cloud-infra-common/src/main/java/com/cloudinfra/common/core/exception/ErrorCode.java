@@ -11,12 +11,7 @@ public enum ErrorCode {
     FORBIDDEN(1003, "权限不足，无法访问"),
     NOT_FOUND(1004, "请求资源不存在"),
     NO_PERMISSION(1005, "无操作权限"),
-    RESOURCE_NOT_FOUND(1006, "资源不存在"),
-
-    // 业务级错误 (2000+)
-    USER_NOT_FOUND(2001, "用户不存在"),
-    AUTH_TOKEN_INVALID(2002, "认证令牌无效或已过期"),
-    RESOURCE_EXHAUSTED(2003, "资源配额已用尽");
+    RESOURCE_NOT_FOUND(1006, "资源不存在");
 
     private final Integer code;
     private final String message;
