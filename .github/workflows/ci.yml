@@ -214,7 +214,7 @@ jobs:
         run: mvn jacoco:prepare-agent test jacoco:report --batch-mode
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./**/target/site/jacoco/jacoco.xml
