@@ -5,7 +5,10 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.springboot3.bulkhead.autoconfigure.BulkheadAutoConfiguration;
 import io.github.resilience4j.springboot3.circuitbreaker.autoconfigure.CircuitBreakerAutoConfiguration;
+import io.github.resilience4j.springboot3.ratelimiter.autoconfigure.RateLimiterAutoConfiguration;
+import io.github.resilience4j.springboot3.retry.autoconfigure.RetryAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -18,10 +21,19 @@ import java.util.List;
 /**
  * Resilience4j 弹性设计自动配置
  * 提供熔断器、限流器、重试、隔离舱壁的统一配置
+ *
+ * <p>除熔断器外，一并导入官方 {@code Retry}/{@code RateLimiter}/{@code Bulkhead}
+ * 自动配置，注册对应 AOP 切面，使 {@code @Retry}/{@code @RateLimiter}/{@code @Bulkhead}
+ * 注解真正生效。官方配置负责切面与注册表，本类负责兜底默认参数。
  */
 @AutoConfiguration
 @EnableConfigurationProperties(Resilience4jProperties.class)
-@Import(CircuitBreakerAutoConfiguration.class)
+@Import({
+        CircuitBreakerAutoConfiguration.class,
+        RetryAutoConfiguration.class,
+        RateLimiterAutoConfiguration.class,
+        BulkheadAutoConfiguration.class
+})
 public class Resilience4jAutoConfiguration {
 
     private final Resilience4jProperties properties;

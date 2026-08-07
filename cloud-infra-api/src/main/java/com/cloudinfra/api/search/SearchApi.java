@@ -5,6 +5,7 @@ import com.cloudinfra.api.search.dto.SearchRequest;
 import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.cloud.openfeign.SpringQueryMap;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,5 +21,6 @@ public interface SearchApi {
      */
     @GetMapping("/search/operlog")
     @CircuitBreaker(name = "searchService")
+    @Retry(name = "searchService")
     Result<SearchResponse<OperLogDTO>> searchOperLog(@SpringQueryMap SearchRequest request);
 }
