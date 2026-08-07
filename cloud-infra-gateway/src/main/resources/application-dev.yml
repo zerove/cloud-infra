@@ -1,0 +1,14 @@
+spring:
+  config:
+    import: "optional:nacos:gateway.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: false
+
+# 开发环境：放宽 Nacos 依赖，允许本地直启
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

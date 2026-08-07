@@ -3,8 +3,6 @@ spring:
     name: system-module
   main:
     allow-bean-definition-overriding: true
-  config:
-    import: "optional:nacos:system-module.yaml"
   # 默认数据源配置（供自动配置启动，Nacos 配置会覆盖）
   datasource:
     url: jdbc:postgresql://cloud-postgres:5432/cloud_infra
@@ -37,9 +35,36 @@ spring:
       port: 6379
       database: 0
 
-  # Seata 分布式事务配置（本地开发环境默认禁用）
+  # Seata 分布式事务配置（本地开发环境默认禁用；生产启用需部署 Seata Server 并置 enabled=true）
   seata:
     enabled: false
+    application-id: ${spring.application.name}
+    tx-service-group: ${spring.application.name}-tx-group
+    service:
+      vgroup-mapping:
+        cloud-infra-system: default
+    registry:
+      type: nacos
+      nacos:
+        server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
+        namespace: ${spring.cloud.nacos.discovery.namespace}
+    config:
+      type: nacos
+      nacos:
+        server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
+        namespace: ${spring.cloud.nacos.config.namespace}
+    client:
+      rm:
+        async-commit-buffer-limit: 1000
+        report-success-enable: true
+        lock:
+          retry-interval: 10
+          retry-times: 30
+        report-retry-count: 5
+      tm:
+        commit-retry-count: 5
+        rollback-retry-count: 5
+        default-global-transaction-timeout: 60000
 
   cloud:
     nacos:
@@ -88,37 +113,6 @@ spring:
               auto-bind-dlq: true
               dlq-name: sys.tx.message.dlq
               republish-to-dlq: true
-
-  # Seata 分布式事务配置
-  seata:
-    enabled: true
-    application-id: ${spring.application.name}
-    tx-service-group: ${spring.application.name}-tx-group
-    service:
-      vgroup-mapping:
-        cloud-infra-system: default
-    registry:
-      type: nacos
-      nacos:
-        server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
-        namespace: ${spring.cloud.nacos.discovery.namespace}
-    config:
-      type: nacos
-      nacos:
-        server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
-        namespace: ${spring.cloud.nacos.config.namespace}
-    client:
-      rm:
-        async-commit-buffer-limit: 1000
-        report-success-enable: true
-        lock:
-          retry-interval: 10
-          retry-times: 30
-        report-retry-count: 5
-      tm:
-        commit-retry-count: 5
-        rollback-retry-count: 5
-        default-global-transaction-timeout: 60000
 
   # Flyway 数据库迁移配置
   flyway:

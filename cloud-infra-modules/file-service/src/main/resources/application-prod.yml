@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: "nacos:file-service.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: true

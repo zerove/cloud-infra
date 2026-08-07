@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: "nacos:system-module.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: true

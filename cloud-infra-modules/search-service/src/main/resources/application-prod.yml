@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: "nacos:search-service.yaml"
+  cloud:
+    nacos:
+      config:
+        fail-fast: true
