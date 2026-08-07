@@ -1,8 +1,6 @@
 spring:
   application:
     name: cloud-auth
-  config:
-    import: "optional:nacos:auth.yaml"
   cloud:
     nacos:
       config:
