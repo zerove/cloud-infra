@@ -143,34 +143,44 @@ public class NotificationServiceImpl implements INotificationService {
      * 异步执行，不阻塞调用线程：分发完成后更新通知状态。
      */
     private void dispatchChannels(Notification notification, List<NotificationChannel> targetChannels) {
+        log.info("[VT-Dispatch] 提交分发任务: notificationId={}, channels={}",
+            notification.getId(),
+            targetChannels.stream().map(NotificationChannel::getChannelCode).collect(Collectors.toList()));
         dispatchExecutor.execute(() -> {
-            List<CompletableFuture<Boolean>> futures = targetChannels.stream()
-                .map(channel -> CompletableFuture.supplyAsync(() -> {
-                    long startTime = System.currentTimeMillis();
-                    String code = channel.getChannelCode();
-                    try {
-                        channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
-                        saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
-                        log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
-                        return true;
-                    } catch (Exception e) {
-                        saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
-                        log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
-                        return false;
-                    }
-                }, dispatchExecutor))
-                .collect(Collectors.toList());
+            try {
+                List<CompletableFuture<Boolean>> futures = targetChannels.stream()
+                    .map(channel -> CompletableFuture.supplyAsync(() -> {
+                        long startTime = System.currentTimeMillis();
+                        String code = channel.getChannelCode();
+                        try {
+                            channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
+                            saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
+                            log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
+                            return true;
+                        } catch (Exception e) {
+                            saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
+                            log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
+                            return false;
+                        }
+                    }, dispatchExecutor))
+                    .collect(Collectors.toList());
 
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-            // 只要有一个渠道发送成功，状态即标记为 SENT
-            boolean anySuccess = futures.stream().anyMatch(f -> f.join());
-            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
-            if (newStatus != notification.getStatus()) {
-                Notification update = new Notification();
-                update.setId(notification.getId());
-                update.setStatus(newStatus);
-                notificationMapper.updateById(update);
+                // 只要有一个渠道发送成功，状态即标记为 SENT
+                boolean anySuccess = futures.stream().anyMatch(f -> f.join());
+                NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
+                if (newStatus != notification.getStatus()) {
+                    Notification update = new Notification();
+                    update.setId(notification.getId());
+                    update.setStatus(newStatus);
+                    notificationMapper.updateById(update);
+                    log.info("[VT-Dispatch] 通知状态更新: id={}, from={}, to={}",
+                        notification.getId(), notification.getStatus(), newStatus);
+                }
+            } catch (Exception e) {
+                // 兜底：异步分发异常不能静默丢失，记录完整堆栈便于排查
+                log.error("[VT-Dispatch] 分发任务异常: notificationId={}", notification.getId(), e);
             }
         });
     }

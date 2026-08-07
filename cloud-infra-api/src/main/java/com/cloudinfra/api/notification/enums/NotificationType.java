@@ -1,5 +1,6 @@
 package com.cloudinfra.api.notification.enums;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -34,6 +35,7 @@ public enum NotificationType {
      */
     SERVICE_TICKET("SERVICE_TICKET", "服务工单通知");
 
+    @EnumValue
     private final String code;
     private final String description;
 }
