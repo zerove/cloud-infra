@@ -16,6 +16,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.LoggerFactory;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -401,6 +407,123 @@ class AuthEvaluatorTest {
 
             assertTrue(result.isSuccess());
             verify(jwtUtils, times(1)).parseToken("raw-token");
+        }
+    }
+
+    // ==================== 场景八：白名单宽度警告 ====================
+
+    @Nested
+    @DisplayName("白名单宽度警告场景")
+    class WhiteListWidthWarningTest {
+
+        @Test
+        @DisplayName("过短的前缀白名单应触发 WARN 日志")
+        void shortPrefixWhiteListShouldLogWarning() {
+            // 设置日志捕获
+            Logger logger = (Logger) LoggerFactory.getLogger(AuthEvaluator.class);
+            ListAppender<ILoggingEvent> listAppender = new ListAppender<>();
+            listAppender.start();
+            logger.addAppender(listAppender);
+            logger.setLevel(Level.WARN);
+
+            try {
+                // 前缀长度为 3 (/a/) 会触发警告（threshold=3，<=3 时警告）
+                new AuthEvaluator(sessionStore, List.of("/a/**"), jwtUtils);
+
+                // 验证是否产生了 WARN 日志
+                assertTrue(listAppender.list.stream()
+                    .anyMatch(e -> e.getLevel() == Level.WARN 
+                        && e.getFormattedMessage().contains("白名单前缀 '/a/**' 过短")
+                        && e.getFormattedMessage().contains("可能导致大范围路径绕过鉴权")));
+            } finally {
+                logger.detachAppender(listAppender);
+                logger.setLevel(Level.INFO);
+            }
+        }
+
+        @Test
+        @DisplayName("长度为 1 的前缀白名单应触发 WARN 日志")
+        void singleCharPrefixWhiteListShouldLogWarning() {
+            Logger logger = (Logger) LoggerFactory.getLogger(AuthEvaluator.class);
+            ListAppender<ILoggingEvent> listAppender = new ListAppender<>();
+            listAppender.start();
+            logger.addAppender(listAppender);
+            logger.setLevel(Level.WARN);
+
+            try {
+                new AuthEvaluator(sessionStore, List.of("/a/**"), jwtUtils);
+
+                assertTrue(listAppender.list.stream()
+                    .anyMatch(e -> e.getLevel() == Level.WARN 
+                        && e.getFormattedMessage().contains("白名单前缀 '/a/**' 过短")));
+            } finally {
+                logger.detachAppender(listAppender);
+                logger.setLevel(Level.INFO);
+            }
+        }
+
+        @Test
+        @DisplayName("根路径 '/' 不应触发警告（特殊情况）")
+        void rootPathShouldNotTriggerWarning() {
+            Logger logger = (Logger) LoggerFactory.getLogger(AuthEvaluator.class);
+            ListAppender<ILoggingEvent> listAppender = new ListAppender<>();
+            listAppender.start();
+            logger.addAppender(listAppender);
+            logger.setLevel(Level.WARN);
+
+            try {
+                new AuthEvaluator(sessionStore, List.of("/"), jwtUtils);
+
+                // 根路径是特殊情况，不应警告
+                assertTrue(listAppender.list.stream()
+                    .noneMatch(e -> e.getLevel() == Level.WARN 
+                        && e.getFormattedMessage().contains("白名单前缀 '/' 过短")));
+            } finally {
+                logger.detachAppender(listAppender);
+                logger.setLevel(Level.INFO);
+            }
+        }
+
+        @Test
+        @DisplayName("长前缀白名单不应触发警告")
+        void longPrefixWhiteListShouldNotLogWarning() {
+            Logger logger = (Logger) LoggerFactory.getLogger(AuthEvaluator.class);
+            ListAppender<ILoggingEvent> listAppender = new ListAppender<>();
+            listAppender.start();
+            logger.addAppender(listAppender);
+            logger.setLevel(Level.WARN);
+
+            try {
+                new AuthEvaluator(sessionStore, List.of("/api/v1/public/**", "/health/**"), jwtUtils);
+
+                assertTrue(listAppender.list.stream()
+                    .noneMatch(e -> e.getLevel() == Level.WARN 
+                        && e.getFormattedMessage().contains("白名单前缀")));
+            } finally {
+                logger.detachAppender(listAppender);
+                logger.setLevel(Level.INFO);
+            }
+        }
+
+        @Test
+        @DisplayName("精确匹配白名单不应触发警告")
+        void exactMatchWhiteListShouldNotLogWarning() {
+            Logger logger = (Logger) LoggerFactory.getLogger(AuthEvaluator.class);
+            ListAppender<ILoggingEvent> listAppender = new ListAppender<>();
+            listAppender.start();
+            logger.addAppender(listAppender);
+            logger.setLevel(Level.WARN);
+
+            try {
+                new AuthEvaluator(sessionStore, List.of("/auth/login", "/health"), jwtUtils);
+
+                assertTrue(listAppender.list.stream()
+                    .noneMatch(e -> e.getLevel() == Level.WARN 
+                        && e.getFormattedMessage().contains("白名单前缀")));
+            } finally {
+                logger.detachAppender(listAppender);
+                logger.setLevel(Level.INFO);
+            }
         }
     }
 }

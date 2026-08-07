@@ -3,9 +3,12 @@ package com.cloudinfra.file;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
+import com.cloudinfra.file.domain.StorageQuota;
 import com.cloudinfra.file.mapper.FileMetadataMapper;
+import com.cloudinfra.file.mapper.StorageQuotaMapper;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.test.BaseIntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -18,6 +21,20 @@ public class FileServiceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private FileMetadataMapper fileMetadataMapper;
+
+    @Autowired
+    private StorageQuotaMapper storageQuotaMapper;
+
+    @BeforeEach
+    void setUp() {
+        // 为测试用户初始化存储配额
+        StorageQuota quota = new StorageQuota();
+        quota.setId(1L);
+        quota.setUserId(1L);
+        quota.setMaxSizeBytes(1024L * 1024 * 1024); // 1GB
+        quota.setUsedSizeBytes(0L);
+        storageQuotaMapper.insert(quota);
+    }
 
     @Test
     public void testUploadAndMetadataPersistence() throws Exception {

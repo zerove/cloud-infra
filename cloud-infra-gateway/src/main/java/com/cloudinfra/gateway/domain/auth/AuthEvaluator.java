@@ -2,6 +2,8 @@ package com.cloudinfra.gateway.domain.auth;
 
 import com.cloudinfra.common.util.JwtUtils;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,10 @@ import java.util.*;
  */
 @Service
 public class AuthEvaluator {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthEvaluator.class);
+    
+    private static final int PREFIX_WARN_THRESHOLD = 3; // 前缀长度 <= 3 字符时警告
 
     private final SessionStore sessionStore;
     private final Set<String> exactWhiteList;
@@ -26,7 +32,13 @@ public class AuthEvaluator {
         if (whiteList != null) {
             for (String path : whiteList) {
                 if (path.contains("*") || path.endsWith("/")) {
-                    prefixWhiteList.add(path.replace("*", ""));
+                    String prefix = path.replace("*", "");
+                    prefixWhiteList.add(prefix);
+                    // 警告：过短的前缀可能导致大范围绕过
+                    if (prefix.length() <= PREFIX_WARN_THRESHOLD && !prefix.equals("/")) {
+                        log.warn("白名单前缀 '{}' 过短（长度 {}），可能导致大范围路径绕过鉴权，建议使用精确路径或更长前缀", 
+                            path, prefix.length());
+                    }
                 } else {
                     exactWhiteList.add(path);
                 }

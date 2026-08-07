@@ -56,6 +56,17 @@
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-common</artifactId>
+            <exclusions>
+                <!-- 网关不消费/生产 Spring Cloud Stream 事件，避免引入 RabbitMQ 自动配置 -->
+                <exclusion>
+                    <groupId>org.springframework.cloud</groupId>
+                    <artifactId>spring-cloud-stream</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.cloud</groupId>
+                    <artifactId>spring-cloud-stream-binder-rabbit</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
