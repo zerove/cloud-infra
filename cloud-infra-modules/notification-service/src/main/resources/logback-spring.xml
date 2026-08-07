@@ -33,6 +33,12 @@
         </root>
     </springProfile>
 
+    <springProfile name="test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_STD"/>
+        </root>
+    </springProfile>
+
     <springProfile name="prod">
         <root level="INFO">
             <appender-ref ref="CONSOLE_JSON"/>

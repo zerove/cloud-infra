@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -61,7 +62,8 @@ public class ServiceTicketService {
             NotificationType.SERVICE_TICKET,
             "【新工单】" + ticket.getTitle(),
             "您被指派处理工单 " + ticket.getTicketNo() + "，请及时处理。",
-            "SYSTEM"
+            List.of("SYSTEM"),
+            null, null, null
         );
         
         notificationApi.send(request);

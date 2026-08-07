@@ -289,6 +289,12 @@
                 <version>3.5.4</version>
                 <configuration>
                     <skip>${skipITs}</skip>
+                    <!--
+                      Spring Boot repackage 会将 main artifact 替换为 BOOT-INF 结构的 fat jar，
+                      导致 failsafe 从 jar 根路径无法加载业务类（NoClassDefFoundError）。
+                      显式指定 classesDirectory 使用编译输出目录。
+                    -->
+                    <classesDirectory>${project.build.outputDirectory}</classesDirectory>
                     <includes>
                         <include>**/*IntegrationTest.java</include>
                         <include>**/*IT.java</include>

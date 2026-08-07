@@ -11,7 +11,8 @@ public enum ErrorCode {
     FORBIDDEN(1003, "权限不足，无法访问"),
     NOT_FOUND(1004, "请求资源不存在"),
     NO_PERMISSION(1005, "无操作权限"),
-    RESOURCE_NOT_FOUND(1006, "资源不存在");
+    RESOURCE_NOT_FOUND(1006, "资源不存在"),
+    RESOURCE_EXHAUSTED(1007, "资源耗尽，配额已用完");
 
     private final Integer code;
     private final String message;
