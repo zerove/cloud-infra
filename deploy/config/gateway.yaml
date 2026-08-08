@@ -36,30 +36,103 @@ spring:
               - Path=/system/**
             filters:
               - StripPrefix=1
+              - RequestTimeout=10000
+              - Retry=3, 1000, 2000, 4000, GET,POST,PUT,DELETE,10000
           - id: auth-service
             uri: lb://cloud-auth
             predicates:
               - Path=/auth/**
             filters:
               - StripPrefix=1
+              - RequestTimeout=5000
+              - Retry=3, 500, 1000, 2000, GET,POST
           - id: file-service
             uri: lb://file-service
             predicates:
               - Path=/file/**
             filters:
               - StripPrefix=1
+              - RequestTimeout=30000
+              - Retry=2, 2000, 4000, POST
           - id: notification-service
             uri: lb://notification-service
             predicates:
               - Path=/notification/**
             filters:
               - StripPrefix=1
+              - RequestTimeout=15000
+              - Retry=3, 1000, 2000, 4000, GET,POST
           - id: search-service
             uri: lb://search-service
             predicates:
               - Path=/search/**
             filters:
               - StripPrefix=1
+              - RequestTimeout=10000
+              - Retry=3, 1000, 2000, 4000, GET,POST
+        cors:
+          configurations:
+            '[/**]':
+              allowed-origin-patterns:
+                - "http://localhost:*"
+                - "http://127.0.0.1:*"
+              allowed-methods:
+                - GET
+                - POST
+                - PUT
+                - DELETE
+                - PATCH
+                - OPTIONS
+              allowed-headers: "*"
+              allow-credentials: true
+              max-age: 3600
+
+# Sentinel 配置
+sentinel:
+  transport:
+    dashboard: cloud-sentinel:8858
+    port: 8719
+  datasource:
+    flow:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-flow
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: flow
+        enabled: true
+    degrade:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-degrade
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: degrade
+        enabled: true
+    param-flow:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-param-flow
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: param-flow
+        enabled: true
+    system:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-system
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: system
+        enabled: true
+    authority:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-authority
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: authority
+        enabled: true
 
 auth:
   jwt:

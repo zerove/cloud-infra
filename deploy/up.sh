@@ -85,10 +85,23 @@ for i in $(seq 1 10); do
     sleep 2
 done
 
+# 等待 Sentinel Dashboard 就绪
+echo "=== 9. 等待 Sentinel Dashboard 就绪 ==="
+for i in $(seq 1 10); do
+    if curl -sf http://localhost:8858 > /dev/null 2>&1; then
+        echo "Sentinel Dashboard 已就绪"
+        break
+    fi
+    [ $i -eq 10 ] && { echo "⚠️ Sentinel Dashboard 启动超时，请手动检查"; }
+    echo "等待 Sentinel Dashboard... ($i/10)"
+    sleep 2
+done
+
 # 同步配置到 Nacos
-echo "=== 9. 同步配置到 Nacos ==="
+echo "=== 10. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
-for file in "$CONFIG_DIR"/*.yaml; do
+for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
+    [ -e "$file" ] || continue
     filename=$(basename "$file")
     echo "  导入 $filename"
     content=$(cat "$file")
@@ -107,5 +120,6 @@ echo "  Redis:      localhost:6379"
 echo "  RabbitMQ:   localhost:15672 (管理界面)"
 echo "  ES:         http://localhost:9200"
 echo "  Prometheus: http://localhost:9090"
+echo "  Sentinel:   http://localhost:8858 (sentinel/sentinel)"
 echo ""
 echo "下一步: 在 IDE 中启动各微服务，或运行 mvn spring-boot:run"
