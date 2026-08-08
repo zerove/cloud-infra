@@ -44,3 +44,6 @@ tools/
 # Agent runtime data (local only)
 .omo/
 .opencode/
+
+# Benchmark results (local only)
+benchmark-results/

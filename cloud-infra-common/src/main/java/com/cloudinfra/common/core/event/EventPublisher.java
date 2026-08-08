@@ -1,5 +1,6 @@
 package com.cloudinfra.common.core.event;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 
@@ -9,9 +10,13 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 事件发布服务
  * 统一事件发布入口，支持同步/异步、重试、死信队列
+ *
+ * <p>仅在 classpath 存在 {@link StreamBridge} 时注册,
+ * 网关等排除 spring-cloud-stream 的应用不会因此启动失败。</p>
  */
 @Slf4j
 @Service
+@ConditionalOnClass(StreamBridge.class)
 @RequiredArgsConstructor
 public class EventPublisher {
 

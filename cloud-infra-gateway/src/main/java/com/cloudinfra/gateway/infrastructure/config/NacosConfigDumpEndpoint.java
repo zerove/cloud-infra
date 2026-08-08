@@ -6,6 +6,7 @@ import jakarta.annotation.Resource;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
 import org.springframework.boot.actuate.endpoint.annotation.Selector;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -18,8 +19,10 @@ import java.util.*;
  * 访问：
  *   GET /management/config-dump          - 获取预定义关键配置列表
  *   GET /management/config-dump/{dataId} - 获取单个配置详情
+ * 仅当 Nacos 配置服务可用时注册（禁用 Nacos 配置时不阻塞应用启动）。
  */
 @Component
+@ConditionalOnBean(ConfigService.class)
 @Endpoint(id = "config-dump")
 public class NacosConfigDumpEndpoint {
 
