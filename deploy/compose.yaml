@@ -21,6 +21,8 @@ services:
     ports:
       - "8848:8848"
       - "9848:9848"
+      # Nacos 3.x 控制台独立端口 (nacos.console.port=8080)
+      - "8080:8080"
     environment:
       MODE: standalone
       PREFER_HOST_MODE: hostname
