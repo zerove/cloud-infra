@@ -1,0 +1,9 @@
+[
+  {
+    "highestSystemLoad": -1,
+    "avgRt": 1000,
+    "maxThread": 200,
+    "qps": 10000,
+    "clusterMode": false
+  }
+]

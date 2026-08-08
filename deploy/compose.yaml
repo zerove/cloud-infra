@@ -149,6 +149,27 @@ services:
       - cloud-infra
     logging: *default-logging
 
+  # ========== 限流熔断控制台 ==========
+  sentinel:
+    image: bladex/sentinel-dashboard:1.8.9
+    container_name: cloud-sentinel
+    mem_limit: 256m
+    ports:
+      - "8858:8858"
+    environment:
+      SENTINEL_DASHBOARD_SERVER: ":8858"
+      SENTINEL_DASHBOARD_AUTH_USERNAME: sentinel
+      SENTINEL_DASHBOARD_AUTH_PASSWORD: sentinel
+    networks:
+      - cloud-infra
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8858"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # ========== 微服务（通过 --profile full 启用）==========
   gateway:
     profiles: ["full"]

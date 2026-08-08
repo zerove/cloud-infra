@@ -21,6 +21,53 @@ spring:
       port: 6379
       database: 0
 
+# Sentinel 配置（本地默认值，Nacos 配置会覆盖）
+sentinel:
+  transport:
+    dashboard: cloud-sentinel:8858
+    port: 8719
+  datasource:
+    flow:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-flow
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: flow
+        enabled: true
+    degrade:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-degrade
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: degrade
+        enabled: true
+    param-flow:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-param-flow
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: param-flow
+        enabled: true
+    system:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-system
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: system
+        enabled: true
+    authority:
+      nacos:
+        server-addr: cloud-nacos:8848
+        data-id: cloud-infra-gateway-sentinel-authority
+        group-id: DEFAULT_GROUP
+        data-type: json
+        rule-type: authority
+        enabled: true
+
 # 认证白名单（本地直启默认值，Nacos 配置会覆盖）
 auth:
   jwt:

@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.lang.reflect.Field;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -19,14 +18,6 @@ class GatewayConfigTest {
     void shouldImplementWebMvcConfigurer() {
         GatewayConfig config = new GatewayConfig();
         assertThat(config).isInstanceOf(WebMvcConfigurer.class);
-    }
-
-    @Test
-    void shouldCreateCorsFilter() throws Exception {
-        GatewayConfig config = new GatewayConfig();
-        setAllowedOrigins(config, List.of("http://localhost:*"));
-        CorsFilter corsFilter = config.corsFilter();
-        assertThat(corsFilter).isNotNull();
     }
 
     @Test

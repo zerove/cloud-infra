@@ -1,0 +1,52 @@
+[
+  {
+    "resource": "system-module",
+    "grade": 0,
+    "count": 50,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5,
+    "clusterMode": false
+  },
+  {
+    "resource": "auth-service",
+    "grade": 0,
+    "count": 100,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5,
+    "clusterMode": false
+  },
+  {
+    "resource": "file-service",
+    "grade": 0,
+    "count": 30,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5,
+    "clusterMode": false
+  },
+  {
+    "resource": "notification-service",
+    "grade": 0,
+    "count": 50,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5,
+    "clusterMode": false
+  },
+  {
+    "resource": "search-service",
+    "grade": 0,
+    "count": 50,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5,
+    "clusterMode": false
+  }
+]
