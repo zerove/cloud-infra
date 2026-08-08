@@ -114,7 +114,7 @@ echo "配置同步完成"
 
 echo ""
 echo "=== 本地开发环境已就绪 ==="
-echo "  Nacos:      $NACOS_URL/nacos"
+echo "  Nacos:      控制台 http://localhost:8080 (API: $NACOS_URL)"
 echo "  PostgreSQL: localhost:5432/cloud_infra"
 echo "  Redis:      localhost:6379"
 echo "  RabbitMQ:   localhost:15672 (管理界面)"
