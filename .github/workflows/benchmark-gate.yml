@@ -1,7 +1,8 @@
 # ============================================================
 # 基准测试门禁
 # 在 main 分支合并前运行, 对比性能基线, 防止性能回归
-# 基线: gateway 启动时间 < 5s (JVM) / < 2s (Native), 内存 < 512MB
+# 基线: gateway 启动时间 < 5s (JVM) / < 2s (Native), 内存 < 512MB, 吞吐 > 100 RPS
+# 用法: 在 PR 上添加 `benchmark` 标签触发
 # ============================================================
 name: Benchmark Gate
 
@@ -42,60 +43,58 @@ jobs:
           cd cloud-infra-gateway
           mvn clean package -DskipTests --batch-mode
 
-      - name: Run startup benchmark
+      - name: Run benchmark suite
         run: |
-          cd cloud-infra-gateway/target
-          echo "=== 启动时间基准测试 ==="
-          START_TIME=$(date +%s%N)
-          java -jar cloud-infra-gateway-*.jar --spring.cloud.nacos.config.enabled=false --spring.cloud.nacos.discovery.enabled=false --server.port=18080 > /tmp/gateway-startup.log 2>&1 &
-          PID=$!
-          
-          # 等待健康检查就绪
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:18080/actuator/health > /dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          END_TIME=$(date +%s%N)
-          STARTUP_MS=$(( (END_TIME - START_TIME) / 1000000 ))
+          # 并发吞量测试取短时长,避免 CI 超时
+          ./benchmark.sh --duration=15 --concurrency=4
+          # 提取报告指标
+          REPORT=benchmark-results/benchmark-report.md
+          STARTUP_MS=$(grep -oP '启动时间 \| \K\d+' "$REPORT" 2>/dev/null || grep -A1 '启动时间' "$REPORT" | tail -1 | grep -oP '\d+' | head -1)
+          MEM_MB=$(grep 'RSS 内存' "$REPORT" | grep -oP '\d+')
+          RPS=$(grep '吞吐量' "$REPORT" | grep -oP '[0-9]+ RPS' | grep -oP '\d+')
+          echo "== 基准指标 =="
+          echo "启动时间: ${STARTUP_MS}ms"
+          echo "内存: ${MEM_MB}MB"
+          echo "吞吐量: ${RPS} RPS"
           echo "STARTUP_MS=${STARTUP_MS}" >> $GITHUB_ENV
-          
-          # 内存使用
-          MEM_KB=$(ps -o rss= -p $PID | tr -d ' ')
-          echo "MEM_KB=${MEM_KB}" >> $GITHUB_ENV
-          echo "启动时间: ${STARTUP_MS}ms, 内存: ${MEM_KB}KB"
-          
-          # 清理
-          kill $PID 2>/dev/null || true
-          wait $PID 2>/dev/null || true
+          echo "MEM_MB=${MEM_MB}" >> $GITHUB_ENV
+          echo "RPS=${RPS}" >> $GITHUB_ENV
 
       - name: Compare with baseline
         run: |
-          # 基准值: JVM 启动 < 15s, Native < 2s, 内存 < 512MB
+          # 基准值: JVM 启动 < 15s, 内存 < 512MB, 吞吐 > 100 RPS
           MAX_STARTUP_MS=15000
-          MAX_MEM_KB=524288
-          
+          MAX_MEM_MB=512
+          MIN_RPS=100
+
           echo "=== 性能门禁检查 ==="
           echo "启动时间: ${STARTUP_MS}ms (阈值: ${MAX_STARTUP_MS}ms)"
-          echo "内存使用: ${MEM_KB}KB (阈值: ${MAX_MEM_KB}KB)"
-          
+          echo "内存使用: ${MEM_MB}MB (阈值: ${MAX_MEM_MB}MB)"
+          echo "吞吐量: ${RPS}RPS (阈值: ${MIN_RPS}RPS)"
+
           FAILED=false
-          
-          if [ "${STARTUP_MS}" -gt "${MAX_STARTUP_MS}" ]; then
+
+          if [ "${STARTUP_MS:-99999}" -gt "${MAX_STARTUP_MS}" ]; then
             echo "❌ 启动时间超出阈值: ${STARTUP_MS}ms > ${MAX_STARTUP_MS}ms"
             FAILED=true
           else
             echo "✅ 启动时间符合要求"
           fi
-          
-          if [ "${MEM_KB}" -gt "${MAX_MEM_KB}" ]; then
-            echo "❌ 内存使用超出阈值: ${MEM_KB}KB > ${MAX_MEM_KB}KB"
+
+          if [ "${MEM_MB:-99999}" -gt "${MAX_MEM_MB}" ]; then
+            echo "❌ 内存使用超出阈值: ${MEM_MB}MB > ${MAX_MEM_MB}MB"
             FAILED=true
           else
             echo "✅ 内存使用符合要求"
           fi
-          
+
+          if [ "${RPS:-0}" -lt "${MIN_RPS}" ]; then
+            echo "❌ 吞吐量低于阈值: ${RPS}RPS < ${MIN_RPS}RPS"
+            FAILED=true
+          else
+            echo "✅ 吞吐量符合要求"
+          fi
+
           if [ "$FAILED" = true ]; then
             echo "❌ 基准测试门禁未通过"
             exit 1
@@ -108,6 +107,7 @@ jobs:
         with:
           name: benchmark-gate-report
           path: |
+            benchmark-results/
             /tmp/gateway-startup.log
           retention-days: 30
 
@@ -117,13 +117,15 @@ jobs:
         with:
           script: |
             const startupMs = process.env.STARTUP_MS || 'N/A';
-            const memKb = process.env.MEM_KB || 'N/A';
+            const memMb = process.env.MEM_MB || 'N/A';
+            const rps = process.env.RPS || 'N/A';
             const body = `## 🏎️ 基准测试门禁结果
             | 指标 | 实测值 | 阈值 | 状态 |
             |------|--------|------|------|
-            | 启动时间 | ${startupMs}ms | 15000ms | ${startupMs > 15000 ? '❌' : '✅'} |
-            | 内存使用 | ${memKb}KB | 524288KB | ${memKb > 524288 ? '❌' : '✅'} |
-            
+            | 启动时间 | ${startupMs}ms | 15000ms | ${Number(startupMs) > 15000 ? '❌' : '✅'} |
+            | 内存使用 | ${memMb}MB | 512MB | ${Number(memMb) > 512 ? '❌' : '✅'} |
+            | 吞吐量 | ${rps}RPS | 100RPS | ${Number(rps) < 100 ? '❌' : '✅'} |
+
             *触发方式: 在 PR 上添加 \`benchmark\` 标签*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,

@@ -53,3 +53,17 @@
 - **单元测试**: JUnit 5 + Mockito。
 - **集成测试**: 使用 Testcontainers 在构建阶段启动真实的 PostgreSQL/Redis 实例。
 - **验证**: 运行 `mvn test` 确保所有契约通过。
+
+## 6. 服务调用弹性 (Resilience4j)
+
+服务间 Feign 调用统一使用 Resilience4j 弹性注解（详见 `docs/RESILIENCE4J.md`）：
+
+- **熔断** `@CircuitBreaker(name = "下游服务名")`：所有 Feign 方法必须标注，防级联故障
+- **重试** `@Retry(name = "下游服务名")`：读/幂等操作必加；非幂等写操作不得重试
+- **限流** `@RateLimiter(name = "下游服务名")`：写操作防刷
+
+新增下游服务时：
+
+1. 在 `cloud-infra-api` 的 Feign 接口方法上标注弹性注解，实例名 = 下游服务名
+2. 在 `deploy/config/system-module.yaml` 的 `resilience4j.*.instances.*` 补对应实例参数
+3. 运行 `mvn test -pl cloud-infra-framework/framework-web -Dtest=Resilience4jAspectTest` 验证切面生效

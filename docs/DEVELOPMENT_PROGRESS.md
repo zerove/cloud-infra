@@ -22,6 +22,7 @@
 - 测试基础设施标准化 (集成 Testcontainers 与 BaseIntegrationTest)：已完成。
 - 模块解耦与组件边界规范化 (Explicit Component Scan)：已完成。
 - Feign 调用弹性优化 (Resilience4j 集成)：已完成。
+- Resilience4j 切面修复 + 熔断/重试/限流注解落地：已完成 (详见 docs/RESILIENCE4J.md)。
 - JDK 25 虚拟线程高性能调优：已完成。
 - MinIO 分布式存储集成：已完成 (策略模式 + MinioConfig + MinioStorageStrategy)。
 - Seata 分布式事务：已完成 (@GlobalTransactional + 单元测试覆盖)。
