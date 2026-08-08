@@ -1,0 +1,12 @@
+[
+  {
+    "resource": "system-module",
+    "limitApp": "admin",
+    "strategy": 0
+  },
+  {
+    "resource": "auth-service",
+    "limitApp": "default",
+    "strategy": 0
+  }
+]

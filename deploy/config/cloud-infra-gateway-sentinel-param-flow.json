@@ -1,0 +1,40 @@
+[
+  {
+    "resource": "system-module",
+    "limitApp": "default",
+    "grade": 1,
+    "count": 50,
+    "paramIdx": 0,
+    "paramFlowItemList": [
+      {
+        "object": "userId",
+        "classType": "java.lang.String",
+        "count": 10,
+        "controlBehavior": 0,
+        "burstCount": 0,
+        "maxQueueingTimeMs": 0,
+        "clusterMode": false
+      }
+    ],
+    "clusterMode": false
+  },
+  {
+    "resource": "auth-service",
+    "limitApp": "default",
+    "grade": 1,
+    "count": 100,
+    "paramIdx": 0,
+    "paramFlowItemList": [
+      {
+        "object": "username",
+        "classType": "java.lang.String",
+        "count": 5,
+        "controlBehavior": 0,
+        "burstCount": 0,
+        "maxQueueingTimeMs": 0,
+        "clusterMode": false
+      }
+    ],
+    "clusterMode": false
+  }
+]
