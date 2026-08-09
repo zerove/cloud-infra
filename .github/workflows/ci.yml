@@ -234,7 +234,19 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        service: [gateway, auth, system, file, notification, search]
+        include:
+          - service: gateway
+            path: cloud-infra-gateway
+          - service: auth
+            path: cloud-infra-auth
+          - service: system
+            path: cloud-infra-modules/system-module
+          - service: file
+            path: cloud-infra-modules/file-service
+          - service: notification
+            path: cloud-infra-modules/notification-service
+          - service: search
+            path: cloud-infra-modules/search-service
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -256,7 +268,7 @@ jobs:
 
       - name: Build module
         run: |
-          cd cloud-infra-modules/${{ matrix.service }}
+          cd ${{ matrix.path }}
           mvn clean package -DskipTests --batch-mode
 
       - name: Login to Container Registry
@@ -280,7 +292,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: cloud-infra-modules/${{ matrix.service }}
+          context: ${{ matrix.path }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
