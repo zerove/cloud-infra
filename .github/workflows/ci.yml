@@ -2,10 +2,10 @@ name: Cloud-Infra CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, master]
     tags: ['v*']
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, master]
 
 env:
   MAVEN_OPTS: "-Xmx4g"
