@@ -50,6 +50,8 @@ public class RedissonConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
+        // Spring Boot 4 仅提供 Jackson 3 (tools.jackson) 的 ObjectMapper bean，
+        // 而本配置使用 Jackson 2 (com.fasterxml.jackson) 序列化器，故内部创建实例
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.activateDefaultTyping(
             LaissezFaireSubTypeValidator.instance,

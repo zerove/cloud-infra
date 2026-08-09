@@ -79,7 +79,7 @@ public class SysLoginService {
         } catch (Exception e) {
             recordLoginFail(loginUser.getUsername());
             return Result.fail(
-                ResultCode.ERROR.getCode(),
+                ResultCode.BUSINESS_ERROR.getCode(),
                 AuthExceptionCode.LOGIN_FAILED.getMsg()
             );
         }
