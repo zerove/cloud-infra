@@ -1,0 +1,17 @@
+# Alertmanager 配置: 本地开发环境告警接收器
+# 生产环境替换 webhook 为飞书/钉钉/Slack
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'local-dev'
+
+receivers:
+  - name: 'local-dev'
+    webhook_configs:
+      - url: 'http://localhost:9093/webhook'
+        send_resolved: true

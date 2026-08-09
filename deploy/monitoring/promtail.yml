@@ -1,0 +1,41 @@
+# Promtail 配置: 采集 podman/docker 容器日志到 Loki
+# 本地环境: 通过 podman 兼容 Docker API socket 自动发现容器 (cloud-* 前缀)
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+# 定位段落: 通过 docker_sd 发现容器 (podman socket 兼容)
+scrape_configs:
+  - job_name: container-logs
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+        filters:
+          - name: name
+            values: ["cloud-"]
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_image']
+        target_label: 'image'
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'project'
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{2}:\d{2})\s+(?P<stream>stdout|stderr)\s+(?P<flag>[FPC])\s+(?P<message>.*)$'
+      - labels:
+          stream:
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      - output:
+          source: message
+    encoding: utf-8

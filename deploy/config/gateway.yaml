@@ -28,64 +28,44 @@ spring:
         locator:
           enabled: true
           lower-case-service-id: true
-      mvc:
-        routes:
+      server:
+        webmvc:
+          routes:
           - id: system-module
             uri: lb://system-module
             predicates:
               - Path=/system/**
             filters:
-              - StripPrefix=1
-              - RequestTimeout=10000
-              - Retry=3, 1000, 2000, 4000, GET,POST,PUT,DELETE,10000
+              - stripPrefix=1
+              - retry=3
           - id: auth-service
             uri: lb://cloud-auth
             predicates:
               - Path=/auth/**
             filters:
-              - StripPrefix=1
-              - RequestTimeout=5000
-              - Retry=3, 500, 1000, 2000, GET,POST
+              - stripPrefix=1
+              - retry=3
           - id: file-service
             uri: lb://file-service
             predicates:
               - Path=/file/**
             filters:
-              - StripPrefix=1
-              - RequestTimeout=30000
-              - Retry=2, 2000, 4000, POST
+              - stripPrefix=1
+              - retry=2
           - id: notification-service
             uri: lb://notification-service
             predicates:
               - Path=/notification/**
             filters:
-              - StripPrefix=1
-              - RequestTimeout=15000
-              - Retry=3, 1000, 2000, 4000, GET,POST
+              - stripPrefix=1
+              - retry=3
           - id: search-service
             uri: lb://search-service
             predicates:
               - Path=/search/**
             filters:
-              - StripPrefix=1
-              - RequestTimeout=10000
-              - Retry=3, 1000, 2000, 4000, GET,POST
-        cors:
-          configurations:
-            '[/**]':
-              allowed-origin-patterns:
-                - "http://localhost:*"
-                - "http://127.0.0.1:*"
-              allowed-methods:
-                - GET
-                - POST
-                - PUT
-                - DELETE
-                - PATCH
-                - OPTIONS
-              allowed-headers: "*"
-              allow-credentials: true
-              max-age: 3600
+              - stripPrefix=1
+              - retry=3
 
 # Sentinel 配置
 sentinel:
@@ -169,9 +149,11 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: http://localhost:4318/v1/traces
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
   metrics:
     export:
       prometheus:
