@@ -23,7 +23,14 @@ public enum ResultCode {
     
     private final Integer code;
     private final String msg;
-    ResultCode(Integer code, String msg) { this.code = code; this.msg = msg; }
-    public Integer getCode() { return code; }
-    public String getMsg() { return msg; }
+    ResultCode(Integer code, String msg) {
+        this.code = code;
+        this.msg = msg;
+    }
+    public Integer getCode() {
+        return code;
+    }
+    public String getMsg() {
+        return msg;
+    }
 }

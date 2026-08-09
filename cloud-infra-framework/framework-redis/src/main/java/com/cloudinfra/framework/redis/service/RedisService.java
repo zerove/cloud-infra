@@ -39,7 +39,9 @@ public class RedisService {
     }
 
     public boolean isBlacklisted(String jti) {
-        if (jti == null) return false;
+        if (jti == null) {
+            return false;
+        }
         return Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti));
     }
 

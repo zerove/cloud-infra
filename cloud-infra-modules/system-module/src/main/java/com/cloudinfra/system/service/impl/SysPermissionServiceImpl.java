@@ -114,7 +114,9 @@ public class SysPermissionServiceImpl
             USER_PERMISSION_CACHE_KEY
         );
         List<String> cached = cache.get(userId);
-        if (cached != null) return cached;
+        if (cached != null) {
+            return cached;
+        }
 
         List<String> permissions = baseMapper.selectPermsByUserId(userId);
 

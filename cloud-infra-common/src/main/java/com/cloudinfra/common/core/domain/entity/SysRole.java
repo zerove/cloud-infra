@@ -1,6 +1,10 @@
 package com.cloudinfra.common.core.domain.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.cloudinfra.common.core.domain.BaseEntity;
 
 import java.util.List;
@@ -66,8 +70,12 @@ public class SysRole extends BaseEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         SysRole sysRole = (SysRole) o;
         return Objects.equals(id, sysRole.id);
     }

@@ -30,7 +30,9 @@ public class IdempotentAspect {
     public void doBefore(JoinPoint joinPoint, Idempotent idempotent) {
         ServletRequestAttributes attributes =
             (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes == null) return;
+        if (attributes == null) {
+            return;
+        }
 
         HttpServletRequest request = attributes.getRequest();
 

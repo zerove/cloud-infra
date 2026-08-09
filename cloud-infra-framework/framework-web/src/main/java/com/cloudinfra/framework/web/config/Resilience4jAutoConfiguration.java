@@ -16,7 +16,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * Resilience4j 弹性设计自动配置

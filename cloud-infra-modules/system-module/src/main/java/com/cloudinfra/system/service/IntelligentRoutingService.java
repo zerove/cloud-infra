@@ -1,13 +1,11 @@
 package com.cloudinfra.system.service;
 
 import com.cloudinfra.system.domain.ResourceMapping;
-import com.cloudinfra.system.domain.ServiceTicket;
 import com.cloudinfra.system.mapper.ResourceMappingMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 
 /**
  * 智能路由服务 - 基于资产拓扑自动寻找责任人

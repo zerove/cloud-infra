@@ -91,7 +91,9 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     private List<SysRoleMenu> buildMenuRelations(SysRole role) {
-        if (role.getMenuIds() == null || role.getMenuIds().isEmpty()) return List.of();
+        if (role.getMenuIds() == null || role.getMenuIds().isEmpty()) {
+            return List.of();
+        }
         return role.getMenuIds().stream().map(menuId -> {
             SysRoleMenu rm = new SysRoleMenu();
             rm.setRoleId(role.getId());
@@ -101,7 +103,9 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     private List<SysRoleDept> buildDeptRelations(SysRole role) {
-        if (role.getDeptIds() == null || role.getDeptIds().isEmpty()) return List.of();
+        if (role.getDeptIds() == null || role.getDeptIds().isEmpty()) {
+            return List.of();
+        }
         return role.getDeptIds().stream().map(deptId -> {
             SysRoleDept rd = new SysRoleDept();
             rd.setRoleId(role.getId());

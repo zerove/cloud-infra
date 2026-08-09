@@ -1,16 +1,11 @@
 package com.cloudinfra.system.service;
 
-import com.cloudinfra.api.notification.NotificationApi;
-import com.cloudinfra.api.notification.dto.NotificationRequest;
-import com.cloudinfra.api.notification.enums.NotificationType;
-import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 
 /**
  * 平台健康守护者 - 实现指标监控与自动告警闭环

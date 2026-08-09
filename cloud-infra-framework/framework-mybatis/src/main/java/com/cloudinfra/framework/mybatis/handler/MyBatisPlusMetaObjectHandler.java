@@ -16,7 +16,9 @@ public class MyBatisPlusMetaObjectHandler implements MetaObjectHandler {
     @Override
     public void insertFill(MetaObject metaObject) {
         String username = UserContext.get("username");
-        if (username == null) username = "system";
+        if (username == null) {
+            username = "system";
+        }
         
         this.strictInsertFill(metaObject, "createBy", String.class, username);
         this.strictInsertFill(metaObject, "createTime", LocalDateTime.class, LocalDateTime.now());
@@ -27,7 +29,9 @@ public class MyBatisPlusMetaObjectHandler implements MetaObjectHandler {
     @Override
     public void updateFill(MetaObject metaObject) {
         String username = UserContext.get("username");
-        if (username == null) username = "system";
+        if (username == null) {
+            username = "system";
+        }
         
         this.strictUpdateFill(metaObject, "updateBy", String.class, username);
         this.strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());

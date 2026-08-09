@@ -1,6 +1,8 @@
 package com.cloudinfra.system.domain;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.cloudinfra.common.core.domain.BaseEntity;
 
 import java.util.ArrayList;
@@ -81,8 +83,12 @@ public class SysMenu extends BaseEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         SysMenu sysMenu = (SysMenu) o;
         return Objects.equals(id, sysMenu.id);
     }

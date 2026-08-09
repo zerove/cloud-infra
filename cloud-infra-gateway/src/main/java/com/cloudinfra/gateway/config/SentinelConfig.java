@@ -1,6 +1,7 @@
 package com.cloudinfra.gateway.config;
 
-import com.alibaba.csp.sentinel.datasource.*;
+import com.alibaba.csp.sentinel.datasource.Converter;
+import com.alibaba.csp.sentinel.datasource.ReadableDataSource;
 import com.alibaba.csp.sentinel.init.InitExecutor;
 import com.alibaba.csp.sentinel.slots.block.authority.AuthorityRule;
 import com.alibaba.csp.sentinel.slots.block.authority.AuthorityRuleManager;

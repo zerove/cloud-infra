@@ -5,8 +5,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 
-import java.util.List;
-
 /**
  * API 文档聚合配置
  * 网关聚合所有微服务的 OpenAPI 文档，统一入口访问

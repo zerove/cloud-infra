@@ -4,12 +4,15 @@ import com.cloudinfra.notification.domain.UserNotificationPreference;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import com.cloudinfra.notification.mapper.UserNotificationPreferenceMapper;
 import com.cloudinfra.notification.service.channel.NotificationChannel;
-import com.cloudinfra.notification.service.ChannelFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 /**
