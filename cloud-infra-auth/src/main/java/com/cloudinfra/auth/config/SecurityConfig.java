@@ -53,7 +53,11 @@ public class SecurityConfig {
                         "/swagger-ui.html",
                         "/doc.html",
                         "/webjars/**",
-                        "/swagger-resources/**"
+                        "/swagger-resources/**",
+                        // 管理端点 (ADR-008: 管理端口独立, base-path=/management)
+                        "/management/health",
+                        "/management/info",
+                        "/management/prometheus"
                     ).permitAll()
                     .anyRequest()
                     .authenticated()

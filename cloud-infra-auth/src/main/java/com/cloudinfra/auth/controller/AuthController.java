@@ -47,7 +47,7 @@ public class AuthController {
     public Result<Void> register(@RequestBody LoginUser registerUser, HttpServletRequest request) {
         if (!PasswordValidator.isValid(registerUser.getPassword())) {
             return Result.fail(
-                ResultCode.ERROR.getCode(),
+                ResultCode.BUSINESS_ERROR.getCode(),
                 "密码强度不足：需包含大小写字母、数字及特殊字符，且长度8-20位"
             );
         }
