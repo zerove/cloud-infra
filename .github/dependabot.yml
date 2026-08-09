@@ -43,3 +43,7 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+    ignore:
+      # actions/checkout v4 是最新稳定版，v7 不存在（dependabot 误报）
+      - dependency-name: "actions/checkout"
+        update-types: ["version-update:semver-major"]
