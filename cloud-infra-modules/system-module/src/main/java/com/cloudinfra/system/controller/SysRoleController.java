@@ -5,12 +5,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysRole;
+import com.cloudinfra.common.domain.SysPermission;
 import com.cloudinfra.system.domain.vo.SysRoleVO;
 import com.cloudinfra.system.domain.dto.SysRoleCreateDTO;
 import com.cloudinfra.system.domain.dto.SysRoleUpdateDTO;
 import com.cloudinfra.system.service.ISysRoleService;
+import com.cloudinfra.system.service.ISysPermissionService;
 import com.cloudinfra.system.converter.SysRoleConverter;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +30,7 @@ public class SysRoleController {
 
     private final ISysRoleService roleService;
     private final SysRoleConverter roleConverter;
+    private final ISysPermissionService permissionService;
 
     @Operation(summary = "查询角色列表")
     @PreAuthorize("@ss.hasPermi('system:role:list')")
@@ -35,7 +40,17 @@ public class SysRoleController {
                                  @RequestParam(defaultValue = "10") Integer pageSize) {
         Page<SysRole> page = new Page<>(pageNum, pageSize);
         IPage<SysRole> roles = roleService.selectRoleList(page, role);
-        return roles.convert(roleConverter::entityToVo);
+        
+        // 批量预加载权限，避免 N+1
+        List<Long> roleIds = roles.getRecords().stream()
+            .map(SysRole::getId)
+            .collect(Collectors.toList());
+        Map<Long, List<SysPermission>> rolePermissions = permissionService.getPermissionsByRoleIds(roleIds);
+        
+        List<SysRoleVO> voList = roleConverter.entityListToVoListWithPermissions(roles.getRecords(), rolePermissions);
+        IPage<SysRoleVO> voPage = new Page<>(roles.getCurrent(), roles.getSize(), roles.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
     }
 
     @Operation(summary = "新增角色")
