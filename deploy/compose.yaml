@@ -149,8 +149,151 @@ services:
     mem_limit: 512m
     ports:
       - "9090:9090"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus-rules/:/etc/prometheus/rules/:ro
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-lifecycle'
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: cloud-alertmanager
+    mem_limit: 128m
+    ports:
+      - "9093:9093"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cloud-grafana
+    mem_limit: 384m
+    ports:
+      - "3000:3000"
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - no_proxy=*
+      - NO_PROXY=*
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  # ========== 日志集中 ==========
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: cloud-loki
+    mem_limit: 384m
+    ports:
+      - "3100:3100"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: cloud-promtail
+    mem_limit: 256m
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
+    volumes:
+      # podman rootless socket + 容器日志存储 (json-file)
+      - /run/user/1000/podman/podman.sock:/var/run/docker.sock:ro
+      - /home/zeron/.local/share/containers/storage/overlay-containers:/var/log/containers:ro
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  # ========== 链路追踪 ==========
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: cloud-otel-collector
+    mem_limit: 256m
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
+    volumes:
+      - ./monitoring/otel-collector.yml:/etc/otel/config.yml:ro
+    command: ["--config=/etc/otel/config.yml"]
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: cloud-jaeger
+    mem_limit: 512m
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - no_proxy=*
+      - NO_PROXY=*
+      - COLLECTOR_OTLP_ENABLED=true
     networks:
       - cloud-infra
     logging: *default-logging
@@ -163,6 +306,12 @@ services:
     ports:
       - "8858:8858"
     environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
       SENTINEL_DASHBOARD_SERVER: ":8858"
       SENTINEL_DASHBOARD_AUTH_USERNAME: sentinel
       SENTINEL_DASHBOARD_AUTH_PASSWORD: sentinel
@@ -414,6 +563,8 @@ volumes:
   redisdata:
   rabbitmqdata:
   esdata:
+  grafana-data:
+  loki-data:
 
 networks:
   cloud-infra:

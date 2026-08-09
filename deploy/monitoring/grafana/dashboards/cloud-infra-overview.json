@@ -1,0 +1,57 @@
+{
+  "title": "Cloud-Infra 基础设施总览",
+  "uid": "cloud-infra-overview",
+  "tags": ["cloud-infra", "overview"],
+  "timezone": "Asia/Shanghai",
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "服务健康状态 (up)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "up{job!=\"prometheus\"}", "legendFormat": "{{job}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{"color":"red","value":null},{"color":"green","value":1}] }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } }
+    },
+    {
+      "title": "JVM 堆内存使用 (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"}) / 1024 / 1024", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" } }
+    },
+    {
+      "title": "JVM GC 暂停 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_sum[5m]) / rate(jvm_gc_pause_seconds_count[5m]) * 1000", "legendFormat": "{{application}} {{gc}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "title": "进程 CPU 使用率 (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "process_cpu_usage * 100", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "title": "堆内存与线程数",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "{{application}} 线程", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

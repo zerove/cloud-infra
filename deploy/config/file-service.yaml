@@ -89,3 +89,11 @@ management:
       base-path: /management
       exposure:
         include: "*"
+  tracing:
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}

@@ -84,6 +84,29 @@
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
             <version>8.5.7</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.squareup.okhttp3</groupId>
+                    <artifactId>okhttp</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.squareup.okio</groupId>
+                    <artifactId>okio</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- 统一 okhttp/okio 版本：与 OTel OTLP exporter 的 okhttp-jvm 5.x 保持一致，
+             避免 MinIO 传递的 okhttp 4.12 + okio 3.6 与 exporter 冲突导致
+             NoSuchMethodError: okio.Okio.socket（trace 上报失败） -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okio</groupId>
+            <artifactId>okio</artifactId>
+            <version>3.16.1</version>
         </dependency>
     </dependencies>
 

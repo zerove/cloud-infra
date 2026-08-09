@@ -1,0 +1,67 @@
+{
+  "title": "Cloud-Infra 服务指标总览",
+  "uid": "cloud-infra-services",
+  "tags": ["cloud-infra", "services"],
+  "timezone": "Asia/Shanghai",
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "HTTP 请求速率 (QPS, 按应用)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum by (application) (rate(http_server_requests_seconds_count[5m]))", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "title": "HTTP 5xx 错误率 (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum by (application) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by (application) (rate(http_server_requests_seconds_count[5m])) * 100", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "title": "HTTP P99 延迟 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m]))) * 1000", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "title": "Hikari 连接池活跃/最大",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "hikaricp_connections_active", "legendFormat": "{{application}} active", "refId": "A" },
+        { "expr": "hikaricp_connections_max", "legendFormat": "{{application}} max", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "title": "JVM 堆内存 (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" } }
+    },
+    {
+      "title": "JVM GC 暂停 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_sum[5m]) / rate(jvm_gc_pause_seconds_count[5m]) * 1000", "legendFormat": "{{application}} {{gc}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}
