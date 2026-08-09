@@ -18,7 +18,9 @@ public class ActuatorSecurityAutoConfiguration {
     @Bean
     public SecurityFilterChain actuatorSecurityFilterChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(requests -> requests
+                // 管理端点 (ADR-008: 管理端口独立映射, base-path=/management)
                 .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                .requestMatchers("/management/health", "/management/info", "/management/prometheus").permitAll()
                 .anyRequest().authenticated()
         );
         return http.build();

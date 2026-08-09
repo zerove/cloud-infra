@@ -30,6 +30,16 @@ public class StandardResponseAdvice implements ResponseBodyAdvice<Object> {
 
     @Override
     public boolean supports(MethodParameter returnType, java.lang.Class<? extends HttpMessageConverter<?>> converterType) {
+        // 跳过 actuator 管理端点 (health/info/prometheus 等)，避免破坏原生响应格式
+        var handlerMethod = returnType.getMethod();
+        if (handlerMethod != null) {
+            String className = handlerMethod.getDeclaringClass().getName();
+            if (className.startsWith("org.springframework.boot.actuate")
+                || className.contains("actuate")
+                || className.startsWith("org.springframework.boot.webmvc")) {
+                return false;
+            }
+        }
         // 如果返回值已经是 Result，则不包装
         return !Result.class.isAssignableFrom(returnType.getParameterType());
     }
