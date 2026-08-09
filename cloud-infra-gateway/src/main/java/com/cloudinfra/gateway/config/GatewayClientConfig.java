@@ -1,5 +1,6 @@
 package com.cloudinfra.gateway.config;
 
+import io.micrometer.observation.ObservationRegistry;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -23,7 +24,7 @@ public class GatewayClientConfig {
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
 
     @Bean
-    public RestClient restClient() {
+    public RestClient restClient(ObservationRegistry observationRegistry) {
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(2000);
         cm.setDefaultMaxPerRoute(500);
@@ -44,6 +45,7 @@ public class GatewayClientConfig {
 
         return RestClient.builder()
                 .requestFactory(factory)
+                .observationRegistry(observationRegistry)
                 .build();
     }
 }
