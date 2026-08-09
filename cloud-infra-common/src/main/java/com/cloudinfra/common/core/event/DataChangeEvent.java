@@ -7,6 +7,7 @@ import lombok.Getter;
  */
 @Getter
 public class DataChangeEvent extends BaseEvent {
+    private static final long serialVersionUID = 1L;
     private final String entityType;
     private final String operation; // CREATE, UPDATE, DELETE
     private final String entityId;

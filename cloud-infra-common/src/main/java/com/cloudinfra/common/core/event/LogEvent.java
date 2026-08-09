@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationEvent;
 
 @Getter
 public class LogEvent extends ApplicationEvent {
+    private static final long serialVersionUID = 1L;
     private final SysOperLog operLog;
 
     public LogEvent(SysOperLog operLog) {

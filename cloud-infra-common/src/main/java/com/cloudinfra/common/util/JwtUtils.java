@@ -33,11 +33,7 @@ public class JwtUtils {
     @PostConstruct
     public void init() {
         validateSecret();
-        try {
-            this.algorithm = Algorithm.HMAC256(secret);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize JwtUtils algorithm", e);
-        }
+        this.algorithm = Algorithm.HMAC256(secret);
     }
 
     /**
