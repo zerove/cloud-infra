@@ -15,7 +15,7 @@ x-logging: &default-logging
 services:
   # ========== 注册中心 & 配置中心 ==========
   nacos:
-    image: nacos/nacos-server:v3.0.2
+    image: nacos/nacos-server:v3.2.3
     container_name: cloud-nacos
     mem_limit: 768m
     ports:
@@ -30,6 +30,10 @@ services:
       NACOS_AUTH_TOKEN: c2VjcmV0VG9rZW4xMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZg==
       NACOS_AUTH_IDENTITY_KEY: serverIdentity
       NACOS_AUTH_IDENTITY_VALUE: security
+      # 启用 v1/v2 客户端 API 兼容 (up.sh 配置同步与运维脚本依赖 v1 API)
+      # 注: NACOS_CORE_API_* 环境变量不在 docker-startup.sh 白名单, 用 JAVA_TOOL_OPTIONS 注入
+      # - 认证关闭时 admin API 仍需登录, 本地开发禁用便于 up.sh 脚本同步配置
+      JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false"
       JVM_XMS: 256m
       JVM_XMX: 512m
     volumes:
@@ -38,9 +42,9 @@ services:
       - cloud-infra
     logging: *default-logging
     healthcheck:
-      # Nacos v3 的 /nacos/ 首页与 v1 console 端点不返回 200（410 Gone 或 404），
-      # 使用命名服务 list API 作为真实可用性探测（返回 200 JSON）
-      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/ns/service/list?pageNo=1&pageSize=10"]
+      # Nacos 3.2+ 健康检查: Console 独立进程 (8080) 的 v3 readiness 端点
+      # v1/v2 API (8848) 在 3.2+ 默认关闭兼容, 不能再作为探测源
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/console/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 10
