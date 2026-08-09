@@ -46,32 +46,34 @@ public class UnifiedSearchService {
                 }, executor))
                 .collect(Collectors.toList());
 
-            // 汇总所有结果
-            List<UnifiedSearchResult> allResults = futures.stream()
-                .flatMap(f -> f.join().stream())
-                .map(result -> {
-                    // 根据 Provider 的权重重新计算最终分数
-                    SearchProvider provider = providers.stream()
-                        .filter(p -> p.getResourceType().equals(result.resourceType()))
-                        .findFirst()
-                        .orElse(null);
-                    
-                    double weight = (provider != null) ? provider.getWeight() : 1.0;
-                    return new UnifiedSearchResult(
-                        result.resourceId(),
-                        result.resourceType(),
-                        result.title(),
-                        result.snippet(),
-                        result.score() * weight,
-                        result.timestamp(),
-                        result.url()
-                    );
-                })
-                .sorted(Comparator.comparing(UnifiedSearchResult::score).reversed())
-                .limit(limit)
-                .collect(Collectors.toList());
+            // 等待所有完成（此时 join 不会阻塞虚拟线程，因为已经在虚拟线程执行器中）
+            // 但为了最佳实践，改用 thenApply 链式处理
+            CompletableFuture<List<UnifiedSearchResult>> allResultsFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> futures.stream()
+                    .flatMap(f -> f.join().stream()) // allOf 完成后 join 不会阻塞
+                    .map(result -> {
+                        // 根据 Provider 的权重重新计算最终分数
+                        SearchProvider provider = providers.stream()
+                            .filter(p -> p.getResourceType().equals(result.resourceType()))
+                            .findFirst()
+                            .orElse(null);
+                        
+                        double weight = (provider != null) ? provider.getWeight() : 1.0;
+                        return new UnifiedSearchResult(
+                            result.resourceId(),
+                            result.resourceType(),
+                            result.title(),
+                            result.snippet(),
+                            result.score() * weight,
+                            result.timestamp(),
+                            result.url()
+                        );
+                    })
+                    .sorted(Comparator.comparing(UnifiedSearchResult::score).reversed())
+                    .limit(limit)
+                    .collect(Collectors.toList()));
 
-            return allResults;
+            return allResultsFuture.join(); // 最终 join 在虚拟线程中可接受
         } catch (Exception e) {
             log.error("统一搜索编排异常: {}", e.getMessage());
             return Collections.emptyList();

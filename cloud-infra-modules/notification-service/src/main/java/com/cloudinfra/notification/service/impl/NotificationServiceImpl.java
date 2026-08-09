@@ -165,21 +165,27 @@ public class NotificationServiceImpl implements INotificationService {
                     }, dispatchExecutor))
                     .collect(Collectors.toList());
 
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-                // 只要有一个渠道发送成功，状态即标记为 SENT
-                boolean anySuccess = futures.stream().anyMatch(f -> f.join());
-                NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
-                if (newStatus != notification.getStatus()) {
-                    Notification update = new Notification();
-                    update.setId(notification.getId());
-                    update.setStatus(newStatus);
-                    notificationMapper.updateById(update);
-                    log.info("[VT-Dispatch] 通知状态更新: id={}, from={}, to={}",
-                        notification.getId(), notification.getStatus(), newStatus);
-                }
+                // 使用 thenCompose 避免阻塞 join，改为异步组合
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenRun(() -> {
+                        try {
+                            boolean anySuccess = futures.stream()
+                                .map(CompletableFuture::join) // 此时已经完成，join 不会阻塞
+                                .anyMatch(Boolean::booleanValue);
+                            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
+                            if (newStatus != notification.getStatus()) {
+                                Notification update = new Notification();
+                                update.setId(notification.getId());
+                                update.setStatus(newStatus);
+                                notificationMapper.updateById(update);
+                                log.info("[VT-Dispatch] 通知状态更新: id={}, from={}, to={}",
+                                    notification.getId(), notification.getStatus(), newStatus);
+                            }
+                        } catch (Exception e) {
+                            log.error("[VT-Dispatch] 状态更新异常: notificationId={}", notification.getId(), e);
+                        }
+                    });
             } catch (Exception e) {
-                // 兜底：异步分发异常不能静默丢失，记录完整堆栈便于排查
                 log.error("[VT-Dispatch] 分发任务异常: notificationId={}", notification.getId(), e);
             }
         });

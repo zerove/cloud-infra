@@ -26,7 +26,7 @@ public class RuleConsumer {
 
     private final NotificationRuleService ruleService;
     private final INotificationService notificationService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = "iot.telemetry.queue")
     @SuppressWarnings("unchecked")
