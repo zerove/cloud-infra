@@ -1,6 +1,5 @@
 package com.cloudinfra.framework.web.config;
 
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,14 +7,14 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -43,7 +42,7 @@ public class GracefulShutdownAutoConfiguration {
 
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
     private final AtomicInteger activeRequestCount = new AtomicInteger(0);
-    private final CountDownLatch allRequestsCompleted = new CountDownLatch(1);
+    private final CountDownLatch allRequestsCompleted = new CountDownLatch(0);
     private Instant shutdownStartTime;
 
     /**

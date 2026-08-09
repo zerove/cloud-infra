@@ -2,7 +2,6 @@ package com.cloudinfra.search.service;
 
 import com.cloudinfra.search.domain.UnifiedSearchResult;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 搜索提供者接口 - 定义具体资源索引的检索行为

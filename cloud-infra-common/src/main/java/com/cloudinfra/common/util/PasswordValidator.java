@@ -12,7 +12,9 @@ public class PasswordValidator {
     private static final Pattern PATTERN = Pattern.compile(PASSWORD_PATTERN);
 
     public static boolean isValid(String password) {
-        if (password == null) return false;
+        if (password == null) {
+            return false;
+        }
         return PATTERN.matcher(password).matches();
     }
 }

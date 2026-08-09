@@ -8,7 +8,6 @@ import com.cloudinfra.file.mapper.StorageQuotaMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -23,7 +22,9 @@ public class StorageQuotaService {
      */
     public void checkQuota(Long userId, long fileSize) {
         StorageQuota quota = getQuota(userId);
-        if (quota == null) return;
+        if (quota == null) {
+            return;
+        }
         if (quota.getUsedSizeBytes() + fileSize > quota.getMaxSizeBytes()) {
             throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
@@ -36,7 +37,9 @@ public class StorageQuotaService {
      * @throws BusinessException 配额不足时抛出 RESOURCE_EXHAUSTED
      */
     public void tryReserve(Long userId, long size) {
-        if (userId == null || size <= 0) return;
+        if (userId == null || size <= 0) {
+            return;
+        }
         int rows = quotaMapper.atomicUpdateUsage(userId, size);
         if (rows == 0) {
             throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
@@ -48,9 +51,13 @@ public class StorageQuotaService {
      * 对未配置配额（无记录）的用户静默跳过。
      */
     public void release(Long userId, long size) {
-        if (userId == null || size <= 0) return;
+        if (userId == null || size <= 0) {
+            return;
+        }
         StorageQuota quota = getQuota(userId);
-        if (quota == null) return;
+        if (quota == null) {
+            return;
+        }
         quotaMapper.atomicUpdateUsage(userId, -size);
     }
 

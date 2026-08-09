@@ -1,7 +1,6 @@
 package com.cloudinfra.api.search.dto;
 
 import lombok.Data;
-import java.util.List;
 import java.util.Map;
 
 /**

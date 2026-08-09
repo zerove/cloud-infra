@@ -1,6 +1,5 @@
 package com.cloudinfra.notification.domain.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +21,12 @@ public record NotificationSendRequest(
     // 为了向后兼容，保留一个验证逻辑：如果没给 templateCode，则 title 和 content 必须非空
     public void validate() {
         if (templateCode == null || templateCode.isBlank()) {
-            if (title == null || title.isBlank()) throw new IllegalArgumentException("Title is required when templateCode is not provided");
-            if (content == null || content.isBlank()) throw new IllegalArgumentException("Content is required when templateCode is not provided");
+            if (title == null || title.isBlank()) {
+                throw new IllegalArgumentException("Title is required when templateCode is not provided");
+            }
+            if (content == null || content.isBlank()) {
+                throw new IllegalArgumentException("Content is required when templateCode is not provided");
+            }
         }
     }
 }

@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
 import java.util.List;
@@ -71,7 +70,9 @@ public class ConfigValidationAutoConfiguration {
     }
 
     private String mask(String value) {
-        if (value == null) return "未设置";
+        if (value == null) {
+            return "未设置";
+        }
         if (value.contains(":")) {
             String[] parts = value.split(":");
             return parts[0] + ":***";

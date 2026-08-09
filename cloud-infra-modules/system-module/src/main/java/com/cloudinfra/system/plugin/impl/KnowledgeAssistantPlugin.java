@@ -1,14 +1,12 @@
 package com.cloudinfra.system.plugin.impl;
 
-import com.cloudinfra.framework.plugin.*;
+import com.cloudinfra.framework.plugin.IServicePlugin;
+import com.cloudinfra.framework.plugin.PluginContext;
+import com.cloudinfra.framework.plugin.PluginMetadata;
 import com.cloudinfra.api.search.SearchApi;
-import com.cloudinfra.api.search.dto.SearchRequest;
-import com.cloudinfra.common.core.domain.Result;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * 联邦知识助手插件

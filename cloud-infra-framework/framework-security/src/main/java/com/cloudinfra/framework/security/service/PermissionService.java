@@ -14,9 +14,13 @@ public class PermissionService {
     private static final String SUPER_ADMIN = "admin";
 
     public boolean hasPermission(String permission) {
-        if (permission == null || permission.isEmpty()) return false;
+        if (permission == null || permission.isEmpty()) {
+            return false;
+        }
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) return false;
+        if (auth == null || auth.getPrincipal() == null) {
+            return false;
+        }
         
         Collection<?> authorities = auth.getAuthorities();
         // 检查通配符或超级管理员角色
@@ -27,7 +31,9 @@ public class PermissionService {
     }
 
     public boolean hasAnyPermissions(String permissions) {
-        if (permissions == null || permissions.isEmpty()) return false;
+        if (permissions == null || permissions.isEmpty()) {
+            return false;
+        }
         String[] perms = permissions.split(",");
         return Arrays.stream(perms).anyMatch(this::hasPermission);
     }

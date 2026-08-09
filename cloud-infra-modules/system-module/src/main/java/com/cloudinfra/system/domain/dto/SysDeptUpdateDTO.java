@@ -2,7 +2,6 @@ package com.cloudinfra.system.domain.dto;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import java.util.List;
 
 /**
  * 部门更新请求 DTO

@@ -223,7 +223,9 @@ public class FileServiceImpl implements IFileService {
      * 解析 uploader 字段为 Long（兼容历史字符串与数字格式）
      */
     private Long parseUploader(String uploader) {
-        if (uploader == null || uploader.isBlank()) return null;
+        if (uploader == null || uploader.isBlank()) {
+            return null;
+        }
         try {
             return Long.valueOf(uploader.trim());
         } catch (NumberFormatException e) {
@@ -240,7 +242,9 @@ public class FileServiceImpl implements IFileService {
     }
 
     private FileMetadataVO mapToVo(FileMetadata entity) {
-        if (entity == null) return null;
+        if (entity == null) {
+            return null;
+        }
         return new FileMetadataVO(
             entity.getId(),
             entity.getFileName(),

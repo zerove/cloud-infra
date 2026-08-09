@@ -1,6 +1,5 @@
 package com.cloudinfra.common.core.exception;
 
-import lombok.Getter;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;

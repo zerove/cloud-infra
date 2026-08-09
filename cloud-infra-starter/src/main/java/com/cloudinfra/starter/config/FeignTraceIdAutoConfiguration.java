@@ -1,7 +1,6 @@
 package com.cloudinfra.starter.config;
 
 import com.cloudinfra.framework.web.interceptor.FeignAuthInterceptor;
-import com.cloudinfra.framework.web.interceptor.FeignTraceIdInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

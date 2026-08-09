@@ -1,6 +1,5 @@
 package com.cloudinfra.framework.redis.lock;
 
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
