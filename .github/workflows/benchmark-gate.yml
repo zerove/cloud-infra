@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 2  # 需要对比上一次提交
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'oracle'
           java-version: '25'
