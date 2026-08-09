@@ -10,13 +10,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 统一审计聚合服务 - 实现全链路行为时间线追踪
@@ -59,7 +60,9 @@ public class AuditAggregatorService {
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     Result<List<NotificationLogDTO>> result = notificationApi.getLogs(userId);
-                    if (result == null || result.getData() == null) return Collections.emptyList();
+                    if (result == null || result.getData() == null) {
+                        return Collections.emptyList();
+                    }
                     
                     return result.getData().stream().map(log -> new UnifiedAuditRecord(
                         log.getCreateTime(),

@@ -85,9 +85,15 @@ public class FilePermissionService {
      */
     private java.util.List<String> permittedLevels(int rank) {
         java.util.List<String> levels = new java.util.ArrayList<>();
-        if (rank >= 1) levels.add("READ");
-        if (rank >= 2) levels.add("WRITE");
-        if (rank >= 3) levels.add("OWNER");
+        if (rank >= 1) {
+            levels.add("READ");
+        }
+        if (rank >= 2) {
+            levels.add("WRITE");
+        }
+        if (rank >= 3) {
+            levels.add("OWNER");
+        }
         return levels;
     }
 

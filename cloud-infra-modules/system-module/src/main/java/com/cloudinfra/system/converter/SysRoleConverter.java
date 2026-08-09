@@ -18,7 +18,9 @@ import java.util.stream.Collectors;
 public class SysRoleConverter {
 
     public SysRole createDtoToEntity(SysRoleCreateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysRole entity = new SysRole();
         entity.setRoleName(dto.getRoleName());
         entity.setRoleKey(dto.getRoleKey());
@@ -31,7 +33,9 @@ public class SysRoleConverter {
     }
 
     public SysRole updateDtoToEntity(SysRoleUpdateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysRole entity = new SysRole();
         entity.setId(dto.getRoleId());
         entity.setRoleName(dto.getRoleName());
@@ -45,7 +49,9 @@ public class SysRoleConverter {
     }
 
     public SysRoleVO entityToVo(SysRole entity) {
-        if (entity == null) return null;
+        if (entity == null) {
+            return null;
+        }
         
         Integer ro = entity.getRoleOrder();
         
@@ -63,7 +69,9 @@ public class SysRoleConverter {
      * 带权限的实体转 VO（用于列表预加载权限场景）
      */
     public SysRoleVO entityToVoWithPermissions(SysRole entity, List<SysPermission> permissions) {
-        if (entity == null) return null;
+        if (entity == null) {
+            return null;
+        }
         
         Integer ro = entity.getRoleOrder();
         List<Long> permissionIds = (permissions == null) ? null : permissions.stream()
@@ -81,7 +89,9 @@ public class SysRoleConverter {
     }
 
     public List<SysRoleVO> entityListToVoList(List<SysRole> list) {
-        if (list == null) return List.of();
+        if (list == null) {
+            return List.of();
+        }
         return list.stream().map(this::entityToVo).collect(Collectors.toList());
     }
 
@@ -89,7 +99,9 @@ public class SysRoleConverter {
      * 批量转换并填充权限（避免 N+1）
      */
     public List<SysRoleVO> entityListToVoListWithPermissions(List<SysRole> list, Map<Long, List<SysPermission>> rolePermissions) {
-        if (list == null) return List.of();
+        if (list == null) {
+            return List.of();
+        }
         return list.stream()
             .map(entity -> entityToVoWithPermissions(entity, rolePermissions.get(entity.getId())))
             .collect(Collectors.toList());

@@ -1,12 +1,16 @@
 package com.cloudinfra.file.service.strategy;
 
 import com.cloudinfra.file.service.StorageStrategy;
-import io.minio.*;
-import io.minio.http.Method;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.GetObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.UUID;
 
 @Component("minioStorageStrategy")
@@ -87,7 +91,9 @@ public class MinioStorageStrategy implements StorageStrategy {
     }
 
     private String getFileExtension(String fileName) {
-        if (fileName == null || !fileName.contains(".")) return "";
+        if (fileName == null || !fileName.contains(".")) {
+            return "";
+        }
         return fileName.substring(fileName.lastIndexOf("."));
     }
 }

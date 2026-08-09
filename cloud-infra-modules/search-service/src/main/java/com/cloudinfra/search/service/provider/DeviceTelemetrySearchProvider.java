@@ -1,6 +1,5 @@
 package com.cloudinfra.search.service.provider;
 
-import com.cloudinfra.search.domain.DeviceTelemetryDocument;
 import com.cloudinfra.search.domain.UnifiedSearchResult;
 import com.cloudinfra.search.repository.DeviceTelemetryRepository;
 import com.cloudinfra.search.service.SearchProvider;

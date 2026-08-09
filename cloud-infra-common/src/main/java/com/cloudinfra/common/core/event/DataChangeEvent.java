@@ -1,7 +1,6 @@
 package com.cloudinfra.common.core.event;
 
 import lombok.Getter;
-import org.springframework.context.ApplicationEvent;
 
 /**
  * 数据变更事件

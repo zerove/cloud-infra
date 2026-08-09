@@ -3,7 +3,6 @@ package com.cloudinfra.system.domain.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import java.util.List;
 
 /**
  * 部门创建请求 DTO

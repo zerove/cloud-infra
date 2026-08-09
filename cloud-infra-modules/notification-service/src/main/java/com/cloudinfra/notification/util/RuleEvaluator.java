@@ -17,7 +17,9 @@ public class RuleEvaluator {
      * @return 是否触发
      */
     public static boolean evaluate(NotificationRule rule, Double currentValue) {
-        if (rule == null || currentValue == null) return false;
+        if (rule == null || currentValue == null) {
+            return false;
+        }
 
         String op = rule.getOperator();
         Double threshold = rule.getThreshold();

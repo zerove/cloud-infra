@@ -37,18 +37,24 @@ public class RuleConsumer {
             String deviceId = (String) data.getOrDefault("deviceId", "unknown");
             Map<String, Object> metrics = (Map<String, Object>) data.get("metrics");
 
-            if (metrics == null) return;
+            if (metrics == null) {
+                return;
+            }
 
             // 2. 获取该设备的活跃规则
             List<NotificationRule> activeRules = ruleService.getActiveRulesForDevice(deviceId);
-            if (activeRules.isEmpty()) return;
+            if (activeRules.isEmpty()) {
+                return;
+            }
 
             // 3. 逐条判定规则
             for (NotificationRule rule : activeRules) {
                 String metricName = rule.getMetric();
                 Object valueObj = metrics.get(metricName);
 
-                if (valueObj == null) continue;
+                if (valueObj == null) {
+                    continue;
+                }
 
                 // 将值转换为 Double 统一判定
                 Double currentValue = Double.valueOf(valueObj.toString());

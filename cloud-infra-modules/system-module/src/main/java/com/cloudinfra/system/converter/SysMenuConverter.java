@@ -16,7 +16,9 @@ import java.util.stream.Collectors;
 public class SysMenuConverter {
 
     public SysMenu createDtoToEntity(SysMenuCreateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysMenu entity = new SysMenu();
         entity.setMenuName(dto.getMenuName());
         entity.setPerms(dto.getPerms());
@@ -38,7 +40,9 @@ public class SysMenuConverter {
     }
 
     public SysMenu updateDtoToEntity(SysMenuUpdateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysMenu entity = new SysMenu();
         entity.setId(dto.getMenuId());
         entity.setMenuName(dto.getMenuName());
@@ -61,7 +65,9 @@ public class SysMenuConverter {
     }
 
     public SysMenuVO entityToVo(SysMenu entity) {
-        if (entity == null) return null;
+        if (entity == null) {
+            return null;
+        }
         
         Integer fs = entity.getFrameStatus();
         Integer vs = entity.getVisibleStatus();
@@ -84,7 +90,9 @@ public class SysMenuConverter {
     }
 
     public List<SysMenuVO> entityListToVoList(List<SysMenu> list) {
-        if (list == null) return List.of();
+        if (list == null) {
+            return List.of();
+        }
         return list.stream().map(this::entityToVo).collect(Collectors.toList());
     }
 }

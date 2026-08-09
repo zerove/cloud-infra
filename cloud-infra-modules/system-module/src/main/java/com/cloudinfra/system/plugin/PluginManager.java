@@ -1,7 +1,6 @@
 package com.cloudinfra.system.plugin;
 
 import com.cloudinfra.framework.plugin.IServicePlugin;
-import com.cloudinfra.framework.plugin.PluginContext;
 import com.cloudinfra.system.plugin.impl.MediaAiTaggingPlugin;
 import com.cloudinfra.system.plugin.impl.KnowledgeAssistantPlugin;
 import lombok.RequiredArgsConstructor;
@@ -9,12 +8,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 插件管理器 - 负责插件的动态加载、生命周期管理与热部署
@@ -107,7 +109,9 @@ public class PluginManager {
      */
     public void unloadPlugin(String pluginId) {
         LoadedPlugin lp = loadedPlugins.remove(pluginId);
-        if (lp == null) return;
+        if (lp == null) {
+            return;
+        }
 
         try {
             lp.instance().onDisable();

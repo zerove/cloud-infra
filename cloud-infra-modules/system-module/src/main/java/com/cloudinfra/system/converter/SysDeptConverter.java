@@ -13,7 +13,9 @@ import java.util.stream.Collectors;
 public class SysDeptConverter {
 
     public SysDept createDtoToEntity(SysDeptCreateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysDept entity = new SysDept();
         entity.setDeptName(dto.getDeptName());
         entity.setParentId(dto.getParentId());
@@ -26,7 +28,9 @@ public class SysDeptConverter {
     }
 
     public SysDept updateDtoToEntity(SysDeptUpdateDTO dto) {
-        if (dto == null) return null;
+        if (dto == null) {
+            return null;
+        }
         SysDept entity = new SysDept();
         entity.setDeptId(dto.getDeptId());
         entity.setDeptName(dto.getDeptName());
@@ -40,7 +44,9 @@ public class SysDeptConverter {
     }
 
     public SysDeptVO entityToVo(SysDept entity) {
-        if (entity == null) return null;
+        if (entity == null) {
+            return null;
+        }
         return new SysDeptVO(
             entity.getDeptId(),
             entity.getParentId() != null ? entity.getParentId().toString() : null,
@@ -55,7 +61,9 @@ public class SysDeptConverter {
     }
 
     public List<SysDeptVO> entityListToVoList(List<SysDept> list) {
-        if (list == null) return List.of();
+        if (list == null) {
+            return List.of();
+        }
         return list.stream().map(this::entityToVo).collect(Collectors.toList());
     }
 }

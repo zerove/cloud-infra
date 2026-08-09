@@ -8,8 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
 
 /**
  * 资源拓扑映射服务 - 实现资源与组织架构的权限展开
@@ -63,7 +62,9 @@ public class ResourceMappingService {
 
     private void expandDeptHierarchy(Long deptId, Set<Long> nodes) {
         SysDept dept = deptMapper.selectById(deptId);
-        if (dept == null) return;
+        if (dept == null) {
+            return;
+        }
 
         nodes.add(deptId);
         

@@ -22,7 +22,9 @@ public class SysMenuVO {
 
     public SysMenuVO() {}
 
-    public SysMenuVO(Long menuId, Long parentId, String menuName, String perms, String path, String component, Integer frameStatus, String menuType, Integer orderNum, Integer visibleStatus, Integer status, List<SysMenuVO> children) {
+    public SysMenuVO(Long menuId, Long parentId, String menuName, String perms, String path, 
+                     String component, Integer frameStatus, String menuType, Integer orderNum, 
+                     Integer visibleStatus, Integer status, List<SysMenuVO> children) {
         this.menuId = menuId;
         this.parentId = parentId;
         this.menuName = menuName;
@@ -75,8 +77,12 @@ public class SysMenuVO {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         SysMenuVO sysMenuVO = (SysMenuVO) o;
         return Objects.equals(menuId, sysMenuVO.menuId);
     }

@@ -1,9 +1,13 @@
 package com.cloudinfra.system.plugin.impl;
 
-import com.cloudinfra.framework.plugin.*;
+import com.cloudinfra.framework.plugin.IServicePlugin;
+import com.cloudinfra.framework.plugin.PluginContext;
+import com.cloudinfra.framework.plugin.PluginMetadata;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 媒体 AI 自动打标签插件
@@ -38,16 +42,24 @@ public class MediaAiTaggingPlugin implements IServicePlugin {
             List<String> tags = new ArrayList<>();
             String title = resource.title().toLowerCase();
             
-            if (title.contains("nature") || title.contains("forest")) tags.add("自然");
-            if (title.contains("tech") || title.contains("code")) tags.add("技术");
-            if (title.contains("tutorial")) tags.add("教程");
+            if (title.contains("nature") || title.contains("forest")) {
+                tags.add("自然");
+            }
+            if (title.contains("tech") || title.contains("code")) {
+                tags.add("技术");
+            }
+            if (title.contains("tutorial")) {
+                tags.add("教程");
+            }
             
             // 根据媒体类型增加通用标签
             if (resource.type() != null) {
                 tags.add("格式:" + resource.type());
             }
             
-            if (tags.isEmpty()) tags.add("通用内容");
+            if (tags.isEmpty()) {
+                tags.add("通用内容");
+            }
             
             return tags;
         });

@@ -3,7 +3,6 @@ package com.cloudinfra.framework.mybatis.interceptor;
 import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.StringJoiner;
 
@@ -16,7 +15,6 @@ import org.apache.ibatis.reflection.SystemMetaObject;
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.cloudinfra.common.core.annotation.DataScope;
 import com.cloudinfra.common.core.domain.entity.SysRole;
-import com.cloudinfra.common.enums.DataScopeEnum;
 import com.cloudinfra.common.util.SecurityUtils;
 
 /**
@@ -219,10 +217,18 @@ public class DataScopeInterceptor implements InnerInterceptor {
         int unionIdx = upper.indexOf(" UNION ");
 
         List<Integer> positions = new ArrayList<>();
-        if (groupIdx >= 0) positions.add(groupIdx);
-        if (orderIdx >= 0) positions.add(orderIdx);
-        if (limitIdx >= 0) positions.add(limitIdx);
-        if (unionIdx >= 0) positions.add(unionIdx);
+        if (groupIdx >= 0) {
+            positions.add(groupIdx);
+        }
+        if (orderIdx >= 0) {
+            positions.add(orderIdx);
+        }
+        if (limitIdx >= 0) {
+            positions.add(limitIdx);
+        }
+        if (unionIdx >= 0) {
+            positions.add(unionIdx);
+        }
 
         if (whereIdx >= 0) {
             // 已有 WHERE：在第一个尾部关键句前插入 AND 片段

@@ -8,7 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * 认证判定引擎 - 领域逻辑凝聚点
@@ -130,9 +133,13 @@ public class AuthEvaluator {
     }
 
     private boolean isWhiteListed(String path) {
-        if (exactWhiteList.contains(path)) return true;
+        if (exactWhiteList.contains(path)) {
+            return true;
+        }
         for (String prefix : prefixWhiteList) {
-            if (path.startsWith(prefix)) return true;
+            if (path.startsWith(prefix)) {
+                return true;
+            }
         }
         return false;
     }

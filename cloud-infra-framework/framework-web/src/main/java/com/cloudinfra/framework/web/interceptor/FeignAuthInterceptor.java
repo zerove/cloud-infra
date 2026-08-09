@@ -39,8 +39,12 @@ public class FeignAuthInterceptor implements RequestInterceptor {
             HttpServletRequest request = attributes.getRequest();
             String userId = request.getHeader("X-User-Id");
             String username = request.getHeader("X-User-Name");
-            if (userId != null) template.header("X-User-Id", userId);
-            if (username != null) template.header("X-User-Name", username);
+            if (userId != null) {
+                template.header("X-User-Id", userId);
+            }
+            if (username != null) {
+                template.header("X-User-Name", username);
+            }
         }
     }
 }

@@ -3,14 +3,12 @@ package com.cloudinfra.notification.service;
 import com.cloudinfra.notification.domain.ScheduledNotification;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;

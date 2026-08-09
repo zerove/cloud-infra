@@ -32,13 +32,40 @@ public record PlatformPrincipal(
         private Set<String> permissions = Set.of();
         private java.util.Map<String, String> attributes = java.util.Map.of();
 
-        public Builder userId(Long userId) { this.userId = userId; return this; }
-        public Builder username(String username) { this.username = username; return this; }
-        public Builder tenantId(String tenantId) { this.tenantId = tenantId; return this; }
-        public Builder deptId(Long deptId) { this.deptId = deptId; return this; }
-        public Builder roleId(Long roleId) { this.roleId = roleId; return this; }
-        public Builder permissions(Set<String> permissions) { this.permissions = permissions; return this; }
-        public Builder attributes(java.util.Map<String, String> attributes) { this.attributes = attributes; return this; }
+        public Builder userId(Long userId) {
+            this.userId = userId;
+            return this;
+        }
+
+        public Builder username(String username) {
+            this.username = username;
+            return this;
+        }
+
+        public Builder tenantId(String tenantId) {
+            this.tenantId = tenantId;
+            return this;
+        }
+
+        public Builder deptId(Long deptId) {
+            this.deptId = deptId;
+            return this;
+        }
+
+        public Builder roleId(Long roleId) {
+            this.roleId = roleId;
+            return this;
+        }
+
+        public Builder permissions(Set<String> permissions) {
+            this.permissions = permissions;
+            return this;
+        }
+
+        public Builder attributes(java.util.Map<String, String> attributes) {
+            this.attributes = attributes;
+            return this;
+        }
 
         public PlatformPrincipal build() {
             return new PlatformPrincipal(userId, username, tenantId, deptId, roleId, permissions, attributes);

@@ -19,8 +19,12 @@ public class TemplateProcessor {
      * @return 渲染后的最终字符串
      */
     public static String process(String template, Map<String, Object> params) {
-        if (template == null) return "";
-        if (params == null || params.isEmpty()) return template;
+        if (template == null) {
+            return "";
+        }
+        if (params == null || params.isEmpty()) {
+            return template;
+        }
 
         StringBuilder sb = new StringBuilder();
         Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
