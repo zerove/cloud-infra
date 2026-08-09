@@ -1,0 +1,83 @@
+# Cloud-Infra 本地环境 Prometheus 告警规则
+# 生产 K8s 规则见 deploy/k8s/infra 下的 PrometheusRule
+groups:
+  - name: cloud-infra-services.rules
+    interval: 30s
+    rules:
+      # === 可用性 ===
+      - alert: ServiceInstanceDown
+        expr: up{job!="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "服务实例不可用"
+          description: "{{ $labels.job }} 实例 {{ $labels.instance }} 已下线超过 1 分钟"
+
+      # === JVM ===
+      - alert: JVMHeapUsageHigh
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "JVM 堆内存使用率过高"
+          description: "应用 {{ $labels.application }} 堆内存使用率超过 85% ({{ $value | humanizePercentage }})"
+
+      - alert: JVMGCPauseHigh
+        expr: rate(jvm_gc_pause_seconds_sum[5m]) / rate(jvm_gc_pause_seconds_count[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "JVM GC 暂停时间过长"
+          description: "应用 {{ $labels.application }} GC 平均暂停超过 500ms"
+
+      # === HTTP ===
+      - alert: Http5xxRateHigh
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+          /
+          sum by (application) (rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "HTTP 5xx 错误率过高"
+          description: "应用 {{ $labels.application }} 5xx 错误率超过 5% ({{ $value | humanizePercentage }})"
+
+      - alert: HttpP99LatencyHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket[5m]))) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HTTP P99 延迟过高"
+          description: "P99 延迟超过 1 秒，持续 5 分钟"
+
+      # === 连接池 ===
+      - alert: HikariPoolExhausted
+        expr: hikaricp_connections_active / hikaricp_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "数据库连接池耗尽"
+          description: "连接池 {{ $labels.pool }} 使用率超过 90%"
+
+      # === 日志错误 ===
+      - alert: LogErrorRateHigh
+        expr: sum by (application) (rate(logback_events_total{level="error"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "应用错误日志过多"
+          description: "应用 {{ $labels.application }} 错误日志速率超过 0.1/s，持续 5 分钟"

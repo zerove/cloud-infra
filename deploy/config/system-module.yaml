@@ -81,9 +81,11 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4317}
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
 
 # Resilience4j 弹性设计配置
 resilience4j:
