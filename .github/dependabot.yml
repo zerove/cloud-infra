@@ -53,3 +53,6 @@ updates:
       # actions/setup-java v4 稳定，v5 暂不升级
       - dependency-name: "actions/setup-java"
         update-types: ["version-update:semver-major"]
+      # azure/setup-helm v4 稳定，v5 暂不升级
+      - dependency-name: "azure/setup-helm"
+        update-types: ["version-update:semver-major"]
