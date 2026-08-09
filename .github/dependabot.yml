@@ -47,3 +47,6 @@ updates:
       # actions/checkout v4 是最新稳定版，v7 不存在（dependabot 误报）
       - dependency-name: "actions/checkout"
         update-types: ["version-update:semver-major"]
+      # docker/login-action v4 可能有 breaking changes，暂不升级
+      - dependency-name: "docker/login-action"
+        update-types: ["version-update:semver-major"]
