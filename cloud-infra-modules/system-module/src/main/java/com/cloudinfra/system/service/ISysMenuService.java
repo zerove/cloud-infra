@@ -1,9 +1,10 @@
 package com.cloudinfra.system.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.cloudinfra.system.domain.SysMenu;
+import java.util.List;
 import com.cloudinfra.system.domain.dto.SysMenuCreateDTO;
 import com.cloudinfra.system.domain.dto.SysMenuUpdateDTO;
-import java.util.List;
 
 public interface ISysMenuService extends IService<SysMenu> {
     List<SysMenu> selectMenuList(SysMenu menu);
