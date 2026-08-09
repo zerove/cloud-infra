@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 资源拓扑映射服务 - 实现资源与组织架构的权限展开
