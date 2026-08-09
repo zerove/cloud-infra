@@ -70,7 +70,11 @@ public class SystemSecurityConfig {
                         "/swagger-ui.html",
                         "/doc.html",
                         "/webjars/**",
-                        "/swagger-resources/**"
+                        "/swagger-resources/**",
+                        // 管理端点 (ADR-008: 管理端口独立, base-path=/management)
+                        "/management/health",
+                        "/management/info",
+                        "/management/prometheus"
                     ).permitAll()
                     // 内部 Feign 契约端点：仅允许签名有效的内部调用
                     .requestMatchers(internalCallMatcher(

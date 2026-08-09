@@ -12,6 +12,8 @@ import com.cloudinfra.system.service.ISysUserService;
 import com.cloudinfra.system.service.ISysPermissionService;
 import com.cloudinfra.system.converter.SysUserConverter;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,7 +39,17 @@ public class SysUserController {
                                  @RequestParam(defaultValue = "10") Integer pageSize) {
         Page<SysUser> page = new Page<>(pageNum, pageSize);
         IPage<SysUser> users = userService.selectUserList(page, user);
-        return users.convert(userConverter::entityToVo);
+        
+        // 批量预加载权限，避免 N+1
+        List<Long> userIds = users.getRecords().stream()
+            .map(SysUser::getUserId)
+            .collect(Collectors.toList());
+        Map<Long, List<String>> userPermissions = permissionService.getPermissionsByUserIds(userIds);
+        
+        List<SysUserVO> voList = userConverter.entityListToVoListWithPermissions(users.getRecords(), userPermissions);
+        IPage<SysUserVO> voPage = new Page<>(users.getCurrent(), users.getSize(), users.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
     }
 
     @Operation(summary = "新增用户")
@@ -71,7 +83,7 @@ public class SysUserController {
     public Result<com.cloudinfra.api.system.dto.UserDTO> getUserById(@PathVariable("userId") Long userId) {
         SysUser user = userService.selectUserById(userId);
         if (user == null) {
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), "用户不存在");
         }
         return Result.success(toUserDTO(user));
     }
@@ -81,7 +93,7 @@ public class SysUserController {
     public Result<com.cloudinfra.api.system.dto.UserDTO> getUserByUsername(@PathVariable("username") String username) {
         SysUser user = userService.selectUserByUsername(username);
         if (user == null) {
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), "用户不存在");
         }
         return Result.success(toUserDTO(user));
     }
@@ -103,7 +115,7 @@ public class SysUserController {
     public Result<com.cloudinfra.api.system.dto.UserCredentialDTO> getUserCredentialById(@PathVariable("userId") Long userId) {
         SysUser user = userService.selectUserById(userId);
         if (user == null) {
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), "用户不存在");
         }
         return Result.success(toUserCredentialDTO(user));
     }
@@ -113,7 +125,7 @@ public class SysUserController {
     public Result<com.cloudinfra.api.system.dto.UserCredentialDTO> getUserCredentialByUsername(@PathVariable("username") String username) {
         SysUser user = userService.selectUserByUsername(username);
         if (user == null) {
-            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.ERROR.getCode(), "用户不存在");
+            return Result.fail(com.cloudinfra.common.core.enums.ResultCode.USER_NOT_FOUND.getCode(), "用户不存在");
         }
         return Result.success(toUserCredentialDTO(user));
     }
