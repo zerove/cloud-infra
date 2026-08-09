@@ -76,10 +76,14 @@ public class AuditAggregatorService {
                 }
             }, executor);
 
-            // 3. 汇总并进行全局时间线排序
-            return Stream.concat(operLogsFuture.join().stream(), notifyLogsFuture.join().stream())
-                .sorted(Comparator.comparing(UnifiedAuditRecord::timestamp).reversed())
-                .collect(Collectors.toList());
+            // 3. 使用 thenCombine 避免阻塞 join，异步组合两个结果
+            return CompletableFuture.allOf(operLogsFuture, notifyLogsFuture)
+                .thenApply(v -> Stream.concat(
+                    operLogsFuture.join().stream(), // allOf 完成后 join 不会阻塞
+                    notifyLogsFuture.join().stream()
+                ).sorted(Comparator.comparing(UnifiedAuditRecord::timestamp).reversed())
+                .collect(Collectors.toList()))
+                .join(); // 最终 join 在虚拟线程中可接受
         } catch (Exception e) {
             log.error("审计聚合异常: {}", e.getMessage());
             return Collections.emptyList();
