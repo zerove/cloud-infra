@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @Data
 @TableName("sys_oper_log")
 public class SysOperLog implements Serializable {
+    private static final long serialVersionUID = 1L;
     @TableId
     private Long operId;
     private Long userId;

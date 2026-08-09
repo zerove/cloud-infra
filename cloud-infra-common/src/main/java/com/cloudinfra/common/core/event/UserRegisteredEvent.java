@@ -7,6 +7,7 @@ import lombok.Getter;
  */
 @Getter
 public class UserRegisteredEvent extends BaseEvent {
+    private static final long serialVersionUID = 1L;
     private final Long userId;
     private final String username;
     private final String email;

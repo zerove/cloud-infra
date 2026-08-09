@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationEvent;
 
 @Getter
 public class LoginLogEvent extends ApplicationEvent {
+    private static final long serialVersionUID = 1L;
     private final SysLoginLog loginLog;
 
     public LoginLogEvent(Object source, SysLoginLog loginLog) {
