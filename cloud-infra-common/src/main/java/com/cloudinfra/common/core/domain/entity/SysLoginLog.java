@@ -9,9 +9,10 @@ import java.time.LocalDateTime;
 @Data
 @TableName("sys_login_log")
 public class SysLoginLog implements Serializable {
+    private static final long serialVersionUID = 1L;
     @TableId
     private Long infoId;
-    private String userName;
+    private String loginName;
     private String ipaddr;
     private String loginLocation;
     private String browser;
@@ -19,4 +20,7 @@ public class SysLoginLog implements Serializable {
     private String status;
     private String msg;
     private LocalDateTime loginTime;
+
+    public String getLoginName() { return loginName; }
+    public void setLoginName(String loginName) { this.loginName = loginName; }
 }

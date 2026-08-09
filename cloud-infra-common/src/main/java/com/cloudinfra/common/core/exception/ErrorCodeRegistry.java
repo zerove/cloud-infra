@@ -78,9 +78,9 @@ public class ErrorCodeRegistry {
                 if (codeObj instanceof Integer code && messageObj instanceof String message) {
                     register(code, constant.name(), message, module);
                 }
-            } catch (Exception ignored) {
-                // 跳过无法读取的枚举常量
-            }
+                } catch (NoSuchFieldException | IllegalAccessException e) {
+                    // 跳过无法读取的枚举常量
+                }
         }
     }
 

@@ -6,7 +6,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 public class ServletUtils {
     public static HttpServletRequest getRequest() {
-        return ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        return attributes != null ? attributes.getRequest() : null;
     }
 
     public static String getClientIP() {

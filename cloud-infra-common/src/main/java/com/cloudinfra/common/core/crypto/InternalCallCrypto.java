@@ -37,7 +37,7 @@ public final class InternalCallCrypto {
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             byte[] raw = mac.doFinal((timestamp + ":" + nonce).getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(raw);
-        } catch (Exception e) {
+        } catch (java.security.NoSuchAlgorithmException | java.security.InvalidKeyException e) {
             throw new IllegalStateException("Failed to sign internal call", e);
         }
     }
