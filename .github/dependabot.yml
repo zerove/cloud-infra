@@ -56,3 +56,36 @@ updates:
       # azure/setup-helm v4 稳定，v5 暂不升级
       - dependency-name: "azure/setup-helm"
         update-types: ["version-update:semver-major"]
+      # actions/cache v4 稳定
+      - dependency-name: "actions/cache"
+        update-types: ["version-update:semver-major"]
+      # actions/upload-artifact v4 稳定
+      - dependency-name: "actions/upload-artifact"
+        update-types: ["version-update:semver-major"]
+      # azure/k8s-set-context v3 稳定
+      - dependency-name: "azure/k8s-set-context"
+        update-types: ["version-update:semver-major"]
+      # codecov/codecov-action v4 稳定
+      - dependency-name: "codecov/codecov-action"
+        update-types: ["version-update:semver-major"]
+      # docker/build-push-action v5 稳定
+      - dependency-name: "docker/build-push-action"
+        update-types: ["version-update:semver-major"]
+      # docker/metadata-action v5 稳定
+      - dependency-name: "docker/metadata-action"
+        update-types: ["version-update:semver-major"]
+      # github/codeql-action v3 稳定
+      - dependency-name: "github/codeql-action"
+        update-types: ["version-update:semver-major"]
+      # graalvm/setup-graalvm v1 稳定
+      - dependency-name: "graalvm/setup-graalvm"
+        update-types: ["version-update:semver-major"]
+      # dorny/test-reporter v1 稳定
+      - dependency-name: "dorny/test-reporter"
+        update-types: ["version-update:semver-major"]
+      # returntocorp/semgrep-action v1 稳定
+      - dependency-name: "returntocorp/semgrep-action"
+        update-types: ["version-update:semver-major"]
+      # slackapi/slack-github-action v1 稳定
+      - dependency-name: "slackapi/slack-github-action"
+        update-types: ["version-update:semver-major"]
