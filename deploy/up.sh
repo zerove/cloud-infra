@@ -18,7 +18,8 @@ podman-compose -f "$SCRIPT_DIR/compose.yaml" up -d
 echo "=== 3. 等待 Nacos 就绪 ==="
 NACOS_URL="http://localhost:8848"
 for i in $(seq 1 30); do
-    if curl -sf "$NACOS_URL/nacos/v1/cs/configs?dataId=health" > /dev/null 2>&1; then
+    # Nacos 3.2+ 移除 v1 HTTP API, 使用 v3 open API 探测
+    if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
         echo "Nacos 已就绪"
         break
     fi
@@ -97,7 +98,7 @@ for i in $(seq 1 10); do
     sleep 2
 done
 
-# 同步配置到 Nacos
+# 同步配置到 Nacos (v3 admin API, 需 nacos.core.auth.admin.enabled=false)
 echo "=== 10. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
 for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
@@ -105,10 +106,11 @@ for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
     filename=$(basename "$file")
     echo "  导入 $filename"
     content=$(cat "$file")
-    curl -sf -X POST "$NACOS_URL/nacos/v1/cs/configs" \
-        -d "dataId=$filename" \
-        -d "group=DEFAULT_GROUP" \
-        -d "content=$content" > /dev/null || echo "  ⚠️  导入 $filename 失败"
+    curl -sf -X POST "$NACOS_URL/nacos/v3/admin/cs/config" \
+        --data-urlencode "dataId=$filename" \
+        --data-urlencode "groupName=DEFAULT_GROUP" \
+        --data-urlencode "namespaceId=public" \
+        --data-urlencode "content=$content" > /dev/null || echo "  ⚠️  导入 $filename 失败"
 done
 echo "配置同步完成"
 
