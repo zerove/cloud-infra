@@ -30,6 +30,30 @@ public class RedissonConfig {
     @Value("${spring.data.redis.database:0}")
     private int database;
 
+    @Value("${spring.data.redis.redisson.client.single-server.connection-pool-size:8}")
+    private int connectionPoolSize;
+
+    @Value("${spring.data.redis.redisson.client.single-server.connection-minimum-idle-size:2}")
+    private int connectionMinimumIdleSize;
+
+    @Value("${spring.data.redis.redisson.client.single-server.idle-connection-timeout:10000}")
+    private int idleConnectionTimeout;
+
+    @Value("${spring.data.redis.redisson.client.single-server.connect-timeout:5000}")
+    private int connectTimeout;
+
+    @Value("${spring.data.redis.redisson.client.single-server.timeout:5000}")
+    private int timeout;
+
+    @Value("${spring.data.redis.redisson.client.single-server.retry-attempts:3}")
+    private int retryAttempts;
+
+    @Value("${spring.data.redis.redisson.client.single-server.retry-interval:1000}")
+    private int retryInterval;
+
+    @Value("${spring.data.redis.redisson.client.single-server.subscriptions-per-connection:5}")
+    private int subscriptionsPerConnection;
+
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(
@@ -73,7 +97,17 @@ public class RedissonConfig {
     public RedissonClient redissonClient() {
         Config config = new Config();
         String address = String.format("redis://%s:%d", host, port);
-        config.useSingleServer().setAddress(address).setDatabase(database);
+        config.useSingleServer()
+            .setAddress(address)
+            .setDatabase(database)
+            .setConnectionPoolSize(connectionPoolSize)
+            .setConnectionMinimumIdleSize(connectionMinimumIdleSize)
+            .setIdleConnectionTimeout(idleConnectionTimeout)
+            .setConnectTimeout(connectTimeout)
+            .setTimeout(timeout)
+            .setRetryAttempts(retryAttempts)
+            .setRetryInterval(retryInterval)
+            .setSubscriptionsPerConnection(subscriptionsPerConnection);
 
         if (password != null && !password.isEmpty()) {
             config.useSingleServer().setPassword(password);

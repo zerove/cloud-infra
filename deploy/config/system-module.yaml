@@ -24,6 +24,9 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   main:
+    # 关闭懒初始化: 避免 Tomcat 启动后健康检查与 Nacos 注册并发触发 fat jar 类加载风暴
+    # (Spring Boot loader NestedJarFile 全局锁 + 虚拟线程 pinning 导致死锁, 见本次调试记录)
+    lazy-initialization: false
     allow-bean-definition-overriding: true
   autoconfigure:
     # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
@@ -57,15 +60,39 @@ spring:
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+  # Flyway 数据库迁移配置
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    baseline-description: "Initial schema"
+    locations: classpath:db/migration
+    encoding: UTF-8
+    validate-on-migrate: true
+    clean-disabled: true
+    out-of-order: false
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:cloud-redis}
       port: 6379
       database: 0
+      # Redisson 连接池优化：减少启动期连接风暴
+      redisson:
+        client:
+          single-server:
+            connection-pool-size: 8
+            connection-minimum-idle-size: 2
+            idle-connection-timeout: 10000
+            connect-timeout: 5000
+            timeout: 5000
+            retry-attempts: 3
+            retry-interval: 1000
+            subscriptions-per-connection: 5
+
 
 management:
   server:
-    port: 9301
+    port: 8082
   endpoints:
     web:
       base-path: /management

@@ -26,9 +26,17 @@ public class LogAspect {
     }
 
     /**
+     * 限定到 controller 层: 注解型切点若无类型过滤, Spring AOP 会对每个 bean 做 AspectJ 签名解析,
+     * 在 JDK 25 反射下启动开销高达百秒级 (仅 system-module 即验证: main 线程卡在 World.resolveToReferenceType)
+     */
+    @org.aspectj.lang.annotation.Pointcut("execution(* com.cloudinfra..controller..*(..))")
+    private void controllerPointcut() {
+    }
+
+    /**
      * 处理请求前执行
      */
-    @Before(value = "@annotation(controllerLog)")
+    @Before(value = "controllerPointcut() && @annotation(controllerLog)")
     public void doBefore(JoinPoint joinPoint, Log controllerLog) {
         // 可以记录请求开始时间等
     }
@@ -37,7 +45,7 @@ public class LogAspect {
      * 处理完请求后执行
      */
     @AfterReturning(
-        pointcut = "@annotation(controllerLog)",
+        pointcut = "controllerPointcut() && @annotation(controllerLog)",
         returning = "jsonResult"
     )
     public void doAfterReturning(
@@ -51,7 +59,7 @@ public class LogAspect {
     /**
      * 拦截异常操作
      */
-    @AfterThrowing(value = "@annotation(controllerLog)", throwing = "e")
+    @AfterThrowing(value = "controllerPointcut() && @annotation(controllerLog)", throwing = "e")
     public void doAfterThrowing(
         JoinPoint joinPoint,
         Log controllerLog,

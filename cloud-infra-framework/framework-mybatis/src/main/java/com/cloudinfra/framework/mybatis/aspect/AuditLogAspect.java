@@ -30,7 +30,16 @@ public class AuditLogAspect {
         this.auditLogService = auditLogService;
     }
 
-    @Around("@annotation(auditLog)")
+    /**
+     * 限定到 controller/service 层: 避免注解型切点对全量 bean 做 AspectJ 签名解析拖慢启动
+     */
+    @org.aspectj.lang.annotation.Pointcut(
+        "execution(* com.cloudinfra..controller..*(..)) || execution(* com.cloudinfra..service..*(..))"
+    )
+    private void businessPointcut() {
+    }
+
+    @Around("businessPointcut() && @annotation(auditLog)")
     public Object doAround(ProceedingJoinPoint joinPoint, AuditLog auditLog) throws Throwable {
         String userId = UserContext.get("userId");
         String username = UserContext.get("username");

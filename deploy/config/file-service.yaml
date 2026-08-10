@@ -21,10 +21,13 @@ spring:
         enabled: true
       config:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
+  application:
+    name: file-service
   lifecycle:
     timeout-per-shutdown-phase: 30s
-  application:
-    name: cloud-file
+  main:
+    lazy-initialization: true
+    allow-bean-definition-overriding: true
   threads:
     virtual:
       enabled: true

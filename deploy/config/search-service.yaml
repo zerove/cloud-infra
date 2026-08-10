@@ -24,6 +24,7 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   main:
+    lazy-initialization: true
     allow-bean-definition-overriding: true
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://cloud-elasticsearch:9200}

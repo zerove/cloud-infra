@@ -13,6 +13,7 @@ spring:
       config:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
   main:
+    lazy-initialization: true
     allow-bean-definition-overriding: true
   datasource:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
