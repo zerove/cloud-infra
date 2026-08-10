@@ -37,6 +37,9 @@ spring:
     timeout-per-shutdown-phase: 30s
   application:
     name: cloud-auth
+  main:
+    lazy-initialization: true
+    allow-bean-definition-overriding: true
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration

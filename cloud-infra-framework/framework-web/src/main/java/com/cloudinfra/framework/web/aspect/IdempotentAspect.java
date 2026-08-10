@@ -26,7 +26,14 @@ public class IdempotentAspect {
         this.redisTemplate = redisTemplate;
     }
 
-    @Before("@annotation(idempotent)")
+    /**
+     * 限定到 controller 层: 避免注解型切点对全量 bean 做 AspectJ 签名解析拖慢启动
+     */
+    @org.aspectj.lang.annotation.Pointcut("execution(* com.cloudinfra..controller..*(..))")
+    private void controllerPointcut() {
+    }
+
+    @Before("controllerPointcut() && @annotation(idempotent)")
     public void doBefore(JoinPoint joinPoint, Idempotent idempotent) {
         ServletRequestAttributes attributes =
             (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
