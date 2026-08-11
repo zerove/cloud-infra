@@ -1,7 +1,7 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.system.domain.SysTxMessage;
 import com.cloudinfra.system.mapper.SysTxMessageMapper;
 import com.cloudinfra.system.service.SysTxMessageService;

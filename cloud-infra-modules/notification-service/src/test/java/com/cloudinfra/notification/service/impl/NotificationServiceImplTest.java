@@ -133,7 +133,7 @@ class NotificationServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("资源配额已用尽");
 
-        then(notificationMapper).should(never()).insert(any());
+        then(notificationMapper).should(never()).insert(any(Notification.class));
     }
 
     @Test

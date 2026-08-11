@@ -29,6 +29,18 @@
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-extension</artifactId>
         </dependency>
+        <!-- MyBatis-Plus 3.5.9+ ServiceImpl 移入 mybatis-plus-spring -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <!-- @MapperScan 由 mybatis-spring 提供 -->
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>4.1.0</version>
+        </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-mybatis</artifactId>

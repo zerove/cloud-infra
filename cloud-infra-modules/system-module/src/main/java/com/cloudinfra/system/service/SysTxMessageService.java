@@ -1,7 +1,7 @@
 package com.cloudinfra.system.service;
 
 import com.cloudinfra.system.domain.SysTxMessage;
-import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.spring.service.IService;
 import java.util.List;
 
 public interface SysTxMessageService extends IService<SysTxMessage> {

@@ -92,8 +92,8 @@ class FileServiceImplTest {
             .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
             .hasMessageContaining("quota exceeded");
 
-        then(metadataMapper).should(never()).insert(any());
-        then(versionMapper).should(never()).insert(any());
+        then(metadataMapper).should(never()).insert(any(FileMetadata.class));
+        then(versionMapper).should(never()).insert(any(FileVersion.class));
     }
 
     @Test

@@ -47,3 +47,6 @@ tools/
 
 # Benchmark results (local only)
 benchmark-results/
+
+# Local Maven settings override (fast mirror)
+.mvn-settings-fast.xml
