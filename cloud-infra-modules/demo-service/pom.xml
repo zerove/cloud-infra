@@ -30,6 +30,11 @@
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-api</artifactId>
         </dependency>
+        <!-- Feign 客户端负载均衡（EnableFeignClients 必需） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
 
         <!-- 测试 -->
         <dependency>
