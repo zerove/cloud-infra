@@ -418,6 +418,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx512m -Xms256m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -458,6 +459,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -497,6 +499,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -536,6 +539,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
