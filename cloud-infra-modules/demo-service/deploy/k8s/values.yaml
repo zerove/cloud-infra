@@ -1,0 +1,13 @@
+replicaCount: 2
+image:
+  repository: demo-service
+  tag: latest
+service:
+  port: 8099
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
