@@ -6,6 +6,7 @@ spring:
       enabled: false
     nacos:
       config:
+        server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
         import-check:
           enabled: false
         shared-configs:
