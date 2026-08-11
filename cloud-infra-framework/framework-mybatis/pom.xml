@@ -47,6 +47,17 @@
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus</artifactId>
         </dependency>
+        <!-- MyBatis-Plus 3.5.9+ 拆分: IService/分页 Page 等在 mybatis-plus-extension, 不再由聚合 jar 传递 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-extension</artifactId>
+        </dependency>
+        <!-- MyBatis-Plus 3.5.9+ 分页插件(JSqlParser)拆分为独立 artifact -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.mybatis</groupId>
             <artifactId>mybatis-spring</artifactId>

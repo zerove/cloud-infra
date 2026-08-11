@@ -1,6 +1,6 @@
 package com.cloudinfra.system.service.impl;
 
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.system.domain.SysRoleMenu;
 import com.cloudinfra.system.mapper.SysRoleMenuMapper;
 import com.cloudinfra.system.service.ISysRoleMenuService;

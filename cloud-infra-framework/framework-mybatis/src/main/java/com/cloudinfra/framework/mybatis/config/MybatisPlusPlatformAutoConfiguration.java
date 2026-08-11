@@ -1,7 +1,7 @@
 package com.cloudinfra.framework.mybatis.config;
 
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
-import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import com.cloudinfra.framework.mybatis.crypto.EncryptedTypeHandler;
 import java.util.List;
 import javax.sql.DataSource;

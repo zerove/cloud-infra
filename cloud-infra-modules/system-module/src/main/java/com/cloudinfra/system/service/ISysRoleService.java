@@ -2,7 +2,7 @@ package com.cloudinfra.system.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.spring.service.IService;
 import com.cloudinfra.common.core.domain.entity.SysRole;
 import com.cloudinfra.system.domain.dto.SysRoleCreateDTO;
 import com.cloudinfra.system.domain.dto.SysRoleUpdateDTO;

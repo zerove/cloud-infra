@@ -1,6 +1,6 @@
 package com.cloudinfra.system.service.impl;
 
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.system.domain.SysRoleDept;
 import com.cloudinfra.system.mapper.SysRoleDeptMapper;
 import com.cloudinfra.system.service.ISysRoleDeptService;

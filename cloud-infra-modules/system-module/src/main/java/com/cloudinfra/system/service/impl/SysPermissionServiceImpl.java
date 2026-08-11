@@ -1,7 +1,7 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.domain.SysPermission;
 import com.cloudinfra.system.domain.SysPermissionEntity;
