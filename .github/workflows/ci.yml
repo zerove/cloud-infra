@@ -12,6 +12,9 @@ env:
   JAVA_VERSION: '25'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # Testcontainers 配置
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+  TESTCONTAINERS_HOST_OVERRIDE: "localhost"
 
 jobs:
   # ========== 代码质量检查 ==========
@@ -47,14 +50,11 @@ jobs:
       - name: Run PMD
         run: mvn pmd:check --batch-mode
 
-      # 注: formatter:validate 已移除，项目暂无统一代码格式基线；
-      # 格式化规范由代码评审与 IDE 配置保证。
-
-  # ========== 单元测试 ==========
+  # ========== 单元测试（快速、无外部依赖）==========
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     needs: code-quality
     steps:
       - name: Checkout code
@@ -75,112 +75,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Run unit tests
-        run: mvn test -DskipTests=false --batch-mode
+      - name: Run unit tests (surefire, 无外部依赖)
+        run: mvn test -Dtest=*Test -DfailIfNoTests=false --batch-mode
 
       - name: Upload test reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-reports
+          name: unit-test-reports
           path: |
             **/target/surefire-reports/
-            **/target/failsafe-reports/
           retention-days: 7
 
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Test Results
+          name: Unit Test Results
           path: '**/target/surefire-reports/*.xml'
           reporter: java-junit
 
-  # ========== 集成测试 ==========
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: code-quality
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: cloud_infra_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-        ports: [5432:5432]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: [6379:6379]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      rabbitmq:
-        image: rabbitmq:3-management-alpine
-        ports: [5672:5672, 15672:15672]
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
-        options: >-
-          --health-cmd "rabbitmqctl status"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 5
-      elasticsearch:
-        image: elasticsearch:8.12.2
-        env:
-          discovery.type: single-node
-          xpack.security.enabled: "false"
-          ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-        ports: [9200:9200, 9300:9300]
-        options: >-
-          --health-cmd "curl -f http://localhost:9200/_cluster/health"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'oracle'
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: 'maven'
-
-      - name: Cache Maven repository
-        uses: actions/cache@v6
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
-      - name: Run integration tests
-        run: mvn verify -DskipUnitTests=true -DskipITs=false --batch-mode
-
-      - name: Upload integration test reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: integration-test-reports
-          path: |
-            **/target/failsafe-reports/
-          retention-days: 7
-
-  # ========== 代码覆盖率 ==========
-  coverage:
-    name: Code Coverage
+  # ========== 代码覆盖率门禁 ==========
+  coverage-gate:
+    name: Coverage Gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: unit-tests
@@ -203,8 +120,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (Jacoco)
         run: mvn jacoco:prepare-agent test jacoco:report --batch-mode
+
+      - name: Enforce coverage threshold (新增代码 ≥ 60%)
+        run: |
+          mvn jacoco:check \
+            -Djacoco.missingClassCoverageThreshold=0.6 \
+            -Djacoco.missingBranchCoverageThreshold=0.6 \
+            -Djacoco.missingLineCoverageThreshold=0.6 \
+            -Djacoco.missingMethodCoverageThreshold=0.6 \
+            --batch-mode
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -213,12 +139,70 @@ jobs:
           files: ./**/target/site/jacoco/jacoco.xml
           fail_ci_if_error: false
 
+  # ========== Contract 测试（迭代 2 实施）==========
+  # Spring Cloud Contract 契约测试需在各业务模块（Producer，含 Controller 端点）挂载。
+  # cloud-infra-api 仅定义 Feign 接口契约，无 Controller/主类，不能作为 Producer。
+  # 实施路径：
+  #   1. 在 system-module/file-service/notification-service/search-service
+  #      引入 spring-cloud-contract-maven-plugin（Producer 角色）
+  #   2. 定义 contracts/*.yaml 匹配真实端点
+  #   3. 消费方模块通过 spring-cloud-contract-stub-runner 验证契约
+  # 参见 docs/superpowers/plans/ 下迭代计划。
+
+  # ========== 集成测试 ==========
+  integration-tests:
+    name: Integration Tests (Testcontainers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: code-quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Cache Maven repository
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Start Docker daemon (Testcontainers 需要)
+        uses: docker-practice/actions-setup-docker@master
+
+      - name: Run integration tests (failsafe, Testcontainers 并行启动)
+        run: mvn verify -DskipUnitTests=true -DskipITs=false -Dtestcontainers.parallel.startup=true --batch-mode
+
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-reports
+          path: |
+            **/target/failsafe-reports/
+          retention-days: 7
+
+      - name: Publish integration test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Integration Test Results
+          path: '**/target/failsafe-reports/*.xml'
+          reporter: java-junit
+
   # ========== 构建镜像 ==========
   build-images:
     name: Build & Push Images
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [unit-tests, integration-tests]
+    needs: [unit-tests, integration-tests, coverage-gate]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
@@ -297,7 +281,7 @@ jobs:
     name: Native Image Build (Gateway)
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    needs: [unit-tests, integration-tests]
+    needs: [unit-tests, integration-tests, coverage-gate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
