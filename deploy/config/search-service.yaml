@@ -26,7 +26,8 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   main:
-    lazy-initialization: true
+    # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
+    lazy-initialization: false
     allow-bean-definition-overriding: true
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://cloud-elasticsearch:9200}

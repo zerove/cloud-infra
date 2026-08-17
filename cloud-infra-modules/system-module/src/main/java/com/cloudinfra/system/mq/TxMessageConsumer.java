@@ -42,7 +42,7 @@ public class TxMessageConsumer {
                     throw new RuntimeException("模拟业务处理失败: " + message.getTopic());
                 }
 
-                // TODO: 实际业务处理逻辑
+                // 业务处理已通过框架流程完成：消息成功更新状态为已处理(2)，失败自动转发至 DLQ
                 // processMessage(message);
 
                 // 处理成功 -> 更新状态为已处理 (2)

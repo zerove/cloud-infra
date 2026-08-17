@@ -15,12 +15,12 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 ### 1. Observability & Management (Standardization)
 **Goal:** Ensure every service in the ecosystem is equally observable and manageable.
 - [x] 🟢 **Actuator Engineering**: Standardize management port (9301) and path (`/management`) across all services. $\rightarrow$ *See `plans/2026-04-21-actuator-engineering.md`*
-- [x] 🟢 **Metrics Aggregation**: Implement standardized custom metrics registration in `framework-web`. $\rightarrow$ *See `plans/2026-04-25-monitoring-implementation.md`*
+- [x] 🟢 **Metrics Aggregation**: Implement standardized custom metrics registration in `framework-web`. $\rightarrow$ *See `plans/2026-04-25-monitoring-implementation.md$`
 - [x] 🟢 **Centralized Log Aggregation**: Integrate ELK/Loki across all modules.
 
 ### 2. Reliability & Event-Driven Architecture
 **Goal:** Improve system resilience and decouple service interactions.
-- [x] 🟢 **TxMessage Retry Refactor**: Transition `TxMessageRetryTask` to use `StreamBridge` for asynchronous dispatch. $\rightarrow$ *See `plans/2026-05-08-tx-message-retry-refactor-plan.md`*
+- [x] 🟢 **TxMessage Retry Refactor**: Transition `TxMessageRetryTask` to use `StreamBridge` for asynchronous dispatch. $\rightarrow$ *See `plans/2026-05-08-tx-message-retry-refactor-plan.md$`
 - [x] 🟢 **Dead Letter Queue (DLQ) Implementation**: Standardize error handling for failed stream messages.
 - [x] 🟢 **Distributed Tracing Integration**: Full end-to-end trace verification for cross-module calls.
 

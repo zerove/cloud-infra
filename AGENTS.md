@@ -70,8 +70,8 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4** 构�
 - **配置修改**: 修改服务配置应优先修改 `deploy/config/` 下对应的 `.yaml` 文件，然后运行 `./deploy/up.sh` 同步至 Nacos。
 
 ### 3. 关键依赖
-- **Spring Boot**: 4.0.5
-- **Spring Cloud**: 2025.1.1
+- **Spring Boot**: 4.1.0
+- **Spring Cloud**: 2025.1.2
 - **JDK**: 25
 - **数据库**: PostgreSQL 16 / MySQL 8.4
 - **中间件**: Redis 7.2, Nacos, Elasticsearch, RabbitMQ
