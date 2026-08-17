@@ -1,6 +1,9 @@
 spring:
   config:
-    import: "optional:nacos:gateway.yaml"
+    import:
+      - optional:nacos:gateway.yaml?group=DEFAULT_GROUP
+      - optional:nacos:actuator-config.yaml?group=DEFAULT_GROUP
+      - optional:nacos:auth-white-list.yaml?group=DEFAULT_GROUP
   cloud:
     nacos:
       config:
