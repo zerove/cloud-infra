@@ -15,7 +15,8 @@ spring:
         import-check:
           enabled: false
   main:
-    lazy-initialization: true
+    # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
+    lazy-initialization: false
     allow-bean-definition-overriding: true
   datasource:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra

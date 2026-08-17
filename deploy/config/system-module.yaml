@@ -29,6 +29,7 @@ spring:
     # 关闭懒初始化: 避免 Tomcat 启动后健康检查与 Nacos 注册并发触发 fat jar 类加载风暴
     # (Spring Boot loader NestedJarFile 全局锁 + 虚拟线程 pinning 导致死锁, 见本次调试记录)
     lazy-initialization: false
+    # 已保持 false: 与其他服务统一 - 防止 fat jar 类加载与 Nacos 注册并发风险
     allow-bean-definition-overriding: true
   autoconfigure:
     # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
