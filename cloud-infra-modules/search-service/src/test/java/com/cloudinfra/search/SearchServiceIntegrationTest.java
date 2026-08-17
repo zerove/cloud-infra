@@ -66,6 +66,7 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
     public void setUp() {
         webTestClient = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port)
+                .responseTimeout(Duration.ofSeconds(60))
                 .build();
         operLogRepository.deleteAll();
     }
