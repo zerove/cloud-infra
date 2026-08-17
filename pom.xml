@@ -38,7 +38,7 @@
         <flyway.version>10.15.0</flyway.version>
         <seata.version>2.0.0</seata.version>
         <swagger-annotations.version>2.2.21</swagger-annotations.version>
-        <jasypt.version>3.0.5</jasypt.version>
+        <jasypt.version>4.0.4</jasypt.version>
 
         <!-- Native Image Build Control -->
         <spring-boot.aot.skip>true</spring-boot.aot.skip>
