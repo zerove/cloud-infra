@@ -228,6 +228,12 @@
                 <version>5.0.1</version>
             </dependency>
             <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-stream-test-support</artifactId>
+                <version>5.0.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
                 <groupId>com.cloudinfra</groupId>
                 <artifactId>cloud-infra-common</artifactId>
                 <version>${revision}</version>
@@ -391,7 +397,7 @@
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.12</version>
+                    <version>0.8.15</version>
                 </plugin>
             </plugins>
         </pluginManagement>

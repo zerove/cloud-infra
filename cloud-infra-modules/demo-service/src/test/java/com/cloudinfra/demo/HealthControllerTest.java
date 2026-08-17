@@ -28,6 +28,8 @@ class HealthControllerTest {
     static void redisProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        // JWT 密钥配置（>=32字符）
+        registry.add("auth.jwt.secret", () -> "test-jwt-secret-key-for-demo-service-tests-32chars");
     }
 
     @Autowired(required = false)
