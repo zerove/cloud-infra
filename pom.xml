@@ -33,7 +33,7 @@
         <testcontainers.version>1.20.4</testcontainers.version>
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>3.1.0</springdoc.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
         <spring-cloud-contract.version>4.2.0</spring-cloud-contract.version>
         <flyway.version>10.15.0</flyway.version>
         <seata.version>2.0.0</seata.version>
