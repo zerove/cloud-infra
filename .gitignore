@@ -1,6 +1,10 @@
 # Ignore build outputs
 **/target/
 **/target-*/
+META-INF/
+*.bak
+# Deploy artifacts (local builds)
+deploy/app.jar
 .gradle/
 .classpath
 .project
