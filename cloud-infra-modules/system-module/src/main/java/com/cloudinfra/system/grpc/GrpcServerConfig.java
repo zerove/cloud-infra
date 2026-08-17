@@ -7,6 +7,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -15,12 +16,15 @@ import java.util.concurrent.TimeUnit;
  * gRPC Server 配置
  * 使用原生 io.grpc NettyServerBuilder 启动 gRPC 服务
  * 替代不存在的 spring-boot-starter-grpc
+ * 
+ * 测试环境下自动禁用（test profile）
  */
 @Slf4j
 @Configuration
+@Profile("!test")  // 测试环境不启动 gRPC 服务器
 public class GrpcServerConfig {
 
-    @Value("${cloud-infra.grpc.server.port:9090}")
+    @Value("${grpc.server.port:9090}")
     private int port;
 
     private Server grpcServer;

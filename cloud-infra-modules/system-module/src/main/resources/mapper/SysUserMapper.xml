@@ -3,7 +3,7 @@
 <mapper namespace="com.cloudinfra.system.mapper.SysUserMapper">
 
     <select id="selectUserPage" resultType="com.cloudinfra.system.domain.SysUser">
-        select u.user_id, u.username, u.phone, u.dept_id, u.status, u.email, 
+        select u.user_id, u.username, u.phone_number, u.dept_id, u.status, u.email, 
                u.create_by, u.create_time, u.update_by, u.update_time
         from sys_user u
         <where>

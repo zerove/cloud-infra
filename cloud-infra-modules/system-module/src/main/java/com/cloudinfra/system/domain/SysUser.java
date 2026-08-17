@@ -1,4 +1,5 @@
 package com.cloudinfra.system.domain;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.TableId;
 
@@ -59,6 +60,7 @@ public class SysUser extends BaseEntity {
     private String email;
 
     /** 岗位组 */
+    @TableField(exist = false)
     private List<Long> postIds;
 
 

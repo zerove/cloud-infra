@@ -17,8 +17,6 @@ import java.util.UUID;
 @Component
 public class TxMessageRetryTask {
 
-    private static final int MAX_RETRY_ATTEMPTS = 5;
-
     @Autowired
     private SysTxMessageService txMessageService;
 
@@ -33,37 +31,31 @@ public class TxMessageRetryTask {
         traceUtils.createCustomSpan("TxMessageRetryTask.retryPendingMessages", () -> {
             log.info("开始处理待发送事务消息...");
             List<SysTxMessage> pendingMessages = txMessageService.findPendingMessages();
-            
+
             for (SysTxMessage message : pendingMessages) {
                 try {
-                    log.info("处理消息: {}, 当前重试次数: {}", message.getId(), message.getRetryCount());
+                    log.info("发送消息到消息队列: {}, 当前重试次数: {}", message.getId(), message.getRetryCount());
                     String traceId = traceUtils.getCurrentTraceId();
                     if (traceId == null || traceId.isEmpty()) {
                         traceId = UUID.randomUUID().toString();
                     }
-                    
+
                     CloudMessage<SysTxMessage> cloudMessage = CloudMessage.<SysTxMessage>builder()
                             .traceId(traceId)
                             .data(message)
                             .build();
-                    streamBridge.send("txMessageOut-out-0", cloudMessage);
-                    
-                    // 发送成功 $\rightarrow$ 更新状态为已发送 (1)
+                    streamBridge.send("sys.tx.message.retry", cloudMessage);
+
+                    // 发送到 MQ 成功 -> 更新状态为已发送 (1)
+                    // 后续由 TxMessageConsumer 消费处理，成功则更新为 2，失败重试耗尽进入 DLQ 更新为 3
                     txMessageService.updateMessageStatus(message.getId(), 1);
                 } catch (Exception e) {
-                    int currentRetry = (message.getRetryCount() == null) ? 0 : message.getRetryCount();
-                    int nextRetry = currentRetry + 1;
-                    
-                    if (nextRetry >= MAX_RETRY_ATTEMPTS) {
-                        log.error("消息 {} 已达到最大重试次数 ({})，标记为处理失败 (状态: 3)", message.getId(), MAX_RETRY_ATTEMPTS);
-                        txMessageService.updateMessageStatus(message.getId(), 3); // 3: 处理失败
-                    } else {
-                        log.warn("消息 {} 发送失败，准备下一次重试. 当前次数: {}", message.getId(), nextRetry);
-                        txMessageService.updateRetryCount(message.getId(), nextRetry);
-                    }
+                    log.error("消息 {} 发送到 MQ 失败: {}", message.getId(), e.getMessage(), e);
+                    // 发送到 MQ 失败，保持状态为待发送 (0) 或处理失败 (3)，下次定时任务重试
+                    // 这里不增加 retryCount，retryCount 由消费端重试控制
                 }
             }
-            log.info("待发送事务消息处理完成。");
+            log.info("待发送事务消息发送完成。");
             return null;
         });
     }

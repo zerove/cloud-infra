@@ -64,7 +64,9 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         save(role);
         
         roleMenuService.saveBatch(buildMenuRelations(role));
-        return roleDeptService.saveBatch(buildDeptRelations(role)) ? 1 : 0;
+        roleDeptService.saveBatch(buildDeptRelations(role));
+        // saveBatch 仅在集合为空时返回 false（DB 失败会抛异常），角色本身已保存成功
+        return 1;
     }
     
     @Override
