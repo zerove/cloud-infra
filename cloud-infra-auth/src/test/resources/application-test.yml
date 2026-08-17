@@ -1,4 +1,7 @@
 spring:
+  config:
+    activate:
+      on-profile: test
   application:
     name: cloud-auth
   datasource:
@@ -14,6 +17,10 @@ spring:
       host: ${TEST_REDIS_HOST:localhost}
       port: ${TEST_REDIS_PORT:6379}
       database: 0
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration
   cloud:
     nacos:
       config:
@@ -23,24 +30,9 @@ spring:
     service-registry:
       auto-registration:
         enabled: false
-  auth:
-    jwt:
-      secret: TestOnlySecretKey_abcdefghijklmnopqrstuvwxyz_0123456789
-      expire-time: 86400000
-      algorithm: HS256
----
-spring:
-  config:
-    activate:
-      on-profile: test
-  data:
-    redis:
-      host: ${TEST_REDIS_HOST:localhost}
-      port: ${TEST_REDIS_PORT:6379}
-      database: 0
-  cloud:
-    nacos:
-      config:
-        enabled: false
-      discovery:
-        enabled: false
+
+auth:
+  jwt:
+    secret: TestOnlySecretKey_abcdefghijklmnopqrstuvwxyz_0123456789
+    expire-time: 86400000
+    algorithm: HS256

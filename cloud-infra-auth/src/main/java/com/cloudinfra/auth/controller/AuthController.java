@@ -58,6 +58,9 @@ public class AuthController {
      * 解析真实客户端 IP（透传 X-Forwarded-For，回退 RemoteAddr）
      */
     private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) {
+            return "127.0.0.1";
+        }
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();
