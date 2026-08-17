@@ -12,6 +12,8 @@ spring:
         enabled: true
       config:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
+        import-check:
+          enabled: false
   main:
     lazy-initialization: true
     allow-bean-definition-overriding: true
@@ -39,6 +41,9 @@ spring:
     port: 5672
     username: guest
     password: guest
+  config:
+    import:
+      - optional:nacos:actuator-config.yaml
 
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
@@ -62,4 +67,3 @@ management:
       export:
         otlp:
           endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-

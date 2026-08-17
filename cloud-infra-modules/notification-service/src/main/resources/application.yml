@@ -21,9 +21,8 @@ spring:
       config:
         server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
         file-extension: yaml
-        shared-configs:
-          - data-id: actuator-config.yaml
-            refresh: true
+        import-check:
+          enabled: false
     stream:
       bindings:
         user-events-in-0:
@@ -44,16 +43,19 @@ spring:
               auto-bind-dlq: true
               dlq-name: user.events.dlq
               republish-to-dlq: true
-  threads:
-    virtual:
-      enabled: true
-  datasource:
-    driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:password}
-  main:
-    allow-bean-definition-overriding: true
+    threads:
+      virtual:
+        enabled: true
+    datasource:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+      username: ${SPRING_DATASOURCE_USERNAME:postgres}
+      password: ${SPRING_DATASOURCE_PASSWORD:password}
+    main:
+      allow-bean-definition-overriding: true
+  config:
+    import:
+      - optional:nacos:actuator-config.yaml
 
 management:
   server:
