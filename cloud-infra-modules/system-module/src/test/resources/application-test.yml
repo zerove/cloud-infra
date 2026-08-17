@@ -1,16 +1,19 @@
 spring:
   cloud:
+    function:
+      # 显式声明函数定义，确保 Consumer binding 激活
+      # （binding 名 txMessageConsumer-in-0 无法推断出 bean txMessageConsumerFunction）
+      definition: txMessageConsumerFunction;txMessageDlqConsumerFunction
     nacos:
       config:
         enabled: false
       discovery:
         enabled: false
-  config:
-    import: "optional:classpath:application-test.yml"
   datasource:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
   sql:
     init:
       mode: always
@@ -19,3 +22,12 @@ spring:
       host: localhost
       port: 6379
       enabled: false
+  autoconfigure:
+    # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
+    exclude: io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
+
+# 测试用 JWT 密钥（>=32字符）
+auth:
+  jwt:
+    secret: test-jwt-secret-key-for-integration-testing-32-chars-minimum
+    expire-time: 86400000
