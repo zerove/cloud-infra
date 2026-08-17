@@ -5,6 +5,7 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +22,7 @@ import java.util.Set;
  * 兼容 YAML 列表绑定(区别于 {@code @Value} 无法绑定索引列表)。</p>
  */
 @Service
+@RefreshScope
 public class AuthEvaluator {
 
     private static final Logger log = LoggerFactory.getLogger(AuthEvaluator.class);

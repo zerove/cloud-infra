@@ -10,6 +10,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +31,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class SecurityFilter extends OncePerRequestFilter implements Ordered {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityFilter.class);
     private static final String TRACE_ID = "traceId";
     
     @Resource
@@ -56,7 +59,13 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
                 Map.of()
             );
 
+            log.info("[SecurityFilter] 请求路径: {}, 方法: {}, token: {}", request.getRequestURI(), request.getMethod(), 
+                request.getHeader(HttpHeaders.AUTHORIZATION) != null ? "present" : "null");
+            
             AuthResult authResult = authEvaluator.evaluate(authContext);
+
+            log.info("[SecurityFilter] 认证结果: success={}, status={}, message={}, identity={}", 
+                authResult.isSuccess(), authResult.status(), authResult.message(), authResult.identity());
 
             if (!authResult.isSuccess()) {
                 handleAuthFailure(response, authResult);

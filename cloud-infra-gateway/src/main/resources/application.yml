@@ -1,17 +1,18 @@
 spring:
   application:
     name: cloud-infra-gateway
+  config:
+    import:
+      - optional:nacos:actuator-config.yaml?group=DEFAULT_GROUP
+      - optional:nacos:auth-white-list.yaml?group=DEFAULT_GROUP
   cloud:
     refresh:
-      enabled: false
+      enabled: true
     nacos:
       config:
         server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
         import-check:
           enabled: false
-        shared-configs:
-          - data-id: actuator-config.yaml
-            refresh: true
       discovery:
         server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
 
@@ -85,21 +86,22 @@ auth:
     - /v3/api-docs
     - /swagger-ui/
     - /webjars/
+    # 管理端点前缀匹配
+    - /management/
+    - /actuator/
 
 server:
   compression:
     enabled: true
     mime-types:
       - text/html
-      - text/xml
-      - text/plain
       - text/css
-      - text/javascript
       - application/javascript
       - application/json
       - application/xml
-      - application/rss+xml
-      - image/svg+xml
+      - text/xml
+      - text/plain
+      - application/octet-stream
     min-response-size: 1024
 
 management:
