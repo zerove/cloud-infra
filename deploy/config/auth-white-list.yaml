@@ -1,0 +1,14 @@
+auth:
+  white-list[0]: /auth/login
+  white-list[1]: /auth/refresh
+  white-list[2]: /auth/register
+  white-list[3]: /auth/captchaImage
+  white-list[4]: /actuator/health
+  white-list[5]: /actuator/info
+  white-list[6]: /actuator/prometheus
+  white-list[7]: /v3/api-docs
+  white-list[8]: /swagger-ui/
+  white-list[9]: /webjars/
+  # 管理端点 - 使用前缀匹配覆盖所有子路径
+  white-list[10]: /management/
+  white-list[11]: /actuator/

@@ -5,15 +5,14 @@ spring:
   application:
     name: demo-service
   config:
-    import: "optional:nacos:demo-service.yaml"
+    import:
+      - optional:nacos:demo-service.yaml
+      - optional:nacos:actuator-config.yaml
   cloud:
     nacos:
       config:
         server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:nacos-service:8848}}
         file-extension: yaml
-        shared-configs:
-          - data-id: actuator-config.yaml
-            refresh: true
         import-check:
           enabled: false
       discovery:

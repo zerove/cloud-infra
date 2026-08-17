@@ -5,7 +5,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: health,info,prometheus,metrics,env,beans,conditions
+        include: health,info,prometheus,metrics,env,beans,conditions,refresh
   endpoint:
     health:
       show-details: always
@@ -17,3 +17,9 @@ management:
   info:
     env:
       enabled: true
+
+# 禁用业务端口的 actuator 端点，仅在管理端口暴露（避免 Spring Boot 3 独立管理端口死锁）
+# 参考: https://github.com/spring-projects/spring-boot/issues/39277
+server:
+  servlet:
+    context-path: /

@@ -23,6 +23,8 @@ spring:
         enabled: true
       config:
         server-addr: cloud-nacos:8848
+        import-check:
+          enabled: false
     gateway:
       discovery:
         locator:
@@ -37,124 +39,30 @@ spring:
               - Path=/system/**
             filters:
               - stripPrefix=1
-              - retry=3
           - id: auth-service
             uri: lb://cloud-auth
             predicates:
               - Path=/auth/**
-            filters:
-              - stripPrefix=1
-              - retry=3
           - id: file-service
             uri: lb://file-service
             predicates:
               - Path=/file/**
             filters:
               - stripPrefix=1
-              - retry=2
           - id: notification-service
             uri: lb://notification-service
             predicates:
               - Path=/notification/**
             filters:
               - stripPrefix=1
-              - retry=3
           - id: search-service
             uri: lb://search-service
             predicates:
               - Path=/search/**
             filters:
               - stripPrefix=1
-              - retry=3
-
-# Sentinel 配置
-sentinel:
-  transport:
-    dashboard: cloud-sentinel:8858
-    port: 8719
-  datasource:
-    flow:
-      nacos:
-        server-addr: cloud-nacos:8848
-        data-id: cloud-infra-gateway-sentinel-flow
-        group-id: DEFAULT_GROUP
-        data-type: json
-        rule-type: flow
-        enabled: true
-    degrade:
-      nacos:
-        server-addr: cloud-nacos:8848
-        data-id: cloud-infra-gateway-sentinel-degrade
-        group-id: DEFAULT_GROUP
-        data-type: json
-        rule-type: degrade
-        enabled: true
-    param-flow:
-      nacos:
-        server-addr: cloud-nacos:8848
-        data-id: cloud-infra-gateway-sentinel-param-flow
-        group-id: DEFAULT_GROUP
-        data-type: json
-        rule-type: param-flow
-        enabled: true
-    system:
-      nacos:
-        server-addr: cloud-nacos:8848
-        data-id: cloud-infra-gateway-sentinel-system
-        group-id: DEFAULT_GROUP
-        data-type: json
-        rule-type: system
-        enabled: true
-    authority:
-      nacos:
-        server-addr: cloud-nacos:8848
-        data-id: cloud-infra-gateway-sentinel-authority
-        group-id: DEFAULT_GROUP
-        data-type: json
-        rule-type: authority
-        enabled: true
-
-auth:
-  jwt:
-    secret: ${AUTH_JWT_SECRET:sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
-    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
-  white-list:
-    - /auth/login
-    - /auth/refresh
-    - /auth/register
-    - /auth/captchaImage
-    - /actuator/health
-    - /actuator/info
-    - /actuator/prometheus
-    - /v3/api-docs
-    - /swagger-ui/
-    - /webjars/
-
-knife4j:
-  gateway:
-    enabled: true
-    strategy: discover
-    discover:
-      enabled: true
-      version: openapi3
-
-management:
-  server:
-    port: 9301
-  endpoints:
-    web:
-      base-path: /management
-      exposure:
-        include: prometheus,health,info
-  tracing:
-    sampling:
-      probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-  metrics:
-    export:
-      prometheus:
-        enabled: true
+  config:
+    import:
+      - optional:nacos:gateway.yaml
+      - optional:nacos:actuator-config.yaml
+      - optional:nacos:auth-white-list.yaml

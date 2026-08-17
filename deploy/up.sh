@@ -117,7 +117,7 @@ done
 # 等待 Redis 就绪
 echo "=== 5. 等待 Redis 就绪 ==="
 for i in $(seq 1 10); do
-    if redis-cli -h localhost ping > /dev/null 2>&1; then
+    if podman exec cloud-redis redis-cli ping > /dev/null 2>&1; then
         echo "Redis 已就绪"
         break
     fi
