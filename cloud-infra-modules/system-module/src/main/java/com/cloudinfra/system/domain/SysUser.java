@@ -83,4 +83,28 @@ public class SysUser extends BaseEntity {
         }
         this.password = encoder.encode(newPassword);
     }
+
+    // Manual getters/setters for Lombok compatibility
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getNickName() { return nickName; }
+    public void setNickName(String nickName) { this.nickName = nickName; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public Long getDeptId() { return deptId; }
+    public void setDeptId(Long deptId) { this.deptId = deptId; }
+    public Long getRoleId() { return roleId; }
+    public void setRoleId(Long roleId) { this.roleId = roleId; }
+    public Long getPostId() { return postId; }
+    public void setPostId(Long postId) { this.postId = postId; }
+    public Integer getStatus() { return status; }
+    public void setStatus(Integer status) { this.status = status; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public List<Long> getPostIds() { return postIds; }
+    public void setPostIds(List<Long> postIds) { this.postIds = postIds; }
 }

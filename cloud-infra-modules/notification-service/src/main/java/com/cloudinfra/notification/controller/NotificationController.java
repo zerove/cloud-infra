@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,6 +40,7 @@ public class NotificationController implements NotificationApi {
 
     @Override
     @Operation(summary = "发送通知")
+    @PreAuthorize("@ss.hasPermi('notification:send')")
     @PostMapping("/send")
     public Result<NotificationResponse> send(@Valid @RequestBody NotificationRequest request) {
         NotificationSendRequest sendRequest = new NotificationSendRequest(
@@ -57,6 +59,7 @@ public class NotificationController implements NotificationApi {
 
     @Override
     @Operation(summary = "查询通知历史")
+    @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/history")
     public Result<List<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
@@ -78,6 +81,7 @@ public class NotificationController implements NotificationApi {
 
     @Override
     @Operation(summary = "将通知标记为已读")
+    @PreAuthorize("@ss.hasPermi('notification:read')")
     @PutMapping("/read/{id}")
     public Result<Void> markAsRead(@PathVariable("id") Long id) {
         // 暂未在 Service 实现
@@ -86,6 +90,7 @@ public class NotificationController implements NotificationApi {
 
     @Override
     @Operation(summary = "根据关键词搜索通知")
+    @PreAuthorize("@ss.hasPermi('notification:search')")
     @GetMapping("/search")
     public Result<List<NotificationDTO>> searchNotifications(@RequestParam String keyword) {
         List<Notification> notifications = notificationService.searchNotifications(keyword);
@@ -96,6 +101,7 @@ public class NotificationController implements NotificationApi {
 
     @Override
     @Operation(summary = "获取特定用户的发送审计日志")
+    @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/logs")
     public Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId) {
         List<NotificationLog> logs = notificationService.getLogs(userId);

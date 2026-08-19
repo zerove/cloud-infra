@@ -8,7 +8,9 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @EnableFeignClients(basePackages = {"com.cloudinfra.auth.feign", "com.cloudinfra.api.system"})
 @EnableDiscoveryClient
-@SpringBootApplication(scanBasePackages = {"com.cloudinfra"})
+@SpringBootApplication(
+    scanBasePackages = {"com.cloudinfra"}
+)
 public class AuthApplication {
 
     public static void main(String[] args) {

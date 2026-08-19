@@ -12,8 +12,8 @@ serviceAccount:
   name: ''
 podAnnotations:
   prometheus.io/scrape: 'true'
-  prometheus.io/port: '8082'
-  prometheus.io/path: /actuator/prometheus
+  prometheus.io/port: '9301'
+  prometheus.io/path: /management/prometheus
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
@@ -146,7 +146,7 @@ configMap:
       \        rabbit:\n          bindings:\n            txMessageConsumer-in-0:\n\
       \              consumer:\n                auto-bind-dlq: true\n            \
       \    dlq-name: sys.tx.message.dlq\n                republish-to-dlq: true\n\
-      \  seata:\n    enabled: true\n    application-id: ${spring.application.name}\n\
+      \  seata:\n    enabled: false\n\
       \    tx-service-group: ${spring.application.name}-tx-group\n    service:\n \
       \     vgroup-mapping:\n        cloud-infra-system: default\n    registry:\n\
       \      type: nacos\n      nacos:\n        server-addr: ${NACOS_DISCOVERY_ADDR}\n\
@@ -195,3 +195,6 @@ serviceMonitor:
     allowExternal: false
 networkPolicy:
   allowExternal: false
+pdb:
+  enabled: true
+  minAvailable: 1

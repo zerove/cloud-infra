@@ -19,7 +19,10 @@ public class JwtUtils {
     /**
      * 已知的公开弱默认密钥（仅用于本地开发兜底，生产必须通过 AUTH_JWT_SECRET 覆盖）
      */
-    private static final String WEAK_DEFAULT_SECRET = "CloudInfraSecretKey123456789012345678901234567890";
+    private static final java.util.Set<String> WEAK_DEFAULT_SECRETS = java.util.Set.of(
+        "CloudInfraSecretKey123456789012345678901234567890",
+        "***REMOVED-LEAKED-DEV-JWT-SECRET***"
+    );
     private static final int MIN_SECRET_LENGTH = 32;
 
     @Value("${auth.jwt.secret:}")
@@ -53,7 +56,7 @@ public class JwtUtils {
                 "JWT 密钥强度不足：长度必须 >= " + MIN_SECRET_LENGTH + "，当前长度 " + secret.length()
             );
         }
-        if (WEAK_DEFAULT_SECRET.equals(secret)) {
+        if (WEAK_DEFAULT_SECRETS.contains(secret)) {
             throw new IllegalStateException(
                 "JWT 密钥为公开弱默认值，禁止用于生产：请通过 AUTH_JWT_SECRET 配置独立高强度密钥"
             );

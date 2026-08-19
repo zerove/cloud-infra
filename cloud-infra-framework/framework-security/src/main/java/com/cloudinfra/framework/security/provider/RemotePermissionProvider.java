@@ -4,11 +4,13 @@ import com.cloudinfra.api.system.UserApi;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.security.IPermissionProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Collections;
 
 @Component
+@ConditionalOnClass(UserApi.class)
 public class RemotePermissionProvider implements IPermissionProvider {
 
     private final UserApi userApi;

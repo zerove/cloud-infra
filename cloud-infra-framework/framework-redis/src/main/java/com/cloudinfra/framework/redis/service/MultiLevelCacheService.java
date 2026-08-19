@@ -4,7 +4,9 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -113,16 +115,27 @@ public class MultiLevelCacheService {
         }
     }
 
-    /**
+/**
      * 清空指定缓存区域
      */
     public void clear(String cacheName) {
         Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
         l1Cache.invalidateAll();
-        
-        // Redis 使用 pattern 删除（注意生产环境慎用）
+
+        // Redis 使用 SCAN 删除（避免 KEYS 阻塞）
         String pattern = buildRedisKey(cacheName, "*");
-        redisTemplate.keys(pattern).forEach(redisTemplate::delete);
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        redisTemplate.execute((org.springframework.data.redis.connection.RedisConnection connection) -> {
+            try (var cursor = connection.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).build())) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next()));
+                }
+            }
+            return null;
+        });
+        if (!keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
     }
 
     /**

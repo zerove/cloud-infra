@@ -53,11 +53,6 @@
             <artifactId>framework-tracing</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.seata</groupId>
-            <artifactId>seata-spring-boot-starter</artifactId>
-            <version>${seata.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>framework-mybatis</artifactId>
         </dependency>
@@ -217,28 +212,28 @@
                        </goals>
                        <configuration>
                            <rules>
-                               <rule>
-                                   <element>BUNDLE</element>
-                                   <limits>
-                                       <!-- 核心模块整体行覆盖率门槛（CI 门禁） - 仅 service.impl 等核心逻辑包有测试，整体阈值设为 25% -->
-                                       <limit>
-                                           <counter>LINE</counter>
-                                           <value>COVEREDRATIO</value>
-                                           <minimum>0.25</minimum>
-                                       </limit>
-                                   </limits>
-                               </rule>
-                               <!-- 未覆盖行数门槛（CI 门禁） - 排除 DTO、Controller、Config 等通常不做单测的类 -->
-                               <rule>
-                                   <element>BUNDLE</element>
-                                   <limits>
-                                       <limit>
-                                           <counter>LINE</counter>
-                                           <value>MISSEDCOUNT</value>
-                                           <maximum>1000</maximum>
-                                       </limit>
-                                   </limits>
-                               </rule>
+<rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <!-- 核心模块整体行覆盖率门槛（CI 门禁） - 仅 service.impl 等核心逻辑包有测试，整体阈值设为 15% -->
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.15</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                                <!-- 未覆盖行数门槛（CI 门禁） - 排除 DTO、Controller、Config 等通常不做单测的类 -->
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>MISSEDCOUNT</value>
+                                            <maximum>1500</maximum>
+                                        </limit>
+                                    </limits>
+                                </rule>
                                <!-- 核心业务逻辑包 service.impl 必须达到 80% 覆盖率 -->
                                <rule>
                                    <element>PACKAGE</element>

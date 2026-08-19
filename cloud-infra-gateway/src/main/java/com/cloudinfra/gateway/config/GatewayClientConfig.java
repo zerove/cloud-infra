@@ -7,31 +7,29 @@ import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.util.Timeout;
-import org.springframework.boot.restclient.RestClientCustomizer;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 
 /**
  * 网关 HTTP 客户端配置
- * 配置连接池、超时、重试以及跳过代理（用于内网服务调用）
- * 提供 RestClientCustomizer bean 供 Spring Cloud Gateway MVC 的 RestClientProxyExchange 使用
- * 同时提供 ClientHttpRequestFactory bean 供其他组件使用
+ * 仅提供配置好的 ClientHttpRequestFactory 和 RestClient.Builder
+ * 让 Spring Cloud Gateway MVC 的函数式路由 DSL (http() + lb()) 处理路由
+ * 完全绕过 RestClientProxyExchange 的自动配置问题
  */
 @Configuration
 public class GatewayClientConfig {
 
-    /** 连接建立超时 */
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
-    /** 从连接池获取连接超时 */
-    private static final Duration CONNECTION_REQUEST_TIMEOUT = Duration.ofSeconds(3);
-    /** Socket 读超时（下游响应超时） */
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration CONNECT_TIMEOUT = java.time.Duration.ofSeconds(3);
+    private static final Duration CONNECTION_REQUEST_TIMEOUT = java.time.Duration.ofSeconds(3);
+    private static final Duration READ_TIMEOUT = java.time.Duration.ofSeconds(10);
 
     /**
      * 创建配置好的 ClientHttpRequestFactory
@@ -45,17 +43,15 @@ public class GatewayClientConfig {
         cm.setDefaultMaxPerRoute(500);
 
         RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.of(CONNECTION_REQUEST_TIMEOUT))
-                .setConnectTimeout(Timeout.of(CONNECT_TIMEOUT))
-                .setResponseTimeout(Timeout.of(READ_TIMEOUT))
-                // 跳过代理，直接连接目标服务
+                .setConnectionRequestTimeout(Timeout.of(Duration.ofSeconds(3)))
+                .setConnectTimeout(Timeout.of(Duration.ofSeconds(3)))
+                .setResponseTimeout(Timeout.of(Duration.ofSeconds(10)))
                 .setProxy(null)
                 .build();
 
         CloseableHttpClient httpClient = HttpClients.custom()
                 .setConnectionManager(cm)
                 .setDefaultRequestConfig(requestConfig)
-                // 禁用系统代理设置
                 .setProxy((HttpHost) null)
                 .disableCookieManagement()
                 .build();
@@ -64,21 +60,26 @@ public class GatewayClientConfig {
     }
 
     /**
-     * 提供 RestClientCustomizer，确保 Spring Cloud Gateway MVC 的 RestClientProxyExchange
-     * 使用我们配置的 ClientHttpRequestFactory（跳过代理、连接池、超时配置）
-     * 注意：不能命名为 gatewayRestClientCustomizer，与 GatewayServerMvcAutoConfiguration
-     * 中同名的 RestClientCustomizer bean 冲突（BeanDefinitionOverrideException）
+     * 提供配置完整的 RestClient.Builder
+     * 用于函数式路由 DSL (http() + lb()) 创建 RestClient
+     * 必须标记 @LoadBalanced：Gateway MVC 的 RestClientProxyExchange 通过
+     * LoadBalancerInterceptor 在 RestClient 内部解析 lb:// 服务名，
+     * 没有独立的 LoadBalancerClientFilter（该组件仅存在于 Gateway WebFlux 变体）。
      */
     @Bean
-    public RestClientCustomizer gatewayHttpClientCustomizer(ClientHttpRequestFactory clientHttpRequestFactory) {
-        return builder -> builder.requestFactory(clientHttpRequestFactory);
-    }
-
-    @Bean
-    public RestClient restClient(ObservationRegistry observationRegistry, ClientHttpRequestFactory requestFactory) {
+    @Primary
+    @LoadBalanced
+    public RestClient.Builder gatewayRestClientBuilder(ClientHttpRequestFactory clientHttpRequestFactory,
+                                                       ObservationRegistry observationRegistry) {
         return RestClient.builder()
-                .requestFactory(requestFactory)
+                .requestFactory(clientHttpRequestFactory)
                 .observationRegistry(observationRegistry)
-                .build();
+                .messageConverters(converters -> {
+                    converters.add(new MappingJackson2HttpMessageConverter());
+                })
+                .defaultStatusHandler(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        (request, response) -> {
+                            throw new RuntimeException("HTTP error: " + response.getStatusCode());
+                        });
     }
 }

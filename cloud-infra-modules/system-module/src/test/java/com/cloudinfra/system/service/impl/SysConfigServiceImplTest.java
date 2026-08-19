@@ -47,11 +47,13 @@ public class SysConfigServiceImplTest {
     void shouldReturnConfigList() {
         SysConfig c1 = new SysConfig();
         c1.setConfigKey("a");
-        when(configMapper.selectList(null)).thenReturn(List.of(c1));
+        com.baomidou.mybatisplus.core.metadata.IPage<SysConfig> page = org.mockito.Mockito.mock(com.baomidou.mybatisplus.core.metadata.IPage.class);
+        when(page.getRecords()).thenReturn(List.of(c1));
+        when(configMapper.selectPage(any(), any())).thenReturn(page);
 
-        List<SysConfig> result = configService.selectConfigList();
+        com.baomidou.mybatisplus.core.metadata.IPage<SysConfig> result = configService.selectConfigList(new SysConfig(), 1, 10);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getRecords()).hasSize(1);
     }
 
     @Test

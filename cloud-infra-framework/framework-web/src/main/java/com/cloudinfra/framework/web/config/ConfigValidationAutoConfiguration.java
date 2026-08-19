@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
  */
 @AutoConfiguration
 @EnableConfigurationProperties(ConfigValidationProperties.class)
+@ConditionalOnProperty(prefix = "cloud-infra.config-validation", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class ConfigValidationAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigValidationAutoConfiguration.class);

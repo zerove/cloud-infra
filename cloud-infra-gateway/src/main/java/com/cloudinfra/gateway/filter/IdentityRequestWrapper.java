@@ -25,6 +25,15 @@ public class IdentityRequestWrapper extends HttpServletRequestWrapper {
     }
 
     @Override
+    public Enumeration<String> getHeaders(String name) {
+        String value = customHeaders.get(name);
+        if (value != null) {
+            return Collections.enumeration(List.of(value));
+        }
+        return super.getHeaders(name);
+    }
+
+    @Override
     public Enumeration<String> getHeaderNames() {
         List<String> names = new ArrayList<>(Collections.list(super.getHeaderNames()));
         names.addAll(customHeaders.keySet());

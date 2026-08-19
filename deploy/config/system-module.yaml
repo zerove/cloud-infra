@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: 9301
   shutdown: graceful
 
 spring:
@@ -97,12 +97,12 @@ spring:
 
 management:
   server:
-    port: 8082
+    port: 9301
   endpoints:
     web:
       base-path: /management
       exposure:
-        include: "*"
+        include: health,info,prometheus,metrics,env,beans,conditions,refresh
   endpoint:
     health:
       show-details: always
@@ -123,7 +123,7 @@ management:
 resilience4j:
   circuitbreaker:
     failure-rate-threshold: 50
-    slow-call-rate-threshold: 100
+    slow-call-rate-threshold: 80
     slow-call-duration-threshold-ms: 2000
     sliding-window-count-based: true
     sliding-window-size: 100
@@ -194,13 +194,13 @@ resilience4j:
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:***REMOVED-LEAKED-DEV-JWT-SECRET***}
+    secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
 # 内部服务间调用签名密钥（生产必须通过 INTERNAL_CALL_SECRET 注入外置强密钥）
 cloud-infra:
   internal-call:
-    secret: ${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}
+    secret: ${INTERNAL_CALL_SECRET:}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

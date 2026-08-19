@@ -14,6 +14,7 @@
     <properties>
         <spring-boot.aot.skip>false</spring-boot.aot.skip>
         <native.image.skip>false</native.image.skip>
+        <spring-boot.repackage.skip>false</spring-boot.repackage.skip>
     </properties>
 
     <dependencies>
@@ -42,6 +43,12 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+        <!-- ProxyExchange 支持 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-gateway-proxyexchange-webmvc</artifactId>
+            <version>5.0.2</version>
         </dependency>
 
         <!-- Nacos 配置 -->
@@ -75,6 +82,10 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
             <artifactId>framework-redis</artifactId>
         </dependency>
         <dependency>
@@ -98,15 +109,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
-        <!-- SpringDoc API 文档聚合 -->
+        <!-- OpenFeign for internal service calls -->
         <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-        </dependency>
-        <!-- 压缩支持 - Spring Boot 内置 Gzip，通过配置启用 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
 
         <!-- Sentinel Gateway & Extensions -->
@@ -131,9 +137,11 @@
             <version>2.0.64</version>
         </dependency>
 
-
-
         <!-- API 文档聚合 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
 
         <!-- Test -->
         <dependency>
@@ -220,7 +228,6 @@
                                         </limit>
                                     </limits>
                                 </rule>
-                                <!-- 未覆盖行数门槛（CI 门禁） -->
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
@@ -231,7 +238,6 @@
                                         </limit>
                                     </limits>
                                 </rule>
-                                <!-- 核心业务逻辑包必须达到 80% 覆盖率 -->
                                 <rule>
                                     <element>PACKAGE</element>
                                     <includes>
@@ -263,26 +269,13 @@
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
                         <configuration>
-                            <skip>false</skip>
+                            <skip>true</skip>
                             <imageName>cloud-infra-gateway-binary</imageName>
                             <mainClass>com.cloudinfra.gateway.GatewayApplication</mainClass>
                             <fallback>false</fallback>
                             <buildArgs>
-                                <arg>--no-fallback</arg>
-                                <arg>--enable-http</arg>
-                                <arg>--enable-https</arg>
-                                <arg>-H:+ReportExceptionStackTraces</arg>
-                                <arg>-H:+SharedArenaSupport</arg>
-                                <arg>-H:ReflectionConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/reflect-config.json</arg>
-                                <arg>-H:DynamicProxyConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/proxy-config.json</arg>
-                                <arg>-H:JNIConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/jni-config.json</arg>
-                                <arg>-H:ResourceConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/resources-config.json</arg>
                                 <arg>--initialize-at-build-time=org.redisson.misc.BiHashMap</arg>
-                                <arg>--initialize-at-build-time=org.redisson.liveobject.core.RedissonObjectBuilder\$CodecMethodRef</arg>
-                                <arg>--initialize-at-build-time=org.redisson.config.Config</arg>
-                                <arg>--initialize-at-build-time=org.redisson.client.codec.StringCodec</arg>
-                                <arg>-J-Xmx7g</arg>
-                                <arg>-J-XX:CICompilerCount=2</arg>
+                                <arg>--initialize-at-build-time=org.redisson.liveobject.core.RedissonObjectBuilder$CodecMethodRef</arg>
                             </buildArgs>
                         </configuration>
                         <executions>

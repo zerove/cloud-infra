@@ -7,8 +7,11 @@ import com.cloudinfra.system.domain.ServiceTicket;
 import com.cloudinfra.system.mapper.ServiceTicketMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,11 +28,12 @@ public class ServiceTicketService {
     private final ServiceTicketMapper ticketMapper;
     private final IntelligentRoutingService routingService;
     private final NotificationApi notificationApi;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 创建智能服务工单并执行自动分发
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ServiceTicket createIntelligentTicket(String title, String content, Integer priority, Long assetId) {
         log.info("创建智能服务工单: {}", title);
 
@@ -50,10 +54,15 @@ public class ServiceTicketService {
         // 3. 持久化
         ticketMapper.insert(ticket);
 
-        // 4. 自动触发通知
-        triggerAssignNotification(ticket);
+        // 4. 发布事件（事务提交后触发监听器）
+        eventPublisher.publishEvent(ticket);
 
         return ticket;
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onTicketCreated(ServiceTicket ticket) {
+        triggerAssignNotification(ticket);
     }
 
     private void triggerAssignNotification(ServiceTicket ticket) {

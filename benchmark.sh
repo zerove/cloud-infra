@@ -59,6 +59,7 @@ if [ "$MODE" = "native" ]; then
   "$BIN" \
     --spring.cloud.nacos.config.enabled=false \
     --spring.cloud.nacos.discovery.enabled=false \
+    --auth.jwt.secret="${AUTH_JWT_SECRET:-test-secret-key-for-benchmark-min-32-chars}" \
     --management.server.port=19301 \
     --server.port=18080 > /tmp/benchmark-gateway.log 2>&1 &
 else
@@ -75,6 +76,7 @@ else
     --spring.cloud.nacos.discovery.enabled=false \
     --spring.data.redis.host=127.0.0.1 \
     --spring.data.redis.port=6379 \
+    --auth.jwt.secret="${AUTH_JWT_SECRET:-test-secret-key-for-benchmark-min-32-chars}" \
     --management.server.port=19301 \
     --server.port=18080 > /tmp/benchmark-gateway.log 2>&1 &
 fi

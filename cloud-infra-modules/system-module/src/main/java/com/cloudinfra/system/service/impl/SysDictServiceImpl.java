@@ -8,6 +8,7 @@ import com.cloudinfra.system.mapper.SysDictTypeMapper;
 import com.cloudinfra.system.service.ISysDictService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,13 +36,13 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertDictType(SysDictType dictType) {
         return dictTypeMapper.insert(dictType);
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateDictType(SysDictType dictType) {
         SysDictType old = dictTypeMapper.selectById(dictType.getId());
         int result = dictTypeMapper.updateById(dictType);
@@ -52,7 +53,7 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteDictTypeByIds(Long[] ids) {
         for (Long id : ids) {
             SysDictType type = dictTypeMapper.selectById(id);
@@ -90,7 +91,7 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertDictData(SysDictData dictData) {
         int result = dictDataMapper.insert(dictData);
         if (result > 0) {
@@ -100,7 +101,7 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateDictData(SysDictData dictData) {
         int result = dictDataMapper.updateById(dictData);
         if (result > 0) {
@@ -110,7 +111,7 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteDictDataByIds(Long[] ids) {
         for (Long id : ids) {
             SysDictData data = dictDataMapper.selectById(id);
@@ -123,8 +124,14 @@ public class SysDictServiceImpl implements ISysDictService {
 
     @Override
     public void clearDictCache() {
-        java.util.Set<String> keys = redisTemplate.keys(CACHE_KEY_PREFIX + "*");
-        if (keys != null && !keys.isEmpty()) {
+        String pattern = CACHE_KEY_PREFIX + "*";
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        try (var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        }
+        if (!keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
     }

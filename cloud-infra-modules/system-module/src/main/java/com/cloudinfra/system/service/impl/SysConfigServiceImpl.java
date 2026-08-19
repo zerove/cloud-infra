@@ -1,6 +1,8 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.system.domain.SysConfig;
 import com.cloudinfra.system.mapper.SysConfigMapper;
@@ -21,8 +23,21 @@ public class SysConfigServiceImpl implements ISysConfigService {
     private static final String CACHE_KEY_PREFIX = "sys:config:";
 
     @Override
-    public List<SysConfig> selectConfigList() {
-        return configMapper.selectList(null);
+    public IPage<SysConfig> selectConfigList(SysConfig query, long pageNum, long pageSize) {
+        Page<SysConfig> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<SysConfig> wrapper = new LambdaQueryWrapper<>();
+        if (query != null) {
+            if (query.getConfigName() != null && !query.getConfigName().isEmpty()) {
+                wrapper.like(SysConfig::getConfigName, query.getConfigName());
+            }
+            if (query.getConfigKey() != null && !query.getConfigKey().isEmpty()) {
+                wrapper.eq(SysConfig::getConfigKey, query.getConfigKey());
+            }
+            if (query.getConfigType() != null) {
+                wrapper.eq(SysConfig::getConfigType, query.getConfigType());
+            }
+        }
+        return configMapper.selectPage(page, wrapper);
     }
 
     @Override
@@ -51,7 +66,7 @@ public class SysConfigServiceImpl implements ISysConfigService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertConfig(SysConfig config) {
         int result = configMapper.insert(config);
         if (result > 0) {
@@ -61,7 +76,7 @@ public class SysConfigServiceImpl implements ISysConfigService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateConfig(SysConfig config) {
         SysConfig old = configMapper.selectById(config.getId());
         int result = configMapper.updateById(config);
@@ -73,7 +88,7 @@ public class SysConfigServiceImpl implements ISysConfigService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteConfigByIds(Long[] ids) {
         for (Long id : ids) {
             SysConfig config = configMapper.selectById(id);

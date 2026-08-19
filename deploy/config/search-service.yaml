@@ -9,12 +9,6 @@ spring:
     username: guest
     password: guest
   cloud:
-    stream:
-      rabbit:
-        binder:
-          nodes: cloud-rabbitmq:5672
-          username: guest
-          password: guest
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
@@ -43,10 +37,15 @@ spring:
     import:
       - optional:nacos:actuator-config.yaml
 
+# 禁用 Outbox 功能（避免 StreamBridge 依赖问题）
+cloud-infra:
+  outbox:
+    enabled: false
+
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:***REMOVED-LEAKED-DEV-JWT-SECRET***}
+    secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
 management:
@@ -56,7 +55,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: "*"
+        include: health,info,prometheus,metrics,env,beans,conditions,refresh
   tracing:
     sampling:
       probability: 1.0

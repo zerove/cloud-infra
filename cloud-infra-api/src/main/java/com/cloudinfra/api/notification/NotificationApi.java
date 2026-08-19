@@ -7,6 +7,7 @@ import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
+import com.cloudinfra.api.notification.fallback.NotificationApiFallbackFactory;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
 
-@FeignClient(name = "notification-service")
+@FeignClient(name = "notification-service", fallbackFactory = NotificationApiFallbackFactory.class)
 public interface NotificationApi {
     /**
      * 发送通知

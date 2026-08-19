@@ -1,5 +1,7 @@
 package com.cloudinfra.file.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
@@ -15,6 +17,8 @@ import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -31,6 +35,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class FileServiceImpl implements IFileService {
+
+    private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
 
     private final StorageFactory storageFactory;
     private final FileMetadataMapper metadataMapper;
@@ -75,7 +81,7 @@ public class FileServiceImpl implements IFileService {
     }
 
     /**
-     * 注册事务回滚补偿：仅当事务最终回滚（ROLLED_BACK）时删除已写入的文件，
+     * 注册事务回滚补偿：仅当事务最终回滚（ROLLED_BACK）时删除已落盘的孤儿文件，
      * 避免失败上传留下孤儿文件占用存储。
      */
     private void registerFileOnCleanup(StorageStrategy strategy, String storedPath) {
@@ -233,12 +239,13 @@ public class FileServiceImpl implements IFileService {
         }
     }
 
-    public List<FileMetadataVO> searchFiles(String keyword) {
-        List<FileMetadata> results = metadataMapper.selectList(
+    public IPage<FileMetadataVO> searchFiles(String keyword, long pageNum, long pageSize) {
+        Page<FileMetadata> page = new Page<>(pageNum, pageSize);
+        IPage<FileMetadata> resultPage = metadataMapper.selectPage(page,
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileMetadata>()
                 .like(FileMetadata::getFileName, keyword)
         );
-        return results.stream().map(this::mapToVo).collect(Collectors.toList());
+        return resultPage.convert(this::mapToVo);
     }
 
     private FileMetadataVO mapToVo(FileMetadata entity) {

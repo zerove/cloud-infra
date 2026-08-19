@@ -6,6 +6,8 @@ import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class NotificationScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationScheduler.class);
 
     private static final String SCHEDULE_LOCK_KEY = "notification:schedule:lock";
     private static final Duration LOCK_TTL = Duration.ofSeconds(30);
@@ -61,11 +65,12 @@ public class NotificationScheduler {
     private void scanAndProcess() {
         log.info("开始扫描到期通知任务...");
         
-        // 查找所有待处理且已到期的通知
+        // 查找待处理且已到期的通知，限制每次处理数量防止内存溢出
         List<ScheduledNotification> dueTasks = scheduleMapper.selectList(
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ScheduledNotification>()
                 .eq(ScheduledNotification::getProcessed, false)
                 .le(ScheduledNotification::getScheduleTime, LocalDateTime.now())
+                .last("LIMIT 100")
         );
 
         if (dueTasks.isEmpty()) {

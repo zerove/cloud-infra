@@ -35,6 +35,30 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "=== 配置漂移检测模式 (仅比较, 不执行变更) ==="
 fi
 
+# 自动生成 .env（仅当不存在时，避免覆盖用户自定义值）
+# compose.yaml 中基础设施凭据与微服务密钥均为 ${VAR:?必填} 强制模式
+ENV_FILE="$PROJECT_ROOT/.env"
+ensure_env() {
+  if [ ! -f "$ENV_FILE" ]; then
+    if [ -f "$PROJECT_ROOT/.env.example" ]; then
+      echo "=== 未检测到 .env, 从 .env.example 生成本地开发配置 ==="
+      cp "$PROJECT_ROOT/.env.example" "$ENV_FILE"
+      # 随机生成 JWT 密钥避免开发环境使用已知值
+      RANDOM_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
+      sed -i "s|^AUTH_JWT_SECRET=.*|AUTH_JWT_SECRET=${RANDOM_SECRET}|" "$ENV_FILE"
+      echo "  ✓ 已生成 $ENV_FILE (AUTH_JWT_SECRET 已随机化)"
+    else
+      echo "✗ 缺少 .env 且无 .env.example 模板, 请手动创建 .env" >&2
+      exit 1
+    fi
+  else
+    echo "=== 使用现有 .env (如需重置请删除后重跑) ==="
+  fi
+  # shellcheck disable=SC1090
+  set -a; source "$ENV_FILE"; set +a
+}
+ensure_env
+
 NACOS_URL="http://localhost:8848"
 
 # 配置同步函数: 上传单个文件到 Nacos (v3 admin API)
@@ -82,12 +106,12 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
 fi
 
 echo "=== 1. 停止并清理旧环境 ==="
-podman-compose -f "$SCRIPT_DIR/compose.yaml" down 2>/dev/null || true
+podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true
 echo "  已停止旧环境 (保留数据卷)"
 
 echo "=== 2. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" ${COMPOSE_ARGS[@]} up -d
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ${COMPOSE_ARGS[@]} up -d
 fi
 
 # 等待 Nacos 就绪

@@ -15,7 +15,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(SpringExtension.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        "auth.jwt.secret=test-secret-key-for-testing-min-32-chars-long-enough",
+        "spring.cloud.nacos.config.enabled=false",
+        "spring.cloud.nacos.discovery.enabled=false"
+})
 @ActiveProfiles("test")
 @Testcontainers
 class GatewayIntegrationTest extends BaseIntegrationTest {

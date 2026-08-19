@@ -17,6 +17,23 @@ management:
   info:
     env:
       enabled: true
+  otlp:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING_PROBABILITY:1.0}
+
+# 共享 Feign 客户端超时配置（防止下游慢调用阻塞线程池）
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 10000
+        loggerLevel: basic
 
 # 禁用业务端口的 actuator 端点，仅在管理端口暴露（避免 Spring Boot 3 独立管理端口死锁）
 # 参考: https://github.com/spring-projects/spring-boot/issues/39277

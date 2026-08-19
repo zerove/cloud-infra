@@ -27,6 +27,4 @@ public interface ISysUserService {
     int updateUser(SysUserUpdateDTO userDTO);
     int deleteUserByIds(Long[] userIds);
     int resetUserPassword(Long userId, String password);
-
-    void verifySeataTransaction(Long userId, String newNickName);
 }

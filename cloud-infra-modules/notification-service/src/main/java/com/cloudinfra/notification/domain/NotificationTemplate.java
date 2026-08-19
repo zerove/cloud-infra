@@ -43,4 +43,20 @@ public class NotificationTemplate {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    // Manual getters/setters for Lombok compatibility
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getTemplateCode() { return templateCode; }
+    public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
+    public String getTitleTemplate() { return titleTemplate; }
+    public void setTitleTemplate(String titleTemplate) { this.titleTemplate = titleTemplate; }
+    public String getContentTemplate() { return contentTemplate; }
+    public void setContentTemplate(String contentTemplate) { this.contentTemplate = contentTemplate; }
+    public String getRecommendedChannels() { return recommendedChannels; }
+    public void setRecommendedChannels(String recommendedChannels) { this.recommendedChannels = recommendedChannels; }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public LocalDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
 }

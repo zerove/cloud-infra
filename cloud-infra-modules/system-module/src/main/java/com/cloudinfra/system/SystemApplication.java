@@ -15,11 +15,7 @@ import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 @EnableDiscoveryClient
 @org.springframework.cloud.openfeign.EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableTransactionManagement
-@SpringBootApplication(
-    exclude = {
-        io.seata.spring.boot.autoconfigure.SeataSpringFenceAutoConfiguration.class
-    }
-)
+@SpringBootApplication
 // 全量扫描 com.cloudinfra (含 framework/common 组件), 但排除 starter 包:
 // starter 配置类走 AutoConfiguration.imports 延迟导入,
 // 避免 @ConditionalOnMissingBean 在用户配置之前评估导致重复注册 Bean

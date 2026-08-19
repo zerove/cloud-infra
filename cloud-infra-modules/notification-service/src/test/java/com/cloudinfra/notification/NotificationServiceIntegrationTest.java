@@ -1,5 +1,8 @@
 package com.cloudinfra.notification;
 
+import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
+import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
+import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.Result;
@@ -17,7 +20,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -30,6 +35,14 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -44,15 +57,72 @@ import static org.awaitility.Awaitility.await;
  * 验证端到端的通知发送、查询、调度流程。
  */
 @Testcontainers
-@SpringBootTest(classes = NotificationTestApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+@SpringBootTest(classes = {NotificationTestApplication.class, NotificationServiceIntegrationTest.TestSecurityConfig.class}, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.cloud.nacos.config.enabled=false",
         "spring.cloud.nacos.discovery.enabled=false",
         "spring.cloud.nacos.config.import-check.enabled=false",
         "spring.flyway.enabled=true",
-        "spring.main.allow-bean-definition-overriding=true"
+        "spring.main.allow-bean-definition-overriding=true",
+        "cloud-infra.config-validation.enabled=false"
 })
 @ActiveProfiles("test")
 public class NotificationServiceIntegrationTest {
+
+    @TestConfiguration
+    static class TestSecurityConfig {
+        @Bean
+        public HeaderAuthenticationFilter headerAuthenticationFilter() {
+            return new HeaderAuthenticationFilter() {
+                @Override
+                protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+                    // 测试环境：直接设置安全上下文，避免依赖 IPermissionProvider
+                    String userId = request.getHeader("X-User-Id");
+                    String username = request.getHeader("X-User-Name");
+                    
+                    if (userId == null) {
+                        userId = "1";
+                        username = "test_user";
+                    }
+                    
+                    // 直接构建认证上下文，跳过 IPermissionProvider
+                    com.cloudinfra.common.core.domain.model.LoginUser loginUser = 
+                        com.cloudinfra.common.core.domain.model.LoginUser.builder()
+                            .userId(Long.valueOf(userId))
+                            .username(username)
+                            .permissions(new java.util.HashSet<>())
+                            .build();
+                    
+                    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities = java.util.List.of();
+                    org.springframework.security.authentication.UsernamePasswordAuthenticationToken auth =
+                        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                            loginUser, null, authorities);
+                    org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+                    
+                    filterChain.doFilter(request, response);
+                }
+            };
+        }
+
+        @Bean
+        public AuthenticationEntryPointImpl authenticationEntryPoint() {
+            return new AuthenticationEntryPointImpl() {
+                @Override
+                public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                }
+            };
+        }
+
+        @Bean
+        public AccessDeniedHandlerImpl accessDeniedHandler() {
+            return new AccessDeniedHandlerImpl() {
+                @Override
+                public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                }
+            };
+        }
+    }
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -102,6 +172,8 @@ public class NotificationServiceIntegrationTest {
     void setUp() {
         webTestClient = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port)
+                .defaultHeader("X-User-Id", "1")
+                .defaultHeader("X-User-Name", "test_user")
                 .build();
         
         // 清理测试数据（立即提交，保证测试间隔离）

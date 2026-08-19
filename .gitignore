@@ -54,3 +54,6 @@ benchmark-results/
 
 # Local Maven settings override (fast mirror)
 .mvn-settings-fast.xml
+
+# K8s 真实密钥清单（占位模板 config-secrets.example.yaml 入库，真实值由 CI/运维注入）
+deploy/k8s/infra/config-secrets.yaml

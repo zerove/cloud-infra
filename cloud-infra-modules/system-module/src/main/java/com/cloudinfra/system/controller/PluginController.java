@@ -29,6 +29,7 @@ public class PluginController {
     /**
      * 查看当前所有激活的插件
      */
+    @PreAuthorize("@ss.hasPermi('system:plugin:list')")
     @GetMapping("/active")
     public Map<String, IServicePlugin> getActivePlugins() {
         return pluginManager.getActivePlugins();
@@ -37,6 +38,7 @@ public class PluginController {
     /**
      * 查看所有已注册的服务能力
      */
+    @PreAuthorize("@ss.hasPermi('system:plugin:list')")
     @GetMapping("/services")
     public Map<String, Object> getRegisteredServices() {
         return pluginRegistry.getAllServices();

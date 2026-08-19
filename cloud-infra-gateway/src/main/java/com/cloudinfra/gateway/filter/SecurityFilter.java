@@ -51,7 +51,7 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
 
         try {
             // 2. 执行认证判定
-            AuthContext authContext = new AuthContext(
+AuthContext authContext = new AuthContext(
                 request.getHeader(HttpHeaders.AUTHORIZATION),
                 request.getRequestURI(),
                 request.getMethod(),
@@ -59,12 +59,12 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
                 Map.of()
             );
 
-            log.info("[SecurityFilter] 请求路径: {}, 方法: {}, token: {}", request.getRequestURI(), request.getMethod(), 
+            log.debug("[SecurityFilter] 请求路径: {}, 方法: {}, token: {}", request.getRequestURI(), request.getMethod(),
                 request.getHeader(HttpHeaders.AUTHORIZATION) != null ? "present" : "null");
-            
+
             AuthResult authResult = authEvaluator.evaluate(authContext);
 
-            log.info("[SecurityFilter] 认证结果: success={}, status={}, message={}, identity={}", 
+            log.debug("[SecurityFilter] 认证结果: success={}, status={}, message={}, identity={}",
                 authResult.isSuccess(), authResult.status(), authResult.message(), authResult.identity());
 
             if (!authResult.isSuccess()) {
@@ -88,10 +88,16 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
             
             IdentityRequestWrapper requestWrapper = new IdentityRequestWrapper(request, headers);
 
-            filterChain.doFilter(requestWrapper, response);
+            try {
+                filterChain.doFilter(requestWrapper, response);
+            } catch (Exception e) {
+                log.error("[SecurityFilter] downstream chain failed for {} {}", request.getMethod(), request.getRequestURI(), e);
+                throw e;
+            }
         } catch (Exception e) {
+            log.debug("Security filter error: {}", e.getMessage(), e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Security filter error: " + e.getMessage());
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Security filter error");
         } finally {
             MDC.remove(TRACE_ID);
         }
