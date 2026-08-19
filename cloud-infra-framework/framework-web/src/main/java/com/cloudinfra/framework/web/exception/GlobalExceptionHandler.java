@@ -71,6 +71,78 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理乐观锁冲突
+     */
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<Result<?>> handleOptimisticLockingFailure(org.springframework.dao.OptimisticLockingFailureException e) {
+        log.warn("Optimistic locking conflict: {}", e.getMessage());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.CONCURRENT_CONFLICT.getCode(), "数据已被修改，请刷新重试"), 
+            HttpStatus.CONFLICT
+        );
+    }
+
+    /**
+     * 处理数据完整性违反（唯一约束、外键等）
+     */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<Result<?>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("Data integrity violation: {}", e.getRootCause() != null ? e.getRootCause().getMessage() : e.getMessage());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.DATA_CONFLICT.getCode(), "数据冲突，可能违反唯一约束或外键约束"), 
+            HttpStatus.CONFLICT
+        );
+    }
+
+    /**
+     * 处理请求体解析失败
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Result<?>> handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
+        log.warn("Request body parse error: {}", e.getMessage());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "请求体格式错误或缺失"), 
+            HttpStatus.BAD_REQUEST
+        );
+    }
+
+    /**
+     * 处理缺少请求参数
+     */
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<Result<?>> handleMissingServletRequestParameter(org.springframework.web.bind.MissingServletRequestParameterException e) {
+        log.warn("Missing request parameter: {}", e.getParameterName());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "缺少必填参数: " + e.getParameterName()), 
+            HttpStatus.BAD_REQUEST
+        );
+    }
+
+    /**
+     * 处理参数类型不匹配
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Result<?>> handleMethodArgumentTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        log.warn("Argument type mismatch: {} (expected {})", e.getName(), e.getRequiredType());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "参数类型错误: " + e.getName()), 
+            HttpStatus.BAD_REQUEST
+        );
+    }
+
+    /**
+     * 处理 404
+     */
+    @ExceptionHandler(org.springframework.web.servlet.NoHandlerFoundException.class)
+    public ResponseEntity<Result<?>> handleNoHandlerFound(org.springframework.web.servlet.NoHandlerFoundException e) {
+        log.warn("No handler found: {}", e.getRequestURL());
+        return new ResponseEntity<>(
+            Result.fail(ErrorCode.NOT_FOUND.getCode(), "接口不存在"), 
+            HttpStatus.NOT_FOUND
+        );
+    }
+
+    /**
      * 处理所有未捕获的运行时异常
      */
     @ExceptionHandler(Exception.class)

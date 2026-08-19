@@ -13,4 +13,12 @@ public class IndexInfoVO {
     private long docCount;
     /** 索引状态: OPEN / MISSING */
     private String status;
+
+    // Manual getters/setters for Lombok compatibility
+    public String getIndexName() { return indexName; }
+    public void setIndexName(String indexName) { this.indexName = indexName; }
+    public long getDocCount() { return docCount; }
+    public void setDocCount(long docCount) { this.docCount = docCount; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

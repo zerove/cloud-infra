@@ -10,30 +10,59 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 规则触发消费者 - 监听遥测数据并执行规则判定
+ * 消费幂等：基于 messageId（payload 中的 traceId/uuid）去重，TTL 24h
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RuleConsumer {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RuleConsumer.class);
+
     private final NotificationRuleService ruleService;
     private final INotificationService notificationService;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redisTemplate;
 
-    @RabbitListener(queues = "iot.telemetry.queue")
+    @RabbitListener(queues = "iot.telemetry.queue", concurrency = "3-10")
     @SuppressWarnings("unchecked")
     public void handleTelemetry(byte[] payload) {
+        String messageId = "";
         try {
             // 1. 解析遥测数据
             Map<String, Object> data = objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
+            messageId = (String) data.getOrDefault("messageId", "");
+            if (messageId.isEmpty()) {
+                // 兜底：用 payload hash 作为幂等键
+                try {
+                    messageId = "rule:" + java.util.Base64.getEncoder().encodeToString(
+                        java.security.MessageDigest.getInstance("SHA-256").digest(payload)).substring(0, 32);
+                } catch (NoSuchAlgorithmException e) {
+                    messageId = "rule:" + System.currentTimeMillis();
+                }
+            }
+            // 幂等校验：SETNX 成功才处理
+            String idempotentKey = "idempotent:rule:" + messageId;
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(idempotentKey, "1", 24, TimeUnit.HOURS);
+            if (!Boolean.TRUE.equals(acquired)) {
+                log.debug("重复消息已忽略: {}", messageId);
+                return;
+            }
+
             String deviceId = (String) data.getOrDefault("deviceId", "unknown");
             Map<String, Object> metrics = (Map<String, Object>) data.get("metrics");
 
@@ -82,8 +111,12 @@ public class RuleConsumer {
                     notificationService.sendNotification(request);
                 }
             }
+        } catch (IOException e) {
+            log.error("解析遥测数据失败，消息将进入 DLQ: {}", messageId, e);
+            throw new RuntimeException(e);
         } catch (Exception e) {
-            log.error("规则判定链路异常: {}", e.getMessage());
+            log.error("规则判定链路异常，消息将进入 DLQ: {}", messageId, e);
+            throw e;
         }
     }
 }

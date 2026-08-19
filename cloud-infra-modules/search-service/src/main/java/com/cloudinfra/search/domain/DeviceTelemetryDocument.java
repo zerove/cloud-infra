@@ -36,4 +36,16 @@ public class DeviceTelemetryDocument {
      */
     @Field(type = FieldType.Object)
     private Map<String, Object> metrics;
+
+    // Getters and Setters (manual for Lombok compatibility)
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getDeviceId() { return deviceId; }
+    public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+    public String getRawPayload() { return rawPayload; }
+    public void setRawPayload(String rawPayload) { this.rawPayload = rawPayload; }
+    public Map<String, Object> getMetrics() { return metrics; }
+    public void setMetrics(Map<String, Object> metrics) { this.metrics = metrics; }
 }

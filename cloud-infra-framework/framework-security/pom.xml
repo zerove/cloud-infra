@@ -19,6 +19,7 @@
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-api</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

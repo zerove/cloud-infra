@@ -1,5 +1,6 @@
 package com.cloudinfra.file.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
@@ -196,12 +197,12 @@ class FileServiceImplTest {
         given(metadataMapper.selectList(any())).willReturn(List.of(meta));
 
         // when
-        List<FileMetadataVO> results = fileService.searchFiles(keyword);
+        IPage<FileMetadataVO> results = fileService.searchFiles(keyword, 1, 10);
 
         // then
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).fileName()).isEqualTo("test.txt");
-        assertThat(results.get(0).url()).isEqualTo("/file/download/1");
+        assertThat(results.getRecords()).hasSize(1);
+        assertThat(results.getRecords().get(0).fileName()).isEqualTo("test.txt");
+        assertThat(results.getRecords().get(0).url()).isEqualTo("/file/download/1");
     }
 
     @Test

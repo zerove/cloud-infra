@@ -1,5 +1,6 @@
 package com.cloudinfra.api.system;
 
+import com.cloudinfra.api.system.fallback.ResourceMappingApiFallbackFactory;
 import com.cloudinfra.common.core.domain.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -8,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.Set;
 
-@FeignClient(name = "system-module")
+@FeignClient(name = "system-module", fallbackFactory = ResourceMappingApiFallbackFactory.class)
 public interface ResourceMappingApi {
     /**
      * 获取资源的有效访问节点集合 (包含拓扑展开后的结果)

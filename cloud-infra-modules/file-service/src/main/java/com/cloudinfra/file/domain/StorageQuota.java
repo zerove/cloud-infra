@@ -38,4 +38,18 @@ public class StorageQuota {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    // Manual getters/setters for Lombok compatibility
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public Long getMaxSizeBytes() { return maxSizeBytes; }
+    public void setMaxSizeBytes(Long maxSizeBytes) { this.maxSizeBytes = maxSizeBytes; }
+    public Long getUsedSizeBytes() { return usedSizeBytes; }
+    public void setUsedSizeBytes(Long usedSizeBytes) { this.usedSizeBytes = usedSizeBytes; }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public LocalDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
 }

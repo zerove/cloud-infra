@@ -18,6 +18,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
+@org.springframework.boot.autoconfigure.EnableAutoConfiguration(exclude = {
+    org.springframework.cloud.stream.config.BindingServiceConfiguration.class
+})
 class HealthControllerTest {
 
     @Container

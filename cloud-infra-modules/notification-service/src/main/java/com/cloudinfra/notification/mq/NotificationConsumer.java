@@ -5,6 +5,8 @@ import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import com.cloudinfra.notification.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import java.util.function.Consumer;
 
@@ -12,6 +14,8 @@ import java.util.function.Consumer;
 @Component
 @RequiredArgsConstructor
 public class NotificationConsumer {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationConsumer.class);
 
     private final INotificationService notificationService;
 

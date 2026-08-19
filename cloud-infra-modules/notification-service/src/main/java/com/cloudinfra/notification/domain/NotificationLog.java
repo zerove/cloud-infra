@@ -45,4 +45,20 @@ public class NotificationLog {
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
+
+    // Manual getters/setters for Lombok compatibility
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getNotificationId() { return notificationId; }
+    public void setNotificationId(Long notificationId) { this.notificationId = notificationId; }
+    public String getChannelCode() { return channelCode; }
+    public void setChannelCode(String channelCode) { this.channelCode = channelCode; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public Long getDuration() { return duration; }
+    public void setDuration(Long duration) { this.duration = duration; }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
 }

@@ -1,6 +1,8 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.domain.SysPermission;
@@ -223,8 +225,9 @@ public class SysPermissionServiceImpl
     }
 
     @Override
-    public List<SysPermissionEntity> list() {
-        return super.list();
+    public IPage<SysPermissionEntity> list(long pageNum, long pageSize) {
+        Page<SysPermissionEntity> page = new Page<>(pageNum, pageSize);
+        return super.page(page);
     }
 
     @Override

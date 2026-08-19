@@ -30,6 +30,13 @@ public class PermissionService {
             a.toString().equals(permission));
     }
 
+    /**
+     * 兼容 @ss.hasPermi('...') SpEL 表达式（别名方法）
+     */
+    public boolean hasPermi(String permission) {
+        return hasPermission(permission);
+    }
+
     public boolean hasAnyPermissions(String permissions) {
         if (permissions == null || permissions.isEmpty()) {
             return false;

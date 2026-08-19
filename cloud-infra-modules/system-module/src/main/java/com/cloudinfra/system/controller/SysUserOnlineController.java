@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,16 +31,20 @@ public class SysUserOnlineController {
     @PreAuthorize("hasAuthority('monitor:online:list')")
     @GetMapping("/list")
     public List<LoginUser> list() {
-        java.util.Set<String> keys = redisTemplate.keys("auth:session:*");
+        String pattern = "auth:session:*";
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        try (var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        }
         List<LoginUser> userOnlineList = new ArrayList<>();
-        if (keys != null) {
-            for (String key : keys) {
-                LoginUser user = (LoginUser) redisTemplate
-                    .opsForValue()
-                    .get(key);
-                if (user != null) {
-                    userOnlineList.add(user);
-                }
+        for (String key : keys) {
+            LoginUser user = (LoginUser) redisTemplate
+                .opsForValue()
+                .get(key);
+            if (user != null) {
+                userOnlineList.add(user);
             }
         }
         return userOnlineList;

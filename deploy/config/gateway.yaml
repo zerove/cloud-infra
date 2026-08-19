@@ -19,50 +19,100 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         enabled: true
       config:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         import-check:
           enabled: false
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
       server:
         webmvc:
-          routes:
-          - id: system-module
-            uri: lb://system-module
-            predicates:
-              - Path=/system/**
-            filters:
-              - stripPrefix=1
-          - id: auth-service
-            uri: lb://cloud-auth
-            predicates:
-              - Path=/auth/**
-          - id: file-service
-            uri: lb://file-service
-            predicates:
-              - Path=/file/**
-            filters:
-              - stripPrefix=1
-          - id: notification-service
-            uri: lb://notification-service
-            predicates:
-              - Path=/notification/**
-            filters:
-              - stripPrefix=1
-          - id: search-service
-            uri: lb://search-service
-            predicates:
-              - Path=/search/**
-            filters:
-              - stripPrefix=1
+          # 路由由 GatewayApplication.java 函数式 DSL 定义，此处不再配置
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:cloud-redis}
+      port: 6379
+      database: 0
+      # Redisson 连接池优化：减少启动期连接风暴
+      redisson:
+        client:
+          single-server:
+            connection-pool-size: 8
+            connection-minimum-idle-size: 2
+            idle-connection-timeout: 10000
+            connect-timeout: 5000
+            timeout: 5000
+            retry-attempts: 3
+            retry-interval: 1000
+            subscriptions-per-connection: 5
   config:
     import:
       - optional:nacos:gateway.yaml
       - optional:nacos:actuator-config.yaml
       - optional:nacos:auth-white-list.yaml
+
+management:
+  server:
+    port: 9301
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: health,info,prometheus,metrics,env,beans,conditions,refresh
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      endpoint: http://otel-collector:4317
+
+# Resilience4j 弹性设计配置
+resilience4j:
+  circuitbreaker:
+    failure-rate-threshold: 50
+    slow-call-rate-threshold: 80
+    slow-call-duration-threshold-ms: 2000
+    sliding-window-count-based: true
+    sliding-window-size: 100
+    minimum-number-of-calls: 10
+    permitted-calls-in-half-open: 10
+    wait-duration-in-open-state-ms: 30000
+    record-exceptions:
+      - java.io.IOException
+      - java.util.concurrent.TimeoutException
+      - org.springframework.web.client.ResourceAccessException
+  ratelimiter:
+    limit-refresh-period-ms: 1000
+    limit-for-period: 100
+    timeout-duration-ms: 500
+  retry:
+    max-attempts: 3
+    wait-duration-ms: 500
+    exponential-backoff: true
+    exponential-multiplier: 2.0
+    retry-exceptions:
+      - java.io.IOException
+      - java.util.concurrent.TimeoutException
+    ignore-exceptions:
+      - java.lang.IllegalArgumentException
+      - java.lang.IllegalStateException
+  bulkhead:
+    max-concurrent-calls: 50
+    max-wait-duration-ms: 1000
+
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
+
+# 内部服务间调用签名密钥（生产必须通过 INTERNAL_CALL_SECRET 注入外置强密钥）
+cloud-infra:
+  internal-call:
+    secret: ${INTERNAL_CALL_SECRET:}

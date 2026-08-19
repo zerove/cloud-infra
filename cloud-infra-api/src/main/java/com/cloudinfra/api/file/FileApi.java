@@ -1,5 +1,7 @@
 package com.cloudinfra.api.file;
 
+import com.cloudinfra.api.file.FileApi;
+import com.cloudinfra.api.file.fallback.FileApiFallbackFactory;
 import com.cloudinfra.api.file.dto.FileInfoResponse;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.api.file.dto.FileUploadRequest;
@@ -18,7 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-@FeignClient(name = "file-service")
+@FeignClient(name = "file-service", fallbackFactory = FileApiFallbackFactory.class)
 public interface FileApi {
     /**
      * 上传文件

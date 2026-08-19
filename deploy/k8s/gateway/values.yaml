@@ -199,7 +199,7 @@ configMap:
           web:
             base-path: /management
             exposure:
-              include: "*"
+              include: health,info,prometheus,metrics,env,beans,conditions,refresh
         tracing:
           sampling:
             probability: 1.0
@@ -221,3 +221,6 @@ serviceMonitor:
   scrapeTimeout: 10s
 networkPolicy:
   allowExternal: false
+pdb:
+  enabled: true
+  minAvailable: 1

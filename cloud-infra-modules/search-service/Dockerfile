@@ -9,7 +9,7 @@ COPY target/*.jar app.jar
 RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
-ENV JAVA_OPTS="-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
+ENV JAVA_OPTS="-XX:+UseZGC -Xms512m -Xmx512m -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
 
 # shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
 ENTRYPOINT ["/bin/sh", "-c", "exec java ${JAVA_OPTS} -jar app.jar"]

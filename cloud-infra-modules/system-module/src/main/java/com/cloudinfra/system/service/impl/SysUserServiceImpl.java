@@ -19,7 +19,6 @@ import com.cloudinfra.system.exception.SystemBusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import io.seata.spring.annotation.GlobalTransactional;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -80,7 +79,7 @@ public class SysUserServiceImpl implements ISysUserService {
 
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertUser(SysUserCreateDTO userDTO) {
         // 1. 业务唯一性校验
         if (selectUserByUsername(userDTO.getUsername()) != null) {
@@ -104,7 +103,7 @@ public class SysUserServiceImpl implements ISysUserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int registerUser(com.cloudinfra.api.system.dto.RegisterUserDTO userDTO) {
         // 业务唯一性校验
         if (selectUserByUsername(userDTO.getUsername()) != null) {
@@ -125,7 +124,7 @@ public class SysUserServiceImpl implements ISysUserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateUser(SysUserUpdateDTO userDTO) {
         SysUser user = new SysUser();
         user.setUserId(userDTO.getUserId());
@@ -139,13 +138,13 @@ public class SysUserServiceImpl implements ISysUserService {
         return userMapper.updateById(user);
     }
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteUserByIds(Long[] userIds) {
         return userMapper.deleteBatchIds(List.of(userIds));
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int resetUserPassword(Long userId, String password) {
         SysUser user = new SysUser();
         user.setUserId(userId);
@@ -153,16 +152,4 @@ public class SysUserServiceImpl implements ISysUserService {
         return userMapper.updateById(user);
     }
 
-    @GlobalTransactional(rollbackFor = Exception.class)
-    public void verifySeataTransaction(Long userId, String newNickName) {
-        // 1. 第一次更新
-        SysUser user = new SysUser();
-        user.setUserId(userId);
-        user.setNickName(newNickName);
-        userMapper.updateById(user);
-
-        // 2. 模拟故障抛出异常
-        throw new RuntimeException("Seata Verification Failure");
     }
-
-}

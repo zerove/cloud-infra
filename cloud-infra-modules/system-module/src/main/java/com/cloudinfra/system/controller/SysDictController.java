@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,7 +47,7 @@ public class SysDictController {
     @PreAuthorize("hasAuthority('system:dict:add')")
     @AuditLog(module = "DICT_TYPE", action = "ADD")
     @PostMapping("/type")
-    public Result<Void> addType(@RequestBody SysDictType dictType) {
+    public Result<Void> addType(@Valid @RequestBody SysDictType dictType) {
         dictService.insertDictType(dictType);
         return Result.success();
     }
@@ -55,7 +56,7 @@ public class SysDictController {
     @PreAuthorize("hasAuthority('system:dict:edit')")
     @AuditLog(module = "DICT_TYPE", action = "EDIT")
     @PutMapping("/type")
-    public Result<Void> editType(@RequestBody SysDictType dictType) {
+    public Result<Void> editType(@Valid @RequestBody SysDictType dictType) {
         dictService.updateDictType(dictType);
         return Result.success();
     }
@@ -70,6 +71,7 @@ public class SysDictController {
     }
 
     @Operation(summary = "根据字典类型查询字典数据")
+    @PreAuthorize("hasAuthority('system:dict:query')")
     @GetMapping("/data/type/{dictType}")
     public List<SysDictData> dictDataByType(@PathVariable String dictType) {
         return dictService.selectDictDataByType(dictType);
@@ -79,7 +81,7 @@ public class SysDictController {
     @PreAuthorize("hasAuthority('system:dict:add')")
     @AuditLog(module = "DICT_DATA", action = "ADD")
     @PostMapping("/data")
-    public Result<Void> addData(@RequestBody SysDictData dictData) {
+    public Result<Void> addData(@Valid @RequestBody SysDictData dictData) {
         dictService.insertDictData(dictData);
         return Result.success();
     }
@@ -88,7 +90,7 @@ public class SysDictController {
     @PreAuthorize("hasAuthority('system:dict:edit')")
     @AuditLog(module = "DICT_DATA", action = "EDIT")
     @PutMapping("/data")
-    public Result<Void> editData(@RequestBody SysDictData dictData) {
+    public Result<Void> editData(@Valid @RequestBody SysDictData dictData) {
         dictService.updateDictData(dictData);
         return Result.success();
     }

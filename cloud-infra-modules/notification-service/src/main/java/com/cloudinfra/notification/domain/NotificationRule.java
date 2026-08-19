@@ -58,4 +58,26 @@ public class NotificationRule {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    // Manual getters/setters for Lombok compatibility
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getDeviceId() { return deviceId; }
+    public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
+    public String getMetric() { return metric; }
+    public void setMetric(String metric) { this.metric = metric; }
+    public String getOperator() { return operator; }
+    public void setOperator(String operator) { this.operator = operator; }
+    public Double getThreshold() { return threshold; }
+    public void setThreshold(Double threshold) { this.threshold = threshold; }
+    public String getTemplateCode() { return templateCode; }
+    public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
+    public Long getTargetUserId() { return targetUserId; }
+    public void setTargetUserId(Long targetUserId) { this.targetUserId = targetUserId; }
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public LocalDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public LocalDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
 }

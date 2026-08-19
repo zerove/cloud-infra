@@ -93,7 +93,7 @@ spring:
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:
-    secret: ${AUTH_JWT_SECRET:sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+    secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
     algorithm: ${AUTH_JWT_ALGORITHM:HS256}
     cache:
@@ -108,4 +108,4 @@ auth:
 # 内部服务间调用签名密钥（生产必须通过 INTERNAL_CALL_SECRET 注入外置强密钥）
 cloud-infra:
   internal-call:
-    secret: ${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}
+    secret: ${INTERNAL_CALL_SECRET:}

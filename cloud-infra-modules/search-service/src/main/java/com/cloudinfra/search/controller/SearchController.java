@@ -13,6 +13,7 @@ import com.cloudinfra.search.service.UnifiedSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,6 +42,7 @@ public class SearchController implements SearchApi {
      * 统一联邦搜索接口 - 全平台资源一键检索
      */
     @Operation(summary = "统一联邦搜索")
+    @PreAuthorize("@ss.hasPermi('search:unified')")
     @GetMapping("/unified")
     public Result<List<UnifiedSearchResult>> unifiedSearch(
             @RequestParam(value = "q", required = true) String q,
@@ -53,6 +55,7 @@ public class SearchController implements SearchApi {
      */
     @Override
     @Operation(summary = "搜索操作日志")
+    @PreAuthorize("@ss.hasPermi('search:operlog')")
     @GetMapping("/operlog")
     public Result<SearchResponse<OperLogDTO>> searchOperLog(
         SearchRequest request
@@ -64,6 +67,7 @@ public class SearchController implements SearchApi {
      * 查询设备遥测历史
      */
     @Operation(summary = "查询设备遥测历史")
+    @PreAuthorize("@ss.hasPermi('search:telemetry')")
     @GetMapping("/iot/telemetry/{deviceId}")
     public Result<List<DeviceTelemetryDocument>> getTelemetryHistory(
             @PathVariable String deviceId,

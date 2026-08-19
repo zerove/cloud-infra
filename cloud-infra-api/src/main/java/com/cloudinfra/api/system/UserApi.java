@@ -1,5 +1,7 @@
 package com.cloudinfra.api.system;
 
+import com.cloudinfra.api.system.UserApi;
+import com.cloudinfra.api.system.fallback.UserApiFallbackFactory;
 import com.cloudinfra.api.system.dto.UserDTO;
 import com.cloudinfra.common.core.domain.Result;
 import java.util.List;
@@ -15,7 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
  * @author cloud-infra
  */
 @Tag(name = "用户RPC接口")
-@FeignClient(name = "system-module", contextId = "userApi")
+@FeignClient(name = "system-module", contextId = "userApi", fallbackFactory = UserApiFallbackFactory.class)
 public interface UserApi {
     /**
      * 根据ID获取用户信息

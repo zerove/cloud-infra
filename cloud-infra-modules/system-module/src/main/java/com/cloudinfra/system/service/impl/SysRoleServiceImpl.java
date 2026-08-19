@@ -54,7 +54,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int insertRole(SysRoleCreateDTO roleDTO) {
         if (this.getOne(new LambdaQueryWrapper<SysRole>().eq(SysRole::getRoleKey, roleDTO.getRoleKey())) != null) {
             throw new SystemBusinessException("角色编码 [" + roleDTO.getRoleKey() + "] 已存在");
@@ -70,7 +70,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
     
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int updateRole(SysRoleUpdateDTO roleDTO) {
         SysRole role = roleConverter.updateDtoToEntity(roleDTO);
         updateById(role);
@@ -83,13 +83,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public int deleteRoleByIds(Long[] roleIds) {
-        for (Long roleId : roleIds) {
-            roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().eq(SysRoleMenu::getRoleId, roleId));
-            roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().eq(SysRoleDept::getRoleId, roleId));
-        }
-        return removeByIds(List.of(roleIds)) ? 1 : 0;
+        List<Long> idList = List.of(roleIds);
+        roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().in(SysRoleMenu::getRoleId, idList));
+        roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().in(SysRoleDept::getRoleId, idList));
+        return removeByIds(idList) ? 1 : 0;
     }
 
     private List<SysRoleMenu> buildMenuRelations(SysRole role) {

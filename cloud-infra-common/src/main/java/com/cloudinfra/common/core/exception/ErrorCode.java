@@ -12,7 +12,9 @@ public enum ErrorCode {
     NOT_FOUND(1004, "请求资源不存在"),
     NO_PERMISSION(1005, "无操作权限"),
     RESOURCE_NOT_FOUND(1006, "资源不存在"),
-    RESOURCE_EXHAUSTED(1007, "资源耗尽，配额已用完");
+    RESOURCE_EXHAUSTED(1007, "资源耗尽，配额已用完"),
+    CONCURRENT_CONFLICT(1008, "数据已被修改，请刷新重试"),
+    DATA_CONFLICT(1009, "数据冲突，可能违反唯一约束或外键约束");
 
     private final Integer code;
     private final String message;

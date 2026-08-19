@@ -12,7 +12,9 @@ import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.cloudinfra.api")
-@SpringBootApplication(scanBasePackages = "com.cloudinfra")
+@SpringBootApplication(
+    scanBasePackages = "com.cloudinfra"
+)
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, MybatisPlusConfig.class, PasswordEncoderConfig.class})
 public class FileApplication {
     public static void main(String[] args) {

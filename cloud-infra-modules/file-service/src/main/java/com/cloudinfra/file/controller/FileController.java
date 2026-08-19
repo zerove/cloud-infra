@@ -1,5 +1,7 @@
 package com.cloudinfra.file.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.cloudinfra.api.file.dto.FileVersion;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
@@ -25,15 +27,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.List;
 
 @Tag(name = "文件管理")
-@Slf4j
 @RestController
 @RequestMapping("/file")
 @RequiredArgsConstructor
 public class FileController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FileController.class);
     private final IFileService fileService;
     private final FileValidator fileValidator;
     private final FilePermissionService permissionService;
@@ -65,7 +71,7 @@ public class FileController {
             return Result.fail(400, e.getMessage());
         } catch (Exception e) {
             log.error("文件上传失败", e);
-            return Result.fail(500, "文件上传失败: " + e.getMessage());
+            return Result.fail(500, "文件上传失败");
         }
     }
 
@@ -82,25 +88,6 @@ public class FileController {
             return securityUserId;
         }
         throw new IllegalArgumentException("未认证的用户无法访问文件服务");
-    }
-
-    @Operation(summary = "下载文件")
-    @GetMapping("/download/{fileId}")
-    public ResponseEntity<Resource> download(@PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
-        try {
-            Long userId = resolveUserId(requestUserId);
-            InputStream is = fileService.download(fileId, userId);
-            return ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(new InputStreamResource(is));
-        } catch (IllegalArgumentException e) {
-            log.warn("文件下载未认证: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
-            log.error("文件下载失败: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
     }
 
     @Operation(summary = "更新文件（创建新版本）")
@@ -123,22 +110,51 @@ public class FileController {
             return Result.fail(400, e.getMessage());
         } catch (Exception e) {
             log.error("文件更新失败", e);
-            return Result.fail(500, "文件更新失败: " + e.getMessage());
+            return Result.fail(500, "文件更新失败");
+        }
+    }
+
+    @Operation(summary = "下载文件")
+    @GetMapping("/download/{fileId}")
+    public ResponseEntity<StreamingResponseBody> download(@PathVariable Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+        try {
+            Long userId = resolveUserId(requestUserId);
+            InputStream is = fileService.download(fileId, userId);
+            StreamingResponseBody responseBody = outputStream -> {
+                try (is) {
+                    is.transferTo(outputStream);
+                }
+            };
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(responseBody);
+        } catch (IllegalArgumentException e) {
+            log.warn("文件下载未认证: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        } catch (Exception e) {
+            log.error("文件下载失败: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
     }
 
     @Operation(summary = "下载指定版本文件")
     @GetMapping("/download/{fileId}/version/{version}")
-    public ResponseEntity<Resource> downloadVersion(
+    public ResponseEntity<StreamingResponseBody> downloadVersion(
             @PathVariable Long fileId,
             @PathVariable Integer version,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
         try {
             Long userId = resolveUserId(requestUserId);
             InputStream is = fileService.downloadVersion(fileId, version, userId);
+            StreamingResponseBody responseBody = outputStream -> {
+                try (is) {
+                    is.transferTo(outputStream);
+                }
+            };
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(new InputStreamResource(is));
+                    .body(responseBody);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
@@ -149,47 +165,43 @@ public class FileController {
 
     @Operation(summary = "获取文件版本历史")
     @GetMapping("/history/{fileId}")
-    public Result<java.util.List<com.cloudinfra.file.domain.FileVersion>> history(
-            @PathVariable Long fileId,
+    public Result<List<FileVersion>> history(@PathVariable Long fileId,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
         try {
             Long userId = resolveUserId(requestUserId);
-            // 读取版本历史需 READ 权限
             if (!permissionService.hasAccess(userId, fileId, "READ")) {
-                return Result.fail(403, "无权查看该文件的版本历史");
+                return Result.fail(403, "无权限查看版本历史");
             }
-            return Result.success(fileService.getVersionHistory(fileId));
+            List<com.cloudinfra.file.domain.FileVersion> domainVersions = fileService.getVersionHistory(fileId);
+            List<FileVersion> dtoVersions = domainVersions.stream()
+                .map(v -> {
+                    FileVersion dto = new FileVersion();
+                    dto.setId(v.getId());
+                    dto.setFileId(v.getFileId());
+                    dto.setVersionNumber(v.getVersionNumber());
+                    dto.setStoragePath(v.getStoragePath());
+                    dto.setCreateTime(v.getCreateTime());
+                    return dto;
+                })
+                .collect(java.util.stream.Collectors.toList());
+            return Result.success(dtoVersions);
         } catch (IllegalArgumentException e) {
-            return Result.fail(401, e.getMessage());
-        }
-    }
-
-    @Operation(summary = "删除文件")
-    @DeleteMapping("/delete/{fileId}")
-    public Result<Void> delete(
-            @PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
-        try {
-            Long userId = resolveUserId(requestUserId);
-            // 权限校验在服务层完成（含上传者 OWNER 放行）
-            if (fileService.delete(fileId, userId)) {
-                return Result.success();
-            }
-            return Result.fail(500, "文件删除失败");
-        } catch (IllegalArgumentException e) {
-            return Result.fail(401, e.getMessage());
+            return Result.fail(400, e.getMessage());
         } catch (Exception e) {
-            log.error("文件删除失败: {}", e.getMessage());
-            return Result.fail(403, "无权删除该文件");
+            log.error("获取版本历史失败", e);
+            return Result.fail(500, "获取版本历史失败");
         }
     }
 
     @Operation(summary = "根据关键词搜索文件")
     @GetMapping("/search")
-    public Result<java.util.List<FileMetadataVO>> search(@RequestParam String keyword) {
+    public Result<IPage<FileMetadataVO>> search(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "1") long pageNum,
+            @RequestParam(defaultValue = "10") long pageSize) {
         if (keyword == null || keyword.isBlank()) {
             return Result.fail(400, "搜索关键词不能为空");
         }
-        return Result.success(fileService.searchFiles(keyword.trim()));
+        return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
     }
 }

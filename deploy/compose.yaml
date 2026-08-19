@@ -16,6 +16,8 @@ services:
   # ========== 注册中心 & 配置中心 ==========
   nacos:
     image: nacos/nacos-server:v3.2.3
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-nacos
     mem_limit: 768m
     ports:
@@ -53,6 +55,8 @@ services:
   # ========== 数据库 ==========
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-postgres
     mem_limit: 512m
     ports:
@@ -60,7 +64,7 @@ services:
     environment:
       POSTGRES_DB: cloud_infra
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
@@ -75,6 +79,8 @@ services:
   # ========== 缓存 ==========
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-redis
     mem_limit: 256m
     ports:
@@ -93,14 +99,16 @@ services:
   # ========== 消息队列 ==========
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-rabbitmq
     mem_limit: 512m
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER 必须在 .env 中设置}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS 必须在 .env 中设置}
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
     networks:
@@ -115,6 +123,8 @@ services:
   # ========== 搜索引擎 ==========
   elasticsearch:
     image: elasticsearch:9.0.2
+    restart: unless-stopped
+    stop_grace_period: 60s
     container_name: cloud-elasticsearch
     mem_limit: 1g
     ports:
@@ -145,6 +155,8 @@ services:
   # ========== 监控 ==========
   prometheus:
     image: prom/prometheus:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-prometheus
     mem_limit: 512m
     ports:
@@ -169,6 +181,8 @@ services:
 
   alertmanager:
     image: prom/alertmanager:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-alertmanager
     mem_limit: 128m
     ports:
@@ -188,6 +202,8 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-grafana
     mem_limit: 384m
     ports:
@@ -216,6 +232,8 @@ services:
   # ========== 日志集中 ==========
   loki:
     image: grafana/loki:3.4.2
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-loki
     mem_limit: 384m
     ports:
@@ -236,6 +254,8 @@ services:
 
   promtail:
     image: grafana/promtail:3.4.2
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-promtail
     mem_limit: 256m
     environment:
@@ -260,6 +280,8 @@ services:
   # ========== 链路追踪 ==========
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-otel-collector
     mem_limit: 256m
     ports:
@@ -281,6 +303,8 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-jaeger
     mem_limit: 512m
     ports:
@@ -301,6 +325,8 @@ services:
   # ========== 限流熔断控制台 ==========
   sentinel:
     image: bladex/sentinel-dashboard:1.8.9
+    restart: unless-stopped
+    stop_grace_period: 30s
     container_name: cloud-sentinel
     mem_limit: 256m
     ports:
@@ -341,7 +367,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -379,7 +405,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -418,7 +444,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx512m -Xms256m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -427,7 +453,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8082/management/health/readiness || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       # 宽松探针: 应用启动需数分钟, 就绪前频繁探测会触发并发类加载(与 Nacos 注册抢 fat jar 锁)导致死锁
       interval: 10s
       timeout: 5s
@@ -459,7 +485,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -499,7 +525,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -539,7 +565,7 @@ services:
       JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -570,8 +596,8 @@ services:
       - "9010:9000"
       - "9011:9001"
     environment:
-      MINIO_ROOT_USER: minio-dev-user
-      MINIO_ROOT_PASSWORD: minio-dev-secret-12345678
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 必须在 .env 中设置}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 必须在 .env 中设置}
     command: server /data --console-address ":9001"
     volumes:
       - miniodata:/data

@@ -130,7 +130,8 @@ public class AuthEvaluator {
             return AuthResult.success(new Identity(userId, username));
 
         } catch (Exception e) {
-            return AuthResult.failure(AuthStatus.UNAUTHORIZED, "Token validation failed: " + e.getMessage());
+            log.debug("Token validation failed", e);
+            return AuthResult.failure(AuthStatus.UNAUTHORIZED, "Token validation failed");
         }
     }
 

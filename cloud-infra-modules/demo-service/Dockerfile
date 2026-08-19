@@ -8,6 +8,9 @@ RUN mvn clean package -DskipTests
 # 运行阶段
 FROM eclipse-temurin:25-jre
 WORKDIR /app
+RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra
+RUN chown -R cloudinfra:cloudinfra /app
+USER cloudinfra
 COPY --from=build /build/target/*.jar app.jar
 EXPOSE 8099
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseZGC", "-Xmx512m", "-XX:+UseContainerSupport", "-jar", "app.jar"]

@@ -1,12 +1,13 @@
 package com.cloudinfra.system.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.system.domain.SysPermissionEntity;
 import com.cloudinfra.common.domain.SysPermission;
 import java.util.List;
 import java.util.Map;
 
 public interface ISysPermissionService {
-    List<SysPermissionEntity> list();
+    IPage<SysPermissionEntity> list(long pageNum, long pageSize);
     boolean save(SysPermissionEntity entity);
     List<SysPermission> getPermissionsByRoleId(Long roleId);
     

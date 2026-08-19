@@ -1,5 +1,6 @@
 package com.cloudinfra.file.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileVersion;
@@ -30,7 +31,7 @@ public interface IFileService {
     /**
      * 根据关键词搜索文件
      */
-    List<FileMetadataVO> searchFiles(String keyword);
+    IPage<FileMetadataVO> searchFiles(String keyword, long pageNum, long pageSize);
 
     boolean delete(Long fileId, Long userId);
 }
