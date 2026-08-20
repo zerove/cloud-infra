@@ -7,6 +7,7 @@ import com.cloudinfra.system.mapper.SysDictDataMapper;
 import com.cloudinfra.system.mapper.SysDictTypeMapper;
 import com.cloudinfra.system.service.ISysDictService;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
@@ -125,8 +126,8 @@ public class SysDictServiceImpl implements ISysDictService {
     @Override
     public void clearDictCache() {
         String pattern = CACHE_KEY_PREFIX + "*";
-        java.util.Set<String> keys = new java.util.HashSet<>();
-        try (var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).build())) {
+        Set<String> keys = new java.util.HashSet<>();
+        try (var cursor = redisTemplate.scan(ScanOptions.scanOptions().match(pattern).build())) {
             while (cursor.hasNext()) {
                 keys.add(cursor.next());
             }

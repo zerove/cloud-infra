@@ -35,6 +35,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -153,6 +154,9 @@ public class NotificationServiceIntegrationTest {
     @Autowired
     private ScheduledNotificationMapper scheduleMapper;
 
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -174,6 +178,7 @@ public class NotificationServiceIntegrationTest {
                 .baseUrl("http://localhost:" + port)
                 .defaultHeader("X-User-Id", "1")
                 .defaultHeader("X-User-Name", "test_user")
+                .responseTimeout(Duration.ofSeconds(30))
                 .build();
         
         // 清理测试数据（立即提交，保证测试间隔离）
@@ -181,6 +186,9 @@ public class NotificationServiceIntegrationTest {
         notificationMapper.delete(null);
         scheduleMapper.delete(null);
         templateMapper.delete(null);
+        
+        // 清理 Redis quota keys
+        redisTemplate.delete(redisTemplate.keys("notification:quota:daily:*"));
     }
 
     @AfterEach

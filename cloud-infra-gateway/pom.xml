@@ -269,7 +269,7 @@
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
                         <configuration>
-                            <skip>true</skip>
+                            <skip>false</skip>
                             <imageName>cloud-infra-gateway-binary</imageName>
                             <mainClass>com.cloudinfra.gateway.GatewayApplication</mainClass>
                             <fallback>false</fallback>

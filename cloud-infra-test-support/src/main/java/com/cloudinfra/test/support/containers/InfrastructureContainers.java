@@ -52,7 +52,7 @@ public class InfrastructureContainers {
 
     /** Elasticsearch - 并行启动（内存密集，建议按需启用） */
     @Container
-    public static final ElasticsearchContainer ELASTICSEARCH = new ElasticsearchContainer(DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.15.0"))
+    public static final ElasticsearchContainer ELASTICSEARCH = new ElasticsearchContainer(DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:9.0.3"))
         .withEnv("discovery.type", "single-node")
         .withEnv("xpack.security.enabled", "false")
         .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")

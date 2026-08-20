@@ -10,7 +10,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
@@ -158,7 +160,10 @@ public class SysDictServiceImplTest {
 
     @Test
     void shouldClearAllDictCache() {
-        when(redisTemplate.keys("sys:dict:*")).thenReturn(Set.of("sys:dict:a", "sys:dict:b"));
+        Cursor<String> cursor = org.mockito.Mockito.mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(true, true, false);
+        when(cursor.next()).thenReturn("sys:dict:a").thenReturn("sys:dict:b");
+        when(redisTemplate.scan(any(ScanOptions.class))).thenReturn(cursor);
 
         dictService.clearDictCache();
 
@@ -167,7 +172,9 @@ public class SysDictServiceImplTest {
 
     @Test
     void shouldSkipDeleteWhenNoCacheKeys() {
-        when(redisTemplate.keys("sys:dict:*")).thenReturn(Set.of());
+        Cursor<String> cursor = org.mockito.Mockito.mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(false);
+        when(redisTemplate.scan(any(ScanOptions.class))).thenReturn(cursor);
 
         dictService.clearDictCache();
 

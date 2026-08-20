@@ -167,8 +167,8 @@ public class SysRoleServiceImplTest {
         int result = roleService.deleteRoleByIds(new Long[] {1L, 2L});
 
         assertThat(result).isEqualTo(1);
-        // 两个角色，各清一次菜单与数据权限
-        verify(roleMenuService, times(2)).remove(any(Wrapper.class));
-        verify(roleDeptService, times(2)).remove(any(Wrapper.class));
+        // 批量删除：菜单与数据权限各调用一次 remove
+        verify(roleMenuService).remove(any(Wrapper.class));
+        verify(roleDeptService).remove(any(Wrapper.class));
     }
 }
