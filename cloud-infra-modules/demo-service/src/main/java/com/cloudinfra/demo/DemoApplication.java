@@ -10,10 +10,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableTransactionManagement
 @SpringBootApplication(scanBasePackages = {"com.cloudinfra"})
-@org.springframework.boot.autoconfigure.EnableAutoConfiguration(exclude = {
-    io.github.resilience4j.springboot3.verifier.autoconfigure.SpringBoot3VerifierAutoConfiguration.class,
-    org.springframework.cloud.stream.config.BindingServiceConfiguration.class
-})
 public class DemoApplication {
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);

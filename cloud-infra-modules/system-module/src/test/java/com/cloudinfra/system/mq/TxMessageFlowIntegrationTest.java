@@ -17,10 +17,12 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 import java.util.List;
@@ -35,7 +37,11 @@ import static org.awaitility.Awaitility.await;
  * 验证：StreamBridge → RabbitMQ → TxMessageConsumer → 成功/失败 → DLQ
  */
 @ExtendWith(SpringExtension.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
+        "auth.jwt.secret=test-secret-key-for-testing-min-32-chars-long-enough",
+        "spring.cloud.nacos.config.enabled=false",
+        "spring.cloud.nacos.discovery.enabled=false"
+})
 @ActiveProfiles("test")
 @Testcontainers
 // MQ 全链路需要真实提交：基类 @Transactional（回滚）会让消费者线程读不到未提交数据
@@ -56,6 +62,11 @@ class TxMessageFlowIntegrationTest extends BaseIntegrationTest {
             .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1)
                     .withStartupTimeout(Duration.ofSeconds(180)));
 
+    /** Redis for distributed lock and caching */
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+            .withExposedPorts(6379);
+
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -66,6 +77,8 @@ class TxMessageFlowIntegrationTest extends BaseIntegrationTest {
         registry.add("spring.rabbitmq.port", rabbitmq::getAmqpPort);
         registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
         registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", redis::getFirstMappedPort);
     }
 
     @Autowired

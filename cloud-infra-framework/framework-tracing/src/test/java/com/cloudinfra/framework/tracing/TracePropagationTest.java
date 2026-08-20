@@ -3,6 +3,7 @@ package com.cloudinfra.framework.tracing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.cloudinfra.test.BaseIntegrationTest;
+import io.micrometer.tracing.Tracer;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -10,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.test.context.ActiveProfiles;
@@ -30,9 +32,9 @@ public class TracePropagationTest extends BaseIntegrationTest {
     @org.springframework.context.annotation.ComponentScan
     static class TestConfig {
 
-        @org.springframework.context.annotation.Bean
-        public io.micrometer.tracing.Tracer tracer() {
-            return org.mockito.Mockito.mock(io.micrometer.tracing.Tracer.class);
+        @Bean
+        public Tracer tracer() {
+            return Tracer.NOOP;
         }
     }
 

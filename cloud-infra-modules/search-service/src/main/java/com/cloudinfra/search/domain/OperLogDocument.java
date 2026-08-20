@@ -18,7 +18,7 @@ public class OperLogDocument {
     @Id
     private Long operId;
 
-    @Field(type = FieldType.Text, analyzer = "standard")
+    @Field(type = FieldType.Text, analyzer = "standard", searchAnalyzer = "standard")
     private String title;
 
     @Field(type = FieldType.Integer)

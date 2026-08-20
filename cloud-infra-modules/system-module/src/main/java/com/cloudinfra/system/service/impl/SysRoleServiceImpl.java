@@ -1,6 +1,7 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
@@ -86,8 +87,8 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     @Transactional(rollbackFor = Exception.class)
     public int deleteRoleByIds(Long[] roleIds) {
         List<Long> idList = List.of(roleIds);
-        roleMenuService.remove(new LambdaQueryWrapper<SysRoleMenu>().in(SysRoleMenu::getRoleId, idList));
-        roleDeptService.remove(new LambdaQueryWrapper<SysRoleDept>().in(SysRoleDept::getRoleId, idList));
+        roleMenuService.remove(new QueryWrapper<SysRoleMenu>().in("role_id", idList));
+        roleDeptService.remove(new QueryWrapper<SysRoleDept>().in("role_id", idList));
         return removeByIds(idList) ? 1 : 0;
     }
 

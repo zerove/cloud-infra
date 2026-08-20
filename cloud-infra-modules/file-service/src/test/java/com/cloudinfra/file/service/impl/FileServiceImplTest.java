@@ -1,6 +1,7 @@
 package com.cloudinfra.file.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.domain.FileMetadata;
@@ -194,7 +195,10 @@ class FileServiceImplTest {
         meta.setFileSize(100L);
         meta.setCreateTime(new Date());
 
-        given(metadataMapper.selectList(any())).willReturn(List.of(meta));
+        Page<FileMetadata> page = new Page<>(1, 10);
+        page.setRecords(List.of(meta));
+        page.setTotal(1);
+        given(metadataMapper.selectPage(any(), any())).willReturn(page);
 
         // when
         IPage<FileMetadataVO> results = fileService.searchFiles(keyword, 1, 10);

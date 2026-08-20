@@ -154,7 +154,7 @@
                 <groupId>org.graalvm.buildtools</groupId>
                 <artifactId>native-maven-plugin</artifactId>
                 <configuration>
-                    <skip>true</skip>
+                    <skip>false</skip>
                     <imageName>cloud-infra-auth-binary</imageName>
                     <mainClass>com.cloudinfra.auth.AuthApplication</mainClass>
                     <buildArgs>
