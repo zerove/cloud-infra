@@ -40,6 +40,10 @@
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-common</artifactId>
         </dependency>
@@ -142,6 +146,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.cloudinfra.auth.AuthApplication</mainClass>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -160,6 +167,19 @@
                     <buildArgs>
                         <arg>--initialize-at-build-time=org.redisson.misc.BiHashMap</arg>
                         <arg>--initialize-at-build-time=org.redisson.liveobject.core.RedissonObjectBuilder$CodecMethodRef</arg>
+                        <arg>--initialize-at-build-time=ch.qos.logback</arg>
+                        <arg>--initialize-at-build-time=org.slf4j</arg>
+                        <arg>--initialize-at-build-time=org.apache.logging.log4j</arg>
+                        <arg>--initialize-at-build-time=org.apache.logging.slf4j</arg>
+                        <arg>--initialize-at-build-time=org.springframework.boot.logging.log4j2</arg>
+                        <arg>--initialize-at-run-time=ch.qos.logback.core.joran.action.AppenderRefAction</arg>
+                        <arg>--initialize-at-run-time=ch.qos.logback.core.joran.action.NestedComplexPropertyIA</arg>
+                        <arg>-H:+ReportExceptionStackTraces</arg>
+                        <arg>-H:+AllowVMInspection</arg>
+                        <arg>-H:ReflectionConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/reflect-config.json</arg>
+                        <arg>-H:JNIConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/jni-config.json</arg>
+                        <arg>-H:ResourceConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/resource-config.json</arg>
+                        <arg>-H:SerializationConfigurationFiles=${project.basedir}/src/main/resources/META-INF/native-image/serialization-config.json</arg>
                     </buildArgs>
                 </configuration>
             </plugin>
