@@ -1,0 +1,33 @@
+FROM alpine:3.20
+
+# 安装必要的运行时依赖
+RUN apk add --no-cache \
+    libc6-compat \
+    libstdc++ \
+    zlib \
+    tzdata \
+    ca-certificates
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+
+# 创建非 root 用户
+RUN addgroup -g 1000 -S appgroup && \
+    adduser -u 1000 -S appuser -G appgroup
+
+WORKDIR /app
+
+# 复制 native 二进制文件
+COPY target/cloud-infra-auth-binary /app/application
+
+# 赋予执行权限
+RUN chmod +x /app/application && \
+    chown -R appuser:appgroup /app
+
+USER appuser
+
+# 暴露端口
+EXPOSE 9001
+
+# 启动命令
+ENTRYPOINT ["/app/application"]
