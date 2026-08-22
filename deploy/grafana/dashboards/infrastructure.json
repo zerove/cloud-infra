@@ -1,0 +1,361 @@
+{
+  "dashboard": {
+    "uid": "cloud-infra-infra",
+    "title": "Cloud-Infra Infrastructure Overview",
+    "tags": ["cloud-infra", "infrastructure", "nacos", "redis", "postgres", "rabbitmq", "elasticsearch"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Nacos - Service Registration",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "nacos_naming_service_count",
+            "legendFormat": "Registered Services",
+            "refId": "A"
+          },
+          {
+            "expr": "nacos_naming_instance_count",
+            "legendFormat": "Total Instances",
+            "refId": "B"
+          },
+          {
+            "expr": "nacos_naming_healthy_instance_count",
+            "legendFormat": "Healthy Instances",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [2], "type": "lt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["C", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "2m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "Nacos Instances Unhealthy",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 2,
+        "title": "Nacos - Config Latency",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(nacos_config_latency_seconds_bucket[1m]))",
+            "legendFormat": "p95 Config Latency",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Redis - Memory & Connections",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "redis_memory_used_bytes / redis_memory_max_bytes * 100",
+            "legendFormat": "Memory Usage %",
+            "refId": "A"
+          },
+          {
+            "expr": "redis_connected_clients",
+            "legendFormat": "Connected Clients",
+            "refId": "B"
+          },
+          {
+            "expr": "redis_blocked_clients",
+            "legendFormat": "Blocked Clients",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Memory %"},
+          {"format": "short", "label": "Clients"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Redis - Commands & Hit Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(redis_commands_total[1m])",
+            "legendFormat": "{{command}} - ops/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "redis_keyspace_hits / (redis_keyspace_hits + redis_keyspace_misses) * 100",
+            "legendFormat": "Hit Rate %",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Commands/sec"},
+          {"format": "percentunit", "label": "Hit Rate %"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "PostgreSQL - Connections",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends / pg_settings_max_connections * 100",
+            "legendFormat": "{{datname}} - Connection Usage %",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Connection Usage %"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [85], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "PostgreSQL Connection Exhaustion",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 6,
+        "title": "PostgreSQL - Query Performance",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(pg_stat_database_tup_returned[1m])",
+            "legendFormat": "{{datname}} - Tuples Returned/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_fetched[1m])",
+            "legendFormat": "{{datname}} - Tuples Fetched/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(pg_stat_database_xact_commit[1m])",
+            "legendFormat": "{{datname}} - Commits/sec",
+            "refId": "C"
+          },
+          {
+            "expr": "rate(pg_stat_database_xact_rollback[1m])",
+            "legendFormat": "{{datname}} - Rollbacks/sec",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "RabbitMQ - Queue & Message Rates",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rabbitmq_queue_messages",
+            "legendFormat": "{{queue}} - Messages",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(rabbitmq_queue_messages_publish_total[1m])",
+            "legendFormat": "{{queue}} - Publish/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(rabbitmq_queue_messages_deliver_get_total[1m])",
+            "legendFormat": "{{queue}} - Deliver/sec",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Messages"},
+          {"format": "ops", "label": "Rate"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "RabbitMQ - Connection & Channel",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rabbitmq_connections",
+            "legendFormat": "Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "rabbitmq_channels",
+            "legendFormat": "Channels",
+            "refId": "B"
+          },
+          {
+            "expr": "rabbitmq_queue_consumers",
+            "legendFormat": "{{queue}} - Consumers",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Elasticsearch - Cluster Health",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 32, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "elasticsearch_cluster_health_status",
+            "legendFormat": "Cluster Status",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "options": {"0": {"color": "green", "text": "GREEN"}, "1": {"color": "yellow", "text": "YELLOW"}, "2": {"color": "red", "text": "RED"}}}
+            ]
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Elasticsearch - Indexing Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 6, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(elasticsearch_indices_indexing_index_total[1m])",
+            "legendFormat": "{{index}} - Indexing/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(elasticsearch_indices_search_query_total[1m])",
+            "legendFormat": "{{index}} - Search/sec",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Elasticsearch - Heap & Disk",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 18, "y": 32, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "elasticsearch_jvm_memory_used_bytes{area=\"heap\"} / elasticsearch_jvm_memory_max_bytes{area=\"heap\"} * 100",
+            "legendFormat": "JVM Heap %",
+            "refId": "A"
+          },
+          {
+            "expr": "elasticsearch_fs_total_available_bytes / elasticsearch_fs_total_bytes * 100",
+            "legendFormat": "Disk Free %",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Usage %"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 12,
+        "title": "MinIO - Storage & Requests",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "minio_bucket_usage_total_bytes / minio_bucket_usage_total_bytes + minio_bucket_usage_free_bytes * 100",
+            "legendFormat": "{{bucket}} - Usage %",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(minio_http_requests_total[1m])",
+            "legendFormat": "{{method}} - {{status}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Storage %"},
+          {"format": "ops", "label": "Requests/sec"}
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(nacos_naming_instance_count, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    }
+  },
+  "overwrite": true
+}
