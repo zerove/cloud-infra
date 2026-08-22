@@ -1,0 +1,223 @@
+{
+  "dashboard": {
+    "uid": "cloud-infra-jvm",
+    "title": "Cloud-Infra JVM Metrics",
+    "tags": ["cloud-infra", "jvm", "spring-boot"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Heap Memory Usage",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"} * 100",
+            "legendFormat": "{{instance}} - {{area}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Heap Usage %"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [85], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Heap Usage",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 2,
+        "title": "Non-Heap Memory Usage",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{area=\"nonheap\"} / jvm_memory_max_bytes{area=\"nonheap\"} * 100",
+            "legendFormat": "{{instance}} - {{area}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Non-Heap Usage %"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "GC Pause Duration (G1/ZGC)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_gc_pause_seconds_sum / jvm_gc_pause_seconds_count",
+            "legendFormat": "{{instance}} - avg pause",
+            "refId": "A"
+          },
+          {
+            "expr": "jvm_gc_pause_seconds_max",
+            "legendFormat": "{{instance}} - max pause",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Pause Duration"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.1], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "2m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High GC Pause",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 4,
+        "title": "Thread Count (Virtual + Platform)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_threads_live",
+            "legendFormat": "{{instance}} - live threads",
+            "refId": "A"
+          },
+          {
+            "expr": "jvm_threads_daemon",
+            "legendFormat": "{{instance}} - daemon threads",
+            "refId": "B"
+          },
+          {
+            "expr": "jvm_threads_peak",
+            "legendFormat": "{{instance}} - peak threads",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Thread Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "CPU Usage",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "process_cpu_usage * 100",
+            "legendFormat": "{{instance}} - process CPU %",
+            "refId": "A"
+          },
+          {
+            "expr": "system_cpu_usage * 100",
+            "legendFormat": "{{instance}} - system CPU %",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "CPU Usage %"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Class Loading",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_classes_loaded",
+            "legendFormat": "{{instance}} - loaded",
+            "refId": "A"
+          },
+          {
+            "expr": "jvm_classes_unloaded",
+            "legendFormat": "{{instance}} - unloaded",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Classes"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Virtual Thread Metrics (JDK 25)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "jvm_virtual_threads_started_total",
+            "legendFormat": "{{instance}} - started",
+            "refId": "A"
+          },
+          {
+            "expr": "jvm_virtual_threads_pinned_total",
+            "legendFormat": "{{instance}} - pinned",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(jvm_memory_used_bytes, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    }
+  },
+  "overwrite": true
+}
