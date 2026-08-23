@@ -1,0 +1,3 @@
+mode,module,test,max_rss_mb
+jvm,cloud-infra-gateway,memory,420
+jvm,cloud-infra-auth,memory,456
