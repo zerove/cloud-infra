@@ -24,12 +24,20 @@ public record PlatformPrincipal(
     }
 
     public static class Builder {
+        private static final String SUPPRESS_FIELD_MATCH_METHOD = "PMD.AvoidFieldNameMatchingMethodName";
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private Long userId;
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private String username;
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private String tenantId;
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private Long deptId;
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private Long roleId;
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private Set<String> permissions = Set.of();
+        @SuppressWarnings(SUPPRESS_FIELD_MATCH_METHOD)
         private java.util.Map<String, String> attributes = java.util.Map.of();
 
         public Builder userId(Long userId) {

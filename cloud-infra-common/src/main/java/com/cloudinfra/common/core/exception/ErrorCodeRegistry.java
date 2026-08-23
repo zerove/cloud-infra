@@ -63,6 +63,7 @@ public class ErrorCodeRegistry {
     /**
      * 批量注册枚举中的所有错误码
      */
+    @SuppressWarnings({"PMD.AvoidAccessibilityAlteration", "PMD.EmptyCatchBlock"})
     public void registerEnum(Class<? extends Enum<?>> enumClass) {
         String module = enumClass.getSimpleName().replace("ErrorCode", "").replace("ExceptionCode", "");
         for (Enum<?> constant : enumClass.getEnumConstants()) {

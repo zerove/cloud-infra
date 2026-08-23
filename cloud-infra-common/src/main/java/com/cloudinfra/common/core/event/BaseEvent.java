@@ -9,6 +9,8 @@ import org.springframework.context.ApplicationEvent;
  */
 @Getter
 public abstract class BaseEvent extends ApplicationEvent {
+    private static final long serialVersionUID = 1L;
+
     private final String eventId;
     private final long eventTimestamp;
     private final String sourceService;

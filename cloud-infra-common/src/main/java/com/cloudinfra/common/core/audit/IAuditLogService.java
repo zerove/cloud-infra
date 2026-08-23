@@ -3,6 +3,7 @@ package com.cloudinfra.common.core.audit;
 /**
  * 审计日志服务接口，定义通用持久化标准
  */
+@FunctionalInterface
 public interface IAuditLogService {
     /**
      * 保存审计日志

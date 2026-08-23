@@ -16,6 +16,7 @@ import com.cloudinfra.test.support.containers.InfrastructureContainers;
  * - 不启用容器时，依赖外部基础设施或测试配置（application-test.yml）
  * - 默认事务回滚，保证测试隔离
  */
+@SuppressWarnings("PMD.AbstractClassWithoutAbstractMethod")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @Transactional
