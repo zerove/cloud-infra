@@ -45,7 +45,9 @@ public class TenantContextFilter extends OncePerRequestFilter implements Ordered
 
         if (tenantId != null && !tenantId.isBlank()) {
             TenantContext.setTenantId(tenantId.trim());
-            log.debug("请求租户: {} uri: {}", tenantId, request.getRequestURI());
+            if (log.isDebugEnabled()) {
+                log.debug("请求租户: {} uri: {}", tenantId, request.getRequestURI());
+            }
         } else if (requireTenant) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             response.getWriter().write("Missing required header: " + TENANT_HEADER);

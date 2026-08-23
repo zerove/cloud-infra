@@ -3,12 +3,14 @@ package com.cloudinfra.common.core.exception;
 import lombok.Getter;
 import com.cloudinfra.common.core.enums.ResultCode;
 
+import java.io.Serializable;
+
 /**
  * 全局自定义业务异常
  */
 @Getter
-public class GlobalException extends RuntimeException {
-
+public class GlobalException extends RuntimeException implements Serializable {
+    private static final long serialVersionUID = 1L;
     private final Integer code;
     private final String msg;
 

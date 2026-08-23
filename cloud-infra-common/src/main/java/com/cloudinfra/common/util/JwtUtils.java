@@ -7,6 +7,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -68,10 +69,11 @@ public class JwtUtils {
      * 使用标准 withClaim API，避免 withPayload(Map) 的内部行为不确定性
      */
     public String createToken(Map<String, Object> claims, String subject) {
+        var now = Instant.now();
         var builder = JWT.create()
                 .withSubject(subject)
-                .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + expireTime));
+                .withIssuedAt(Date.from(now))
+                .withExpiresAt(Date.from(now.plusMillis(expireTime)));
 
         for (Map.Entry<String, Object> entry : claims.entrySet()) {
             String key = entry.getKey();

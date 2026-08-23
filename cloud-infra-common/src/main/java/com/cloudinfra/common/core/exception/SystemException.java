@@ -7,6 +7,7 @@ import lombok.Getter;
  * 用于处理不可预见的系统内部错误
  */
 @Getter
+@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class SystemException extends BaseException {
     public SystemException(Integer code, String errorCode, String message) {
         super(code, errorCode, message);

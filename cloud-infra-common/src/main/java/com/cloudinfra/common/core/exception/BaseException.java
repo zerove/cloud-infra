@@ -9,6 +9,7 @@ import java.io.Serializable;
  */
 @Getter
 public abstract class BaseException extends RuntimeException implements Serializable {
+    private static final long serialVersionUID = 1L;
     private final Integer code;
     private final String errorCode;
 
