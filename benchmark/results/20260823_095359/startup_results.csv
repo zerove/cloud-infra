@@ -1,0 +1,5 @@
+mode,module,test,avg,median,min,max
+jvm,cloud-infra-gateway,startup,16942,16615,15323,18799
+jvm,cloud-infra-auth,startup,18382,18270,17580,19190
+native,cloud-infra-gateway,startup,17,13,12,30
+native,cloud-infra-auth,startup,17,15,12,28

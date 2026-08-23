@@ -1,0 +1,17 @@
+=== 系统信息 ===
+Linux DESKTOP-OGR5K69 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux
+
+java version "25.0.1" 2025-10-21 LTS
+Java(TM) SE Runtime Environment Oracle GraalVM 25.0.1+8.1 (build 25.0.1+8-LTS-jvmci-b01)
+Java HotSpot(TM) 64-Bit Server VM Oracle GraalVM 25.0.1+8.1 (build 25.0.1+8-LTS-jvmci-b01, mixed mode, sharing)
+
+               total        used        free      shared  buff/cache   available
+Mem:            19Gi       4.2Gi        10Gi       227Mi       5.3Gi        15Gi
+Swap:           20Gi       2.2Gi        17Gi
+
+CPU(s):                                  6
+On-line CPU(s) list:                     0-5
+Model name:                              Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+Thread(s) per core:                      2
+Core(s) per socket:                      3
+NUMA node0 CPU(s):                       0-5
