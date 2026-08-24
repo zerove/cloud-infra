@@ -39,10 +39,10 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-bootstrap</artifactId>
-        </dependency>
+        <!-- spring-cloud-starter-bootstrap 已移除：Bootstrap 上下文会中断 AOT
+             (process-aot) 的自动配置处理，导致仅生成 29 个 bean 定义类
+             （gateway 为 479 个），运行时报 ServletWebServerFactory 缺失。
+             auth 无 bootstrap.yml，配置导入走 spring.config.import=nacos: -->
         <dependency>
             <groupId>com.cloudinfra</groupId>
             <artifactId>cloud-infra-common</artifactId>
