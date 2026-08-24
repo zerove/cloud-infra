@@ -22,7 +22,20 @@
         <module>notification-service</module>
         <module>file-service</module>
         <module>search-service</module>
-        <module>demo-service</module>
     </modules>
+
+    <!--
+      demo-service 仅作为新服务脚手架模板保留（健康检查/whoami 示例），
+      不参与默认构建与测试；需要时用 -Pwith-demo 显式激活：
+        mvn clean package -Pwith-demo -pl cloud-infra-modules/demo-service -am
+    -->
+    <profiles>
+        <profile>
+            <id>with-demo</id>
+            <modules>
+                <module>demo-service</module>
+            </modules>
+        </profile>
+    </profiles>
 
 </project>
