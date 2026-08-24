@@ -17,4 +17,6 @@ public class SysUserUpdateDTO {
     private Long postId;
     private String email;
     private String phoneNumber;
+    /** 帐号状态（0正常 1停用），停用将立即吊销该用户全部会话 */
+    private Integer status;
 }
