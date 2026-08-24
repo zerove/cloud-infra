@@ -1,0 +1,42 @@
+[
+  {
+    "name": "com.cloudinfra.auth.domain.AuthUser",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.core.userdetails.User",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.oauth2.core.OAuth2AccessToken",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.oauth2.core.oidc.OidcIdToken",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "io.jsonwebtoken.Claims",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "io.jsonwebtoken.Jwt",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "com.alibaba.nacos.api.config.ConfigService",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "com.alibaba.nacos.api.naming.NamingService",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  }
+]

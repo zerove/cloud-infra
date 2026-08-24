@@ -2,6 +2,7 @@
 **/target/
 **/target-*/
 META-INF/
+!**/src/**/META-INF/
 *.bak
 # Deploy artifacts (local builds)
 deploy/app.jar
