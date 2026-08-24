@@ -31,7 +31,7 @@ sentinel:
   datasource:
     flow:
       nacos:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         data-id: cloud-infra-gateway-sentinel-flow
         group-id: DEFAULT_GROUP
         data-type: json
@@ -39,7 +39,7 @@ sentinel:
         enabled: true
     degrade:
       nacos:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         data-id: cloud-infra-gateway-sentinel-degrade
         group-id: DEFAULT_GROUP
         data-type: json
@@ -47,7 +47,7 @@ sentinel:
         enabled: true
     param-flow:
       nacos:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         data-id: cloud-infra-gateway-sentinel-param-flow
         group-id: DEFAULT_GROUP
         data-type: json
@@ -55,7 +55,7 @@ sentinel:
         enabled: true
     system:
       nacos:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         data-id: cloud-infra-gateway-sentinel-system
         group-id: DEFAULT_GROUP
         data-type: json
@@ -63,7 +63,7 @@ sentinel:
         enabled: true
     authority:
       nacos:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_ADDR:cloud-nacos:8848}
         data-id: cloud-infra-gateway-sentinel-authority
         group-id: DEFAULT_GROUP
         data-type: json
