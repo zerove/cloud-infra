@@ -37,6 +37,7 @@ public class SysUserServiceImpl implements ISysUserService {
     private final ISysConfigService configService;
     private final ISysPermissionService permissionService;
     private final RedisService redisService;
+    private final UserSessionRevoker sessionRevoker;
 
     /** 与 RBACServiceImpl 共用的权限刷新频道（下游 PermissionCacheRefreshListener 订阅） */
     private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
@@ -139,11 +140,16 @@ public class SysUserServiceImpl implements ISysUserService {
         user.setPostId(userDTO.getPostId());
         user.setEmail(userDTO.getEmail());
         user.setPhoneNumber(userDTO.getPhoneNumber());
+        user.setStatus(userDTO.getStatus());
         
         int rows = userMapper.updateById(user);
         // 角色变更后通知下游失效该用户权限缓存，避免旧权限最长 30 分钟才过期
         if (userDTO.getRoleId() != null) {
             redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userDTO.getUserId());
+        }
+        // 停用（status=1）时立即吊销存量会话，防止被停用账号继续使用已签发 JWT
+        if (userDTO.getStatus() != null && userDTO.getStatus() == 1) {
+            sessionRevoker.revokeAllSessions(userDTO.getUserId());
         }
         return rows;
     }
@@ -155,7 +161,10 @@ public class SysUserServiceImpl implements ISysUserService {
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
             redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
         }
-        return userMapper.deleteBatchIds(List.of(userIds));
+        int rows = userMapper.deleteBatchIds(List.of(userIds));
+        // 删除后吊销全部存量会话，已签发 token 立即失效
+        sessionRevoker.revokeAllSessions(List.of(userIds));
+        return rows;
     }
 
     @Override
@@ -164,7 +173,10 @@ public class SysUserServiceImpl implements ISysUserService {
         SysUser user = new SysUser();
         user.setUserId(userId);
         user.updatePassword(passwordEncoder, password);
-        return userMapper.updateById(user);
+        int rows = userMapper.updateById(user);
+        // 密码重置后吊销全部会话：持有旧凭据的攻击者/前用户必须重新登录
+        sessionRevoker.revokeAllSessions(userId);
+        return rows;
     }
 
     }
