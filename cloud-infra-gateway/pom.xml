@@ -56,10 +56,23 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
         </dependency>
-        <!-- Nacos Config Bootstrap (用于 shared-configs 早期加载) -->
+        <!-- Jasypt 配置加密（显式声明：原由 spring-cloud-starter-bootstrap 传递引入） -->
         <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-bootstrap</artifactId>
+            <groupId>com.github.ulisesbocchio</groupId>
+            <artifactId>jasypt-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- MyBatis-Plus 注解（cloud-infra-api 的 DTO/枚举引用了 @EnumValue 等，
+             Feign AOT 处理器扫描接口方法签名时需要这些类型在 classpath 上） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-annotation</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <!-- @TableField 注解签名引用了 org.apache.ibatis.type.JdbcType，需 mybatis 核心在 classpath -->
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis</artifactId>
+            <version>3.5.19</version>
         </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

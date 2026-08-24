@@ -1,7 +1,13 @@
 package com.cloudinfra.gateway;
 
+import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.tomcat.autoconfigure.TomcatServerProperties;
+import org.springframework.boot.tomcat.servlet.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.boot.web.server.servlet.ServletWebServerFactory;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.Bean;
@@ -36,11 +42,14 @@ import static org.springframework.http.HttpMethod.OPTIONS;
         com.cloudinfra.framework.security.config.FrameworkSecurityAutoConfiguration.class
     }
 )
-@Import({RedissonConfig.class, TracingAutoConfiguration.class, PasswordEncoderConfig.class})
+@Import({RedissonConfig.class, TracingAutoConfiguration.class, PasswordEncoderConfig.class,
+        GatewayApplication.TomcatRuntimeHints.class, com.cloudinfra.gateway.config.WebServerConfig.class})
 public class GatewayApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(GatewayApplication.class, args);
+        SpringApplication app = new SpringApplication(GatewayApplication.class);
+        app.setWebApplicationType(org.springframework.boot.WebApplicationType.SERVLET);
+        app.run(args);
     }
 
     private static final org.springframework.web.servlet.function.RequestPredicate ALL_METHODS = 
@@ -72,5 +81,23 @@ public class GatewayApplication {
             request.attributes().put(GATEWAY_REQUEST_URL_ATTR, java.net.URI.create(uri));
             return request;
         };
+    }
+
+    /**
+     * Runtime hints to ensure Tomcat servlet web server auto-configuration is included in native image.
+     */
+    static class TomcatRuntimeHints implements RuntimeHintsRegistrar {
+        @Override
+        public void registerHints(RuntimeHints hints, @org.jspecify.annotations.Nullable ClassLoader classLoader) {
+            hints.reflection().registerType(TomcatServletWebServerFactory.class,
+                org.springframework.aot.hint.MemberCategory.values());
+            hints.reflection().registerType(ServletWebServerFactory.class,
+                org.springframework.aot.hint.MemberCategory.values());
+            hints.reflection().registerType(WebServerFactoryCustomizer.class,
+                org.springframework.aot.hint.MemberCategory.values());
+            hints.reflection().registerType(TomcatServerProperties.class,
+                org.springframework.aot.hint.MemberCategory.values());
+            hints.resources().registerPattern("META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports");
+        }
     }
 }
