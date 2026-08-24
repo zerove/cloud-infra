@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,6 +46,7 @@ public class FileController {
     private final FilePermissionService permissionService;
 
     @Operation(summary = "上传文件")
+    @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/upload")
     public Result<FileMetadataVO> upload(
             @RequestParam("file") MultipartFile file,
@@ -91,6 +93,7 @@ public class FileController {
     }
 
     @Operation(summary = "更新文件（创建新版本）")
+    @PreAuthorize("@ss.hasPermi('file:file:update')")
     @PutMapping("/update/{fileId}")
     public Result<FileMetadataVO> update(
             @PathVariable Long fileId,
@@ -115,6 +118,7 @@ public class FileController {
     }
 
     @Operation(summary = "下载文件")
+    @PreAuthorize("@ss.hasPermi('file:file:download')")
     @GetMapping("/download/{fileId}")
     public ResponseEntity<StreamingResponseBody> download(@PathVariable Long fileId,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
@@ -139,6 +143,7 @@ public class FileController {
     }
 
     @Operation(summary = "下载指定版本文件")
+    @PreAuthorize("@ss.hasPermi('file:file:download')")
     @GetMapping("/download/{fileId}/version/{version}")
     public ResponseEntity<StreamingResponseBody> downloadVersion(
             @PathVariable Long fileId,
@@ -164,6 +169,7 @@ public class FileController {
     }
 
     @Operation(summary = "获取文件版本历史")
+    @PreAuthorize("@ss.hasPermi('file:file:history')")
     @GetMapping("/history/{fileId}")
     public Result<List<FileVersion>> history(@PathVariable Long fileId,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
@@ -194,6 +200,7 @@ public class FileController {
     }
 
     @Operation(summary = "根据关键词搜索文件")
+    @PreAuthorize("@ss.hasPermi('file:file:search')")
     @GetMapping("/search")
     public Result<IPage<FileMetadataVO>> search(
             @RequestParam String keyword,
