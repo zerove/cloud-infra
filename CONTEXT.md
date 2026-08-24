@@ -15,7 +15,6 @@ The project follows a modular architecture to decouple core infrastructure capab
     *   `framework-web`: Standardized web capabilities, global exception handling, logging aspects.
     *   `framework-mybatis`: Standardized data access patterns, audit log, outbox.
     *   `framework-redis`: Standardized caching, multi-level cache, distributed locking.
-    *   `framework-seata`: Distributed transaction management (optional, via ConditionalOnClass).
     *   `framework-security`: Unified security and authorization logic (HeaderAuthenticationFilter, PermissionService).
     *   `framework-tracing`: Distributed tracing for request observability (OTel, Zipkin).
 *   **`cloud-infra-starter`**: Auto-configuration aggregation (tenant, platform capabilities).
@@ -42,8 +41,7 @@ The project follows a modular architecture to decouple core infrastructure capab
 *   **Config**: Nacos 3.x
 *   **Observability**: Spring Boot Actuator, Micrometer, Prometheus, OpenTelemetry, Zipkin
 *   **Messaging**: RabbitMQ (direct consumer)
-*   **Database/Cache**: PostgreSQL 16, Redis 7.2, MyBatis Plus 3.5.6
-*   **Distributed Transactions**: Seata (optional, disabled by default for system-module)
+*   **Database/Cache**: PostgreSQL 16, Redis 7.2, MyBatis Plus 3.5.17
 *   **Container**: Podman, Kind, Helm
 
 ## 📖 How to Use This Repository
@@ -54,5 +52,5 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   Architecture: framework-security optional api, removed spring-cloud-stream from common.
 *   Performance: KEYS→SCAN, N+1 fixes, pagination LIMIT, RabbitListener concurrency, Feign timeouts, ZGC+512m.
 *   Quality: @Transactional rollbackFor, Feign out of transactions, idempotent consumers, DLQ config, StreamingResponseBody.
-*   Deployment: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled, dirty file cleanup.
+*   Deployment: compose restart/healthcheck, Helm PDB, prometheus port 9301, dirty file cleanup.
 *   Shared config: actuator-config.yaml with OTLP 4318, TRACE_SAMPLING_PROBABILITY, feign timeouts.
