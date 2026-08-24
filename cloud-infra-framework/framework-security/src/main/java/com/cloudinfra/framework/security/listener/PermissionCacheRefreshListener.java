@@ -75,10 +75,16 @@ public class PermissionCacheRefreshListener implements MessageListener {
     }
 
     private void clearAll() {
-        Cache cache = cacheManager.getCache("permissions");
-        if (cache != null) {
-            cache.clear();
+        Cache permissions = cacheManager.getCache("permissions");
+        if (permissions != null) {
+            permissions.clear();
             log.info("权限缓存已全量清空");
+        }
+        // userContexts 与 permissions 同源（RemotePermissionProvider 双缓存），必须一并清理
+        Cache userContexts = cacheManager.getCache("userContexts");
+        if (userContexts != null) {
+            userContexts.clear();
+            log.info("用户上下文缓存已全量清空");
         }
     }
 }
