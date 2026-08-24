@@ -65,8 +65,28 @@ public class OutboxEventRepository {
     }
 
     /**
-     * 查询待投递事件（分页）
+     * 查询待投递事件（分页）并对行加锁。
+     * FOR UPDATE SKIP LOCKED：多实例部署时各派发器抢占互不重叠的事件集，
+     * 防止同一事件被重复投递；已被其他实例锁定的行直接跳过不阻塞。
+     * 注意：调用方需在事务内使用，否则锁在查询语句结束时立即释放。
      */
+    public List<OutboxEvent> lockAndFindPending(int limit) {
+        return jdbcTemplate.query("""
+            SELECT * FROM %s
+            WHERE status IN ('PENDING', 'FAILED')
+            ORDER BY created_at ASC
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+            """.formatted(TABLE),
+            ROW_MAPPER, limit
+        );
+    }
+
+    /**
+     * 查询待投递事件（分页，无锁）。
+     * @deprecated 多实例并发下会重复投递，请使用 {@link #lockAndFindPending(int)}
+     */
+    @Deprecated
     public List<OutboxEvent> findPending(int limit) {
         return jdbcTemplate.query("""
             SELECT * FROM %s
