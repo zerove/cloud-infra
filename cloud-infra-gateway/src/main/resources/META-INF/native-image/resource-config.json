@@ -1,0 +1,22 @@
+{
+  "resources": [
+    {
+      "pattern": "META-INF/spring/*"
+    },
+    {
+      "pattern": "META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports"
+    },
+    {
+      "pattern": "META-INF/native-image/*"
+    },
+    {
+      "pattern": "application.yml"
+    },
+    {
+      "pattern": "bootstrap.yml"
+    },
+    {
+      "pattern": "logback-spring.xml"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+[
+  {
+    "name": "com.cloudinfra.gateway.config.GatewayProperties",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "com.cloudinfra.gateway.domain.auth.GatewayUser",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.cloud.gateway.route.RouteDefinition",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.cloud.gateway.filter.FilterDefinition",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.cloud.gateway.handler.predicate.PredicateDefinition",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.core.userdetails.User",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.oauth2.core.OAuth2AccessToken",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.oauth2.core.oidc.OidcIdToken",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "com.alibaba.nacos.api.config.ConfigService",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "com.alibaba.nacos.api.naming.NamingService",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "io.jsonwebtoken.Claims",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  },
+  {
+    "name": "io.jsonwebtoken.Jwt",
+    "allDeclaredFields": true,
+    "allowUnsafeAccess": true
+  }
+]
