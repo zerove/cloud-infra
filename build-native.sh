@@ -27,19 +27,17 @@ echo -e "${GREEN}>>> 启动优化构建流程...${NC}"
 echo -e "配置项: \n - 并发度: 单线程 (-T 1) \n - Maven 堆内存: 2GB \n - 目标模块: Gateway, Auth"
 
 # 3. 执行 Native 构建
-# 使用 native:compile 直接调用 native-image 工具
-# 注意：native-maven-plugin 0.10.x 对 Spring Boot 4 的 AOT 引擎支持不完整，
-# 如果构建失败，尝试以下方案之一:
-#   a) 升级 native-maven-plugin 至支持 Spring Boot 4 的版本
-#   b) 使用 spring-boot:build-image (Buildpacks) 替代
-#   c) 手动使用 native-image 工具配合正确的 classpath (排除 fat jar BOOT-INF 层级)
+# Spring Boot 4.1.0 需要先执行 process-aot 再执行 native:compile
 mvn clean package \
     -T 1 \
     -Pnative \
     -DskipTests \
-    -Dnative.image.args="-J-Xmx8g" \
     -pl cloud-infra-gateway,cloud-infra-auth \
     -am \
+    && mvn spring-boot:process-aot \
+    -Pnative \
+    -DskipTests \
+    -pl cloud-infra-gateway,cloud-infra-auth \
     && mvn native:compile \
     -Pnative \
     -DskipTests \

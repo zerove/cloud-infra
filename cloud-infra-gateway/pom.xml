@@ -206,6 +206,7 @@
                         <arg>-H:+AllowVMInspection</arg>
                         <arg>--initialize-at-build-time=org.redisson.misc.BiHashMap</arg>
                         <arg>--initialize-at-build-time=org.redisson.liveobject.core.RedissonObjectBuilder$CodecMethodRef</arg>
+                        <arg>--initialize-at-build-time=com.alibaba.fastjson2</arg>
                         <arg>--initialize-at-build-time=org.springframework.util.unit.DataSize</arg>
                         <arg>--initialize-at-build-time=org.springframework.core.io.buffer.DataBufferFactory</arg>
                         <arg>--initialize-at-build-time=org.springframework.http.codec.ServerSentEvent</arg>
