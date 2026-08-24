@@ -7,7 +7,7 @@ spring:
       - optional:nacos:auth-white-list.yaml?group=DEFAULT_GROUP
   cloud:
     refresh:
-      enabled: true
+      enabled: false # AOT/Native Image 不支持 RefreshScope 动态刷新
     nacos:
       config:
         server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
