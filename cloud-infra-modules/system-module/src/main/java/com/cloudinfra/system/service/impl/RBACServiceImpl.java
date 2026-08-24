@@ -38,13 +38,18 @@ public class RBACServiceImpl implements RBACService {
         }).collect(Collectors.toList());
         list.forEach(sysUserRoleMapper::insert);
         
-        // 发布权限刷新事件
+        // 发布权限刷新事件（下游服务订阅后失效本地/Redis 权限缓存）
         redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignPermissionsToRole(Long roleId, List<Long> permissionIds) {
+        // 先查出受影响的用户（角色变更前），变更后逐一通知失效
+        List<Long> affectedUserIds = sysUserRoleMapper.selectList(
+                new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getRoleId, roleId))
+            .stream().map(SysUserRole::getUserId).distinct().collect(Collectors.toList());
+
         sysRolePermissionMapper.delete(new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
         List<SysRolePermission> list = permissionIds.stream().map(permId -> {
             SysRolePermission rolePerm = new SysRolePermission();
@@ -54,8 +59,9 @@ public class RBACServiceImpl implements RBACService {
         }).collect(Collectors.toList());
         list.forEach(sysRolePermissionMapper::insert);
         
-        // 发布权限刷新事件
-        redisService.publish(AUTH_REFRESH_CHANNEL, "role:" + roleId);
+        // 逐个用户发布权限刷新事件：监听器只处理 user: 前缀，
+        // role: 消息无法在下游反查用户-角色映射，必须在 system 侧展开
+        affectedUserIds.forEach(uid -> redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + uid));
     }
 
     @Override

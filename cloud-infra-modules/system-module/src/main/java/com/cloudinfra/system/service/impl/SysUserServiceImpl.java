@@ -16,6 +16,7 @@ import com.cloudinfra.system.service.ISysUserService;
 import com.cloudinfra.system.domain.dto.SysUserCreateDTO;
 import com.cloudinfra.system.domain.dto.SysUserUpdateDTO;
 import com.cloudinfra.system.exception.SystemBusinessException;
+import com.cloudinfra.framework.redis.service.RedisService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,10 @@ public class SysUserServiceImpl implements ISysUserService {
     private final PasswordEncoder passwordEncoder;
     private final ISysConfigService configService;
     private final ISysPermissionService permissionService;
+    private final RedisService redisService;
+
+    /** 与 RBACServiceImpl 共用的权限刷新频道（下游 PermissionCacheRefreshListener 订阅） */
+    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
 
     @Override
     public IPage<SysUser> selectUserList(Page<SysUser> page, SysUser user) {
@@ -135,11 +140,21 @@ public class SysUserServiceImpl implements ISysUserService {
         user.setEmail(userDTO.getEmail());
         user.setPhoneNumber(userDTO.getPhoneNumber());
         
-        return userMapper.updateById(user);
+        int rows = userMapper.updateById(user);
+        // 角色变更后通知下游失效该用户权限缓存，避免旧权限最长 30 分钟才过期
+        if (userDTO.getRoleId() != null) {
+            redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userDTO.getUserId());
+        }
+        return rows;
     }
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int deleteUserByIds(Long[] userIds) {
+        // 先清理用户-角色关联再删用户；同时广播失效权限缓存
+        for (Long userId : userIds) {
+            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+            redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
+        }
         return userMapper.deleteBatchIds(List.of(userIds));
     }
 
