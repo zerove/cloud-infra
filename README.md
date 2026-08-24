@@ -7,9 +7,9 @@
 - **核心**: Spring Boot 4.1.0 | JDK 25 (启用虚拟线程 Virtual Threads)
 - **云生态**: Spring Cloud 2025.1.2 | Spring Cloud Alibaba 2025.1.0.0
 - **注册与配置**: Nacos
-- **持久化**: MyBatis Plus 3.5.6 | PostgreSQL 16 | MySQL 8.4
-- **缓存与分布**: Redisson 3.30.0 | Redis 7.2
-- **安全**: Spring Security | JWT (jjwt 0.12.5) | RBAC (基于角色的访问控制)
+- **持久化**: MyBatis Plus 3.5.17 | PostgreSQL 16 | MySQL 8.4
+- **缓存与分布**: Redisson 4.7.0 | Redis 7.2
+- **安全**: Spring Security | JWT (jjwt 0.13.0) | RBAC (基于角色的访问控制)
 - **可观测性**: Micrometer Tracing | Prometheus | Actuator
 - **基础设施**: Podman/Docker | Maven 3.9+
 
@@ -37,7 +37,6 @@
 ## 🛡️ 关键修复记录 (2026-08)
 
 - **Gateway 路由修复**: 修复 `IdentityRequestWrapper.getHeaders()` 缺失导致的 NPE，修正 `RestClient.Builder` 添加 `@LoadBalanced` 支持 `lb://` 服务发现路由。
-- **Seata 移除**: 从 system-module 移除 seata 依赖，简化事务管理 (本地事务足够，分布式事务由应用层补偿)。
 - **配置校验优化**: ConfigValidationAutoConfiguration 新增条件注解，测试环境自动禁用，避免启动噪音。
 - **系统模块覆盖率调整**: 降低整体覆盖率门槛至 15%，核心 service.impl 保持 80% 门槛。
 
