@@ -1197,5 +1197,83 @@
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.block.flow.FlowRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.block.degrade.DegradeRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.block.authority.AuthorityRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.system.SystemRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
+  },
+  {
+    "name": "com.alibaba.csp.sentinel.slots.block.AbstractRule",
+    "queryAllPublicMethods": true,
+    "queryAllDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true,
+    "queryAllPublicConstructors": true,
+    "queryAllDeclaredConstructors": true,
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "unsafeAllocated": true
   }
 ]
