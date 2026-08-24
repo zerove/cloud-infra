@@ -31,8 +31,8 @@ spring:
   rabbitmq:
     host: cloud-rabbitmq
     port: 5672
-    username: guest
-    password: guest
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
@@ -50,8 +50,8 @@ spring:
       rabbit:
         binder:
           nodes: cloud-rabbitmq:5672
-          username: guest
-          password: guest
+          username: ${RABBITMQ_USER:guest}
+          password: ${RABBITMQ_PASSWORD:guest}
     nacos:
       discovery:
         server-addr: cloud-nacos:8848

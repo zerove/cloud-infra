@@ -59,7 +59,11 @@ management:
     web:
       base-path: /management
       exposure:
-        include: health,info,prometheus,metrics,env,beans,conditions,refresh
+        # 与 actuator-config.yaml 保持一致：env/beans/conditions 默认不暴露
+        include: health,info,prometheus,metrics,refresh
+  endpoint:
+    env:
+      show-values: never
   metrics:
     export:
       prometheus:

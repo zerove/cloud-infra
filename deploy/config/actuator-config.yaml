@@ -5,12 +5,17 @@ management:
     web:
       base-path: /management
       exposure:
-        include: health,info,prometheus,metrics,env,beans,conditions,refresh
+        # 收敛暴露面：env/beans/conditions 仅运维排查时临时开启，
+        # 常规只保留健康、指标类端点（refresh 供 Nacos 配置刷新）
+        include: health,info,prometheus,metrics,refresh
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+    env:
+      # 环境变量端点强制脱敏：所有属性值以******掩码返回，防凭据泄露
+      show-values: never
   metrics:
     tags:
       application: ${spring.application.name:unknown}
