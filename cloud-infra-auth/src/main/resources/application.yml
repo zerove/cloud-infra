@@ -1,6 +1,19 @@
 spring:
   application:
     name: cloud-auth
+  autoconfigure:
+    exclude:
+      # resilience4j 的 RefreshScoped 注册表依赖 RefreshScope，AOT (process-aot)
+      # 无法为其生成代码（UnsupportedTypeValueCodeGenerationException）。
+      # auth 未使用 resilience4j 注解，安全排除。
+      - io.github.resilience4j.springboot.bulkhead.autoconfigure.BulkheadRefreshScopedRegistryAutoConfiguration
+      - io.github.resilience4j.springboot.circuitbreaker.autoconfigure.CircuitBreakerRefreshScopedRegistryAutoConfiguration
+      - io.github.resilience4j.springboot.ratelimiter.autoconfigure.RateLimiterRefreshScopedRegistryAutoConfiguration
+      - io.github.resilience4j.springboot.retry.autoconfigure.RetryRefreshScopedRegistryAutoConfiguration
+      - io.github.resilience4j.springboot.timelimiter.autoconfigure.TimeLimiterRefreshScopedRegistryAutoConfiguration
+      # RefreshScope 提供者：禁用后 resilience4j 的 @ConditionalOnBean(RefreshScope)
+      # 配置全部不满足，从根源避免 AOT 代码生成失败
+      - org.springframework.cloud.autoconfigure.RefreshAutoConfiguration
   cloud:
     nacos:
       config:
@@ -73,3 +86,7 @@ management:
   otlp:
     tracing:
       endpoint: http://otel-collector:4317
+# MyBatis-Plus：native 下必须显式指定日志实现，避免运行时反射选型 NPE
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
