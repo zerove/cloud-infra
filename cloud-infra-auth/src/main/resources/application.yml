@@ -86,7 +86,12 @@ management:
   otlp:
     tracing:
       endpoint: http://otel-collector:4317
-# MyBatis-Plus：native 下必须显式指定日志实现，避免运行时反射选型 NPE
+# MyBatis-Plus：native 下必须显式指定日志实现，避免运行时反射选型 NPE；
+# 禁用延迟加载，避免 Javassist 字节码代理在 native 下不可用
 mybatis-plus:
+  global-config:
+    banner: false
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    lazy-loading-enabled: false
+    aggressive-lazy-loading: false

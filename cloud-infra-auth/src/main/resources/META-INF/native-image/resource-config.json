@@ -1,0 +1,19 @@
+{
+  "resources": [
+    {
+      "pattern": "META-INF/spring/*"
+    },
+    {
+      "pattern": "META-INF/native-image/*"
+    },
+    {
+      "pattern": "application.yml"
+    },
+    {
+      "pattern": "bootstrap.yml"
+    },
+    {
+      "pattern": "logback-spring.xml"
+    }
+  ]
+}
