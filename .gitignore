@@ -4,6 +4,12 @@
 META-INF/
 !**/src/**/META-INF/
 *.bak
+*.class
+hs_err_pid*.log
+# 误生成到仓库根目录的编译产物目录
+/org/
+/io/
+cp.txt
 # Deploy artifacts (local builds)
 deploy/app.jar
 .gradle/
