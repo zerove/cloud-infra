@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
@@ -68,19 +67,14 @@ public class OutboxEventPublisher {
             .idempotencyKey(idempotencyKeyFinal)
             .build();
 
-        // 如果在事务内，注册事务同步回调，事务提交时写入
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    try {
-                        repository.insert(event);
-                        log.debug("Outbox 事件已写入（事务提交后）: {}", eventType);
-                    } catch (Exception e) {
-                        log.error("Outbox 事件写入失败: {}", eventType, e);
-                    }
-                }
-            });
+        // 如果在事务内，在同一事务中同步写入（真正的 Transactional Outbox：
+        // 业务数据与事件同事务原子提交，不存在"业务提交了但事件丢失"的窗口）；
+        // 事务回滚则事件一并回滚，符合语义。
+        // 注意：不能用 afterCommit 写入——那时事务已结束，insert 失败将静默丢事件。
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            repository.insert(event);
+            log.debug("Outbox 事件已随业务事务写入: {}", eventType);
         } else {
             // 无事务上下文，直接写入
             repository.insert(event);

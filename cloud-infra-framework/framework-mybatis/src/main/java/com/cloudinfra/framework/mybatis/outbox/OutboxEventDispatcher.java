@@ -8,6 +8,7 @@ import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -54,15 +55,18 @@ public class OutboxEventDispatcher {
     }
 
     /**
-     * 定时投递：默认每 1 秒轮询一次
+     * 定时投递：默认每 1 秒轮询一次。
+     * 整轮投递在单个事务内完成：lockAndFindPending 的 SKIP LOCKED 行锁
+     * 保证多实例抢占互不重叠的事件集；事务提交时行锁释放。
      */
     @Scheduled(fixedDelayString = "${cloud-infra.outbox.poll-interval-ms:1000}")
+    @Transactional(rollbackFor = Exception.class)
     public void dispatchPendingEvents() {
         if (!enabled) {
             return;
         }
 
-        List<OutboxEvent> pendingEvents = repository.findPending(batchSize);
+        List<OutboxEvent> pendingEvents = repository.lockAndFindPending(batchSize);
         if (pendingEvents.isEmpty()) {
             return;
         }
