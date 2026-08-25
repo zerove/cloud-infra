@@ -64,8 +64,9 @@ public class MultiLevelCacheConfig {
         // 用户会话：长 TTL
         cacheConfigurations.put("sessions", defaultConfig.entryTtl(Duration.ofHours(24)));
         
-        // 权限缓存：中等 TTL
-        cacheConfigurations.put("permissions", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        // 权限缓存：短 TTL。主动失效走 auth:refresh:channel 广播，但 Redis pub/sub
+        // 发后即忘，监听方重启/抖动期间的消息会丢；TTL 是唯一兜底，须保持分钟级
+        cacheConfigurations.put("permissions", defaultConfig.entryTtl(Duration.ofMinutes(5)));
         
         // 字典/配置：长 TTL
         cacheConfigurations.put("dictionaries", defaultConfig.entryTtl(Duration.ofHours(1)));

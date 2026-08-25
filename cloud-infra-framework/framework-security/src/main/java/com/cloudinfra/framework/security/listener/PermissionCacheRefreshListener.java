@@ -1,6 +1,7 @@
 package com.cloudinfra.framework.security.listener;
 
 import com.cloudinfra.common.core.security.IPermissionProvider;
+import com.cloudinfra.common.core.security.PermissionRefreshProtocol;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,14 +25,18 @@ import org.springframework.stereotype.Component;
  *   user:*         -> 清除全部用户缓存（全量刷新）
  */
 @Component
-public class PermissionCacheRefreshListener implements MessageListener {
+public class PermissionCacheRefreshListener implements MessageListener,
+        org.springframework.context.SmartLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(PermissionCacheRefreshListener.class);
-    private static final String CHANNEL = "auth:refresh:channel";
-    private static final String USER_PREFIX = "user:";
+
 
     private final IPermissionProvider permissionProvider;
     private final CacheManager cacheManager;
+
+    private final RedisMessageListenerContainer container;
+
+    private volatile boolean running = false;
 
     public PermissionCacheRefreshListener(
         IPermissionProvider permissionProvider,
@@ -40,9 +45,29 @@ public class PermissionCacheRefreshListener implements MessageListener {
     ) {
         this.permissionProvider = permissionProvider;
         this.cacheManager = cacheManager;
-        // 注册订阅（构造时完成，避免与容器初始化顺序冲突）
-        container.addMessageListener(new MessageListenerAdapter(this), new ChannelTopic(CHANNEL));
-        log.info("权限缓存刷新监听器已注册，频道: {}", CHANNEL);
+        this.container = container;
+    }
+
+    /**
+     * 订阅注册移入生命周期启动阶段：所有单例 bean 就绪、容器可安全接受监听器
+     * 后才挂订阅，消除构造期注册对初始化顺序的依赖。
+     */
+    @Override
+    public void start() {
+        container.addMessageListener(new MessageListenerAdapter(this),
+            new ChannelTopic(PermissionRefreshProtocol.CHANNEL));
+        running = true;
+        log.info("权限缓存刷新监听器已注册，频道: {}", PermissionRefreshProtocol.CHANNEL);
+    }
+
+    @Override
+    public void stop() {
+        running = false;
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
     }
 
     @Override
@@ -53,8 +78,8 @@ public class PermissionCacheRefreshListener implements MessageListener {
             if (body == null || body.isBlank()) {
                 return;
             }
-            if (body.startsWith(USER_PREFIX)) {
-                String userIdStr = body.substring(USER_PREFIX.length());
+            if (body.startsWith(PermissionRefreshProtocol.USER_PREFIX)) {
+                String userIdStr = body.substring(PermissionRefreshProtocol.USER_PREFIX.length());
                 if ("*".equals(userIdStr)) {
                     clearAll();
                     return;
