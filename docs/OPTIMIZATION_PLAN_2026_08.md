@@ -18,6 +18,7 @@
 ## P0 安全与正确性缺陷（立即修复）
 
 ### S1. actuator env 端点泄露敏感配置值
+**状态：✅ 已完成（2026-08）。** `show-values: never` 已配置，暴露面收敛为 health/info/prometheus/metrics，管理端口收敛至 9301。
 `deploy/config/actuator-config.yaml` 的 `exposure.include` 含 `env,beans,conditions,refresh`，
 且未配置脱敏。`/management/env` 会返回数据源口令、MQ 凭据等属性源内容
 （Spring Boot 默认仅对特定 key 模式脱敏，自定义属性名可能漏网）。
@@ -32,6 +33,7 @@ management:
 `health,info,prometheus,metrics`，其余仅运维临时开启。
 
 ### S2. 权限缓存失效链路断裂
+**状态：✅ 已完成（2026-08-25 收尾）。** updateUser/deleteUserByIds/resetUserPassword 均已联动失效；角色级变更（assignPermissionsToRole/unassign）逐用户广播；本次补齐最后缺口 `deleteRoleByIds`（清理 user_role 关联 + 受影响用户逐个广播 `auth:refresh:channel`）。
 - `RemotePermissionProvider.getPermissionsByUserId/getUserContext` 走 `@Cacheable`
   （permissions/userContexts 两个缓存）。
 - `SysUserServiceImpl.updateUser` 可变更 `roleId/deptId`，但**不调用**
@@ -41,12 +43,14 @@ management:
 角色级变更需广播失效该角色下全部用户（遍历或按版本号失效）。
 
 ### S3. RabbitMQ guest/guest 硬编码于 Nacos 配置
+**状态：✅ 已完成。** 凭据全部走 `${VAR:?}` 强制占位符 + `.env` 注入，compose 设置 RABBITMQ_DEFAULT_USER/PASS。
 `auth.yaml/file-service.yaml/notification-service.yaml` 中 `spring.rabbitmq.username/password: guest`
 未走 `${VAR:}` 占位符（对比 datasource 已规范）。生产环境 guest 默认被禁用且属弱凭据。
 **修复**：改为 `username: ${RABBITMQ_USER:guest}`、`password: ${RABBITMQ_PASSWORD:?}`，
 compose 中 rabbitmq 容器设置 `RABBITMQ_DEFAULT_USER/PASS` 并入 `.env` 管理。
 
 ### S4. 用户禁用/删除后存量 JWT 仍有效
+**状态：✅ 已完成。** JWT 黑名单（Redis TTL 自动清理）已落地；updateUser/deleteUserByIds/resetUserPassword 三处均调 revokeAllSessions 全量吊销。
 网关只校验签名与过期，不查会话状态。删除用户、重置密码后旧 token 在有效期内继续可用。
 **修复**：auth 签发时写入 token 版本号（或 jti + Redis 白名单）；网关校验环节增加
 Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用扩展。
@@ -56,6 +60,7 @@ Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用�
 ## P1 可靠性与架构补强（1-2 周）
 
 ### R1. Outbox 表并发派发缺行锁
+**状态：✅ 已完成。** 派发查询已加行锁抢占，多实例不重复投递。
 `OutboxEventRepository.findPending` 为普通 `SELECT ... LIMIT ?`，多实例部署时同一事件
 会被多个派发器重复投递（表内幂等键只防重复写入，不防重复发送）。
 **修复**：PG 下改 `FOR UPDATE SKIP LOCKED`；或派发前 `UPDATE ... SET status='SENDING' WHERE id IN (...) AND status='PENDING'` 抢占。
@@ -67,6 +72,8 @@ Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用�
 或失败时落盘本地文件/告警补偿。配套补一个 Testcontainers 集成测试验证原子性。
 
 ### R3. 集成测试从 0 到 1 ✅（2026-08-25 完成）
+
+**进展补充（2026-08-25 下午）：** 跨服务 Feign 链路 IT（gateway×system×auth 进程隔离）已落地并全绿；CI 已去并行 + 补 exec jar 构建步骤。
 `cloud-infra-test-support`（Testcontainers PG/RabbitMQ/ES）已建好却无消费者。
 关键缺口：跨服务 Feign 链路、MQ 幂等消费、outbox 派发、权限传播全靠手工验证。
 **计划**：每模块先补 1 条主链路 IT（登录→网关→业务→DB 断言），纳入 CI test job。
@@ -137,6 +144,7 @@ TTL 30-60s，配合 S2 的主动失效。
 评估 git-filter-repo 清理（破坏性操作，需团队协调，低优先）。
 
 ### H3. 文档版本漂移 ✅（2026-08-25 完成）
+
 README 写 MyBatis Plus 3.5.6（实际 pom 3.5.17）、jjwt 0.12.5（实际 0.13.0）、
 Redisson 3.30（实际 4.7.0）；CONTEXT.md 提及已移除的 framework-seata。
 ROADMAP 多个里程碑勾选状态与实际不符（Milestone 1 两项未完成但仍标进行中）。
@@ -169,7 +177,7 @@ e2e-test.sh 只测验证码接口，token 拿不到就用 mock 继续，最后�
 ## 推进节奏建议
 
 ```
-第 1 周   P0 四项安全修复（S1-S4）+ H1/H3 卫生清理     ← 改动小收益大
+第 1 周   P0 四项安全修复（S1-S4）+ H1/H3 卫生清理 ✅（S1-S4、H3 已完成，H1 待做）
 第 2-3 周 R1-R3 可靠性三件套 + R4/R5 处置 + native 基线（F1）
 第 4 周   F2/F3 调参与启动优化，更新性能基线文档
 之后      按 P4 规划池逐项立项（走 docs/superpowers/plans 流程）
