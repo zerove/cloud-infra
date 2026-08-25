@@ -60,6 +60,12 @@ public class SysUserServiceImplTest {
     @Mock
     private ISysPermissionService permissionService;
 
+    @Mock
+    private com.cloudinfra.framework.redis.service.RedisService redisService;
+
+    @Mock
+    private com.cloudinfra.system.service.impl.UserSessionRevoker sessionRevoker;
+
     @InjectMocks
     private SysUserServiceImpl userService;
 
