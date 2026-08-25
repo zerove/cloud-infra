@@ -26,10 +26,10 @@ import java.util.List;
 public class UserSessionRevoker {
 
     private static final String SESSION_PREFIX = "auth:session:";
-    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final RedisService redisService;
+    private final PermissionInvalidationService permissionInvalidationService;
 
     /**
      * 吊销指定用户的全部会话并刷新权限缓存。
@@ -46,14 +46,16 @@ public class UserSessionRevoker {
             while (cursor.hasNext()) {
                 keys.add(cursor.next());
             }
-        } catch (Exception e) {
+        } catch (org.springframework.data.redis.RedisConnectionFailureException
+                | org.springframework.data.redis.RedisSystemException e) {
+            // 会话扫描失败不阻断吊销主流程：键残留由 TTL 兜底过期
             log.warn("扫描用户会话失败, userId={}", userId, e);
         }
         for (String key : keys) {
             redisService.delete(key);
         }
         // 通知下游失效权限/用户上下文缓存（与 RBAC 变更同一通道）
-        redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
+        permissionInvalidationService.invalidateUser(userId);
         log.info("已吊销用户会话, userId={}, 会话数={}", userId, keys.size());
     }
 

@@ -6,10 +6,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.cloudinfra.common.core.domain.entity.SysRole;
-import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.system.domain.SysRoleDept;
 import com.cloudinfra.system.domain.SysUserRole;
-import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.domain.SysRoleMenu;
 import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.service.ISysRoleDeptService;
@@ -32,11 +30,8 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     private final ISysRoleMenuService roleMenuService;
     private final ISysRoleDeptService roleDeptService;
     private final SysRoleConverter roleConverter;
-    private final SysUserRoleMapper sysUserRoleMapper;
-    private final RedisService redisService;
-
-    /** 权限缓存失效广播频道，与 RBACServiceImpl 保持一致 */
-    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
+    private final PermissionInvalidationService permissionInvalidationService;
+    private final com.cloudinfra.system.mapper.SysUserRoleMapper sysUserRoleMapper;
 
     @Override
     public List<SysRole> selectRoleList(SysRole role) {
@@ -95,18 +90,13 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     @Transactional(rollbackFor = Exception.class)
     public int deleteRoleByIds(Long[] roleIds) {
         List<Long> idList = List.of(roleIds);
-        // 删除前查出持有这些角色的用户：删完关联就查不到了
-        List<Long> affectedUserIds = sysUserRoleMapper.selectList(
-                new QueryWrapper<SysUserRole>().in("role_id", idList))
-            .stream().map(SysUserRole::getUserId).distinct().collect(Collectors.toList());
+        // 关联删除前先经收口服务查受影响用户并记录，删完就查不到了
+        permissionInvalidationService.invalidateRoles(idList);
 
         roleMenuService.remove(new QueryWrapper<SysRoleMenu>().in("role_id", idList));
         roleDeptService.remove(new QueryWrapper<SysRoleDept>().in("role_id", idList));
         // 清理用户-角色关联（否则留孤儿数据，且用户侧权限判定仍命中已删角色）
         sysUserRoleMapper.delete(new QueryWrapper<SysUserRole>().in("role_id", idList));
-
-        // 广播失效受影响用户的权限缓存（监听器只处理 user: 前缀，须在 system 侧展开）
-        affectedUserIds.forEach(uid -> redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + uid));
 
         return removeByIds(idList) ? 1 : 0;
     }

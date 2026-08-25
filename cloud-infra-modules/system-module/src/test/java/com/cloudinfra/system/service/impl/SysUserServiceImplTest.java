@@ -66,6 +66,9 @@ public class SysUserServiceImplTest {
     @Mock
     private com.cloudinfra.system.service.impl.UserSessionRevoker sessionRevoker;
 
+    @Mock
+    private com.cloudinfra.system.service.impl.PermissionInvalidationService permissionInvalidationService;
+
     @InjectMocks
     private SysUserServiceImpl userService;
 

@@ -16,7 +16,6 @@ import com.cloudinfra.system.service.ISysUserService;
 import com.cloudinfra.system.domain.dto.SysUserCreateDTO;
 import com.cloudinfra.system.domain.dto.SysUserUpdateDTO;
 import com.cloudinfra.system.exception.SystemBusinessException;
-import com.cloudinfra.framework.redis.service.RedisService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -36,11 +35,8 @@ public class SysUserServiceImpl implements ISysUserService {
     private final PasswordEncoder passwordEncoder;
     private final ISysConfigService configService;
     private final ISysPermissionService permissionService;
-    private final RedisService redisService;
     private final UserSessionRevoker sessionRevoker;
-
-    /** 与 RBACServiceImpl 共用的权限刷新频道（下游 PermissionCacheRefreshListener 订阅） */
-    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
+    private final PermissionInvalidationService permissionInvalidationService;
 
     @Override
     public IPage<SysUser> selectUserList(Page<SysUser> page, SysUser user) {
@@ -143,9 +139,9 @@ public class SysUserServiceImpl implements ISysUserService {
         user.setStatus(userDTO.getStatus());
         
         int rows = userMapper.updateById(user);
-        // 角色变更后通知下游失效该用户权限缓存，避免旧权限最长 30 分钟才过期
+        // 角色变更后通知下游失效该用户权限缓存
         if (userDTO.getRoleId() != null) {
-            redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userDTO.getUserId());
+            permissionInvalidationService.invalidateUser(userDTO.getUserId());
         }
         // 停用（status=1）时立即吊销存量会话，防止被停用账号继续使用已签发 JWT
         if (userDTO.getStatus() != null && userDTO.getStatus() == 1) {
@@ -159,7 +155,7 @@ public class SysUserServiceImpl implements ISysUserService {
         // 先清理用户-角色关联再删用户；同时广播失效权限缓存
         for (Long userId : userIds) {
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
-            redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
+            permissionInvalidationService.invalidateUser(userId);
         }
         int rows = userMapper.deleteBatchIds(List.of(userIds));
         // 删除后吊销全部存量会话，已签发 token 立即失效

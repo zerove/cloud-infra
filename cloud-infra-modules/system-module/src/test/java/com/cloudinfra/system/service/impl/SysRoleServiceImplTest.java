@@ -10,7 +10,6 @@ import com.cloudinfra.system.domain.SysRoleMenu;
 import com.cloudinfra.system.domain.dto.SysRoleCreateDTO;
 import com.cloudinfra.system.domain.dto.SysRoleUpdateDTO;
 import com.cloudinfra.system.exception.SystemBusinessException;
-import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.system.domain.SysUserRole;
 import com.cloudinfra.system.mapper.SysRoleMapper;
 import com.cloudinfra.system.mapper.SysUserRoleMapper;
@@ -58,7 +57,7 @@ public class SysRoleServiceImplTest {
     private SysUserRoleMapper sysUserRoleMapper;
 
     @Mock
-    private RedisService redisService;
+    private PermissionInvalidationService permissionInvalidationService;
 
     @InjectMocks
     private SysRoleServiceImpl roleService;
@@ -169,10 +168,6 @@ public class SysRoleServiceImplTest {
 
     @Test
     void shouldDeleteRolesAndRelations() {
-        SysUserRole link = new SysUserRole();
-        link.setUserId(100L);
-        link.setRoleId(1L);
-        when(sysUserRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(link));
         when(roleMenuService.remove(any(Wrapper.class))).thenReturn(true);
         when(roleDeptService.remove(any(Wrapper.class))).thenReturn(true);
         when(sysUserRoleMapper.delete(any(Wrapper.class))).thenReturn(1);
@@ -185,13 +180,12 @@ public class SysRoleServiceImplTest {
         verify(roleMenuService).remove(any(Wrapper.class));
         verify(roleDeptService).remove(any(Wrapper.class));
         verify(sysUserRoleMapper).delete(any(Wrapper.class));
-        // 持有被删角色的用户必须收到权限缓存失效广播
-        verify(redisService).publish("auth:refresh:channel", "user:100");
+        // 角色级失效必须经收口服务（其内部查用户并广播）
+        verify(permissionInvalidationService).invalidateRoles(List.of(1L, 2L));
     }
 
     @Test
-    void shouldDeleteRolesWithoutBroadcastWhenNoUsers() {
-        when(sysUserRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+    void shouldStillInvalidateViaServiceWhenNoUsers() {
         when(roleMenuService.remove(any(Wrapper.class))).thenReturn(true);
         when(roleDeptService.remove(any(Wrapper.class))).thenReturn(true);
         when(sysUserRoleMapper.delete(any(Wrapper.class))).thenReturn(0);
@@ -200,6 +194,6 @@ public class SysRoleServiceImplTest {
         int result = roleService.deleteRoleByIds(new Long[] {9L});
 
         assertThat(result).isEqualTo(1);
-        verify(redisService, never()).publish(any(), any());
+        verify(permissionInvalidationService).invalidateRoles(List.of(9L));
     }
 }

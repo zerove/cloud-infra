@@ -1,6 +1,5 @@
 package com.cloudinfra.system.service.impl;
 
-import com.cloudinfra.framework.redis.service.RedisService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudinfra.system.domain.SysRolePermission;
 import com.cloudinfra.system.domain.SysUserRole;
@@ -22,9 +21,7 @@ public class RBACServiceImpl implements RBACService {
     private final SysUserRoleMapper sysUserRoleMapper;
     private final SysRolePermissionMapper sysRolePermissionMapper;
     private final SysPermissionMapper sysPermissionMapper;
-    private final RedisService redisService;
-
-    private static final String AUTH_REFRESH_CHANNEL = "auth:refresh:channel";
+    private final PermissionInvalidationService permissionInvalidationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -39,7 +36,7 @@ public class RBACServiceImpl implements RBACService {
         list.forEach(sysUserRoleMapper::insert);
         
         // 发布权限刷新事件（下游服务订阅后失效本地/Redis 权限缓存）
-        redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + userId);
+        permissionInvalidationService.invalidateUser(userId);
     }
 
     @Override
@@ -59,9 +56,8 @@ public class RBACServiceImpl implements RBACService {
         }).collect(Collectors.toList());
         list.forEach(sysRolePermissionMapper::insert);
         
-        // 逐个用户发布权限刷新事件：监听器只处理 user: 前缀，
-        // role: 消息无法在下游反查用户-角色映射，必须在 system 侧展开
-        affectedUserIds.forEach(uid -> redisService.publish(AUTH_REFRESH_CHANNEL, "user:" + uid));
+        // 逐个用户失效：监听器只处理 user: 前缀，经收口服务展开
+        permissionInvalidationService.invalidateUsers(affectedUserIds);
     }
 
     @Override
