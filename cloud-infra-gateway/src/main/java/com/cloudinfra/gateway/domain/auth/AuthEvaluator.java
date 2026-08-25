@@ -5,7 +5,6 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,8 +16,9 @@ import java.util.Set;
  * 认证判定引擎 - 领域逻辑凝聚点
  * 本模块不依赖于任何 Web/Servlet API，具有极高的可测试性和可复用性。
  * 
- * <p>白名单通过 {@link Environment} 读取 {@code auth.white-list[*]} 列表配置,
- * 兼容 YAML 列表绑定(区别于 {@code @Value} 无法绑定索引列表)。</p>
+ * <p>白名单经 {@link com.cloudinfra.gateway.config.AuthWhiteListProperties}
+ * 标准绑定 {@code auth.white-list} 列表；Nacos 配置变更后可调
+ * {@link #reloadWhiteList(java.util.List)} 热更新，无需重启。</p>
  */
 @Service
 // 不加 @RefreshScope：主配置 spring.cloud.refresh.enabled=false 时 refresh scope 未注册，
@@ -36,12 +36,25 @@ public class AuthEvaluator {
     private final JwtUtils jwtUtils;
 
     @Autowired
-    public AuthEvaluator(SessionStore sessionStore, Environment environment, JwtUtils jwtUtils) {
+    public AuthEvaluator(SessionStore sessionStore,
+                         com.cloudinfra.gateway.config.AuthWhiteListProperties whiteListProperties,
+                         JwtUtils jwtUtils) {
         this.sessionStore = sessionStore;
         this.exactWhiteList = new HashSet<>();
         this.prefixWhiteList = new ArrayList<>();
-        collectWhiteList(environment);
+        collectWhiteList(whiteListProperties.getWhiteList());
         this.jwtUtils = jwtUtils;
+    }
+
+    /**
+     * 配置变更后重载白名单：Nacos 下发 auth.white-list 变更并触发刷新时，
+     * 由监听器调用本方法应用新列表，避免"改白名单必须重启网关"。
+     * （此前依赖 @RefreshScope 承载，但主配置关闭 refresh 时会直接启动失败。）
+     */
+    public void reloadWhiteList(java.util.List<String> whiteList) {
+        exactWhiteList.clear();
+        prefixWhiteList.clear();
+        collectWhiteList(whiteList);
     }
 
     /** 直接给定白名单的构造, 供测试/程序化使用 */
@@ -78,24 +91,7 @@ public class AuthEvaluator {
         }
     }
 
-    private void collectWhiteList(Environment environment) {
-        // 读取 auth.white-list[0..N] 索引形式, 兼容 YAML 列表
-        for (int i = 0; i < 256; i++) {
-            String path = environment.getProperty("auth.white-list[" + i + "]");
-            if (path == null || path.isEmpty()) {
-                break;
-            }
-            addWhiteListEntry(path);
-        }
-        // 兼容逗号分隔字符串(命令行/环境变量注入)
-        String csv = environment.getProperty("auth.white-list");
-        if (csv != null && !csv.isEmpty()) {
-            for (String s : csv.split(",")) {
-                addWhiteListEntry(s.trim());
-            }
-        }
-        log.info("白名单加载完成: 精确 {} 项, 前缀 {} 项", exactWhiteList.size(), prefixWhiteList.size());
-    }
+
 
     /**
      * 核心判定逻辑
