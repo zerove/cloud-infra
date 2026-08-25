@@ -109,6 +109,10 @@ auth:
 cloud-infra:
   internal-call:
     secret: ${INTERNAL_CALL_SECRET:}
+# H5: E2E 固定验证码。仅本地/e2e 环境设置非空值；生产必须保持空串（真实验证码校验）
+auth:
+  captcha:
+    fixed-code: ${AUTH_CAPTCHA_FIXED_CODE:-}
   security:
     # 开启后 X-User-Id 仅在携带有效网关签名时被信任，防内网直连伪造身份
     verify-internal-sign: true

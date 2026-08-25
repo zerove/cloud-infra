@@ -1,38 +1,60 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GATEWAY="http://localhost:9000"
-AUTH="http://localhost:8081"
-SYSTEM="http://localhost:8082"
-FILE="http://localhost:8083"
-NOTIFICATION="http://localhost:8084"
-SEARCH="http://localhost:8085"
+# E2E 真实链路验收：登录 -> 受保护资源 -> 401 -> 403
+# 前置条件：本地环境已启动（./deploy/up.sh），且 auth 启用固定验证码
+#   （deploy/config/auth.yaml 或环境变量 AUTH_CAPTCHA_FIXED_CODE=1234）
+GATEWAY="${GATEWAY:-http://localhost:9000}"
+FIXED_CODE="${AUTH_CAPTCHA_FIXED_CODE:-1234}"
+PASS=0; FAIL=0
+
+expect_contains() { # desc haystack needle
+  local desc="$1" hay="$2" needle="$3"
+  if echo "$hay" | grep -q "$needle"; then PASS=$((PASS+1)); echo "  PASS: $desc";
+  else FAIL=$((FAIL+1)); echo "  FAIL: $desc (期望含 '$needle'，实际: ${hay:0:200})"; fi
+}
 
 echo "=== E2E 验收测试开始 ==="
 
-# 1. 获取验证码
-echo "1. 获取验证码..."
-CAPTCHA_RESP=$(curl -s -X GET "$GATEWAY/auth/captchaImage")
-CAPTCHA_UUID=$(echo "$CAPTCHA_RESP" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
-echo "   UUID: $CAPTCHA_UUID"
+echo "1. 获取验证码 uuid..."
+CAPTCHA_RESP=$(curl -sf -X GET "$GATEWAY/auth/captchaImage")
+UUID=$(echo "$CAPTCHA_RESP" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
+[ -n "$UUID" ] || { echo "FAIL: 未获取到 captcha uuid"; exit 1; }
+echo "  UUID: $UUID"
 
-# 2. 登录 (使用固定验证码绕过或模拟)
-# 注: 当前验证码逻辑需要图片识别, 这里用 admin/admin123 直接测试返回 1004
-echo "2. 登录测试..."
-LOGIN_RESP=$(curl -s -X POST "$GATEWAY/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123","code":"1234","uuid":"'"$CAPTCHA_UUID"'"}')
-echo "   登录响应: $LOGIN_RESP"
-
-# 如果验证码失败, 尝试直接调用 auth 服务获取 token (内部测试用)
-# 实际上需要正确验证码, 这里记录预期行为
-TOKEN=$(echo "$LOGIN_RESP" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-if [ -z "$TOKEN" ]; then
-  echo "   ⚠ 验证码拦截, 使用模拟 token 继续后续测试"
-  # 从之前的响应看, auth 返回 code 1004 "验证码错误或已过期"
-  # 实际环境需要正确验证码, 这里跳过真实 token 获取
-  TOKEN="mock-token-for-testing"
+echo "2. 场景一：错误密码登录应被拒绝..."
+RESP=$(curl -s -X POST "$GATEWAY/auth/login" -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"wrong-password","code":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
+expect_contains "错误密码返回失败码" "$RESP" '"code":-\?[0-9]*' 
+if echo "$RESP" | grep -q '"token"'; then
+  FAIL=$((FAIL+1)); echo "  FAIL: 错误密码竟拿到 token"
+else
+  PASS=$((PASS+1)); echo "  PASS: 错误密码未签发 token"
 fi
 
-echo "=== 验收测试完成 ==="
-echo "网关路由: ✅ 所有服务可达 (auth/system/file/notification/search 均返回 401/业务错误而非 500/NPE)"
+echo "3. 场景二：正确凭据登录获取 token..."
+CAPTCHA_RESP=$(curl -sf -X GET "$GATEWAY/auth/captchaImage")
+UUID=$(echo "$CAPTCHA_RESP" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
+LOGIN_RESP=$(curl -s -X POST "$GATEWAY/auth/login" -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123","code":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
+TOKEN=$(echo "$LOGIN_RESP" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+if [ -n "$TOKEN" ]; then PASS=$((PASS+1)); echo "  PASS: 登录成功获得 token";
+else FAIL=$((FAIL+1)); echo "  FAIL: 登录未获得 token，响应: $LOGIN_RESP"; fi
+
+echo "4. 场景三：无 token 访问受保护资源应 401..."
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$GATEWAY/system/user/list")
+if [ "$HTTP_CODE" = "401" ]; then PASS=$((PASS+1)); echo "  PASS: 无 token -> 401";
+else FAIL=$((FAIL+1)); echo "  FAIL: 期望 401 实际 $HTTP_CODE"; fi
+
+echo "5. 场景四：带 token 访问受保护资源应 2xx..."
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$GATEWAY/system/user/list")
+if [[ "$HTTP_CODE" == 2* ]]; then PASS=$((PASS+1)); echo "  PASS: 带 token -> $HTTP_CODE";
+else FAIL=$((FAIL+1)); echo "  FAIL: 期望 2xx 实际 $HTTP_CODE"; fi
+
+echo "6. 场景五：伪造 token 应 401..."
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer forged.token.value" "$GATEWAY/system/user/list")
+if [ "$HTTP_CODE" = "401" ]; then PASS=$((PASS+1)); echo "  PASS: 伪造 token -> 401";
+else FAIL=$((FAIL+1)); echo "  FAIL: 期望 401 实际 $HTTP_CODE"; fi
+
+echo "=== 结果: PASS=$PASS FAIL=$FAIL ==="
+[ "$FAIL" -eq 0 ]
