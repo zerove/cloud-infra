@@ -112,4 +112,37 @@ class HeaderAuthenticationFilterVerifyTest {
         assertThat(org.springframework.security.core.context.SecurityContextHolder
             .getContext().getAuthentication()).isNotNull();
     }
+
+    @Test
+    void shouldNotFallThroughWhenNegativeCacheHit() throws Exception {
+        // 回归：L1 负缓存命中后必须按未认证放行，严禁跌落兜底块
+        // Long.valueOf(null) 抛 NumberFormatException 导致网关 500（跨服务 IT step3 根因）
+        ReflectionTestUtils.setField(filter, "verifyInternalSign", false);
+        com.cloudinfra.framework.security.cache.PermissionLocalCache cache =
+            new com.cloudinfra.framework.security.cache.PermissionLocalCache();
+        ReflectionTestUtils.setField(filter, "permissionLocalCache", cache);
+        // 预置负缓存：模拟 getUserContext 曾返回 null 被标记为"用户不存在"
+        cache.put(999L, null);
+
+        filter.doFilterInternal(forgedRequest(), new MockHttpServletResponse(), filterChain);
+
+        verify(filterChain).doFilter(any(), any());
+        assertThat(org.springframework.security.core.context.SecurityContextHolder
+            .getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void shouldNotWriteNullContextIntoLocalCache() throws Exception {
+        // 回归：getUserContext 瞬时返回 null 不得固化为 30 秒负缓存，
+        // 否则同 uid 后续请求全部误判为"用户不存在"
+        ReflectionTestUtils.setField(filter, "verifyInternalSign", false);
+        com.cloudinfra.framework.security.cache.PermissionLocalCache cache =
+            new com.cloudinfra.framework.security.cache.PermissionLocalCache();
+        ReflectionTestUtils.setField(filter, "permissionLocalCache", cache);
+        org.mockito.Mockito.when(permissionProvider.getUserContext(999L)).thenReturn(null);
+
+        filter.doFilterInternal(forgedRequest(), new MockHttpServletResponse(), filterChain);
+
+        assertThat(cache.hasEntry(999L)).isFalse();
+    }
 }
