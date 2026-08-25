@@ -179,6 +179,11 @@
            <plugin>
                <groupId>org.springframework.boot</groupId>
                <artifactId>spring-boot-maven-plugin</artifactId>
+               <configuration>
+                   <!-- 保留原始 thin jar（boot jar 另存为 *-exec.jar），
+                        使 gateway/auth 的 IT 能以 test scope 引用本模块真实类型 -->
+                   <classifier>exec</classifier>
+               </configuration>
                <executions>
                    <execution>
                        <goals>
