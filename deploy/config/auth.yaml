@@ -109,3 +109,6 @@ auth:
 cloud-infra:
   internal-call:
     secret: ${INTERNAL_CALL_SECRET:}
+  security:
+    # 开启后 X-User-Id 仅在携带有效网关签名时被信任，防内网直连伪造身份
+    verify-internal-sign: true

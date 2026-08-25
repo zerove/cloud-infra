@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 
 @Component
@@ -23,6 +24,17 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
     @org.springframework.context.annotation.Lazy
     private IPermissionProvider permissionProvider;
 
+    /**
+     * 身份头信任开关：开启后 X-User-Id 仅在携带有效网关内部签名时被信任，
+     * 防止绕过网关直连伪造身份。默认关闭以兼容存量部署与本地直连调试；
+     * 生产环境应置 true（deploy/config 统一下发）。
+     */
+    @org.springframework.beans.factory.annotation.Value("${cloud-infra.security.verify-internal-sign:false}")
+    private boolean verifyInternalSign;
+
+    @org.springframework.beans.factory.annotation.Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
+    private String internalCallSecret;
+
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,
@@ -31,7 +43,14 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
         String userId = request.getHeader("X-User-Id");
         String username = request.getHeader("X-User-Name");
-        
+
+        if (userId != null && username != null && !isTrustedInternalRequest(request)) {
+            // 身份头存在但签名无效：按未认证继续走过滤链（由授权规则拒绝），
+            // 不直接抛错以便复用统一的 401 入口
+            userId = null;
+            username = null;
+        }
+
         if (userId != null && username != null) {
             // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用
             LoginUser loginUser = permissionProvider.getUserContext(Long.valueOf(userId));
@@ -60,5 +79,24 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         }
         
         filterChain.doFilter(request, response);
+    }
+
+    /** 关闭校验时恒为可信；开启时要求 (timestamp:nonce) 的 HMAC 签名有效。 */
+    private boolean isTrustedInternalRequest(HttpServletRequest request) {
+        if (!verifyInternalSign) {
+            return true;
+        }
+        String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
+        String ts = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
+        String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
+        if (sign == null || ts == null || nonce == null) {
+            return false;
+        }
+        try {
+            return InternalCallCrypto.verify(
+                internalCallSecret, sign, Long.parseLong(ts), nonce);
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
