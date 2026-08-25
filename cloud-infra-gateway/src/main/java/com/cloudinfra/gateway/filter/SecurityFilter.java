@@ -37,6 +37,16 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
     @Resource
     private AuthEvaluator authEvaluator;
 
+    /**
+     * 内部调用签名密钥：网关对每个转发请求注入 HMAC 签名，下游
+     * HeaderAuthenticationFilter 验签后才信任 X-User-Id 身份头，
+     * 杜绝绕过网关直连伪造身份。生产必须经 INTERNAL_CALL_SECRET 覆盖。
+     */
+    @org.springframework.beans.factory.annotation.Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
+    private String internalCallSecret;
+
+    private static final java.security.SecureRandom NONCE_RANDOM = new java.security.SecureRandom();
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -81,10 +91,15 @@ AuthContext authContext = new AuthContext(
                 headers.put("X-User-Name", identity.username());
             }
             headers.put(TRACE_ID, traceId);
-            // 剥离外部伪造的内部调用标识（签名/时间戳/随机数），防止绕过 Feign 端点鉴权
-            headers.put(InternalCallCrypto.HEADER_SIGN, "");
-            headers.put(InternalCallCrypto.HEADER_TIMESTAMP, "");
-            headers.put(InternalCallCrypto.HEADER_NONCE, "");
+            // 先剥离外部伪造的内部调用标识，再注入网关自己的签名：
+            // 下游统一验签通过才信任身份头，内网直连无有效签名即被拒
+            String nonce = Long.toHexString(System.currentTimeMillis()) + ':'
+                + Long.toHexString(NONCE_RANDOM.nextLong());
+            String sign = InternalCallCrypto.sign(
+                internalCallSecret, System.currentTimeMillis(), nonce);
+            headers.put(InternalCallCrypto.HEADER_SIGN, sign);
+            headers.put(InternalCallCrypto.HEADER_TIMESTAMP, String.valueOf(System.currentTimeMillis()));
+            headers.put(InternalCallCrypto.HEADER_NONCE, nonce);
             
             IdentityRequestWrapper requestWrapper = new IdentityRequestWrapper(request, headers);
 
