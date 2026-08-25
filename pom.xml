@@ -378,6 +378,8 @@
                       显式指定 classesDirectory 使用编译输出目录。
                     -->
                     <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                    <!-- 单个 IT 卡死兜底：forked JVM 10 分钟无响应则杀掉并记失败，避免全量回归无限阻塞 -->
+                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
                     <includes>
                         <include>**/*IntegrationTest.java</include>
                         <include>**/*IT.java</include>

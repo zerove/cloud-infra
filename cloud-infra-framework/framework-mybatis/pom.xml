@@ -84,5 +84,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Outbox 原子性/并发投递集成测试：Testcontainers + 平台测试底座 -->
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

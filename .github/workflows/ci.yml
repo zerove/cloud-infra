@@ -39,6 +39,11 @@ jobs:
       - name: Run tests
         run: mvn clean test --batch-mode -T 2
 
+      - name: Run integration tests (Testcontainers)
+        # 集成测试需 Docker（GitHub runner 自带），单独跑避免拖慢单测反馈；
+        # 先 test-compile 因为直接调 failsafe goal 不触发编译生命周期
+        run: mvn test-compile failsafe:integration-test failsafe:verify -DskipITs=false --batch-mode -T 2
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
