@@ -44,6 +44,8 @@ import static org.springframework.http.HttpMethod.OPTIONS;
 )
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, PasswordEncoderConfig.class,
         GatewayApplication.TomcatRuntimeHints.class, com.cloudinfra.gateway.config.WebServerConfig.class})
+@org.springframework.boot.context.properties.EnableConfigurationProperties(
+        com.cloudinfra.gateway.config.AuthWhiteListProperties.class)
 public class GatewayApplication {
 
     public static void main(String[] args) {
