@@ -167,7 +167,6 @@ class CrossServiceFeignChainIntegrationTest {
         sysArgs.addAll(List.of(
                 "--spring.profiles.active=dev",          // dev profile 使 logback appender 可见
                 "--server.port=0",                        // 随机端口，从日志解析
-                "--grpc.server.port=0",                   // gRPC 固定 9090 会撞车，同样随机化
                 // 无 ES 容器：指向死地址，连接失败仅影响搜索索引同步，不阻塞启动
                 "--spring.elasticsearch.uris=http://127.0.0.1:1",
                 "--cloud-infra.internal-call.secret=" + INTERNAL_CALL_VALUE));
