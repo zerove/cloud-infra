@@ -51,6 +51,10 @@ dependency-reduced-pom.xml
 rebuild-native.sh
 spring-aot-resources.jar
 tools/
+# CI quality-gate 引用的校验脚本必须入库（tools 其余文件仍本地忽略）
+!tools/
+tools/*
+!tools/check-doc-versions.sh
 
 # Agent runtime data (local only)
 .omo/
