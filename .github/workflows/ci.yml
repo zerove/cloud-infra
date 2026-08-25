@@ -39,6 +39,11 @@ jobs:
       - name: Run tests
         run: mvn clean test --batch-mode -T 2
 
+      - name: Build exec jars for cross-service IT
+        # 跨服务 Feign 链路 IT 以子进程拉起 system/auth 的 *-exec.jar（进程隔离），
+        # 必须在 failsafe 前完成 package；-am 连带构建其依赖模块
+        run: mvn package -pl cloud-infra-modules/system-module,cloud-infra-auth -am -DskipTests --batch-mode
+
       - name: Run integration tests (Testcontainers)
         # 集成测试需 Docker（GitHub runner 自带），单独跑避免拖慢单测反馈；
         # 先 test-compile 因为直接调 failsafe goal 不触发编译生命周期。
