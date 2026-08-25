@@ -2,6 +2,7 @@ package com.cloudinfra.framework.security.listener;
 
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.core.security.PermissionRefreshProtocol;
+import com.cloudinfra.framework.security.cache.PermissionLocalCache;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,8 @@ public class PermissionCacheRefreshListener implements MessageListener,
 
     private final IPermissionProvider permissionProvider;
     private final CacheManager cacheManager;
+    /** F4: 本实例的 L1 缓存；失效消息须同步清 L1+L2 两级（可为 null，单测场景） */
+    private final PermissionLocalCache localCache;
 
     private final RedisMessageListenerContainer container;
 
@@ -41,11 +44,14 @@ public class PermissionCacheRefreshListener implements MessageListener,
     public PermissionCacheRefreshListener(
         IPermissionProvider permissionProvider,
         CacheManager cacheManager,
-        RedisMessageListenerContainer container
+        RedisMessageListenerContainer container,
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+            PermissionLocalCache localCache
     ) {
         this.permissionProvider = permissionProvider;
         this.cacheManager = cacheManager;
         this.container = container;
+        this.localCache = localCache;
     }
 
     /**
@@ -86,8 +92,11 @@ public class PermissionCacheRefreshListener implements MessageListener,
                 }
                 try {
                     Long userId = Long.valueOf(userIdStr);
+                    if (localCache != null) {
+                        localCache.evict(userId);
+                    }
                     permissionProvider.clearPermissionCache(userId);
-                    log.info("权限缓存已刷新, userId={}", userId);
+                    log.info("权限缓存已刷新(L1+L2), userId={}", userId);
                 } catch (NumberFormatException e) {
                     log.warn("忽略非法的权限刷新消息: {}", body);
                 }
@@ -100,6 +109,9 @@ public class PermissionCacheRefreshListener implements MessageListener,
     }
 
     private void clearAll() {
+        if (localCache != null) {
+            localCache.evictAll();
+        }
         Cache permissions = cacheManager.getCache("permissions");
         if (permissions != null) {
             permissions.clear();
