@@ -67,20 +67,23 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
             if (permissionLocalCache != null && permissionLocalCache.hasEntry(uid)) {
                 loginUser = permissionLocalCache.get(uid, LoginUser.class);
                 if (loginUser == null) {
-                    // L1 记录的是"用户不存在"负缓存：按未认证继续
-                    userId = null;
-                    username = null;
+                    // L1 记录的是"用户不存在"负缓存：按未认证继续走过滤链
+                    //（由授权规则拒绝），严禁跌落至下方兜底装配块（Long.valueOf(null) 会炸）
+                    filterChain.doFilter(request, response);
+                    return;
                 }
             }
-            if (userId != null && loginUser == null) {
-                // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用
+            if (loginUser == null) {
+                // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用。
+                // getUserContext 返回 null 属瞬时故障（下游不可达/Feign 失败）：
+                // 不得写入 L1 负缓存，否则同 uid 后续请求在 30 秒内全部误判为"用户不存在"
                 loginUser = permissionProvider.getUserContext(uid);
-                if (permissionLocalCache != null) {
+                if (permissionLocalCache != null && loginUser != null) {
                     permissionLocalCache.put(uid, loginUser);
                 }
             }
             if (loginUser == null) {
-                // 兜底：基于 Header 构建最小上下文
+                // 兜底：基于 Header 构建最小上下文（此时 userId 非空，可安全解析）
                 loginUser = LoginUser.builder()
                     .userId(Long.valueOf(userId))
                     .username(username)

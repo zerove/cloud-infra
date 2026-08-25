@@ -68,3 +68,11 @@ benchmark-results/
 
 # K8s 真实密钥清单（占位模板 config-secrets.example.yaml 入库，真实值由 CI/运维注入）
 deploy/k8s/infra/config-secrets.yaml
+
+# 根目录杂项（会话产物/评审提示词，不入库）
+/cp.txt
+/code-quality-reviewer-prompt.md
+/notification_api_tracker.md
+/search_service_tracker.md
+/spec-reviewer-prompt.md
+/task_tracker.md
