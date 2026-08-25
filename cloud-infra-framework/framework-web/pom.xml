@@ -26,6 +26,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- 方法级安全 (@PreAuthorize) 抛出的 AccessDeniedException 需要全局处理器
+             转换为业务码 403；security 由具体服务的 framework-security 提供，
+             此处仅编译期依赖核心类型 -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
