@@ -1,6 +1,11 @@
 # 网关 refresh scope 配置矛盾：AuthEvaluator @RefreshScope 在生产配置下必然失败
 
-Status: needs-triage
+Status: closed (fixed 2026-08-25)
+
+## 修复记录（2026-08-25）
+
+采用方案 1：移除 `AuthEvaluator` 的 `@RefreshScope`。跨服务 IT 已同步移除
+`spring.cloud.refresh.enabled=true` 规避属性，现在 IT 跑的是生产默认配置。
 
 ## 现象
 
