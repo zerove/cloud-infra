@@ -5,7 +5,6 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +21,9 @@ import java.util.Set;
  * 兼容 YAML 列表绑定(区别于 {@code @Value} 无法绑定索引列表)。</p>
  */
 @Service
-@RefreshScope
+// 不加 @RefreshScope：主配置 spring.cloud.refresh.enabled=false 时 refresh scope 未注册，
+// bean 首次实例化即抛 "No Scope registered for scope name 'refresh'"（认证全 500）。
+// 白名单动态刷新诉求由 Nacos 配置变更 + 重启承载；详见 .scratch/gateway-refresh-scope-misconfig/issues/01。
 public class AuthEvaluator {
 
     private static final Logger log = LoggerFactory.getLogger(AuthEvaluator.class);

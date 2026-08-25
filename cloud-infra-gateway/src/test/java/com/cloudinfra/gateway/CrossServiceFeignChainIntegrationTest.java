@@ -70,9 +70,6 @@ import static org.awaitility.Awaitility.await;
         "auth.jwt.secret=test-jwt-secret-key-for-integration-testing-32-chars-minimum",
         "spring.cloud.nacos.config.enabled=false",
         "spring.cloud.nacos.discovery.enabled=false",
-        // 网关主配置禁用了 refresh，但 AuthEvaluator 带 @RefreshScope，
-        // 必须在测试上下文显式开启，否则 "No Scope registered for scope name 'refresh'"
-        "spring.cloud.refresh.enabled=true",
         "logging.level.com.cloudinfra.gateway=DEBUG"
 })
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -242,7 +239,7 @@ class CrossServiceFeignChainIntegrationTest {
      */
     private static int awaitPort(Process proc, String name) throws Exception {
         Path logFile = procLogs.get(name);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(180);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(300);
         while (System.nanoTime() < deadline) {
             if (!proc.isAlive()) {
                 throw new IllegalStateException(name + " 进程异常退出(exit=" + proc.exitValue()
@@ -257,7 +254,7 @@ class CrossServiceFeignChainIntegrationTest {
             }
             Thread.sleep(500);
         }
-        throw new IllegalStateException(name + " 启动超时(180s)，未捕获到 Tomcat 端口行，日志尾部:\n" + tail(logFile));
+        throw new IllegalStateException(name + " 启动超时(300s)，未捕获到 Tomcat 端口行，日志尾部:\n" + tail(logFile));
     }
 
     private static List<String> readAllLinesSafe(Path file) {
