@@ -111,7 +111,21 @@ public class SysLoginService {
         }
     }
 
+    /**
+     * H5: E2E 固定验证码开关。仅当 auth.captcha.fixed-code 配置了非空值时启用：
+     * 提交的 code 与固定值匹配即通过（uuid 仍要求存在）。生产环境不得配置该项，
+     * 默认无值即维持真实验证码校验。
+     */
+    @org.springframework.beans.factory.annotation.Value("${auth.captcha.fixed-code:}")
+    private String fixedCaptchaCode;
+
     private void validateCaptcha(String username, String code, String uuid) {
+        if (fixedCaptchaCode != null && !fixedCaptchaCode.isEmpty()) {
+            if (uuid == null || uuid.isEmpty() || !fixedCaptchaCode.equalsIgnoreCase(code)) {
+                throw new AuthBusinessException(AuthExceptionCode.CAPTCHA_ERROR);
+            }
+            return;
+        }
         if (uuid == null || uuid.isEmpty()) {
             throw new AuthBusinessException(AuthExceptionCode.CAPTCHA_ERROR);
         }
