@@ -93,10 +93,18 @@ public class RuleConsumer {
                         rule.getId(), deviceId, metricName, currentValue, rule.getOperator(), rule.getThreshold());
 
                     // 4. 触发通知
+                    // 无模版时必须提供兜底标题/内容，否则 sendNotification 的
+                    // validate() 会拒绝（Title is required when templateCode
+                    // is not provided），导致告警静默丢失（消息进 DLQ）
+                    String alertTitle = rule.getTemplateCode() != null && !rule.getTemplateCode().isBlank()
+                        ? null : "设备告警";
+                    String alertContent = rule.getTemplateCode() != null && !rule.getTemplateCode().isBlank()
+                        ? null : String.format("设备 %s 的指标 %s 当前值 %s 已达到阈值 %s",
+                            deviceId, metricName, currentValue, rule.getThreshold());
                     NotificationSendRequest request = new NotificationSendRequest(
                         rule.getTargetUserId(),
-                        null,
-                        null,
+                        alertTitle,
+                        alertContent,
                         NotificationType.ALERT, // 告警类通知
                         null,
                         rule.getTemplateCode(),
