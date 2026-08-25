@@ -21,7 +21,6 @@
 | `framework-redis` | Redisson 封装、分布式锁、限流器 | — |
 | `framework-security` | Header 认证过滤器、RBAC 权限校验 | `SecurityAutoConfiguration` |
 | `framework-tracing` | Micrometer Tracing 链路追踪 | — |
-| `framework-seata` | 分布式事务 | — |
 
 ### 自动配置注册
 
@@ -48,3 +47,18 @@
 
 - 相关配置: `AutoConfiguration.imports`
 - 相关代码: `CloudInfraRuntimeHints`, `StandardResponseAdvice`, `SecurityAutoConfiguration`
+
+## 补充记录（2026-08-25）：移除未接线的 notificationConsumer
+
+`NotificationConsumer.notificationConsumer()`（`Consumer<NotificationRequest>` 函数式 bean）
+自引入起从未接线：application.yml 无 `spring.cloud.function.definition` 声明，
+`notification-send-out-0` 出站绑定也无任何生产者调用。上游（system 模块工单/审计/监控）
+实际通过 `NotificationApi`（Feign 同步调用）触发通知。
+
+决策：删除该死代码与孤立绑定，而非补配置激活。理由：
+1. 通知发送已有同步 Feign 路径且被业务使用；
+2. MQ 异步路径需要幂等、重试、DLQ 语义配套，当前无消费方需求；
+3. 保留未接线的 Consumer 会造成"消息有消费者"的假象，排障误导（本轮 IT 排障实测）。
+
+若未来需要异步通知（削峰/解耦），重新引入时须同时补：函数定义声明、绑定配置、
+幂等键与 DLQ 处理，并补 MQ 全链路 IT（可参考 NotificationMqFlowIntegrationTest 模式）。
