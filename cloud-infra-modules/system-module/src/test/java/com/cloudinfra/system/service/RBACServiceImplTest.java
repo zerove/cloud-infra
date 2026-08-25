@@ -1,7 +1,7 @@
 package com.cloudinfra.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.cloudinfra.framework.redis.service.RedisService;
+
 import com.cloudinfra.system.domain.SysRolePermission;
 import com.cloudinfra.system.domain.SysUserRole;
 import com.cloudinfra.system.mapper.SysPermissionMapper;
@@ -41,7 +41,7 @@ public class RBACServiceImplTest {
     private SysPermissionMapper sysPermissionMapper;
 
     @Mock
-    private RedisService redisService;
+    private PermissionInvalidationService permissionInvalidationService;
 
     @InjectMocks
     private RBACServiceImpl rbacService;
@@ -60,7 +60,7 @@ public class RBACServiceImplTest {
         verify(sysUserRoleMapper).delete(any(Wrapper.class));
         verify(sysUserRoleMapper, times(2)).insert(any(SysUserRole.class));
         // 发布权限刷新事件
-        verify(redisService).publish("auth:refresh:channel", "user:1");
+        verify(permissionInvalidationService).invalidateUser(1L);
     }
 
     @Test
@@ -77,7 +77,7 @@ public class RBACServiceImplTest {
 
         verify(sysRolePermissionMapper).delete(any(Wrapper.class));
         verify(sysRolePermissionMapper, times(1)).insert(any(SysRolePermission.class));
-        verify(redisService).publish("auth:refresh:channel", "user:1");
+        verify(permissionInvalidationService).invalidateUsers(any());
     }
 
     @Test
