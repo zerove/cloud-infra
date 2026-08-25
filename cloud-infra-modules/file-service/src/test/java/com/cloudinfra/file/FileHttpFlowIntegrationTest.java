@@ -168,23 +168,49 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
         }
 
         /**
-         * 关键：替身过滤器是 OncePerRequestFilter（Filter 类型）bean，
-         * Spring Boot 会把所有 Filter bean 自动注册为 servlet 容器级全局过滤器，
-         * 位于 Spring Security 链之前。请求先经过它设置认证，随后 security 链中的
-         * SecurityContextHolderFilter 会用空的 SecurityContextRepository 重置 ThreadLocal，
-         * 导致认证"凭空丢失"。此处显式禁用容器级注册，让过滤器只存在于 security 链内。
+         * 替身过滤器按 X-User-Id Header 授予/拒绝认证与权限。
+         * 注意：这里刻意【不注册为 Spring bean】——Filter 类型的 bean 会被
+         * Spring Boot 自动注册为 servlet 容器级全局过滤器（先于 security 链执行），
+         * 随后 security 链内 SecurityContextHolderFilter 会用空的
+         * SecurityContextRepository 重置 ThreadLocal，导致认证"凭空丢失"。
+         * 直接以实例形式加入 security 链即可规避。
          */
-        @Bean
-        public org.springframework.boot.web.servlet.FilterRegistrationBean<jakarta.servlet.Filter> testHeaderAuthFilterRegistration(HeaderAuthenticationFilter testHeaderAuthenticationFilter) {
-            org.springframework.boot.web.servlet.FilterRegistrationBean<jakarta.servlet.Filter> reg =
-                    new org.springframework.boot.web.servlet.FilterRegistrationBean<>(testHeaderAuthenticationFilter);
-            reg.setEnabled(false);
-            return reg;
-        }
+        private static final HeaderAuthenticationFilter TEST_HEADER_AUTH_FILTER =
+                new HeaderAuthenticationFilter() {
+                    @Override
+                    protected void doFilterInternal(HttpServletRequest request,
+                                                    HttpServletResponse response,
+                                                    FilterChain filterChain)
+                            throws ServletException, IOException {
+                        String userId = request.getHeader("X-User-Id");
+                        if (userId == null || userId.isBlank()) {
+                            // 保持未认证上下文，交给 AuthenticationEntryPointImpl 返回业务码 401
+                            filterChain.doFilter(request, response);
+                            return;
+                        }
+                        boolean hasFilePerm = USER_WITH_PERM_ID.equals(userId);
+                        LoginUser loginUser = LoginUser.builder()
+                                .userId(Long.valueOf(userId))
+                                .username("it_user_" + userId)
+                                .permissions(hasFilePerm ? FILE_PERMS : Set.of())
+                                .build();
+                        var authorities = loginUser.getPermissions().stream()
+                                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                                .toList();
+                        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                                loginUser, null, authorities);
+                        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                                .setAuthentication(auth);
+                        try {
+                            filterChain.doFilter(request, response);
+                        } finally {
+                            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+                        }
+                    }
+                };
 
         @Bean
         public SecurityFilterChain testFilterChain(HttpSecurity http,
-                                                   HeaderAuthenticationFilter testHeaderAuthenticationFilter,
                                                    AuthenticationEntryPointImpl entryPoint,
                                                    AccessDeniedHandlerImpl deniedHandler) throws Exception {
             http
@@ -195,7 +221,7 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(testHeaderAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(TEST_HEADER_AUTH_FILTER, UsernamePasswordAuthenticationFilter.class);
             return http.build();
         }
     }

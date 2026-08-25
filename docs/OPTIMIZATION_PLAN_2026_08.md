@@ -66,19 +66,31 @@ Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用�
 **修复**：insert 移入事务内（同事务原子提交才是真 outbox），afterCommit 仅用于触发通知；
 或失败时落盘本地文件/告警补偿。配套补一个 Testcontainers 集成测试验证原子性。
 
-### R3. 集成测试从 0 到 1
+### R3. 集成测试从 0 到 1 ✅（2026-08-25 完成）
 `cloud-infra-test-support`（Testcontainers PG/RabbitMQ/ES）已建好却无消费者。
 关键缺口：跨服务 Feign 链路、MQ 幂等消费、outbox 派发、权限传播全靠手工验证。
 **计划**：每模块先补 1 条主链路 IT（登录→网关→业务→DB 断言），纳入 CI test job。
 
-### R4. demo-service 处置
+**进展**：file-service 首条 HTTP 主链路 IT 已落地（FileHttpFlowIntegrationTest，3 用例：
+未认证 401 / 无权限 403 / OWNER 上传→搜索→版本历史全链路），过程中顺带修复
+GlobalExceptionHandler 吞掉 AccessDeniedException 变 500 的生产级缺陷。
+search-service 已有 IT 但其 @EnableMethodSecurity 未启用（@PreAuthorize 未生效）。
+剩余模块 IT 待补。
+
+### R4. demo-service 处置 ✅（2026-08-25 完成）
 3 个类、HealthController 无 @PreAuthorize（whoami 端点）、不在任何部署配置中。
 **处置**：要么删除模块，要么明确其"新服务脚手架模板"定位并移出默认构建（profile 隔离）。
 
-### R5. FileController 全端点无权限注解
+**完成方式**：已移出默认 reactor，改为 `-Pwith-demo` profile 显式激活。
+
+### R5. FileController 全端点无权限注解 ✅（2026-08-25 完成）
 file-service 上传/下载/删除均无 `@PreAuthorize`。若依赖网关白名单放行则上传接口可被
 任意已认证用户滥用（存储耗尽风险）。
 **修复**：补齐权限注解 + 上传大小/类型限制核查（魔数校验已有，确认阈值配置）。
+
+**完成方式**：6 端点补齐 `@ss.hasPermi('file:file:*')` 注解；V8 迁移注册 5 条权限种子
+并授予超管；关键补充：file-service 此前无 SecurityFilterChain 且未启用方法安全
+（注解不会生效），新建 FileSecurityConfig 对齐其余服务基线。
 
 ---
 
@@ -118,11 +130,13 @@ TTL 30-60s，配合 S2 的主动失效。
 历史中可能有大 jar/二进制。**行动**：`git rev-list --objects --all | sort -k2` 找大对象，
 评估 git-filter-repo 清理（破坏性操作，需团队协调，低优先）。
 
-### H3. 文档版本漂移
+### H3. 文档版本漂移 ✅（2026-08-25 完成）
 README 写 MyBatis Plus 3.5.6（实际 pom 3.5.17）、jjwt 0.12.5（实际 0.13.0）、
 Redisson 3.30（实际 4.7.0）；CONTEXT.md 提及已移除的 framework-seata。
 ROADMAP 多个里程碑勾选状态与实际不符（Milestone 1 两项未完成但仍标进行中）。
 **行动**：一次性校正 + 加 CI 步骤 grep 关键版本号防回归（tools/check-config-drift.py 思路延伸）。
+
+**完成方式**：README/CONTEXT.md 版本已校正、seata 引用已删；CI 防回归步骤待补。
 
 ### H4. tools/ 目录 41MB 构建产物混入源码管理
 pack*.tgz、pack-build*.log 共 41MB。**行动**：移至 release 附件或 gitignore，仓库只留脚本。

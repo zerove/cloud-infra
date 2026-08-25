@@ -24,7 +24,8 @@ import org.testcontainers.utility.DockerImageName;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+@org.springframework.boot.test.context.filter.annotation.TypeExcludeFilters(FileServiceContextExcludeFilter.class)
+@SpringBootTest(classes = com.cloudinfra.file.FileApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "auth.jwt.secret=test-secret-key-for-testing-min-32-chars-long-enough",
         "spring.cloud.nacos.config.enabled=false",
         "spring.cloud.nacos.discovery.enabled=false"

@@ -22,6 +22,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.when;
 
 /**
  * RBAC 服务单元测试
@@ -64,11 +65,19 @@ public class RBACServiceImplTest {
 
     @Test
     void shouldAssignPermissionsAndPublishRefreshEvent() {
+        // 角色授权变更前先查出受影响用户，变更后逐一发布 user: 刷新事件
+        // （监听器只处理 user: 前缀；role: 消息无法在下游反查用户-角色映射）
+        com.cloudinfra.system.domain.SysUserRole relation =
+                new com.cloudinfra.system.domain.SysUserRole();
+        relation.setUserId(1L);
+        relation.setRoleId(2L);
+        when(sysUserRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(relation));
+
         rbacService.assignPermissionsToRole(2L, List.of(100L));
 
         verify(sysRolePermissionMapper).delete(any(Wrapper.class));
         verify(sysRolePermissionMapper, times(1)).insert(any(SysRolePermission.class));
-        verify(redisService).publish("auth:refresh:channel", "role:2");
+        verify(redisService).publish("auth:refresh:channel", "user:1");
     }
 
     @Test
