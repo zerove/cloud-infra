@@ -10,7 +10,10 @@ import com.cloudinfra.system.domain.SysRoleMenu;
 import com.cloudinfra.system.domain.dto.SysRoleCreateDTO;
 import com.cloudinfra.system.domain.dto.SysRoleUpdateDTO;
 import com.cloudinfra.system.exception.SystemBusinessException;
+import com.cloudinfra.framework.redis.service.RedisService;
+import com.cloudinfra.system.domain.SysUserRole;
 import com.cloudinfra.system.mapper.SysRoleMapper;
+import com.cloudinfra.system.mapper.SysUserRoleMapper;
 import com.cloudinfra.system.service.ISysRoleDeptService;
 import com.cloudinfra.system.service.ISysRoleMenuService;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +53,12 @@ public class SysRoleServiceImplTest {
 
     @Mock
     private SysRoleConverter roleConverter;
+
+    @Mock
+    private SysUserRoleMapper sysUserRoleMapper;
+
+    @Mock
+    private RedisService redisService;
 
     @InjectMocks
     private SysRoleServiceImpl roleService;
@@ -160,15 +169,37 @@ public class SysRoleServiceImplTest {
 
     @Test
     void shouldDeleteRolesAndRelations() {
+        SysUserRole link = new SysUserRole();
+        link.setUserId(100L);
+        link.setRoleId(1L);
+        when(sysUserRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(link));
         when(roleMenuService.remove(any(Wrapper.class))).thenReturn(true);
         when(roleDeptService.remove(any(Wrapper.class))).thenReturn(true);
+        when(sysUserRoleMapper.delete(any(Wrapper.class))).thenReturn(1);
         when(roleMapper.deleteByIds(any())).thenReturn(2);
 
         int result = roleService.deleteRoleByIds(new Long[] {1L, 2L});
 
         assertThat(result).isEqualTo(1);
-        // 批量删除：菜单与数据权限各调用一次 remove
+        // 批量删除：菜单、数据权限、用户-角色关联各清一次
         verify(roleMenuService).remove(any(Wrapper.class));
         verify(roleDeptService).remove(any(Wrapper.class));
+        verify(sysUserRoleMapper).delete(any(Wrapper.class));
+        // 持有被删角色的用户必须收到权限缓存失效广播
+        verify(redisService).publish("auth:refresh:channel", "user:100");
+    }
+
+    @Test
+    void shouldDeleteRolesWithoutBroadcastWhenNoUsers() {
+        when(sysUserRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(roleMenuService.remove(any(Wrapper.class))).thenReturn(true);
+        when(roleDeptService.remove(any(Wrapper.class))).thenReturn(true);
+        when(sysUserRoleMapper.delete(any(Wrapper.class))).thenReturn(0);
+        when(roleMapper.deleteByIds(any())).thenReturn(1);
+
+        int result = roleService.deleteRoleByIds(new Long[] {9L});
+
+        assertThat(result).isEqualTo(1);
+        verify(redisService, never()).publish(any(), any());
     }
 }
