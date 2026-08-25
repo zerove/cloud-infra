@@ -15,6 +15,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.framework.security.cache.PermissionLocalCache;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 
 @Component
@@ -23,6 +25,13 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     @org.springframework.context.annotation.Lazy
     private IPermissionProvider permissionProvider;
+
+    /**
+     * F4: L1 本地缓存。置于 @Cacheable(Redis) 之前，热点用户命中即免 Redis 往返。
+     * 失效由监听器同步 evict；TTL 30 秒兜底广播丢失。
+     */
+    @Autowired(required = false)
+    private PermissionLocalCache permissionLocalCache;
 
     /**
      * 身份头信任开关：开启后 X-User-Id 仅在携带有效网关内部签名时被信任，
@@ -52,8 +61,24 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         }
 
         if (userId != null && username != null) {
-            // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用
-            LoginUser loginUser = permissionProvider.getUserContext(Long.valueOf(userId));
+            // F4: L1 命中直接装配，跳过 @Cacheable 的 Redis 往返
+            Long uid = Long.valueOf(userId);
+            LoginUser loginUser = null;
+            if (permissionLocalCache != null && permissionLocalCache.hasEntry(uid)) {
+                loginUser = permissionLocalCache.get(uid, LoginUser.class);
+                if (loginUser == null) {
+                    // L1 记录的是"用户不存在"负缓存：按未认证继续
+                    userId = null;
+                    username = null;
+                }
+            }
+            if (userId != null && loginUser == null) {
+                // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用
+                loginUser = permissionProvider.getUserContext(uid);
+                if (permissionLocalCache != null) {
+                    permissionLocalCache.put(uid, loginUser);
+                }
+            }
             if (loginUser == null) {
                 // 兜底：基于 Header 构建最小上下文
                 loginUser = LoginUser.builder()
