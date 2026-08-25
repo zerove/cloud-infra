@@ -74,8 +74,14 @@ Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用�
 **进展**：file-service 首条 HTTP 主链路 IT 已落地（FileHttpFlowIntegrationTest，3 用例：
 未认证 401 / 无权限 403 / OWNER 上传→搜索→版本历史全链路），过程中顺带修复
 GlobalExceptionHandler 吞掉 AccessDeniedException 变 500 的生产级缺陷。
-search-service 已有 IT 但其 @EnableMethodSecurity 未启用（@PreAuthorize 未生效）。
-剩余模块 IT 待补。
+search-service 方法安全已修复并验证（替身过滤器静态实例入链规避双注册，7/7 全绿）。
+outbox 原子性/并发派发 IT 已落地（OutboxIntegrationTest，5 用例：事务原子性/
+幂等键双重防线/SKIP LOCKED 并发互斥/生命周期状态机）。
+notification MQ 全链路 IT 已落地（NotificationMqFlowIntegrationTest，5 用例：
+规则命中落库/未命中忽略/messageId 幂等/毒消息不击穿/无规则静默），
+过程中修复 RuleConsumer 告警请求被 validate() 拒绝致告警静默丢失的产品缺陷。
+CI 已接入 IT 步骤（failsafe:integration-test -DskipITs=false）。
+剩余模块（gateway/auth Feign 链路）IT 待补。
 
 ### R4. demo-service 处置 ✅（2026-08-25 完成）
 3 个类、HealthController 无 @PreAuthorize（whoami 端点）、不在任何部署配置中。
