@@ -143,6 +143,34 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理方法级安全 (@PreAuthorize/@ss.hasPermi) 抛出的拒绝访问异常。
+     * 若无此分支，AccessDeniedException 会落入下方 Exception 兜底变成 500。
+     * 行为对齐 SecurityFilterChain 的 ExceptionTranslationFilter：
+     * 匿名/未认证请求 → 业务码 401（提示登录）；已认证但权限不足 → 业务码 403。
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Result<?>> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        org.springframework.security.core.Authentication auth =
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean anonymous = auth == null
+            || !auth.isAuthenticated()
+            || auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken;
+        if (anonymous) {
+            log.warn("Access denied for unauthenticated request");
+            return new ResponseEntity<>(
+                Result.fail(401, "未授权，请先登录"),
+                HttpStatus.OK
+            );
+        }
+        log.warn("Access denied: {}", e.getMessage());
+        // 业务码与 SecurityFilterChain 的 AccessDeniedHandlerImpl 保持一致
+        return new ResponseEntity<>(
+            Result.fail(403, "权限不足"),
+            HttpStatus.OK
+        );
+    }
+
+    /**
      * 处理所有未捕获的运行时异常
      */
     @ExceptionHandler(Exception.class)

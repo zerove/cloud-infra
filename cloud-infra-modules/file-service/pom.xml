@@ -118,6 +118,12 @@
             <artifactId>okio</artifactId>
             <version>3.18.1</version>
         </dependency>
+        <!-- 集成测试 HTTP 客户端（WebTestClient） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
