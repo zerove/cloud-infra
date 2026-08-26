@@ -37,17 +37,18 @@ class NacosConfigDriftChecker:
         page_size = 100
         
         while True:
-            url = f"{self.nacos_url}/nacos/v1/cs/configs"
-            params = {'pageNo': page_no, 'pageSize': page_size}
+            url = f"{self.nacos_url}/nacos/v3/admin/cs/config/list"
+            params = {'pageNo': page_no, 'pageSize': page_size, 'namespaceId': 'public'}
             try:
                 resp = self.session.get(url, params=params, timeout=10)
                 resp.raise_for_status()
                 data = resp.json()
-                page_items = data.get('pageItems', [])
+                page_data = data.get('data', {})
+                page_items = page_data.get('pageItems', [])
                 if not page_items:
                     break
                 all_configs.extend(page_items)
-                if len(page_items) < page_size:
+                if len(page_items) < page_size or page_no >= page_data.get('pagesAvailable', 1):
                     break
                 page_no += 1
             except Exception as e:
@@ -57,15 +58,22 @@ class NacosConfigDriftChecker:
         return all_configs
     
     def get_nacos_config(self, data_id: str, group: str = "DEFAULT_GROUP") -> Tuple[str, str]:
-        """获取单个配置内容及 MD5"""
-        url = f"{self.nacos_url}/nacos/v1/cs/configs"
-        params = {'dataId': data_id, 'group': group}
+        """获取单个配置内容及 MD5（Nacos 3.x v3 admin API，v1 兼容层默认关闭）"""
+        url = f"{self.nacos_url}/nacos/v3/admin/cs/config"
+        params = {'dataId': data_id, 'groupName': group, 'namespaceId': 'public'}
         try:
             resp = self.session.get(url, params=params, timeout=10)
             if resp.status_code == 404:
                 return None, None
             resp.raise_for_status()
-            content = resp.text
+            payload = resp.json()
+            if not isinstance(payload, dict) or payload.get('code') != 0:
+                return None, None
+            content = (payload.get('data') or {}).get('content')
+            if content is None:
+                return None, None
+            # shell $(cat) 同步会剥离尾部换行，对比前统一 rstrip 避免伪漂移
+            content = content.rstrip()
             md5 = hashlib.md5(content.encode('utf-8')).hexdigest()
             return content, md5
         except Exception as e:
@@ -78,7 +86,7 @@ class NacosConfigDriftChecker:
         if not filepath.exists():
             return None, None
         try:
-            content = filepath.read_text(encoding='utf-8')
+            content = filepath.read_text(encoding='utf-8').rstrip()
             md5 = hashlib.md5(content.encode('utf-8')).hexdigest()
             return content, md5
         except Exception as e:
