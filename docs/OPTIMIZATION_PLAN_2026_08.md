@@ -108,16 +108,22 @@ file-service 上传/下载/删除均无 `@PreAuthorize`。若依赖网关白名�
 
 ## P2 性能与资源优化（2-4 周）
 
-### F1. Native 性能基线缺失
+### F1. Native 性能基线缺失 🔄（2026-08-26 JVM 侧完成，native 待构建）
 benchmark-results 仅 JVM 数据（启动 68.8s / p99 5.2s）。native 二进制已交付但从未压测。
-**行动**：跑 `./benchmark.sh --native` 建立 native 基线；JVM p99 5.2s 偏高，抓一次
-async-profile 火焰图定位（怀疑虚拟线程 pinning 或日志同步 IO）。
+**进展（2026-08-26）**：JVM 基线已刷新——p99 **5188ms→970ms**、吞吐 54→148 RPS，
+达成 "p99 < 2s" 验收口径。JFR 归因：**虚拟线程 pinning = 0 次**（原怀疑证伪）；
+尾部延迟来自 Spring Boot Loader 嵌套 jar URL 处理与 SecureRandom 锁（fat-jar
+已知开销）；详见 benchmark-results-jvm-refresh/benchmark-report.md。
+**剩余**：`./build-native.sh` 后跑 `--native` 建立 native 基线（构建约 30-60min，
+需 12GB 内存，本机满足）。
 
-### F2. compose 内存参数与 JDK 25 脱节
+### F2. compose 内存参数与 JDK 25 脱节 ✅（2026-08-26 完成）
 `JAVA_OPTS` 用 `-XX:+UseZGC -Xmx256m`：JDK 25 的 ZGC 即分代 ZGC（`ZGenerational` 标志
 已在 24 移除，无需显式开）。256m 堆对 servlet 服务偏紧，GC 频率换吞吐。
-**行动**：压测后统一调参；考虑 `-XX:+UseCompactObjectHeaders`（JDK 24+ 正式特性，
-对象头压缩省内存 ~10%）。
+**完成**：全部 JAVA_OPTS 加 `-XX:+UseCompactObjectHeaders`（对象头压缩省内存 ~10%）
+与 `-XX:+ExitOnOutOfMemoryError`（OOM 快速失败+restart 拉起）；gateway/auth/file/
+notification/search 五服务 mem_limit 384m→448m 对齐实测 RSS 余量。压测后如仍有
+GC 压力再评估 Xmx 上调。
 
 ### F3. 启动时间 68.8s 过长（JVM 模式）
 疑似原因：Nacos 连接重试串行化、logback 初始化、Bean 全量预实例化。
