@@ -56,9 +56,11 @@ if [ "$MODE" = "native" ]; then
     echo "❌ Native 二进制不存在: $BIN (先运行 ./build-native.sh)"
     exit 1
   fi
+  # 注意: --spring.cloud.nacos.*.enabled=false 在 native 下不生效(AOT 已固化 Nacos 客户端初始化),
+  # 依赖 /etc/hosts 将 cloud-nacos/cloud-redis 映射到 127.0.0.1 来直连本地基础设施
   "$BIN" \
-    --spring.cloud.nacos.config.enabled=false \
-    --spring.cloud.nacos.discovery.enabled=false \
+    --spring.data.redis.host=127.0.0.1 \
+    --spring.data.redis.port=6379 \
     --auth.jwt.secret="${AUTH_JWT_SECRET:-test-secret-key-for-benchmark-min-32-chars}" \
     --management.server.port=19301 \
     --server.port=18080 > /tmp/benchmark-gateway.log 2>&1 &

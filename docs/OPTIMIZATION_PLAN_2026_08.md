@@ -11,7 +11,7 @@
 | Native Image | 网关 ✅（1.37s 启动）、auth ✅（11.6s 启动），业务模块按 ADR-005 保持 JVM |
 | 测试 | 167 单测全绿；**集成测试 0 个**（test-support 底座就绪但无 *IT.java） |
 | CI | GitHub Actions 四阶段流水线完整（test/quality/native/docker） |
-| 性能基线 | JVM 启动 68.8s、54 RPS、p99 5.2s；native 无基线数据 |
+| 性能基线 | JVM 启动 36.0s、101 RPS、p99 151ms；native 启动 10.3s、123 RPS、p99 104ms（同参数对照） |
 
 ---
 
@@ -108,14 +108,23 @@ file-service 上传/下载/删除均无 `@PreAuthorize`。若依赖网关白名�
 
 ## P2 性能与资源优化（2-4 周）
 
-### F1. Native 性能基线缺失 🔄（2026-08-26 JVM 侧完成，native 待构建）
+### F1. Native 性能基线缺失 ✅（2026-08-26 完成）
 benchmark-results 仅 JVM 数据（启动 68.8s / p99 5.2s）。native 二进制已交付但从未压测。
 **进展（2026-08-26）**：JVM 基线已刷新——p99 **5188ms→970ms**、吞吐 54→148 RPS，
 达成 "p99 < 2s" 验收口径。JFR 归因：**虚拟线程 pinning = 0 次**（原怀疑证伪）；
 尾部延迟来自 Spring Boot Loader 嵌套 jar URL 处理与 SecureRandom 锁（fat-jar
 已知开销）；详见 benchmark-results-jvm-refresh/benchmark-report.md。
-**剩余**：`./build-native.sh` 后跑 `--native` 建立 native 基线（构建约 30-60min，
-需 12GB 内存，本机满足）。
+**完成（2026-08-26 f1c）**：gateway/auth native 二进制构建并直跑验证通过
+（gateway 250MB / auth 260MB），native 基线建立——**启动 10.3s vs JVM 同参数 36.0s
+（-71%）、RSS 258MB vs 519MB（-50%）、123 RPS vs 101 RPS、p99 104ms vs 151ms**
+（同参数：30s/并发10//v3/api-docs，见 benchmark-results/native-f1c 与 jvm-f1c）。
+构建攻坚排掉三个独立缺陷：① skywalking toolkit 9.7.0 上游未发布（回退 9.6.0）；
+② proxyexchange aliyun 缓存 404（Central 直拉）；③ SCG `AfterFilterFunctions$1`
+匿名类致 process-aot 崩溃（classpath shadow 覆盖 `GatewayMvcRuntimeHintsProcessor`，
+上游修复后可删）。另发现：**多模块合跑 process-aot 时 auth 的 spring-aot 产物
+不落盘**（FileSystemNotFoundException），build-native.sh 已改为按模块单独 AOT+编译；
+`--spring.cloud.nacos.*.enabled=false` 在 native 下不生效（AOT 固化客户端初始化），
+本地验证依赖 /etc/hosts 将 cloud-nacos/cloud-redis 映射到 127.0.0.1。
 
 ### F2. compose 内存参数与 JDK 25 脱节 ✅（2026-08-26 完成，G1 补充同日）
 `JAVA_OPTS` 用 `-XX:+UseZGC -Xmx256m`：JDK 25 的 ZGC 即分代 ZGC（`ZGenerational` 标志
