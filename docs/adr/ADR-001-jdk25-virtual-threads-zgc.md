@@ -44,3 +44,8 @@
 - 实施计划: `docs/superpowers/plans/2026-05-02-jdk25-virtual-threads.md`
 - 设计文档: `docs/superpowers/specs/2026-05-02-jdk25-virtual-threads-design.md`
 - 相关代码: `VirtualThreadConfig`, `VirtualThreadPinnedMonitor`, `VirtualThreadMonitorHealthIndicator`
+
+> **2026-08-26 状态更新**：容器化实测（448m limit / 256-320m 堆）表明 ZGC 的
+> 并发回收 CPU 开销在小堆场景显著拖慢启动（Bean 加载段 19-23s vs G1 ~7s），
+> compose 六个 JVM 服务已切换为 `-XX:+UseG1GC`。虚拟线程决策不变。
+> 数据见 `docs/OPTIMIZATION_PLAN_2026_08.md` F2/F3 段。
