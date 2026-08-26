@@ -44,12 +44,6 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
-        <!-- ProxyExchange 支持 -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-gateway-proxyexchange-webmvc</artifactId>
-            <version>5.0.3</version>
-        </dependency>
 
         <!-- Nacos 配置 -->
         <dependency>
