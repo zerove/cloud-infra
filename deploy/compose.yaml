@@ -359,12 +359,12 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-gateway:latest
     container_name: cloud-gateway
-    mem_limit: 384m
+    mem_limit: 448m
     ports:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -397,12 +397,12 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
-    mem_limit: 384m
+    mem_limit: 448m
     ports:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -441,7 +441,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx512m -Xms256m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx512m -Xms256m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -477,12 +477,12 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-file:latest
     container_name: cloud-file
-    mem_limit: 384m
+    mem_limit: 448m
     ports:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -517,12 +517,12 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-notification:latest
     container_name: cloud-notification
-    mem_limit: 384m
+    mem_limit: 448m
     ports:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -557,12 +557,12 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-search:latest
     container_name: cloud-search
-    mem_limit: 384m
+    mem_limit: 448m
     ports:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseZGC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
