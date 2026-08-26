@@ -29,7 +29,7 @@ echo "  UUID: $UUID"
 
 echo "2. 场景一：错误密码登录应被拒绝..."
 RESP=$(curl -s --noproxy '*' -X POST "$GATEWAY/auth/login" -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"wrong-password","code":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
+  -d '{"username":"admin","password":"wrong-password","captcha":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
 expect_contains "错误密码返回失败码" "$RESP" '"code":-\?[0-9]*' 
 if echo "$RESP" | grep -q '"token"'; then
   FAIL=$((FAIL+1)); echo "  FAIL: 错误密码竟拿到 token"
@@ -41,7 +41,7 @@ echo "3. 场景二：正确凭据登录获取 token..."
 CAPTCHA_RESP=$(curl -s -f --noproxy '*' -X GET "$GATEWAY/auth/captchaImage")
 UUID=$(echo "$CAPTCHA_RESP" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
 LOGIN_RESP=$(curl -s --noproxy '*' -X POST "$GATEWAY/auth/login" -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123","code":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
+  -d '{"username":"admin","password":"admin123","captcha":"'"$FIXED_CODE"'","uuid":"'"$UUID"'"}')
 TOKEN=$(echo "$LOGIN_RESP" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 if [ -n "$TOKEN" ]; then PASS=$((PASS+1)); echo "  PASS: 登录成功获得 token";
 else FAIL=$((FAIL+1)); echo "  FAIL: 登录未获得 token，响应: $LOGIN_RESP"; fi

@@ -106,7 +106,7 @@ auth:
     blacklist-ttl-ms: ${AUTH_TOKEN_BLACKLIST_TTL_MS:86400000}
   # H5: E2E 固定验证码。仅本地/e2e 环境设置非空值；生产必须保持空串（真实验证码校验）
   captcha:
-    fixed-code: ""
+    fixed-code: ${AUTH_CAPTCHA_FIXED_CODE:}
 
 # 内部服务间调用签名密钥（生产必须通过 INTERNAL_CALL_SECRET 注入外置强密钥）
 cloud-infra:
