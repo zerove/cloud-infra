@@ -195,10 +195,15 @@ ROADMAP 多个里程碑勾选状态与实际不符（Milestone 1 两项未完成
 ### H4. tools/ 目录 41MB 构建产物混入源码管理
 pack*.tgz、pack-build*.log 共 41MB。**行动**：移至 release 附件或 gitignore，仓库只留脚本。
 
-### H5. E2E 测试是空壳
+### H5. E2E 测试是空壳 ✅（2026-08-26 完成）
 e2e-test.sh 只测验证码接口，token 拿不到就用 mock 继续，最后无条件打 ✅。
 **行动**：auth 测试环境加固定验证码开关（已有 dev profile 基础），打通真实登录断言，
 覆盖：登录→带 token 访问受保护资源→401 场景→权限不足 403 场景。
+**状态：✅ 已完成。** `auth.captcha.fixed-code` 占位符 + `AUTH_CAPTCHA_FIXED_CODE` 环境变量注入
+（生产留空走真实验证码）；e2e-test.sh 重写为真实断言五场景：错误密码拒绝、正确凭据签发 token、
+无 token 401、带 token 200、伪造 token 401，6/6 PASS。排障中修复登录请求体字段名错误
+（`code` → 实体字段 `captcha`，Jackson 静默丢弃导致恒 1004）。本地联调环境注意：手动
+pasta 容器需显式透传 INTERNAL_CALL_SECRET 等密钥变量，TUN 代理会污染中间件域名解析。
 
 ---
 
