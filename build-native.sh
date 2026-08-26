@@ -28,21 +28,32 @@ echo -e "配置项: \n - 并发度: 单线程 (-T 1) \n - Maven 堆内存: 2GB \
 
 # 3. 执行 Native 构建
 # Spring Boot 4.1.0 需要先执行 process-aot 再执行 native:compile
+# 注意: process-aot 会启动应用上下文连接 Nacos, 需先加载 .env 并将 NACOS_ADDR 指向本地回环
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+export NACOS_ADDR="${NACOS_ADDR:-localhost:8848}"
+
+# 多模块合跑 process-aot 时 auth 的 spring-aot 产物不会落盘(仅 gateway 正常),
+# 导致 auth native:compile 报 FileSystemNotFoundException, 因此 auth 必须单独跑 AOT
 mvn clean package \
     -T 1 \
     -Pnative \
     -DskipTests \
     -pl cloud-infra-gateway,cloud-infra-auth \
-    -am \
-    && mvn spring-boot:process-aot \
-    -Pnative \
-    -DskipTests \
-    -pl cloud-infra-gateway,cloud-infra-auth \
-    && mvn native:compile \
-    -Pnative \
-    -DskipTests \
+    -am
+
+mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-gateway
+mvn native:compile -Pnative -DskipTests \
     -Dnative.image.args="-J-Xmx8g" \
-    -pl cloud-infra-gateway,cloud-infra-auth
+    -pl cloud-infra-gateway
+
+mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-auth
+mvn native:compile -Pnative -DskipTests \
+    -Dnative.image.args="-J-Xmx8g" \
+    -pl cloud-infra-auth
 
 echo -e "${GREEN}>>> Native 二进制文件构建完成。${NC}"
 ls -l cloud-infra-gateway/target/cloud-infra-gateway-binary
