@@ -125,10 +125,16 @@ benchmark-results 仅 JVM 数据（启动 68.8s / p99 5.2s）。native 二进制
 notification/search 五服务 mem_limit 384m→448m 对齐实测 RSS 余量。压测后如仍有
 GC 压力再评估 Xmx 上调。
 
-### F3. 启动时间 68.8s 过长（JVM 模式）
-疑似原因：Nacos 连接重试串行化、logback 初始化、Bean 全量预实例化。
-**行动**：加 `-Dspring.startup.insight` 或 startup endpoint 分析各阶段耗时，目标 <30s。
-（CDS/AppCDS 是备选方案，优先级低于 native。）
+### F3. 启动时间 68.8s 过长（JVM 模式）✅（2026-08-26 完成）
+JFR+日志分解定位：5 个 Sentinel NacosDataSource 串行创建占约 34.5s（一半以上）。
+sentinel-datasource-nacos 1.8.9 构造器内部强制 `NacosFactory.createConfigService`，
+每次新建独立 gRPC 连接且无共享池；本机基准环境 `cloud-nacos` 被代理工具 DNS
+劫持为 fake-ip，gRPC 直连失败触发多轮超时重试放大耗时。
+**修复**：SentinelConfig 反射共享 ConfigService——首个数据源正常建连，
+其余 4 个构造后字段替换为主实例并 shutDown 冗余连接（e428b2c）。
+**实测**：启动 66.7s → 25.5s（-62%），Sentinel 数据源阶段 34.5s → 0.29s。
+注：本机直跑 jar 需 `NACOS_ADDR=localhost:8848` 绕开 DNS 劫持；生产容器走
+podnet 别名真实 IP 不受影响。CDS/AppCDS 备选方案不再需要。
 
 ### F4. 权限上下文每次请求远程拉取的放大效应 ✅（2026-08-26 完成）
 HeaderAuthenticationFilter 每请求走 Cacheable→Redis。热点用户 QPS 高时 Redis 成为瓶颈点。
