@@ -199,7 +199,8 @@ Redisson 3.30（实际 4.7.0）；CONTEXT.md 提及已移除的 framework-seata�
 ROADMAP 多个里程碑勾选状态与实际不符（Milestone 1 两项未完成但仍标进行中）。
 **行动**：一次性校正 + 加 CI 步骤 grep 关键版本号防回归（tools/check-config-drift.py 思路延伸）。
 
-**完成方式**：README/CONTEXT.md 版本已校正、seata 引用已删；CI 防回归步骤待补。
+**完成方式**：README/CONTEXT.md 版本已校正、seata 引用已删；CI 防回归步骤已补
+（ci.yml quality-gate 调用 `bash tools/check-doc-versions.sh`，2026-08-26 验证通过）。
 
 ### H4. tools/ 目录 41MB 构建产物混入源码管理 ✅（2026-08-26 完成）
 pack*.tgz、pack-build*.log 共 41MB。**行动**：移至 release 附件或 gitignore，仓库只留脚本。
