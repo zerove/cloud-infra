@@ -14,6 +14,8 @@ import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRuleManager;
 import com.alibaba.csp.sentinel.slots.system.SystemRule;
 import com.alibaba.csp.sentinel.slots.system.SystemRuleManager;
 import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;
+import com.alibaba.nacos.api.NacosFactory;
+import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.fastjson2.JSON;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -26,6 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 
 import java.util.List;
+import java.util.Properties;
 
 /**
  * Sentinel Nacos 数据源配置
@@ -61,6 +64,14 @@ public class SentinelConfig implements SmartInitializingSingleton {
     /** 应用名（Sentinel Dashboard 展示名称） */
     @Value("${spring.application.name:cloud-infra-gateway}")
     private String appName;
+
+    /**
+     * F3: 五个规则数据源共享一个 ConfigService。
+     * NacosDataSource(String,...) 构造器内部每次调 NacosFactory.createConfigService
+     * 新建 gRPC 连接（无共享池），5 个数据源串行建连曾是启动期 ~35s 的主因；
+     * 改为单例 ConfigService 后仅一次建连，后续数据源复用。
+     */
+    private volatile ConfigService sharedConfigService;
 
     /** 限流规则数据源（非懒加载 bean） */
     private final ObjectProvider<ReadableDataSource<String, List<FlowRule>>> flowRuleDataSource;
@@ -109,6 +120,62 @@ public class SentinelConfig implements SmartInitializingSingleton {
     }
 
     /**
+     * 惰性共享 Properties：五个数据源共用同一份 Nacos 连接属性。
+     * sentinel-datasource-nacos 1.8.9 的 NacosDataSource 构造器内部强制
+     * NacosFactory.createConfigService（每次新建 gRPC 连接，无共享池），
+     * 5 个数据源串行建连曾占网关启动耗时一半以上。这里构造完成后立即
+     * 通过反射把各实例的 configService 字段替换为首个实例，实现单连接复用。
+     */
+    private volatile Properties sharedProperties;
+
+    private synchronized Properties sharedProperties() {
+        if (sharedProperties == null) {
+            sharedProperties = new Properties();
+            sharedProperties.setProperty("serverAddr", serverAddr);
+            sharedProperties.setProperty("namespace", "public");
+        }
+        return sharedProperties;
+    }
+
+    /**
+     * F3: 将数据源的 ConfigService 收敛为进程内单一实例。
+     * 首个调用者正常创建（真实 gRPC 建连），后续实例的 configService 字段
+     * 被反射替换为该实例后其自身新建的连接即刻被丢弃（可 GC）。
+     */
+    private static void shareConfigServiceAcross(ReadableDataSource<?, ?>... sources) {
+        java.lang.reflect.Field field = null;
+        try {
+            field = com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource.class
+                    .getDeclaredField("configService");
+            field.setAccessible(true);
+            Object primary = null;
+            for (ReadableDataSource<?, ?> source : sources) {
+                if (!(source instanceof com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource)) {
+                    continue;
+                }
+                Object current = field.get(source);
+                if (primary == null) {
+                    primary = current;
+                } else if (current != primary) {
+                    // 丢弃重复连接，复用主实例（Nacos ConfigService 线程安全）
+                    try {
+                        ((com.alibaba.nacos.api.config.ConfigService) current).shutDown();
+                    } catch (Exception ignore) {
+                        // 冗余连接关闭失败不影响主流程
+                    }
+                    field.set(source, primary);
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Sentinel 数据源 ConfigService 共享化失败", e);
+        } finally {
+            if (field != null) {
+                field.setAccessible(false);
+            }
+        }
+    }
+
+    /**
      * 限流规则数据源
      */
     @Bean
@@ -117,7 +184,7 @@ public class SentinelConfig implements SmartInitializingSingleton {
             @Value("${sentinel.datasource.flow.nacos.data-id}") String dataId) {
         log.info("=== 创建 flowRuleDataSource, dataId: {} ===", dataId);
         Converter<String, List<FlowRule>> converter = source -> JSON.parseArray(source, FlowRule.class);
-        return new NacosDataSource<>(serverAddr, groupId, dataId, converter);
+        return new NacosDataSource<>(sharedProperties(), groupId, dataId, converter);
     }
 
     /**
@@ -129,7 +196,7 @@ public class SentinelConfig implements SmartInitializingSingleton {
             @Value("${sentinel.datasource.degrade.nacos.data-id}") String dataId) {
         log.info("=== 创建 degradeRuleDataSource, dataId: {} ===", dataId);
         Converter<String, List<DegradeRule>> converter = source -> JSON.parseArray(source, DegradeRule.class);
-        return new NacosDataSource<>(serverAddr, groupId, dataId, converter);
+        return new NacosDataSource<>(sharedProperties(), groupId, dataId, converter);
     }
 
     /**
@@ -141,7 +208,7 @@ public class SentinelConfig implements SmartInitializingSingleton {
             @Value("${sentinel.datasource.param-flow.nacos.data-id}") String dataId) {
         log.info("=== 创建 paramFlowRuleDataSource, dataId: {} ===", dataId);
         Converter<String, List<ParamFlowRule>> converter = source -> JSON.parseArray(source, ParamFlowRule.class);
-        return new NacosDataSource<>(serverAddr, groupId, dataId, converter);
+        return new NacosDataSource<>(sharedProperties(), groupId, dataId, converter);
     }
 
     /**
@@ -153,7 +220,7 @@ public class SentinelConfig implements SmartInitializingSingleton {
             @Value("${sentinel.datasource.system.nacos.data-id}") String dataId) {
         log.info("=== 创建 systemRuleDataSource, dataId: {} ===", dataId);
         Converter<String, List<SystemRule>> converter = source -> JSON.parseArray(source, SystemRule.class);
-        return new NacosDataSource<>(serverAddr, groupId, dataId, converter);
+        return new NacosDataSource<>(sharedProperties(), groupId, dataId, converter);
     }
 
     /**
@@ -165,7 +232,7 @@ public class SentinelConfig implements SmartInitializingSingleton {
             @Value("${sentinel.datasource.authority.nacos.data-id}") String dataId) {
         log.info("=== 创建 authorityRuleDataSource, dataId: {} ===", dataId);
         Converter<String, List<AuthorityRule>> converter = source -> JSON.parseArray(source, AuthorityRule.class);
-        return new NacosDataSource<>(serverAddr, groupId, dataId, converter);
+        return new NacosDataSource<>(sharedProperties(), groupId, dataId, converter);
     }
 
     /**
@@ -176,6 +243,9 @@ public class SentinelConfig implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         log.info("=== Sentinel 数据源注册开始 ===");
+        shareConfigServiceAcross(flowRuleDataSource.getObject(), degradeRuleDataSource.getObject(),
+                paramFlowRuleDataSource.getObject(), systemRuleDataSource.getObject(),
+                authorityRuleDataSource.getObject());
         FlowRuleManager.register2Property(flowRuleDataSource.getObject().getProperty());
         DegradeRuleManager.register2Property(degradeRuleDataSource.getObject().getProperty());
         ParamFlowRuleManager.register2Property(paramFlowRuleDataSource.getObject().getProperty());
