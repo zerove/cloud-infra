@@ -77,3 +77,13 @@ deploy/k8s/infra/config-secrets.yaml
 /search_service_tracker.md
 /spec-reviewer-prompt.md
 /task_tracker.md
+
+# Nacos 本地运行时数据与解包产物（compose 用镜像内置配置）
+nacos/data/
+nacos/logs/
+nacos-mysql.sql
+
+# 历史调试残留
+hs_err_pid*.log
+*.jfr
+nacos-mysql.sql
