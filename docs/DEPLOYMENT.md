@@ -19,7 +19,7 @@ podman build -t cloud-infra-system:jre -f deploy/Dockerfile.jre .
 ```
 
 ### 3. 运维说明
-- **性能优化**：JRE 服务已默认开启 `ZGC` (`-XX:+UseZGC`) 与虚拟线程 (`-XX:+UseVirtualThreads`)，网关服务则通过 Native 实现毫秒级扩容。
+- **性能优化**：JRE 服务已默认开启 `G1 GC` (`-XX:+UseG1GC`)，小堆容器场景启动与内存均优于 ZGC；同时默认启用虚拟线程 (`-XX:+UseVirtualThreads`)，网关服务则通过 Native 实现毫秒级扩容。
 - **健康监控**：可通过各服务 Actuator 接口汇总状态，Prometheus 自动发现已通过 `service_discovery.sh` 集成。
 - **构建规范**：所有 Dockerfile 已采用“宿主机编译 + Alpine 镜像打包”策略，避免了镜像内 `apt/maven` 网络冲突问题，请确保宿主机环境具备 JDK 25。
 

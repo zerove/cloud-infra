@@ -117,13 +117,18 @@ benchmark-results 仅 JVM 数据（启动 68.8s / p99 5.2s）。native 二进制
 **剩余**：`./build-native.sh` 后跑 `--native` 建立 native 基线（构建约 30-60min，
 需 12GB 内存，本机满足）。
 
-### F2. compose 内存参数与 JDK 25 脱节 ✅（2026-08-26 完成）
+### F2. compose 内存参数与 JDK 25 脱节 ✅（2026-08-26 完成，G1 补充同日）
 `JAVA_OPTS` 用 `-XX:+UseZGC -Xmx256m`：JDK 25 的 ZGC 即分代 ZGC（`ZGenerational` 标志
 已在 24 移除，无需显式开）。256m 堆对 servlet 服务偏紧，GC 频率换吞吐。
 **完成**：全部 JAVA_OPTS 加 `-XX:+UseCompactObjectHeaders`（对象头压缩省内存 ~10%）
 与 `-XX:+ExitOnOutOfMemoryError`（OOM 快速失败+restart 拉起）；gateway/auth/file/
 notification/search 五服务 mem_limit 384m→448m 对齐实测 RSS 余量。压测后如仍有
 GC 压力再评估 Xmx 上调。
+**G1 补充（容器化四组对照实测）**：小堆下 ZGC 并发回收 CPU 开销拖慢启动
+（Bean 加载段 19-23s vs 直跑 ~7s）。对照结果：ZGC+256m 47.8s/463MB、
+ZGC+320m 44.3s/469MB、**G1+320m 24.5s/395MB**、SerialGC+320m 29.6s/348MB；
+G1 三轮复测 18.1-23.4s 稳定。compose 六服务已切 G1+320m（768m 服务保 512m 堆），
+网关路由冒烟通过。SerialGC 启动/RSS 也优但单核暂停模型不适合生产流量，未选。
 
 ### F3. 启动时间 68.8s 过长（JVM 模式）✅（2026-08-26 完成）
 JFR+日志分解定位：5 个 Sentinel NacosDataSource 串行创建占约 34.5s（一半以上）。
