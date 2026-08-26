@@ -129,6 +129,12 @@ GC 压力再评估 Xmx 上调。
 ZGC+320m 44.3s/469MB、**G1+320m 24.5s/395MB**、SerialGC+320m 29.6s/348MB；
 G1 三轮复测 18.1-23.4s 稳定。compose 六服务已切 G1+320m（768m 服务保 512m 堆），
 网关路由冒烟通过。SerialGC 启动/RSS 也优但单核暂停模型不适合生产流量，未选。
+**三路径参数一致性收尾（2026-08-26）**：六个 Dockerfile 内置 JAVA_OPTS 与
+compose/K8s 对齐（G1+320m，system 512m；保留 CDS 容错挂载）；demo-service
+ENTRYPOINT 硬编码改为 JAVA_OPTS 环境变量模式；K8s 六个 chart values 注入
+JAVA_OPTS（此前 K8s 路径跑镜像旧默认值）且 system limits 512Mi→640Mi；
+顺手修复六 chart pdb.yaml helper 引用名存量 bug（file.fullname →
+cloud-infra-file.fullname 等），helm template 此前整体无法渲染。
 
 ### F3. 启动时间 68.8s 过长（JVM 模式）✅（2026-08-26 完成）
 JFR+日志分解定位：5 个 Sentinel NacosDataSource 串行创建占约 34.5s（一半以上）。

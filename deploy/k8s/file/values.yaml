@@ -107,6 +107,8 @@ env:
     secretKeyRef:
       name: cloud-infra-secrets
       key: minio.secret-key
+- name: JAVA_OPTS
+  value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness

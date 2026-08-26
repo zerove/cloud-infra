@@ -2,12 +2,12 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "notification.fullname" . }}
+  name: {{ include "cloud-infra-notification.fullname" . }}
   labels:
-    {{- include "notification.labels" . | nindent 4 }}
+    {{- include "cloud-infra-notification.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.pdb.minAvailable }}
   selector:
     matchLabels:
-      {{- include "notification.selectorLabels" . | nindent 6 }}
+      {{- include "cloud-infra-notification.selectorLabels" . | nindent 6 }}
 {{- end }}
