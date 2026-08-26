@@ -101,6 +101,8 @@ env:
   value: guest
 - name: SPRING_RABBITMQ_PASSWORD
   value: guest
+- name: JAVA_OPTS
+  value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness

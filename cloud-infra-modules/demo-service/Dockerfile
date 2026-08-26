@@ -13,4 +13,7 @@ RUN chown -R cloudinfra:cloudinfra /app
 USER cloudinfra
 COPY --from=build /build/target/*.jar app.jar
 EXPOSE 8099
-ENTRYPOINT ["java", "-XX:+UseZGC", "-Xmx512m", "-XX:+UseContainerSupport", "-jar", "app.jar"]
+# JVM 参数走环境变量，部署方可按需覆盖（默认与 compose 其他服务对齐）
+ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+# shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
+ENTRYPOINT ["/bin/sh", "-c", "exec java ${JAVA_OPTS} -jar app.jar"]

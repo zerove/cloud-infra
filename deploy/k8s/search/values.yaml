@@ -87,6 +87,8 @@ env:
     configMapKeyRef:
       name: cloud-infra-config
       key: rabbitmq.host
+- name: JAVA_OPTS
+  value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness

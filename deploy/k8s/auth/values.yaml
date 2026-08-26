@@ -122,6 +122,8 @@ env:
     value: "10000"
   - name: AUTH_JWT_CACHE_TTL
     value: "300"
+  - name: JAVA_OPTS
+    value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 
 livenessProbe:
   httpGet:

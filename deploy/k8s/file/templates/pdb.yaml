@@ -2,12 +2,12 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "file.fullname" . }}
+  name: {{ include "cloud-infra-file.fullname" . }}
   labels:
-    {{- include "file.labels" . | nindent 4 }}
+    {{- include "cloud-infra-file.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.pdb.minAvailable }}
   selector:
     matchLabels:
-      {{- include "file.selectorLabels" . | nindent 6 }}
+      {{- include "cloud-infra-file.selectorLabels" . | nindent 6 }}
 {{- end }}

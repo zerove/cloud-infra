@@ -35,7 +35,7 @@ managementService:
 resources:
   limits:
     cpu: 1000m
-    memory: 512Mi
+    memory: 640Mi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -108,6 +108,8 @@ env:
   value: '60000'
 - name: HIKARI_TEST_QUERY
   value: SELECT 1
+- name: JAVA_OPTS
+  value: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /actuator/health/liveness
