@@ -174,10 +174,14 @@ L1 命中免 Redis 往返；监听器双清 L1+L2；NullMarker 负缓存防穿�
 
 ## P3 工程卫生与开发者体验（持续）
 
-### H1. 仓库根目录垃圾清理（26 文件 2.5MB）
+### H1. 仓库根目录垃圾清理 ✅（2026-08-26 完成）
 `hs_err_pid*.log × 5`、各类构建/静态分析 log、`tracker.md`、根目录散落的 `META-INF/org/io` 目录。
 **行动**：gitignore 补 `hs_err_pid*.log`、`*.log`（已有）核实为何入库，`git rm --cached`
 清跟踪，物理删除构建产物目录（META-INF/org/io 疑似误生成的编译产物，需先确认来源）。
+**状态：✅ 已完成。** git 移除跟踪 nacos 运行时数据（derby/raft 145 文件）、GC 日志、
+seata 残留 file.conf、散落脚本（start-nacos3/migrate_configs/port-forward，scripts/ 留全量版）、
+cp.txt/.port-forward.pid/nacos-mysql.sql；gitignore 补 nacos/data、nacos/logs、
+hs_err_pid*.log、*.jfr 防回归（提交 8aa469e）。
 
 ### H2. .git 体积 279MB
 历史中可能有大 jar/二进制。**行动**：`git rev-list --objects --all | sort -k2` 找大对象，
@@ -192,8 +196,11 @@ ROADMAP 多个里程碑勾选状态与实际不符（Milestone 1 两项未完成
 
 **完成方式**：README/CONTEXT.md 版本已校正、seata 引用已删；CI 防回归步骤待补。
 
-### H4. tools/ 目录 41MB 构建产物混入源码管理
+### H4. tools/ 目录 41MB 构建产物混入源码管理 ✅（2026-08-26 完成）
 pack*.tgz、pack-build*.log 共 41MB。**行动**：移至 release 附件或 gitignore，仓库只留脚本。
+**状态：✅ 已完成。** 核实 git 跟踪中仅剩 CI quality-gate 引用的两个校验脚本
+（check-config-drift.py/check-doc-versions.sh），gitignore 白名单规则已正确；
+本地物理删除 tools/pack(30M)/pack.tgz(11M)/pack-build*.log，目录降至 28K。
 
 ### H5. E2E 测试是空壳 ✅（2026-08-26 完成）
 e2e-test.sh 只测验证码接口，token 拿不到就用 mock 继续，最后无条件打 ✅。
