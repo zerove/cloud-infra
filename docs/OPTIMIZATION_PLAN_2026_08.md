@@ -183,9 +183,14 @@ seata 残留 file.conf、散落脚本（start-nacos3/migrate_configs/port-forwar
 cp.txt/.port-forward.pid/nacos-mysql.sql；gitignore 补 nacos/data、nacos/logs、
 hs_err_pid*.log、*.jfr 防回归（提交 8aa469e）。
 
-### H2. .git 体积 279MB
+### H2. .git 体积 279MB ✅（2026-08-26 完成）
 历史中可能有大 jar/二进制。**行动**：`git rev-list --objects --all | sort -k2` 找大对象，
 评估 git-filter-repo 清理（破坏性操作，需团队协调，低优先）。
+**状态：✅ 已完成（无需改写历史）。** 分析确认 279MB 主要来自三个孤儿大 blob
+（128.9+102.7+90.2MB 的历史 JAR/zip，仅 unreachable commit 引用、reflog 已空），
+非现役分支内容。执行 `git reflog expire --expire=now --all && git gc --prune=now`
+回收孤儿对象：**.git 282MB → 25MB**。未改写任何现存提交/分支，fsck 无错误，
+与远端保持同步。
 
 ### H3. 文档版本漂移 ✅（2026-08-25 完成）
 
