@@ -65,11 +65,10 @@ Redis 快查（本地缓存 30s 兜底）。已有 JWT 黑名单机制可复用�
 会被多个派发器重复投递（表内幂等键只防重复写入，不防重复发送）。
 **修复**：PG 下改 `FOR UPDATE SKIP LOCKED`；或派发前 `UPDATE ... SET status='SENDING' WHERE id IN (...) AND status='PENDING'` 抢占。
 
-### R2. Outbox afterCommit 写库失败即丢事件
-`OutboxEventPublisher.publishTransactional` 把 insert 放在 `afterCommit()` 回调且吞异常。
-事务提交后写 outbox 失败 → 事件永久丢失，违背 outbox 初衷。
-**修复**：insert 移入事务内（同事务原子提交才是真 outbox），afterCommit 仅用于触发通知；
-或失败时落盘本地文件/告警补偿。配套补一个 Testcontainers 集成测试验证原子性。
+### R2. Outbox afterCommit 写库失败即丢事件 ✅（2026-08-25 实证已完成）
+**状态：✅ 已完成。** `OutboxEventPublisher.publishTransactional` 已改为事务活跃时
+同事务同步写入（业务数据与事件原子提交，回滚则一并回滚），无事务上下文直接写入；
+`OutboxIntegrationTest`（Testcontainers 版）覆盖原子性两语义，5/5 绿。
 
 ### R3. 集成测试从 0 到 1 ✅（2026-08-25 完成）
 
