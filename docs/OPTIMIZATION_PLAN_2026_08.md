@@ -132,7 +132,11 @@ sentinel-datasource-nacos 1.8.9 构造器内部强制 `NacosFactory.createConfig
 劫持为 fake-ip，gRPC 直连失败触发多轮超时重试放大耗时。
 **修复**：SentinelConfig 反射共享 ConfigService——首个数据源正常建连，
 其余 4 个构造后字段替换为主实例并 shutDown 冗余连接（e428b2c）。
-**实测**：启动 66.7s → 25.5s（-62%），Sentinel 数据源阶段 34.5s → 0.29s。
+**实测**：直跑 jar（默认 G1 大堆）启动 66.7s → 25.5s（-62%），Sentinel 数据源
+阶段 34.5s → 0.29s。容器化对照实测（448m/ZGC/-Xmx256m，各两轮）：F3 版
+55.5s/72.6s vs 修复前 83.3s/46.9s——共享化收益在容器内被小堆 ZGC 的 CPU 开销
+（Bean 加载段 19-23s，直跑同段仅 ~7s）掩盖，数据源段仍稳定缩短（注册绑定
+1.5s vs 3.2s）。容器内下一步优化方向是堆参数而非连接复用。
 注：本机直跑 jar 需 `NACOS_ADDR=localhost:8848` 绕开 DNS 劫持；生产容器走
 podnet 别名真实 IP 不受影响。CDS/AppCDS 备选方案不再需要。
 
