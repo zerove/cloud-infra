@@ -125,10 +125,15 @@ async-profile 火焰图定位（怀疑虚拟线程 pinning 或日志同步 IO）
 **行动**：加 `-Dspring.startup.insight` 或 startup endpoint 分析各阶段耗时，目标 <30s。
 （CDS/AppCDS 是备选方案，优先级低于 native。）
 
-### F4. 权限上下文每次请求远程拉取的放大效应
+### F4. 权限上下文每次请求远程拉取的放大效应 ✅（2026-08-26 完成）
 HeaderAuthenticationFilter 每请求走 Cacheable→Redis。热点用户 QPS 高时 Redis 成为瓶颈点。
-**行动**：接入 framework-redis 已有的 MultiLevelCacheService（Caffeine L1 + Redis L2），
-TTL 30-60s，配合 S2 的主动失效。
+**行动**：HeaderAuthenticationFilter 前置 PermissionLocalCache（Caffeine 5000 条/30s TTL），
+L1 命中免 Redis 往返；监听器双清 L1+L2；NullMarker 负缓存防穿透。
+**落地中修出两个缺陷**：
+1. 负缓存命中分支置空 userId 后未中断，跌落兜底块 Long.valueOf(null) 抛
+   NumberFormatException——跨服务 IT step3 logout 500 的根因（7caf597 修复）；
+2. MultiLevelCacheConfig L1 配了 weakKeys()，装箱 Long key 用 == 比较，
+   超 -128~127 缓存池后永久 miss 退化为纯穿透（c5c9f34 移除）。
 
 ---
 
