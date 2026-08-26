@@ -40,7 +40,9 @@ public class MultiLevelCacheConfig {
             .expireAfterWrite(Duration.ofMinutes(5))
             .expireAfterAccess(Duration.ofMinutes(10))
             .recordStats()
-            .weakKeys() // 允许 GC 回收 key
+            // 注意：不可用 weakKeys()——弱引用模式改用 ==（标识比较），
+            // 而 @Cacheable 的 key 是每次装箱的 Long userId，超过 -128~127
+            // 缓存池后 != 恒成立，L1 将永久 miss 退化为纯穿透
         );
         return cacheManager;
     }
