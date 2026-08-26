@@ -87,3 +87,7 @@ nacos-mysql.sql
 hs_err_pid*.log
 *.jfr
 nacos-mysql.sql
+
+# 代码图谱本地索引
+.codegraph/
+.code-review-graph/
