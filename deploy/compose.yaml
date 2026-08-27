@@ -368,6 +368,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 网关对下游服务注入内部调用签名，下游 HeaderAuthenticationFilter 验签
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -397,15 +399,17 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
-    mem_limit: 448m
+    mem_limit: 576m
     ports:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 服务间签名密钥，FeignAuthInterceptor 调 system 等下游服务时使用
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       # H5: E2E 固定验证码，仅本地 e2e 在 .env 中设为 1234 等值；留空则走真实验证码
       AUTH_CAPTCHA_FIXED_CODE: ${AUTH_CAPTCHA_FIXED_CODE:-}
       HTTP_PROXY: ""
@@ -447,6 +451,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 服务间签名密钥，FeignAuthInterceptor 与 HeaderAuthenticationFilter 验签使用
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -488,6 +494,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 服务间签名密钥，FeignAuthInterceptor 与 HeaderAuthenticationFilter 验签使用
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -528,6 +536,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 服务间签名密钥，FeignAuthInterceptor 与 HeaderAuthenticationFilter 验签使用
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""
@@ -568,6 +578,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
+      # 服务间签名密钥，FeignAuthInterceptor 与 HeaderAuthenticationFilter 验签使用
+      INTERNAL_CALL_SECRET: ${INTERNAL_CALL_SECRET:?INTERNAL_CALL_SECRET 必须在 .env 中设置}
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       http_proxy: ""

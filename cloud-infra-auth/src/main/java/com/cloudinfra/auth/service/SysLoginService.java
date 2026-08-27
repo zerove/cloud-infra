@@ -112,12 +112,20 @@ public class SysLoginService {
     }
 
     /**
-     * H5: E2E 固定验证码开关。仅当 auth.captcha.fixed-code 配置了非空值时启用：
-     * 提交的 code 与固定值匹配即通过（uuid 仍要求存在）。生产环境不得配置该项，
-     * 默认无值即维持真实验证码校验。
+     * H5: E2E 固定验证码开关。仅当非空值时启用，提交的 code 与该值匹配即通过（uuid 仍要求存在）。
+     * 优先级：System 环境变量 AUTH_CAPTCHA_FIXED_CODE > 配置项 auth.captcha.fixed-code。
+     * 直接读环境变量以绕开 jasypt 对 Nacos 配置 PropertySource 的解密副作用
+     * （jasypt 4.0.4 + Spring 6 + Nacos Config 时，CachingResolver 在 BeanFactory
+     * 解析阶段返回 null，导致 @Value 拿到空串；环境变量是兜底且更直观）。
+     * 生产环境不得配置该项，默认无值即维持真实验证码校验。
      */
-    @org.springframework.beans.factory.annotation.Value("${auth.captcha.fixed-code:}")
-    private String fixedCaptchaCode;
+    private String fixedCaptchaCode = readFixedCaptchaCode();
+
+    private static String readFixedCaptchaCode() {
+        String env = System.getenv("AUTH_CAPTCHA_FIXED_CODE");
+        if (env != null && !env.isEmpty()) return env;
+        return System.getProperty("auth.captcha.fixed-code", "");
+    }
 
     private void validateCaptcha(String username, String code, String uuid) {
         if (fixedCaptchaCode != null && !fixedCaptchaCode.isEmpty()) {
