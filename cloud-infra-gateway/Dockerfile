@@ -5,7 +5,7 @@ RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
 # 明确复制 repackaged fat jar，排除 .original 文件
-COPY target/cloud-infra-gateway-*.jar app.jar
+COPY target/*.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
 RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 

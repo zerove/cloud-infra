@@ -4,7 +4,7 @@ WORKDIR /app
 RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra 
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
-COPY target/*.jar app.jar
+COPY target/*-exec.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
 RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 
