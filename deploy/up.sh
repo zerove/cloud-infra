@@ -55,7 +55,9 @@ ensure_env() {
     echo "=== 使用现有 .env (如需重置请删除后重跑) ==="
   fi
   # shellcheck disable=SC1090
-  set -a; source "$ENV_FILE"; set +a
+  # JAVA_OPTS 含空格与引号, 直接 source 会触发 "command not found";
+  # 用 process substitution 过滤掉, 仅导出其余变量
+  set -a; source <(grep -v '^JAVA_OPTS=' "$ENV_FILE"); set +a
 }
 ensure_env
 
