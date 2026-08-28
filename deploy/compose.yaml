@@ -634,20 +634,6 @@ services:
       - cloud-infra
     logging: *default-logging
 
-  seata:
-    image: seataio/seata-server:2.0.0
-    container_name: cloud-seata
-    mem_limit: 512m
-    ports:
-      - "7091:7091"
-      - "8091:8091"
-    environment:
-      SEATA_IP: cloud-seata
-      SEATA_PORT: 8091
-    networks:
-      - cloud-infra
-    logging: *default-logging
-
 volumes:
   pgdata:
   redisdata:
