@@ -39,8 +39,12 @@ public class SystemSecurityConfig {
     private final AuthenticationEntryPointImpl authenticationEntryPoint;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
 
-    // jasypt 4.0.4 注入 null 问题: 直接 System.getenv 兜底
-    private String internalCallSecret = com.cloudinfra.common.core.crypto.InternalCallCrypto.resolveSecret();
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.cloudinfra.common.core.crypto.InternalCallSecretProvider secretProvider;
+    // jasypt 4.0.4 注入 null 问题: 走 Spring 容器内统一持有者, 绕开 Nacos PropertySource 包装
+    private String internalCallSecret;
+    @jakarta.annotation.PostConstruct
+    void initSecret() { this.internalCallSecret = secretProvider.getSecret(); }
 
     public SystemSecurityConfig(
         HeaderAuthenticationFilter headerAuthenticationFilter,

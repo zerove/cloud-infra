@@ -41,8 +41,12 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
     @org.springframework.beans.factory.annotation.Value("${cloud-infra.security.verify-internal-sign:false}")
     private boolean verifyInternalSign;
 
-    // jasypt 4.0.4 注入 null 问题: 直接 System.getenv 兜底
-    private String internalCallSecret = com.cloudinfra.common.core.crypto.InternalCallCrypto.resolveSecret();
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.cloudinfra.common.core.crypto.InternalCallSecretProvider secretProvider;
+    // jasypt 4.0.4 注入 null 问题: 走 Spring 容器内统一持有者, 绕开 Nacos PropertySource 包装
+    private String internalCallSecret;
+    @jakarta.annotation.PostConstruct
+    void initSecret() { this.internalCallSecret = secretProvider.getSecret(); }
 
     @Override
     protected void doFilterInternal(
@@ -83,12 +87,32 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
             if (loginUser == null) {
-                // 兜底：基于 Header 构建最小上下文（此时 userId 非空，可安全解析）
+                // 兜底：基于 Header 构建最小上下文（此时 userId 非空，可安全解析）。
+                // A3 关键修复：Feign 调 getPermissionsByUserId 在 system 冷启动期会超时,
+                // 之前没写 L1 缓存导致 30s 内每次请求都重试 Feign 失败路径 (业务 401)。
+                // 修复: 兜底装配 (空 permissions 兜底) 也写 L1 缓存,
+                // 30s 内 L1 命中走"快速失败"避免反复 Feign 重试;
+                // 30s 后 L1 失效再重试, 给 system 启动喘息窗口。
+                java.util.Set<String> fallbackPerms;
+                try {
+                    fallbackPerms = new java.util.HashSet<>(
+                        permissionProvider.getPermissionsByUserId(Long.valueOf(userId)));
+                } catch (Exception feignEx) {
+                    // A2 增强：Feign 调用超时/失败时快速降级, 不阻塞请求链
+                    // 错误用 L1 缓存 "user:uid 拉取失败" 标记, 30s 内不再重试
+                    org.slf4j.LoggerFactory.getLogger(HeaderAuthenticationFilter.class)
+                        .debug("Feign 拉取 user:{} 权限失败, 走空权限降级: {}",
+                            userId, feignEx.getMessage());
+                    fallbackPerms = java.util.Collections.emptySet();
+                }
                 loginUser = LoginUser.builder()
                     .userId(Long.valueOf(userId))
                     .username(username)
-                    .permissions(new java.util.HashSet<>(permissionProvider.getPermissionsByUserId(Long.valueOf(userId))))
+                    .permissions(fallbackPerms)
                     .build();
+                if (permissionLocalCache != null) {
+                    permissionLocalCache.put(uid, loginUser);
+                }
             }
 
             List<SimpleGrantedAuthority> authorities =
