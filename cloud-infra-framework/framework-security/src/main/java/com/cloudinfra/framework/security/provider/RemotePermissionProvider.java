@@ -24,7 +24,13 @@ public class RemotePermissionProvider implements IPermissionProvider {
     }
 
     @Override
-    @org.springframework.cache.annotation.Cacheable(value = "permissions", key = "#userId")
+    // A3 关键修复: 暂时禁用 @Cacheable.
+    // 原 @Cacheable + Spring Cache + CaffeineCacheManager 缓存 @Cacheable 失败/空结果,
+    // 导致 5min TTL 内业务持续 401 无法恢复.
+    // 真正修: 移除 @Cacheable, 依赖 HeaderAuthenticationFilter 的 L1 PermissionLocalCache.
+    // Feign 调 system 失败时, 抛 PermissionFetchException,
+    // HeaderAuthenticationFilter catch 后走 fallback 装配 (空 permissions),
+    // 30s 后 L1 失效再重试 Feign.
     public List<String> getPermissionsByUserId(Long userId) {
         // A3 关键修复: Feign 默认不抛异常, 下游返回 Result.fail() 时静默 swallow 成空 list,
         // 触发 @Cacheable 把"空"永久缓存 30 分钟, 业务持续 401。
@@ -55,7 +61,6 @@ public class RemotePermissionProvider implements IPermissionProvider {
     }
 
     @Override
-    @org.springframework.cache.annotation.Cacheable(value = "userContexts", key = "#userId")
     public LoginUser getUserContext(Long userId) {
         try {
             Result<LoginUser> result = userApi.getUserDetail(userId);

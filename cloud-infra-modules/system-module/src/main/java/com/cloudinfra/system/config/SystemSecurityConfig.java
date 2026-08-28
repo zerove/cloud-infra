@@ -5,6 +5,7 @@ import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import org.springframework.beans.factory.annotation.Value;
+import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -41,10 +42,9 @@ public class SystemSecurityConfig {
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.cloudinfra.common.core.crypto.InternalCallSecretProvider secretProvider;
-    // jasypt 4.0.4 注入 null 问题: 走 Spring 容器内统一持有者, 绕开 Nacos PropertySource 包装
-    private String internalCallSecret;
-    @jakarta.annotation.PostConstruct
-    void initSecret() { this.internalCallSecret = secretProvider.getSecret(); }
+    // A3 关键修复: 之前用 field 缓存 secret, lambda capture this.field 引用,
+    // field 初始化 vs filterChain @Bean 调用顺序问题导致 null 值, 验签失败.
+    // 改用 secretProvider.getSecret() 实时调, 保证用最新值.
 
     public SystemSecurityConfig(
         HeaderAuthenticationFilter headerAuthenticationFilter,
@@ -120,7 +120,14 @@ public class SystemSecurityConfig {
             }
             try {
                 long timestamp = Long.parseLong(timestampHeader);
-                return InternalCallCrypto.verify(internalCallSecret, sign, timestamp, nonce);
+                String sec = secretProvider.getSecret();
+                boolean ok = InternalCallCrypto.verify(sec, sign, timestamp, nonce);
+                if (!ok) {
+                    org.slf4j.LoggerFactory.getLogger(SystemSecurityConfig.class)
+                        .debug("internalCallMatcher FAIL: secret.len={} sign={} ts={} nonce={}",
+                            sec==null?0:sec.length(), sign, timestamp, nonce);
+                }
+                return ok;
             } catch (NumberFormatException e) {
                 return false;
             }
