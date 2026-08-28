@@ -79,11 +79,20 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
             }
             if (loginUser == null) {
                 // 优先拉取完整用户上下文（含部门、角色数据权限），保证数据权限拦截器可用。
-                // getUserContext 返回 null 属瞬时故障（下游不可达/Feign 失败）：
-                // 不得写入 L1 负缓存，否则同 uid 后续请求在 30 秒内全部误判为"用户不存在"
-                loginUser = permissionProvider.getUserContext(uid);
-                if (permissionLocalCache != null && loginUser != null) {
-                    permissionLocalCache.put(uid, loginUser);
+                // A3 关键修复: PermissionFetchException (Feign 失败/Result 失败/@Cacheable 缓存空)
+                // 不能再往上抛, 否则 GlobalExceptionHandler 当 500 处理.
+                // 这里 catch 后视为 getUserContext 返回 null, 走下面的兜底装配分支.
+                try {
+                    loginUser = permissionProvider.getUserContext(uid);
+                    if (permissionLocalCache != null && loginUser != null) {
+                        permissionLocalCache.put(uid, loginUser);
+                    }
+                } catch (RuntimeException ex) {
+                    // A3 降级: 标记为 getUserContext 失败, 但 loginUser 仍为 null,
+                    // 走下面的 fallback 分支基于 Header 重建 loginUser (permissions 调 getPermissionsByUserId).
+                    org.slf4j.LoggerFactory.getLogger(HeaderAuthenticationFilter.class)
+                        .debug("getUserContext 失败, 降级走兜底: userId={}, err={}",
+                            userId, ex.getMessage());
                 }
             }
             if (loginUser == null) {
@@ -110,7 +119,9 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
                     .username(username)
                     .permissions(fallbackPerms)
                     .build();
-                if (permissionLocalCache != null) {
+                // A3 关键: 仅当 Feign 成功 (非空 Set 或显式 List 实际有内容) 才缓存.
+                // 空 permissions 来自 fallback 不缓存, 30s 后重新走 fallback 仍失败但不会再延长.
+                if (permissionLocalCache != null && !fallbackPerms.isEmpty()) {
                     permissionLocalCache.put(uid, loginUser);
                 }
             }

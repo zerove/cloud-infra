@@ -45,12 +45,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtUtils.getUserIdFromToken(jwt);
 
                 if (userId != null) {
-                    LoginUser loginUser = permissionProvider.getUserContext(userId);
+                    // A3 关键修复: 与 HeaderAuthenticationFilter 一致, Feign 失败时
+                    // 走 fallback 装配, 不抛 PermissionFetchException 到 filter chain 变 500.
+                    LoginUser loginUser = null;
+                    try {
+                        loginUser = permissionProvider.getUserContext(userId);
+                    } catch (RuntimeException ex) {
+                        // Feign 拉取 user:{} 失败, 标记为 transient 故障
+                        org.slf4j.LoggerFactory.getLogger(JwtAuthenticationFilter.class)
+                            .debug("getUserContext 失败, 降级走兜底: userId={}, err={}",
+                                userId, ex.getMessage());
+                    }
                     if (loginUser == null) {
+                        java.util.Set<String> fallbackPerms;
+                        try {
+                            fallbackPerms = new java.util.HashSet<>(
+                                permissionProvider.getPermissionsByUserId(userId));
+                        } catch (Exception ex) {
+                            org.slf4j.LoggerFactory.getLogger(JwtAuthenticationFilter.class)
+                                .debug("getPermissionsByUserId 失败, 走空权限降级: userId={}, err={}",
+                                    userId, ex.getMessage());
+                            fallbackPerms = java.util.Collections.emptySet();
+                        }
                         loginUser = LoginUser.builder()
                             .userId(userId)
                             .username(username)
-                            .permissions(new java.util.HashSet<>(permissionProvider.getPermissionsByUserId(userId)))
+                            .permissions(fallbackPerms)
                             .build();
                     }
 
