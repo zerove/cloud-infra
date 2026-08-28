@@ -29,6 +29,34 @@ public final class InternalCallCrypto {
     }
 
     /**
+     * 解析内部调用签名密钥
+     *
+     * 优先级: System 环境变量 INTERNAL_CALL_SECRET > System 属性 cloud-infra.internal-call.secret > 内置默认值
+     *
+     * <p>背景: jasypt-spring-boot 4.0.4 + Spring 6 + Nacos Config 组合下,
+     * CachingResolver 在 BeanFactory 解析阶段对 Nacos PropertySource 包装类的
+     * getProperty(name) 返回 null (jasypt 缓存与 Spring 6 PropertySourcesPropertyResolver
+     * 时序冲突), 导致 {@code @Value("${cloud-infra.internal-call.secret:...}")}
+     * 拿到空串, 签名用空 key 必失败。直接读 System env / property 绕过 jasypt 包装路径。
+     *
+     * <p>用法: 在 {@code @Value} 失败场景下, 用此方法替代配置注入:
+     * <pre>{@code
+     * private String internalCallSecret = InternalCallCrypto.resolveSecret();
+     * }</pre>
+     */
+    public static String resolveSecret() {
+        String env = System.getenv("INTERNAL_CALL_SECRET");
+        if (env != null && !env.isEmpty()) {
+            return env;
+        }
+        String prop = System.getProperty("cloud-infra.internal-call.secret");
+        if (prop != null && !prop.isEmpty()) {
+            return prop;
+        }
+        return "cloud-infra-internal-dev-secret";
+    }
+
+    /**
      * 生成签名
      */
     public static String sign(String secret, long timestamp, String nonce) {

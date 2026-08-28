@@ -42,8 +42,8 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
      * HeaderAuthenticationFilter 验签后才信任 X-User-Id 身份头，
      * 杜绝绕过网关直连伪造身份。生产必须经 INTERNAL_CALL_SECRET 覆盖。
      */
-    @org.springframework.beans.factory.annotation.Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
-    private String internalCallSecret;
+    // jasypt 4.0.4 注入 null 问题: 直接 System.getenv 兜底
+    private String internalCallSecret = com.cloudinfra.common.core.crypto.InternalCallCrypto.resolveSecret();
 
     private static final java.security.SecureRandom NONCE_RANDOM = new java.security.SecureRandom();
 

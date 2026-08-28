@@ -39,8 +39,8 @@ public class SystemSecurityConfig {
     private final AuthenticationEntryPointImpl authenticationEntryPoint;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
 
-    @Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
-    private String internalCallSecret;
+    // jasypt 4.0.4 注入 null 问题: 直接 System.getenv 兜底
+    private String internalCallSecret = com.cloudinfra.common.core.crypto.InternalCallCrypto.resolveSecret();
 
     public SystemSecurityConfig(
         HeaderAuthenticationFilter headerAuthenticationFilter,

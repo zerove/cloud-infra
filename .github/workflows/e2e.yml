@@ -1,0 +1,70 @@
+name: E2E Verify
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# E2E 跑全链路: mvn + podman build + compose 启动 + e2e 验收,
+# 需要 Linux runner + podman + podman-compose + Java 25 + 充足磁盘 (>=10GB 镜像层)
+# 单 PR 跑 1 次, 防止资源滥用; push 到 master 时多并发 (按服务拆分)
+jobs:
+  e2e:
+    name: End-to-End Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Install Podman + podman-compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman podman-compose
+          podman --version
+          podman-compose --version
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Start Podman system service (rootless)
+        # GitHub runner 默认有 podman, 但 rootless 模式需 lingering 启动守护进程
+        run: |
+          sudo loginctl enable-linger $USER
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          systemctl --user enable podman.socket || true
+          systemctl --user start podman.socket || true
+          podman info | head -5
+
+      - name: Run E2E verify script
+        # --skip-build 不传: CI 走完整流程 (mvn + podman build)
+        # 失败时上传 build 产物与日志便于排查
+        run: bash verify-e2e.sh 2>&1 | tee /tmp/e2e.log
+        env:
+          # 让 compose 在 runner 上能找到 Nacos
+          JAVA_OPTS: ""
+
+      - name: Upload E2E logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ github.run_id }}
+          path: |
+            /tmp/e2e.log
+            deploy/nacos/conf/
+            **/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore

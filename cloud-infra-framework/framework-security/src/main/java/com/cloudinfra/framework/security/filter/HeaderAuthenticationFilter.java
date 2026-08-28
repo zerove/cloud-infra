@@ -41,8 +41,8 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
     @org.springframework.beans.factory.annotation.Value("${cloud-infra.security.verify-internal-sign:false}")
     private boolean verifyInternalSign;
 
-    @org.springframework.beans.factory.annotation.Value("${cloud-infra.internal-call.secret:${INTERNAL_CALL_SECRET:cloud-infra-internal-dev-secret}}")
-    private String internalCallSecret;
+    // jasypt 4.0.4 注入 null 问题: 直接 System.getenv 兜底
+    private String internalCallSecret = com.cloudinfra.common.core.crypto.InternalCallCrypto.resolveSecret();
 
     @Override
     protected void doFilterInternal(

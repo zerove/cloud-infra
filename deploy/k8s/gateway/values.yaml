@@ -92,6 +92,11 @@ affinity:
           topologyKey: kubernetes.io/hostname
 
 env:
+  - name: INTERNAL_CALL_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: cloud-infra-secrets
+        key: internalCall.secret
   - name: SPRING_PROFILES_ACTIVE
     value: "k8s"
   - name: NACOS_ADDR
