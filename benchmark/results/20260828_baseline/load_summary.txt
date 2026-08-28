@@ -1,0 +1,90 @@
+=== captcha GET /auth/captchaImage ===
+Summary:
+  Total:	10.2617 secs
+  Slowest:	0.9593 secs
+  Fastest:	0.0456 secs
+  Average:	0.2361 secs
+  Requests/sec:	41.6109
+Status code distribution:
+  [200]	427 responses
+
+=== noauth GET /system/user/list ===
+Summary:
+  Total:	10.0822 secs
+  Slowest:	0.1752 secs
+  Fastest:	0.0038 secs
+  Average:	0.0357 secs
+  Requests/sec:	278.4120
+Status code distribution:
+  [401]	2807 responses
+
+=== userlist GET /system/user/list?pageNum=1&pageSize=5 ===
+
+Summary:
+  Total:	10.1987 secs
+  Slowest:	2.3408 secs
+  Fastest:	0.0480 secs
+  Average:	0.6637 secs
+  Requests/sec:	14.9039
+  
+  Total data:	122092 bytes
+  Size/request:	803 bytes
+
+Response time histogram:
+  0.048 [1]	|■
+  0.277 [16]	|■■■■■■■■■■■■■■■
+  0.507 [44]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.736 [34]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.965 [25]	|■■■■■■■■■■■■■■■■■■■■■■■
+  1.194 [19]	|■■■■■■■■■■■■■■■■■
+  1.424 [9]	|■■■■■■■■
+  1.653 [2]	|■■
+  1.882 [0]	|
+  2.112 [0]	|
+  2.341 [2]	|■■
+
+
+Latency distribution:
+  10%% in 0.2767 secs
+  25%% in 0.3591 secs
+  50%% in 0.6074 secs
+  75%% in 0.8812 secs
+  90%% in 1.1814 secs
+  95%% in 1.3037 secs
+  99%% in 2.3408 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0004 secs, 0.0000 secs, 0.0110 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0006 secs
+  req write:	0.0001 secs, 0.0000 secs, 0.0028 secs
+  resp wait:	0.6626 secs, 0.0471 secs, 2.3404 secs
+  resp read:	0.0004 secs, 0.0000 secs, 0.0097 secs
+
+Status code distribution:
+  [200]	152 responses
+
+
+
+
+=== notify POST /notification/send ===
+Summary:
+  Total:	10.1527 secs
+  Slowest:	1.0620 secs
+  Fastest:	0.0203 secs
+  Average:	0.2844 secs
+  Requests/sec:	34.8675
+  Total data:	21948 bytes
+Status code distribution:
+  [200]	354 responses
+
+=== search GET /search/indexes ===
+Summary:
+  Total:	10.2324 secs
+  Slowest:	1.3201 secs
+  Fastest:	0.0356 secs
+  Average:	0.2546 secs
+  Requests/sec:	38.6028
+  Total data:	24490 bytes
+Status code distribution:
+  [200]	395 responses
+
