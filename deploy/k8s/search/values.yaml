@@ -60,6 +60,16 @@ affinity:
             - cloud-infra-search
         topologyKey: kubernetes.io/hostname
 env:
+- name: AUTH_JWT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: jwt.secret
+- name: INTERNAL_CALL_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: cloud-infra-secrets
+      key: internalCall.secret
 - name: SPRING_PROFILES_ACTIVE
   value: k8s
 - name: NACOS_ADDR
