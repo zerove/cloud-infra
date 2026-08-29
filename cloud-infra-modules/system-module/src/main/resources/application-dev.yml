@@ -5,3 +5,9 @@ spring:
     nacos:
       config:
         fail-fast: false
+
+# ADR-010 plugin-security-model: dev 环境显式启用插件系统 + 热加载 (开发便利)
+cloud-infra:
+  plugin:
+    enabled: true
+    hot-deploy: true

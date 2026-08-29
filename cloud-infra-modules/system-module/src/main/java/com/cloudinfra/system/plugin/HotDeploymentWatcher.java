@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,10 +20,17 @@ import java.util.concurrent.Executors;
 
 /**
  * 热部署监听器 - 实时监控插件目录
+ *
+ * <p>安全策略: 监听文件系统变更, 任意文件写入触发插件重新加载.
+ * 生产环境应禁用 (默认 {@code cloud-infra.plugin.hot-deploy=false}),
+ * 仅 dev 通过 application-dev.yml 显式启用.</p>
+ *
+ * <p>详见 ADR-010 plugin-security-model.md</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "cloud-infra.plugin.hot-deploy", havingValue = "true", matchIfMissing = false)
 public class HotDeploymentWatcher {
 
     private final PluginManager pluginManager;

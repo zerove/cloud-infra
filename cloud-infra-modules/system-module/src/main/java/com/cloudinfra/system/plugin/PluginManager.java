@@ -6,6 +6,7 @@ import com.cloudinfra.system.plugin.impl.KnowledgeAssistantPlugin;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import jakarta.annotation.PostConstruct;
 import java.io.File;
@@ -20,10 +21,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 插件管理器 - 负责插件的动态加载、生命周期管理与热部署
+ *
+ * <p>安全策略: URLClassLoader 可加载任意 jar 路径, 加载代码继承 system-module 全部权限
+ * (调任意 service / 读任意 DB / 调任意 Feign). 生产环境建议关闭
+ * ({@code cloud-infra.plugin.enabled=false}), 仅 dev 启用.</p>
+ *
+ * <p>详见 ADR-010 plugin-security-model.md</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "cloud-infra.plugin.enabled", havingValue = "true", matchIfMissing = true)
 public class PluginManager {
 
     private final PluginContextImpl pluginContext;
@@ -53,8 +61,8 @@ public class PluginManager {
             loadedPlugins.put(knowledgeAssistant.getMetadata().id(), new LoadedPlugin(knowledgeAssistant, null));
             log.info("内置插件 {} 预加载成功", knowledgeAssistant.getMetadata().name());
             
-        } catch (Exception e) {
-            log.error("预加载内置插件失败: {}", e.getMessage());
+        } catch (RuntimeException e) {
+            log.error("预加载内置插件失败: {}", e.getMessage(), e);
         }
     }
 
@@ -99,7 +107,7 @@ public class PluginManager {
             loadedPlugins.put(pluginId, new LoadedPlugin(plugin, classLoader));
             log.info("插件 {} ({}) 加载成功！", plugin.getMetadata().name(), pluginId);
 
-        } catch (Exception e) {
+        } catch (RuntimeException | ReflectiveOperationException | IOException e) {
             log.error("加载插件 {} 失败: {}", jarFile.getName(), e.getMessage(), e);
         }
     }
