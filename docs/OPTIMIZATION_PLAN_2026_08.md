@@ -230,6 +230,16 @@ pasta 容器需显式透传 INTERNAL_CALL_SECRET 等密钥变量，TUN 代理会
 | 插件系统安全模型 | PluginManager 用 URLClassLoader 加载任意 jar，无签名/沙箱，生产风险高，建议明确仅 dev 用 | 决策即可 |
 | 业务模块 native 化 | ADR-005 已论证暂缓，维持 JVM+CDS 即可 | 不动 |
 
+### P4 状态 (2026-08-29 复盘)
+
+| 候选 | 状态 | 决策 |
+| :--- | :--- | :--- |
+| 租户体系落地 | ⏳ 未做 | TenantContext + Filter + AutoConfig 已就绪, 缺数据隔离 schema + interceptor, 建议走独立 PRD |
+| 操作审计检索 | ✅ 已就绪 | AuditController `/system/audit/timeline` + SearchController `/search/operlog` + search-service OperLogSearchProvider 均已实现 |
+| 配置加密 | ⏳ 不必 | 2026-08 全量整改后 deploy/config/*.yaml 几乎全 `${VAR:?}` 占位符, 加密需求低 |
+| 插件系统安全模型 | ✅ 已决策 | ADR-010 + PluginManager/HotDeploymentWatcher @ConditionalOnProperty + profile yml 已实施 (commit 7ac18f7) |
+| 业务模块 native 化 | ⏸ 暂缓 | ADR-005 维持 |
+
 ---
 
 ## 推进节奏建议
