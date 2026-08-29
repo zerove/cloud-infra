@@ -204,6 +204,15 @@ cloud-infra:
   security:
     # 开启后 X-User-Id 仅在携带有效网关签名时被信任，防内网直连伪造身份
     verify-internal-sign: true
+  # 插件系统安全模型: ADR-010
+  # URLClassLoader 可加载任意 jar, 继承 system-module 全部权限, 生产环境必须禁用
+  # 启用条件 (按 profile):
+  #   dev:    enabled=true  hot-deploy=true  (开发调试)
+  #   staging: enabled=false hot-deploy=false (中间环境, 模拟生产)
+  #   prod:   enabled=false hot-deploy=false (生产, 默认)
+  plugin:
+    enabled: true   # 默认开启 (兼容现有 dev 行为), 生产环境通过 SPRING_PROFILES_ACTIVE=prod 覆盖
+    hot-deploy: false # 热加载默认关闭, 需显式 dev profile 开启
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

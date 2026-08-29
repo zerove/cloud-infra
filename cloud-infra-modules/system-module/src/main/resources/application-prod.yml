@@ -5,3 +5,10 @@ spring:
     nacos:
       config:
         fail-fast: true
+
+# ADR-010 plugin-security-model: 生产环境禁用插件系统
+# URLClassLoader 在生产可加载任意 jar 继承全部权限, 无沙箱, 仅 dev 启用
+cloud-infra:
+  plugin:
+    enabled: false
+    hot-deploy: false
