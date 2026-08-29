@@ -57,6 +57,19 @@ jobs:
           # 让 compose 在 runner 上能找到 Nacos
           JAVA_OPTS: ""
 
+      - name: Install Python websockets client
+        # Notification WebSocket e2e 端到端测试 (commit af10741)
+        # 验证: connect 收到 connected / send 触发 push 收到 notification / ping-pong
+        if: success()
+        run: pip install websockets
+
+      - name: Run WebSocket E2E test
+        if: success()
+        # 等通知服务 5s 让 startup 完成
+        run: |
+          sleep 5
+          python3 docs/demos/notification-websocket-e2e.py
+
       - name: Upload E2E logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
