@@ -34,5 +34,10 @@ public interface IFileService {
     IPage<FileMetadataVO> searchFiles(String keyword, long pageNum, long pageSize);
 
     boolean delete(Long fileId, Long userId);
-}
 
+    /**
+     * 获取文件下载用的 objectKey (供 presigned download URL 使用).
+     * 内部包含权限校验 (复用 download 路径), 只返回 objectKey 不返回文件流.
+     */
+    String getObjectKeyForDownload(Long fileId, Long userId);
+}

@@ -89,6 +89,11 @@ jobs:
       - name: Check doc version drift (H3 regression guard)
         run: bash tools/check-doc-versions.sh
 
+      - name: ArchUnit architecture guard (5 rules)
+        # 守护 framework/common/api/modules 分层, 防止架构腐化.
+        # 详见 ArchitectureTest.java (5 rules). 任一违反即拦截 PR.
+        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -DfailIfNoTests=false --batch-mode
+
   native-build:
     name: Native Image Build (Gateway + Auth)
     runs-on: ubuntu-latest

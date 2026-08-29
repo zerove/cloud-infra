@@ -83,6 +83,30 @@ public class FileValidator {
     }
 
     /**
+     * 预签名场景的文件校验 (无 MultipartFile, 只有元数据)
+     */
+    public void validate(String filename, String contentType, Long size) {
+        if (filename == null || filename.isBlank()) {
+            throw new IllegalArgumentException("文件名不能为空");
+        }
+        if (filename.length() > 255) {
+            throw new IllegalArgumentException("文件名过长 (最大 255 字符)");
+        }
+        if (size != null && size > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("文件大小超过限制 (最大 100MB)");
+        }
+        // 按扩展名校验 (复用 ALLOWED_EXTENSIONS)
+        if (!filename.isBlank() && filename.contains(".")) {
+            String ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+            if (!ALLOWED_EXTENSIONS.contains(ext)) {
+                throw new IllegalArgumentException("不支持的文件扩展名: " + ext);
+            }
+        }
+        // contentType 仅警告, 不阻断 (前端可撒谎, 服务端按扩展名+魔数二次校验)
+    }
+
+
+    /**
      * 清洗文件名：移除路径遍历、控制字符、Windows 保留名
      */
     public String sanitizeFilename(String filename) {
