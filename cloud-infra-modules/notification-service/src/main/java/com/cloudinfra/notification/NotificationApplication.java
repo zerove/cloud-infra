@@ -24,7 +24,10 @@ import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 @ComponentScan(
     basePackages = "com.cloudinfra",
     excludeFilters = {
-        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.cloudinfra\\.starter\\..*")
+        // 只排除 starter 自身的 component bean, 不排除其下的 auto-config 类
+        // 之前 pattern "com\\.cloudinfra\\.starter\\..*" 把整个 starter 排了, 导致
+        // FeignAuthInterceptor / InternalCallSecretProvider / TenantContextFilter 都没注册
+        @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.cloudinfra\\.starter\\.domain\\..*")
     }
 )
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, MybatisPlusConfig.class, PasswordEncoderConfig.class})
