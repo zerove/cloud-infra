@@ -1,6 +1,7 @@
 package com.cloudinfra.notification.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import static com.cloudinfra.notification.ws.NotificationWebSocketHandler.pushToUser;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
@@ -49,7 +50,6 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
     private final ExecutorService dispatchExecutor;
-    private final com.cloudinfra.notification.ws.NotificationWebSocketHandler webSocketHandler;
 
     // Manual logger for static contexts
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NotificationServiceImpl.class);
@@ -275,12 +275,12 @@ public class NotificationServiceImpl implements INotificationService {
                 new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        webSocketHandler.pushToUser(notification.getUserId(), payload);
+                        pushToUser(notification.getUserId(), payload);
                     }
                 });
         } else {
             // 无事务上下文 (异步调度), 直接推
-            webSocketHandler.pushToUser(notification.getUserId(), payload);
+            pushToUser(notification.getUserId(), payload);
         }
     }
 }

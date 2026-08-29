@@ -1,36 +1,37 @@
 package com.cloudinfra.notification.config;
 
-import com.cloudinfra.notification.ws.NotificationWebSocketHandler;
-import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.config.annotation.EnableWebSocket;
-import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.web.socket.server.standard.ServerEndpointExporter;
+import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
 
 /**
- * WebSocket 实时通知推送配置 (原始 WebSocket, 不依赖 STOMP)
+ * WebSocket 配置: 注册 JSR-356 ServerEndpointExporter (扫描 @ServerEndpoint bean)
+ * 详见 NotificationWebSocketHandler @ServerEndpoint("/notification/ws/{userId}")
  *
- * <p>设计: 按 userId 订阅, server 主动 push 通知到客户端
- * <ul>
- *   <li>端点: ws://host:8084/notification/ws/{userId}
- *   <li>客户端连上后自动收到该 userId 的所有通知
- *   <li>鉴权: 通过 X-User-Id header (网关已注入) / 直接路径传 userId
- *   <li>心跳: 默认 30s, 客户端应定期 ping
- * </ul>
- *
- * <p>为什么不用 STOMP: 业务只需 server -> client 单向推送, 原始 WebSocket
- * 协议更轻, 客户端用浏览器原生 WebSocket API 即可对接.</p>
+ * <p>Spring Boot 4 web 启动时自动 scan @ServerEndpoint, 显式注册 bean
+ * 是为了显式可控 (例如在 @Profile("!test") 排除测试场景).</p>
  */
 @Configuration
-@EnableWebSocket
-@RequiredArgsConstructor
-public class WebSocketConfig implements WebSocketConfigurer {
+public class WebSocketConfig {
 
-    private final NotificationWebSocketHandler notificationWebSocketHandler;
+    /**
+     * 显式注册 ServerEndpointExporter 扫描 @ServerEndpoint 注解的 bean
+     */
+    @Bean
+    public ServerEndpointExporter serverEndpointExporter() {
+        return new ServerEndpointExporter();
+    }
 
-    @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(notificationWebSocketHandler, "/notification/ws/{userId}")
-            .setAllowedOriginPatterns("*");
+    /**
+     * WebSocket 容器配置: 文本消息最大 64KB, 空闲超时 30 分钟
+     * 避免单个 session 内存爆炸或长时间空挂
+     */
+    @Bean
+    public ServletServerContainerFactoryBean webSocketContainer() {
+        ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
+        container.setMaxTextMessageBufferSize(64 * 1024);
+        container.setMaxSessionIdleTimeout(30 * 60 * 1000L);
+        return container;
     }
 }
