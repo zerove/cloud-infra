@@ -41,7 +41,8 @@ public class NotificationSecurityConfig {
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/actuator/**", "/management/**").permitAll()
+                .requestMatchers("/notification/ws/**").permitAll()  // WebSocket 升级端点 (浏览器原生 WS 不带 Header)
                 .anyRequest().authenticated())
             .addFilterBefore(headerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

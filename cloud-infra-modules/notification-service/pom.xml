@@ -74,6 +74,16 @@
             <artifactId>cloud-infra-starter</artifactId>
             <!-- 自动注册 FeignAuthInterceptor (签名) + TenantContextFilter -->
         </dependency>
+        <!--
+            Spring Boot 4 移除 tyrus 运行时, 需显式引入 tyrus-core 启用 JSR-356 ServerContainer
+            (META-INF/services/jakarta.websocket.server.ServerEndpointConfig$Configurator SPI 自动注册)
+            缺失时 Upgrade 请求被识别为普通 HTTP 返回 200 而非 101 Switching Protocols
+        -->
+        <dependency>
+            <groupId>org.glassfish.tyrus</groupId>
+            <artifactId>tyrus-core</artifactId>
+            <version>2.2.0</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
