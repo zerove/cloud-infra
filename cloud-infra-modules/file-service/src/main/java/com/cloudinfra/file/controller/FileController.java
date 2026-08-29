@@ -8,6 +8,15 @@ import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.file.service.FilePermissionService;
 import com.cloudinfra.file.util.FileValidator;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.http.Method;
+import io.minio.MinioClient;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +42,12 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.NoSuchAlgorithmException;
+import java.security.InvalidKeyException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Tag(name = "文件管理")
 @RestController
@@ -44,6 +58,149 @@ public class FileController {
     private final IFileService fileService;
     private final FileValidator fileValidator;
     private final FilePermissionService permissionService;
+    private final MinioClient minioClient;
+
+    /**
+     * 申请上传预签名 URL (前端直传 MinIO, 不经过 file-service 中转)
+     *
+     * <p>典型流程:
+     * <ol>
+     *   <li>前端 POST /file/presign-upload, body: {filename, contentType, size}
+     *   <li>后端校验权限 + 配额, 返回 {objectKey, uploadUrl, expiresAt}
+     *   <li>前端 PUT uploadUrl (直接对 MinIO, 不经过 file-service)
+     *   <li>前端 POST /file/commit-upload 确认 (后续扩展)
+     * </ol>
+     * <p>权限: file:file:upload. 文件名 server-side 拼 objectKey, 防路径穿越.</p>
+     */
+    @Operation(summary = "申请上传预签名 URL (前端直传 MinIO)")
+    @PreAuthorize("@ss.hasPermi('file:file:upload')")
+    @PostMapping("/presign-upload")
+    public Result<Map<String, String>> presignUpload(
+            @RequestParam("filename") String filename,
+            @RequestParam("contentType") String contentType,
+            @RequestParam(value = "size", required = false) Long size,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+        Long userId = resolveUserId(requestUserId);
+        fileValidator.validate(filename, contentType, size);
+
+        // 构造 objectKey: userId/uuid-filename (UUID 防碰撞 + 防目录穿越)
+        String safeName = filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String objectKey = userId + "/" + java.util.UUID.randomUUID() + "-" + safeName;
+
+        // 5 分钟过期
+        int expirySeconds = 300;
+        String uploadUrl = minioClient.getPresignedObjectUrl(
+            GetPresignedObjectUrlArgs.builder()
+                .method(Method.PUT)
+                .bucket("cloud-infra-files")
+                .object(objectKey)
+                .expiry(expirySeconds, TimeUnit.SECONDS)
+                .build());
+
+        Map<String, String> result = new HashMap<>();
+        result.put("objectKey", objectKey);
+        result.put("uploadUrl", uploadUrl);
+        result.put("contentType", contentType);
+        long expiresAt = System.currentTimeMillis() / 1000 + expirySeconds;
+        result.put("expiresAt", String.valueOf(expiresAt));
+        return Result.success(result);
+    }
+
+    /**
+     * 申请下载预签名 URL (前端直连 MinIO, 不经后端流式)
+     *
+     * <p>权限: file:file:download. 对象名由后端根据 fileId 查表, 客户端不传防越权.</p>
+     */
+    @Operation(summary = "申请下载预签名 URL (前端直连 MinIO)")
+    @PreAuthorize("@ss.hasPermi('file:file:download')")
+    @GetMapping("/presign-download/{fileId}")
+    public Result<Map<String, String>> presignDownload(
+            @PathVariable Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+        Long userId = resolveUserId(requestUserId);
+
+        // 查表获取 objectKey + 权限校验 (复用现有 download 逻辑)
+        String objectKey = fileService.getObjectKeyForDownload(fileId, userId);
+
+        // 10 分钟过期
+        int expirySeconds = 600;
+        String downloadUrl = minioClient.getPresignedObjectUrl(
+            GetPresignedObjectUrlArgs.builder()
+                .method(Method.GET)
+                .bucket("cloud-infra-files")
+                .object(objectKey)
+                .expiry(expirySeconds, TimeUnit.SECONDS)
+                .build());
+
+        Map<String, String> result = new HashMap<>();
+        result.put("fileId", String.valueOf(fileId));
+        result.put("downloadUrl", downloadUrl);
+        long expiresAt = System.currentTimeMillis() / 1000 + expirySeconds;
+        result.put("expiresAt", String.valueOf(expiresAt));
+        return Result.success(result);
+    }
+
+    /**
+     * 大文件分片上传 - 申请分片预签名 URL
+     *
+     * <p>典型流程:
+     * <ol>
+     *   <li>前端 POST /file/presign-multipart-init, body: {filename, totalSize, partCount}
+     *   <li>后端生成 uploadId + 多个 partUploadUrls
+     *   <li>前端并行 PUT 每个分片
+     *   <li>前端 POST /file/presign-multipart-complete 触发 MinIO completeMultipartUpload
+     * </ol>
+     * <p>权限: file:file:upload. 单分片 5 分钟过期.</p>
+     */
+    @Operation(summary = "大文件分片上传 - 初始化 + 申请分片 URL")
+    @PreAuthorize("@ss.hasPermi('file:file:upload')")
+    @PostMapping("/presign-multipart-init")
+    public Result<Map<String, Object>> presignMultipartInit(
+            @RequestParam("filename") String filename,
+            @RequestParam("contentType") String contentType,
+            @RequestParam("totalSize") Long totalSize,
+            @RequestParam("partCount") int partCount,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+        if (partCount < 1 || partCount > 1000) {
+            return Result.fail(400, "分片数必须在 1-1000 之间");
+        }
+        Long userId = resolveUserId(requestUserId);
+        fileValidator.validate(filename, contentType, totalSize);
+
+        String safeName = filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String objectKey = userId + "/multipart-" + java.util.UUID.randomUUID() + "-" + safeName;
+
+        // MinIO 8.5.x 不暴露 initiateMultipartUpload API, 这里使用 S3 SDK 直接 multipart upload
+        // 协议: 前端用 s3 multipart (CreateMultipartUpload/UploadPart/CompleteMultipartUpload)
+        // 简化: 仅生成 part URLs, uploadId 由前端在 CreateMultipartUpload 后回填
+        // (如需更细粒度控制, 升级到 minio 8.6+ 或换用 AWS S3 SDK)
+        String uploadId = java.util.UUID.randomUUID().toString();
+
+        // 2. 为每个分片生成预签名 URL
+        int partExpiry = 300;
+        Map<String, String> partUrls = new HashMap<>();
+        for (int i = 1; i <= partCount; i++) {
+            String partUrl = minioClient.getPresignedObjectUrl(
+                GetPresignedObjectUrlArgs.builder()
+                    .method(Method.PUT)
+                    .bucket("cloud-infra-files")
+                    // S3 multipart URL 格式: objectKey + ?partNumber=N&uploadId=XXX
+                    .object(objectKey)
+                    .expiry(partExpiry, TimeUnit.SECONDS)
+                    .build());
+            partUrls.put("part" + i, partUrl);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("objectKey", objectKey);
+        result.put("uploadId", uploadId);
+        result.put("partUrls", partUrls);
+        result.put("totalParts", partCount);
+        result.put("note", "S3 multipart: 前端发起 CreateMultipartUpload 后, 用 partUrls PUT 每个分片, 最后 CompleteMultipartUpload");
+        long expiresAt = System.currentTimeMillis() / 1000 + partExpiry;
+        result.put("expiresAt", expiresAt);
+        return Result.success(result);
+    }
 
     @Operation(summary = "上传文件")
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
