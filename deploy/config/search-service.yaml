@@ -48,6 +48,10 @@ auth:
     secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
+# 跨服务 Feign host 映射 (search-service 调 notification-service)
+# entrypoint.sh 启动时自动注入实际 IP 到 SERVICE_HOST_MAP, 实际值由运行时决定
+# SERVICE_HOST_MAP: notification-service:127.0.0.1
+
 management:
   server:
     port: 9301
