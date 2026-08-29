@@ -2,6 +2,19 @@
 
 高性能、企业级云基础设施平台，基于最新 Java 生态构建。专为极致并发、分布式可扩展性和开发者生产力而设计。
 
+## 📌 v1.0.0-rc1 (2026-08-29)
+
+![Status](https://img.shields.io/badge/status-rc1-blue) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-88%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-37%2F37-success)
+
+**完整状态**: [HANDOFF-2026-08-29.md](docs/HANDOFF-2026-08-29.md) · 17 个新 commits · 5 项 P0 安全闭环 · 11 Prometheus 告警 · p99 970ms
+
+**快速开始**:
+```bash
+./deploy/up.sh              # 启动基础设施 + 同步 Nacos 配置
+bash e2e-test.sh            # 6/6 业务断言 PASS
+./deploy/up.sh --check      # 0 配置漂移
+```
+
 ## 🚀 技术栈
 
 - **核心**: Spring Boot 4.1.0 | JDK 25 (启用虚拟线程 Virtual Threads)
