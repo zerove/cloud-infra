@@ -92,12 +92,11 @@ nacos-mysql.sql
 .codegraph/
 .code-review-graph/
 
-# JCode IDE 工具目录（本地 IDE 工作目录，不入库）
-/.jcode/
-
-# Python 编译缓存
 **/__pycache__/
 *.pyc
 
 # Tools 目录已有 *.sh 必需 (check-doc-versions.sh), 允许 check-config-drift.py (Nacos 漂移检测)
 /tools/__pycache__/
+
+# JCode AI Agent 开发工作目录（IDE 工具配置，规范/约束/质量工具，本地不入库）
+/.jcode/
