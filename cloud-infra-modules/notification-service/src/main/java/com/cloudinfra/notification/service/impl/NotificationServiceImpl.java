@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -48,6 +49,7 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
     private final ExecutorService dispatchExecutor;
+    private final com.cloudinfra.notification.ws.NotificationWebSocketHandler webSocketHandler;
 
     // Manual logger for static contexts
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NotificationServiceImpl.class);
@@ -104,6 +106,9 @@ public class NotificationServiceImpl implements INotificationService {
 
         // 7. 事务提交后分发渠道（避免长事务持有 DB 连接）
         registerDispatchAfterCommit(notification, targetChannels);
+
+        // 8. WebSocket 实时推送 (事务提交后, 用户即时收到通知)
+        registerWebSocketPushAfterCommit(notification);
     }
 
     private void scheduleNotification(NotificationSendRequest request) {
@@ -249,5 +254,33 @@ public class NotificationServiceImpl implements INotificationService {
                 new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
                 wrapper);
         return p.getRecords();
+    }
+
+    /**
+     * 事务提交后 WebSocket 推送
+     * 通过 TransactionSynchronization 保证 DB 已持久化后再推, 避免幻读.
+     */
+    private void registerWebSocketPushAfterCommit(Notification notification) {
+        Map<String, Object> payload = Map.of(
+            "id", notification.getId(),
+            "type", notification.getType().name(),
+            "title", notification.getTitle(),
+            "content", notification.getContent(),
+            "status", notification.getStatus().name(),
+            "createTime", notification.getCreateTime() != null
+                ? notification.getCreateTime().toString() : ""
+        );
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        webSocketHandler.pushToUser(notification.getUserId(), payload);
+                    }
+                });
+        } else {
+            // 无事务上下文 (异步调度), 直接推
+            webSocketHandler.pushToUser(notification.getUserId(), payload);
+        }
     }
 }
