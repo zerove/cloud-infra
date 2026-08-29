@@ -66,6 +66,11 @@
             <artifactId>framework-security</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-starter</artifactId>
+            <!-- 自动注册 FeignAuthInterceptor (签名) + TenantContextFilter -->
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
