@@ -84,6 +84,11 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-starter</artifactId>
+            <!-- 自动注册 FeignAuthInterceptor (签名) + TenantContextFilter + 平台配置 -->
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
             <artifactId>framework-tracing</artifactId>
         </dependency>
         <dependency>
