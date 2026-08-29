@@ -129,6 +129,14 @@
             <artifactId>cloud-infra-test-support</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- ArchUnit: 架构守护测试 (系统模块依赖最多, 适合放此处) -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
