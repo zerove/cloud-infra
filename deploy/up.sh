@@ -7,6 +7,7 @@
 #   ./up.sh                # 启动基础设施 + 同步配置 (不启动微服务, 用于开发)
 #   ./up.sh --full         # 启动全部 (基础设施 + 微服务, 需要先构建镜像)
 #   ./up.sh --check        # 检测本地配置与 Nacos 的漂移, 不执行变更
+#   ./up.sh --sync         # 仅同步本地配置到 Nacos (不启动基础设施, 不重启容器)
 #   ./up.sh --infra        # 仅启动基础设施 (不级联清理数据卷)
 
 set -euo pipefail
@@ -18,13 +19,15 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_ARGS=()
 FULL=0
 CHECK_ONLY=0
+SYNC_ONLY=0
 INFRA_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --full) FULL=1 ;;
     --check) CHECK_ONLY=1 ;;
+    --sync) SYNC_ONLY=1 ;;
     --infra) INFRA_ONLY=1 ;;
-    *) echo "未知参数: $arg (支持 --full --check --infra)" >&2; exit 1 ;;
+    *) echo "未知参数: $arg (支持 --full --check --sync --infra)" >&2; exit 1 ;;
   esac
 done
 
@@ -88,6 +91,48 @@ nacos_config_diff() {
   fi
 }
 
+# 配置同步函数: 上传单个文件到 Nacos (v3 admin API, form-encoded)
+# 使用 curl 的 --data-urlencode "content@$file" 让 curl 读文件原文, 保留多行/中文/转义
+nacos_config_upload() {
+  local file="$1"
+  local filename
+  filename=$(basename "$file")
+  local resp
+  resp=$(curl -sf -X POST "$NACOS_URL/nacos/v3/admin/cs/config" \
+    --data-urlencode "dataId=$filename" \
+    --data-urlencode "groupName=DEFAULT_GROUP" \
+    --data-urlencode "namespaceId=public" \
+    --data-urlencode "type=yaml" \
+    --data-urlencode "content@${file}" 2>/dev/null) || { echo "  ⚠️  导入 $filename 失败 (curl error)"; return 1; }
+  # v3 API 返回 {"code":0,"message":"success","data":true} 表示成功
+  if echo "$resp" | grep -q '"code":0'; then
+    echo "  ✓ 同步 $filename"
+    return 0
+  else
+    echo "  ⚠️  同步 $filename 失败: $resp"
+    return 1
+  fi
+}
+
+# 若仅同步, 直接推 Nacos 后退出 (不起动基础设施, 不重启容器)
+if [ "$SYNC_ONLY" -eq 1 ]; then
+  NACOS_URL="http://localhost:8848"
+  echo "=== Nacos 配置同步模式 (仅推送, 不启动基础设施) ==="
+  # 先确认 Nacos 在跑
+  if ! curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+    echo "✗ Nacos 未就绪 ($NACOS_URL), 请先 ./deploy/up.sh 启动基础设施" >&2
+    exit 1
+  fi
+  CONFIG_DIR="$SCRIPT_DIR/config"
+  SYNC_COUNT=0
+  for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
+    [ -e "$file" ] || continue
+    nacos_config_upload "$file" && SYNC_COUNT=$((SYNC_COUNT+1))
+  done
+  echo "=== 同步完成: $SYNC_COUNT 个配置 ==="
+  exit 0
+fi
+
 # 若仅检测, 直接比较配置 (跳过环境操作)
 if [ "$CHECK_ONLY" -eq 1 ]; then
   NACOS_URL="http://localhost:8848"
@@ -102,7 +147,7 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     echo "✓ 所有配置无漂移"
     exit 0
   else
-    echo "✗ 存在 $DRIFT_COUNT 个漂移配置, 可运行 ./up.sh 同步"
+    echo "✗ 存在 $DRIFT_COUNT 个漂移配置, 可运行 ./up.sh --sync 同步"
     exit 2
   fi
 fi
@@ -200,24 +245,15 @@ for i in $(seq 1 10); do
     sleep 2
 done
 
-# 同步配置到 Nacos (v3 admin API, 需 nacos.core.auth.admin.enabled=false)
+# 同步配置到 Nacos (v3 admin API, --data-urlencode content@$file 保证原文多行/中文/转义正确)
 echo "=== 10. 同步配置到 Nacos ==="
 CONFIG_DIR="$SCRIPT_DIR/config"
+SYNC_COUNT=0
 for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
     [ -e "$file" ] || continue
-    filename=$(basename "$file")
-    content=$(cat "$file")
-    if curl -sf -X POST "$NACOS_URL/nacos/v3/admin/cs/config" \
-        --data-urlencode "dataId=$filename" \
-        --data-urlencode "groupName=DEFAULT_GROUP" \
-        --data-urlencode "namespaceId=public" \
-        --data-urlencode "content=$content" > /dev/null 2>&1; then
-      echo "  ✓ 导入 $filename"
-    else
-      echo "  ⚠️  导入 $filename 失败"
-    fi
+    nacos_config_upload "$file" && SYNC_COUNT=$((SYNC_COUNT+1))
 done
-echo "配置同步完成"
+echo "=== 同步完成: $SYNC_COUNT 个配置 ==="
 
 echo ""
 echo "=== 本地开发环境已就绪 ==="
