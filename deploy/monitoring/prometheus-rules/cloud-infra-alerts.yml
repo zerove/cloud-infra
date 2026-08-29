@@ -81,3 +81,60 @@ groups:
         annotations:
           summary: "应用错误日志过多"
           description: "应用 {{ $labels.application }} 错误日志速率超过 0.1/s，持续 5 分钟"
+
+      # === SLO (Service Level Objective) ===
+      # 可用性 SLO: 服务 30 天 99.9% (月度不可用 < 43.2 分钟)
+      - alert: SLOServiceAvailabilityBreach
+        expr: |
+          (1 - (
+            sum by (application) (rate(http_server_requests_seconds_count{status!~"5.."}[5m]))
+            /
+            sum by (application) (rate(http_server_requests_seconds_count[5m]))
+          )) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          slo: availability
+        annotations:
+          summary: "SLO 可用性预算耗尽 (短期)"
+          description: "应用 {{ $labels.application }} 5xx 率超过 1%, 短期 SLO 告警。长期 SLO 需 30 天窗口计算"
+
+      - alert: SLOLatencyBudgetBurn
+        expr: histogram_quantile(0.99, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          slo: latency
+        annotations:
+          summary: "SLO P99 延迟预算燃烧"
+          description: "应用 {{ $labels.application }} P99 延迟超过 2s, 持续 10 分钟"
+
+      # === 业务告警 (Business-Specific) ===
+      - alert: LoginFailureRateHigh
+        expr: |
+          sum by (application) (rate(auth_login_attempts_total{result="failure"}[5m]))
+          /
+          sum by (application) (rate(auth_login_attempts_total[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "登录失败率过高 (疑似暴力破解)"
+          description: "应用 {{ $labels.application }} 登录失败率超过 50%, 持续 3 分钟"
+
+      - alert: FileUploadFailureHigh
+        expr: rate(file_upload_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "文件上传失败率过高"
+          description: "文件上传失败率超过 0.1/s"
+
+      # === 关键告警分层 (Critical Tier 升级) ===
+      # 已有 critical tier 告警 (ServiceInstanceDown / HikariPoolExhausted / Http5xxRateHigh)
+      # 满足任一 critical + 持续 5min → 升级至 oncall 立即响应
