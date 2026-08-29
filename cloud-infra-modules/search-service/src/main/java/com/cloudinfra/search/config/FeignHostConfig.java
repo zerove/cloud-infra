@@ -1,4 +1,4 @@
-package com.cloudinfra.notification.config;
+package com.cloudinfra.search.config;
 
 import feign.Client;
 import feign.Request;
@@ -16,12 +16,14 @@ import java.util.Map;
 /**
  * Feign 客户端: 拦截请求, 替换 service 名 host 为配置的 IP.
  *
- * <p>背景: 容器内 'system-module' DNS 解析到 podman 内部错误 IP 198.18.0.30,
+ * <p>背景: 容器内 'notification-service' 等 DNS 解析到 podman 内部错误 IP 198.18.0.30,
  * 造成 Feign 连接超时/拒绝. 改用环境变量 SERVICE_HOST_MAP (格式 service:ip)
  * 显式映射, 完全绕开容器 DNS.</p>
  *
- * <p>配置: deploy/config/notification-service.yaml 加顶级 key:
- *   SERVICE_HOST_MAP: system-module:10.89.0.5</p>
+ * <p>当前由 search-service 使用 (跨服务调 notification-service).</p>
+ *
+ * <p>配置: deploy/config/search-service.yaml 加顶级 key:
+ *   SERVICE_HOST_MAP: notification-service:10.89.0.5</p>
  */
 @Configuration
 public class FeignHostConfig {

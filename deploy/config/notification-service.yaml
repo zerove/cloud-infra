@@ -52,9 +52,7 @@ auth:
     secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
-# 内部调用 Feign 客户端 host 头替换 (容器内 DNS 解析 bug 修复)
-# 格式: service1:ip1,service2:ip2 (启动时由 Nacos 实例 IP 注入)
-# SERVICE_HOST_MAP: service-name:127.0.0.1
+# 业务可观测性配置 (透传 OTLP endpoint)
 management:
   server:
     port: 9301

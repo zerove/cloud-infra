@@ -12,9 +12,5 @@ RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 # JVM 内存优化 + CDS 启动加速
 ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
 
-# entrypoint.sh: 等 Nacos 上 system-module 注册, 拉其 IP, 注入 SERVICE_HOST_MAP env
-# 解决容器内 'system-module' DNS 解析到 podman 内部错误 IP 198.18.0.30 的问题
-# 让 FeignHostConfig 拿到 system 实际 IP 替换 host header
-COPY --chmod=755 target/classes/entrypoint.sh /app/entrypoint.sh
-
-ENTRYPOINT ["/bin/sh", "-c", "exec /app/entrypoint.sh"]
+# shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
+ENTRYPOINT ["/bin/sh", "-c", "exec java ${JAVA_OPTS} -jar app.jar"]
