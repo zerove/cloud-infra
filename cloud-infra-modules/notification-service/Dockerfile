@@ -14,3 +14,15 @@ ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+
 
 # shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
 ENTRYPOINT ["/bin/sh", "-c", "exec java ${JAVA_OPTS} -jar app.jar"]
+
+# SkyWalking APM agent (可选) - 通过 SW_AGENT_ENABLED=true 启用
+# 默认禁用, 不影响现有部署. 启用时业务可观察 分布式追踪/慢SQL/异常聚合
+# COPY --from=apache/skywalking-java-agent:9.6.0-java17 /skywalking/agent /skywalking/agent
+# COPY deploy/skywalking/agent-entrypoint.sh /app/agent-entrypoint.sh
+# RUN chmod +x /app/agent-entrypoint.sh
+# ENV SW_AGENT_SERVICE=notification-service
+# ENV SW_AGENT_OAP=cloud-skywalking-oap:11800
+# SW_AGENT_ENABLED=true  # 取消注释启用
+#
+# 启用需将上面 5 行取消注释 + 改 ENTRYPOINT 为 ["/app/agent-entrypoint.sh"]
+# 详见 deploy/skywalking/README.md
