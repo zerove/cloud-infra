@@ -212,3 +212,39 @@ cloud-infra-modules/*/Dockerfile    # 已加 SW agent 启用注释 (默认 disab
 | `apache/skywalking-oap-server:11.0.0` (2025-04) | 仍报 `Unrecognized format specifier [swversion]` log4j2 PatternLayout (镜像内 log4j 兼容性 bug) | 镜像内修补或 fork |
 | `apache/skywalking-oap-server:11.0.0` + ES 9.0.2 | ES 客户端 `Failed to create index` (ES 8.x→9.x 协议变更, SW 11.x 需 11.0.1+) | 等 SW 11.0.1+ 或降 ES 8.18 |
 | `apache/skywalking-ui:11.0.0` | 镜像**根本未发布** (Docker Hub 查无 11.0.0 tag) | 用 10.4.0 UI (兼容性未知) |
+
+---
+
+## 端到端验证记录 (2026-08-30 commit 302b6ba)
+
+**链路**: notification-service 业务 → Java agent 9.6.0 → OAP 9.7.0 gRPC 11800 → H2 存储 → GraphQL 12800 查询
+
+**操作**:
+```bash
+# 1. 拉 agent 镜像
+podman pull docker.io/apache/skywalking-java-agent:9.6.0-java17
+
+# 2. 提取 agent 目录到 host
+podman create --name swagent-extract docker.io/apache/skywalking-java-agent:9.6.0-java17 true
+podman cp swagent-extract:/skywalking/agent/. /tmp/swagent/
+
+# 3. 启业务容器 (bind mount agent 目录 + 通用 entrypoint)
+podman run -d --name cloud-notification --network cloud-infra \
+  -v /path/to/notification.jar:/app/app.jar:ro \
+  -v /tmp/swagent:/skywalking/agent:ro \
+  -v /path/to/agent-entrypoint.sh:/app/agent-entrypoint.sh:ro \
+  -e SW_AGENT_ENABLED=true -e SW_AGENT_SERVICE=notification-service \
+  -e SW_AGENT_OAP=cloud-skywalking-oap:11800 \
+  -e JAVA_OPTS="-Xms320m -Xmx512m -XX:+UseG1GC" \
+  eclipse-temurin:25-jre-alpine sh /app/agent-entrypoint.sh
+```
+
+**结果**:
+- agent 启动: `agent enabled: service=notification-service oap=cloud-skywalking-oap:11800`
+- 业务启动: Spring Boot Tomcat 8084 + Nacos 注册成功
+- OAP 注册: `getAllServices` 返回:
+  - `notification-service` (业务)
+  - `cloud-rabbitmq10.89.0.90:5672`, `cloud-redis:6379`, `postgres:5432` (依赖)
+
+**关键修复**: `agent-entrypoint.sh` 中 `java -jar app.jar` → `java -jar /app/app.jar`
+(之前为相对路径, 容器内 cwd=/ 导致 'Unable to access jarfile app.jar')
