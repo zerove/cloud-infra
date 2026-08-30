@@ -24,6 +24,23 @@ SkyWalking 10.1.0 作为可选 APM 平台, 与现有 Prometheus + Jaeger + Grafa
   - 降 ES: 修改 compose `elasticsearch:8.18.0` -> `elasticsearch:7.17.28`, 同步 V1-V12 SQL migration
 - 当前用 H2 (零依赖) 是务实选择
 
+## 11.0.0 升级实测记录 (本轮 2026-08-30)
+
+**镜像可用**: `apache/skywalking-oap-server:11.0.0` 存在, 也可拉 UI 10.4.0
+
+**实测启动失败** (用 SW 11.0.0 默认 application.yml + ES 8.18 + core.default.gRPCHost 字段名):
+
+1. `Unrecognized format specifier [swversion]` - log4j2 PatternLayout 镜像内置格式错误, 11.0.0 仍含此 bug
+2. `log-analyzer module is required by receiver-runtime-rule.default, but not found` - 11.0.0 默认配置缺 log-analyzer 段
+3. 11.0.0 ES 客户端可能与 8.18 协议兼容 (未完整测, 因 log4j bug 先挂)
+
+**决策**: 11.0.0 不升级, 维持 10.1.0 + H2 兜底. 等官方 bug 修复 (11.0.1+)
+
+**升级 SW 11 真正可行路径**:
+- 等 Apache SkyWalking 11.0.1+ 修复 swversion log4j bug
+- 或用 SW 10.2.0 (10.x 系列最新稳定, 镜像中 9 个月前, 较稳定)
+- 或 fork 10.1.0 镜像打 log4j 2.17.2 升级包
+
 ## 升级链路完整证据
 
 | 版本 | 启动结果 | 关键错 |
