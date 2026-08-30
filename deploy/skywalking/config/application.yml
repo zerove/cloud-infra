@@ -150,7 +150,7 @@ core:
     # The long value of the max direct memory usage. The default max value is -1, representing no limit. The unit is in bytes.
     maxDirectMemoryUsage: ${SW_CORE_MAX_DIRECT_MEMORY_USAGE:-1}
 storage:
-  selector: ${SW_STORAGE:h2}  # H2 默认 (10.1.0 + ES 8.18 客户端协议不兼容, 用 H2 兜底; 11.0.0 报 swversion log4j bug)
+  selector: ${SW_STORAGE:h2}  # H2 默认 (9.7.0 镜像含 log-analyzer/log4j-core; 10.1.0 客户端协议不兼容 ES 8.18; 11.0.0 报 swversion bug)
   elasticsearch:
     namespace: ${SW_NAMESPACE:cloud-infra}
     clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:cloud-elasticsearch:9200}
