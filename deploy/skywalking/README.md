@@ -151,3 +151,6 @@ cloud-infra-modules/*/Dockerfile    # 已加 SW agent 启用注释 (默认 disab
 - SkyWalking 10.x 文档: https://skywalking.apache.org/docs/
 - ES 版本兼容: https://github.com/apache/skywalking/blob/master/docs/en/backend/storage/elasticsearch.md
 - Java agent 配置: https://github.com/apache/skywalking-java
+| `apache/skywalking-oap-server:11.0.0` (2025-04) | 仍报 `Unrecognized format specifier [swversion]` log4j2 PatternLayout (镜像内 log4j 兼容性 bug) | 镜像内修补或 fork |
+| `apache/skywalking-oap-server:11.0.0` + ES 9.0.2 | ES 客户端 `Failed to create index` (ES 8.x→9.x 协议变更, SW 11.x 需 11.0.1+) | 等 SW 11.0.1+ 或降 ES 8.18 |
+| `apache/skywalking-ui:11.0.0` | 镜像**根本未发布** (Docker Hub 查无 11.0.0 tag) | 用 10.4.0 UI (兼容性未知) |

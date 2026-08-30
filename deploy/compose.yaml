@@ -327,7 +327,7 @@ services:
   # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
-    image: apache/skywalking-oap-server:10.1.0
+    image: apache/skywalking-oap-server:9.6.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-oap
@@ -351,7 +351,7 @@ services:
     logging: *default-logging
 
   skywalking-ui:
-    image: apache/skywalking-ui:10.1.0
+    image: apache/skywalking-ui:9.6.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-ui
