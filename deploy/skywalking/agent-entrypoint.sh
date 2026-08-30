@@ -16,7 +16,7 @@
 if [ -x /app/entrypoint.sh ]; then
   START_CMD="/app/entrypoint.sh"
 else
-  START_CMD="java \$JAVA_OPTS -jar app.jar"
+  START_CMD="java \$JAVA_OPTS -jar /app/app.jar"
 fi
 
 if [ -z "${SW_AGENT_ENABLED}" ] || [ "${SW_AGENT_ENABLED}" != "true" ]; then
