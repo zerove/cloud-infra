@@ -17,3 +17,12 @@ ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+
 COPY --chmod=755 target/classes/entrypoint.sh /app/entrypoint.sh
 
 ENTRYPOINT ["/bin/sh", "-c", "exec /app/entrypoint.sh"]
+
+# SkyWalking APM agent (可选) - 通过 SW_AGENT_ENABLED=true 启用
+# 详见 deploy/skywalking/README.md 启用说明
+# 取消下面 5 行注释 + 改 ENTRYPOINT 为 ["/app/agent-entrypoint.sh"]:
+# COPY --from=apache/skywalking-java-agent:9.6.0-java17 /skywalking/agent /skywalking/agent
+# COPY deploy/skywalking/agent-entrypoint.sh /app/agent-entrypoint.sh
+# RUN chmod +x /app/agent-entrypoint.sh
+# ENV SW_AGENT_SERVICE=MODULENAME
+# ENV SW_AGENT_OAP=cloud-skywalking-oap:11800

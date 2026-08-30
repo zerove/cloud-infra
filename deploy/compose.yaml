@@ -322,6 +322,49 @@ services:
       - cloud-infra
     logging: *default-logging
 
+  # ========== SkyWalking APM (可选) ==========
+  # 应用性能监控: 分布式追踪 + 慢 SQL/慢方法 + 服务拓扑 + 异常聚合
+  # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
+  # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
+  skywalking-oap:
+    image: apache/skywalking-oap-server:9.6.0
+    restart: unless-stopped
+    stop_grace_period: 30s
+    container_name: cloud-skywalking-oap
+    mem_limit: 1024m
+    ports:
+      - "11800:11800"  # gRPC agent 接收
+      - "12800:12800"  # HTTP REST query
+    volumes:
+      - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
+    environment:
+      # SW 9.6.0 用 application.yml 配置 (覆盖默认), 不再依赖 env var
+      - TZ=Asia/Shanghai
+      - JAVA_OPTS=-Xms512m -Xmx1024m
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  skywalking-ui:
+    image: apache/skywalking-ui:9.6.0
+    restart: unless-stopped
+    stop_grace_period: 30s
+    container_name: cloud-skywalking-ui
+    mem_limit: 512m
+    ports:
+      - "18080:8080"   # SkyWalking UI
+    environment:
+      - SW_OAP_ADDRESS=cloud-skywalking-oap:12800
+      - TZ=Asia/Shanghai
+    depends_on:
+      - skywalking-oap
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
   # ========== 限流熔断控制台 ==========
   sentinel:
     image: bladex/sentinel-dashboard:1.8.9
