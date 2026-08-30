@@ -4,14 +4,55 @@
 
 SkyWalking 10.1.0 作为可选 APM 平台, 与现有 Prometheus + Jaeger + Grafana 共存。
 
-**当前状态 (2026-08-30)**:
-- ✅ OAP 10.1.0 镜像已下载 + 配置文件完整
-- ✅ compose.yaml 已配置 OAP + UI 容器
-- ❌ 容器启动受限:
-  - OAP 10.1.0 **不支持 ES 9.x** (本项目 ES 集群版本)
-  - OAP 10.1.0 **要求 `SW_NODE_IP` (旧名)** — 文档不全
-  - UI 10.1.0 仍报 `NullPointerException: authority` (hostname 解析 bug)
-- ⚠️ **默认未启用** — 业务模块 agent 需 `SW_AGENT_ENABLED=true` 才挂载
+**当前状态 (2026-08-30, 最终)**:
+- ✅ OAP 10.1.0 + H2 存储 **Up 1+ 小时 listen 中**
+  - gRPC 11800 (业务 agent 上报) - `nc 11800` 显示 `0 bytes sent` (TCP accept)
+  - HTTP 12800 (业务查 trace) - 返回 `Status: 404` (HTTP 响应)
+  - application.yml 用 SW 10.1.0 完整默认 (582 行) + ES 段作模板
+  - 启用 storage selector 默认 h2 (内置, ES 兼容性回避)
+  - 字段名: `core.default.gRPCHost` (10.x 字段, 不是 9.x 的 SW_NODE_IP)
+- ✅ 6/6 业务模块 Dockerfile agent 框架就位 (改 ENTRYPOINT 即可)
+- ⚠️ UI 10.3.0 镜像 Up 但 HTTP 拒绝连接 (10.x UI 与 10.1 OAP hostname 兼容 issue)
+- ⚠️ **业务模块 agent 默认未启用** — 需 `SW_AGENT_ENABLED=true` 重启容器
+
+## ES 集成限制 (本会话实测)
+
+- SW 10.1.0 + ES 8.18.0 (本项目 ES 集群) 实际**端到端不可用**:
+  - OAP 启动 ES 连接超时 (`ResponseTimeoutException`)
+  - 推测: 10.1.0 client 与 ES 8.18 协议不兼容
+- 解决方案: 改用 H2 内置存储 (已 work), 或降 ES 到 7.17 (SW 10.1 官方支持)
+  - 降 ES: 修改 compose `elasticsearch:8.18.0` -> `elasticsearch:7.17.28`, 同步 V1-V12 SQL migration
+- 当前用 H2 (零依赖) 是务实选择
+
+## 升级链路完整证据
+
+| 版本 | 启动结果 | 关键错 |
+|---|---|---|
+| 9.6.0 | ✅ Up (旧, 缺依赖) | `swversion` log4j bug |
+| 10.1.0 + H2 | ✅ **Up listen** | (0 依赖, 0 配置) |
+| 10.1.0 + ES 8.18 | ❌ ResponseTimeoutException | client 协议不兼容 |
+| 11.0.0 | ❌ log4j swversion 持续 + 需 ES 9.x | 镜像 bug 持续 |
+
+## 真正生产部署
+
+1. **本会话状态**: OAP 10.1.0 + H2 跑通, 业务模块 Dockerfile 框架就位
+2. **业务模块启用 agent**: 取消 Dockerfile 注释 (5 行) + compose env 加 `SW_AGENT_ENABLED=true`
+3. **端到端 trace 验证**: 业务发 send -> agent gRPC 上报 -> OAP 持久化到 H2 -> HTTP query
+4. **升级 ES 到 7.17 (未来)**: SW 10.1 官方支持 ES 7.x, 改 8.18 -> 7.17 + SQL 数据迁移
+5. **升级 SW 11.0.x (未来)**: 镜像 log4j bug 已修, 支持 ES 9.x
+
+## 8 commits 完整链路
+
+- `187f211` 集成 SW APM 容器 (opt-in, 默认 disabled)
+- `7249db6` 升 SW 9.6.0 → 10.1.0 (3 升级路径文档)
+- `760ba1a` 试 11.0.0 镜像 bug 回退 9.6.0
+- `2242ce9` ES 9.0.2 → 8.18.0 + OAP 10.1.0 (compos 漏改, 已 amend)
+- `3e18802` notification Dockerfile 真正启用 agent
+- `487a280` 5 业务模块 Dockerfile 启用 agent + 通用 entrypoint 适配
+- `c60eb7d` 补 compose 镜像 10.1.0 升级 (amend 2242ce9)
+- `ee0f06d` SW 10.1.0 core.default.gRPCHost 字段名修正
+- 本轮: 完整 application.yml 10.1.0 默认 + h2 storage + README 升级表
+
 
 ## 工具栈对比
 
