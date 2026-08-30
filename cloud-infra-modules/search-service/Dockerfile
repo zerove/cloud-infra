@@ -18,8 +18,7 @@ COPY --chmod=755 target/classes/entrypoint.sh /app/entrypoint.sh
 
 # SkyWalking APM agent - 通过 SW_AGENT_ENABLED=true 启用 (默认 false 不影响现状)
 COPY --from=apache/skywalking-java-agent:9.6.0-java17 /skywalking/agent /skywalking/agent
-COPY deploy/skywalking/agent-entrypoint.sh /app/agent-entrypoint.sh
-RUN chmod +x /app/agent-entrypoint.sh
+COPY ../../deploy/skywalking/agent-entrypoint.sh /app/agent-entrypoint.sh
 ENV SW_AGENT_SERVICE=search-service
 ENV SW_AGENT_OAP=cloud-skywalking-oap:11800
 # SW_AGENT_ENABLED=true  # 取消注释启用
