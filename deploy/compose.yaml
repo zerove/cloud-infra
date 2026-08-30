@@ -122,7 +122,7 @@ services:
 
   # ========== 搜索引擎 ==========
   elasticsearch:
-    image: elasticsearch:9.0.2
+    image: elasticsearch:8.18.0
     restart: unless-stopped
     stop_grace_period: 60s
     container_name: cloud-elasticsearch
