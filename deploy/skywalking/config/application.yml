@@ -25,13 +25,13 @@ core:
     searchableMetrics: ${SW_SEARCHABLE_METRICS:on}
 
 storage:
-  selector: ${SW_STORAGE:elasticsearch7}
-  elasticsearch7:
+  selector: ${SW_STORAGE:elasticsearch}
+  elasticsearch:
     namespace: ${SW_NAMESPACE:cloud-infra}
-    clusterNodes: ${SW_STORAGE_ES_NODES:cloud-elasticsearch:9200}
+    clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:cloud-elasticsearch:9200}
     # ES 7.x 必须用 elasticsearch7 selector
     # ES 8.x 用 elasticsearch8
-    protocol: ${SW_STORAGE_ES_PROTOCOL:http}
+    protocol: ${SW_STORAGE_ES_HTTP_PROTOCOL:http}
     # 信任自签证书
     trustStorePath: ${SW_STORAGE_ES_SSL_JKS_PATH:}
     trustStorePass: ${SW_STORAGE_ES_SSL_JKS_PASS:}

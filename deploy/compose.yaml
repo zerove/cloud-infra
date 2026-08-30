@@ -327,7 +327,7 @@ services:
   # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
-    image: apache/skywalking-oap-server:9.6.0
+    image: apache/skywalking-oap-server:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-oap
@@ -339,6 +339,8 @@ services:
       - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
     environment:
       # SW 9.6.0 用 application.yml 配置 (覆盖默认), 不再依赖 env var
+      - SW_STORAGE=h2
+      - SW_NODE_IP=cloud-skywalking-oap
       - TZ=Asia/Shanghai
       - JAVA_OPTS=-Xms512m -Xmx1024m
     depends_on:
@@ -349,7 +351,7 @@ services:
     logging: *default-logging
 
   skywalking-ui:
-    image: apache/skywalking-ui:9.6.0
+    image: apache/skywalking-ui:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-ui
@@ -358,6 +360,7 @@ services:
       - "18080:8080"   # SkyWalking UI
     environment:
       - SW_OAP_ADDRESS=cloud-skywalking-oap:12800
+      - SW_SERVER_LISTEN_IP=0.0.0.0
       - TZ=Asia/Shanghai
     depends_on:
       - skywalking-oap
