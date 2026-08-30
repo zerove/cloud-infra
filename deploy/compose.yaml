@@ -338,9 +338,9 @@ services:
     volumes:
       - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
     environment:
-      # SW 9.6.0 用 application.yml 配置 (覆盖默认), 不再依赖 env var
+      # SW 10.x 字段名: SW_CORE_GRPC_HOST (替换 9.6 的 SW_NODE_IP)
       - SW_STORAGE=h2
-      - SW_NODE_IP=cloud-skywalking-oap
+      - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
       - JAVA_OPTS=-Xms512m -Xmx1024m
     depends_on:
