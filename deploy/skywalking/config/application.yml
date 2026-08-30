@@ -16,6 +16,8 @@ core:
   default:
     # 角色分组 (单节点所有模块)
     role: ${SW_CORE_ROLE:Mixed}
+    # OAP 节点 hostname (10.1.0 GRPCServer 需显式设, 避免 hostname can't be null)
+    hostname: ${SW_CORE_DEFAULT_HOSTNAME:cloud-skywalking-oap}
     # 数据保留 (与 env var 一致)
     recordDataTTL: ${SW_CORE_RECORD_DATA_TTL:3}
     metricsDataTTL: ${SW_CORE_METRICS_DATA_TTL:7}
