@@ -22,7 +22,7 @@
         <!-- 第三方依赖版本 -->
         <protobuf.version>3.25.5</protobuf.version>
         <minio.version>8.5.7</minio.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <awaitility.version>4.3.0</awaitility.version>
     </properties>
 
     <dependencyManagement>
