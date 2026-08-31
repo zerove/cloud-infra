@@ -17,8 +17,6 @@ import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -36,7 +34,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FileServiceImpl implements IFileService {
 
-    private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
 
     private final StorageFactory storageFactory;
     private final FileMetadataMapper metadataMapper;
