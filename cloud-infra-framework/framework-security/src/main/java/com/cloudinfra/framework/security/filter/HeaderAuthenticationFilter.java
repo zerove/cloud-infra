@@ -120,19 +120,16 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
             if (loginUser == null) {
-                // 兜底：基于 Header 构建最小上下文（此时 userId 非空，可安全解析）。
-                // A3 关键修复：Feign 调 getPermissionsByUserId 在 system 冷启动期会超时,
-                // 之前没写 L1 缓存导致 30s 内每次请求都重试 Feign 失败路径 (业务 401)。
-                // 修复: 兜底装配 (空 permissions 兜底) 也写 L1 缓存,
-                // 30s 内 L1 命中走"快速失败"避免反复 Feign 重试;
-                // 30s 后 L1 失效再重试, 给 system 启动喘息窗口。
+                // A3 关键修复: getUserContext 返回 null (用户不存在或暂时性失败)
+                // 不应被缓存, 否则 30s 内同 uid 全部误判为"用户不存在"
+                // 仅当 getUserContext 成功 (返回值非 null) 时才写入 L1 缓存
                 java.util.Set<String> fallbackPerms;
                 try {
                     fallbackPerms = new java.util.HashSet<>(
                         permissionProvider.getPermissionsByUserId(Long.valueOf(userId)));
                 } catch (RuntimeException feignEx) {
                     // A2 增强：Feign 调用超时/失败时快速降级, 不阻塞请求链
-                    // 错误用 L1 缓存 "user:uid 拉取失败" 标记, 30s 内不再重试
+                    // 空 permissions 兜底, 不缓存 (30s 后重试, 给 system 启动喘息窗口)
                     org.slf4j.LoggerFactory.getLogger(HeaderAuthenticationFilter.class)
                         .debug("Feign 拉取 user:{} 权限失败, 走空权限降级: {}",
                             userId, feignEx.getMessage());
@@ -143,11 +140,8 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
                     .username(username)
                     .permissions(fallbackPerms)
                     .build();
-                // A3 关键: 仅当 Feign 成功 (非空 Set 或显式 List 实际有内容) 才缓存.
-                // 空 permissions 来自 fallback 不缓存, 30s 后重新走 fallback 仍失败但不会再延长.
-                if (permissionLocalCache != null && !fallbackPerms.isEmpty()) {
-                    permissionLocalCache.put(uid, loginUser);
-                }
+                // A3 修复: getUserContext 返回 null 时不缓存, 避免误判同 uid 用户不存在
+                // 仅在 getUserContext 成功时 (loginUser != null) 才写缓存, 此时已在 getUserContext 块缓存
             }
 
             List<SimpleGrantedAuthority> authorities =
