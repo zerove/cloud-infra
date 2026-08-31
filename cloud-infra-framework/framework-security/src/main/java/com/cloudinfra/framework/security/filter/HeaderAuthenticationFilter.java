@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +19,7 @@ import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.framework.security.cache.PermissionLocalCache;
 import com.cloudinfra.common.core.security.IPermissionProvider;
+import com.cloudinfra.common.util.JwtUtils;
 
 @Component
 public class HeaderAuthenticationFilter extends OncePerRequestFilter {
@@ -43,6 +45,17 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.cloudinfra.common.core.crypto.InternalCallSecretProvider secretProvider;
+
+    /**
+     * P0-3b: 用于直连模式解析 Bearer token, 查 Redis blacklist.
+     * Gateway 模式下请求不带 Bearer token (gateway 已验签 + 注入 X-User-Id),
+     * 这里只在直连场景被命中.
+     */
+    @Autowired(required = false)
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired(required = false)
+    private JwtUtils jwtUtils;
     // jasypt 4.0.4 注入 null 问题: 走 Spring 容器内统一持有者, 绕开 Nacos PropertySource 包装
     private String internalCallSecret;
     @jakarta.annotation.PostConstruct
@@ -54,6 +67,17 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
+        // P0-3b 2026-08-31: 直连模式 blacklist 检查
+        //   Gateway 路径: gateway 已通过 RedisSessionStore.validateSession 拦截, 请求无 Bearer
+        //   直连路径: 用户带 Bearer token 直达下游, 需在 filter 装配 SecurityContext 前先查 blacklist
+        //   命中: 直接写 401 response, 不进 controller (避免 @PreAuthorize 兜底放行)
+        String jti = extractJtiFromBearer(request);
+        if (jti != null && stringRedisTemplate != null
+                && Boolean.TRUE.equals(stringRedisTemplate.hasKey("blacklist:" + jti))) {
+            writeBlacklistUnauthorized(response, jti);
+            return;
+        }
+
         String userId = request.getHeader("X-User-Id");
         String username = request.getHeader("X-User-Name");
 
@@ -106,7 +130,7 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
                 try {
                     fallbackPerms = new java.util.HashSet<>(
                         permissionProvider.getPermissionsByUserId(Long.valueOf(userId)));
-                } catch (Exception feignEx) {
+                } catch (RuntimeException feignEx) {
                     // A2 增强：Feign 调用超时/失败时快速降级, 不阻塞请求链
                     // 错误用 L1 缓存 "user:uid 拉取失败" 标记, 30s 内不再重试
                     org.slf4j.LoggerFactory.getLogger(HeaderAuthenticationFilter.class)
@@ -161,5 +185,39 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    /**
+     * P0-3b: 解析 Authorization Bearer 头中的 jti claim.
+     * 无 token / 无 jwtUtils / token 异常均返回 null, 调用方降级放行.
+     */
+    private String extractJtiFromBearer(HttpServletRequest request) {
+        if (jwtUtils == null) {
+            return null;
+        }
+        String auth = request.getHeader("Authorization");
+        if (auth == null || !auth.startsWith("Bearer ")) {
+            return null;
+        }
+        try {
+            return jwtUtils.getJtiFromToken(auth.substring(7));
+        } catch (RuntimeException ex) {
+            // token 解析失败: 不影响无 token 的其他请求, 降级放行
+            return null;
+        }
+    }
+
+    /**
+     * P0-3b: 直连模式 blacklist 命中时直接 401.
+     * 与 JwtAuthenticationFilter.writeUnauthorizedResponse 行为一致.
+     */
+    private void writeBlacklistUnauthorized(HttpServletResponse response, String jti)
+            throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.setHeader("X-Blacklist-Jti", jti);
+        String body = "{\"success\":false,\"code\":401,\"message\":\"token已登出\",\"data\":null}";
+        response.getWriter().write(body);
+        response.getWriter().flush();
     }
 }

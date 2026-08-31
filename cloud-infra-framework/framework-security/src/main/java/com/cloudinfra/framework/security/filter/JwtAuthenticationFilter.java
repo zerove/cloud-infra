@@ -53,12 +53,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = token.substring(7);
             // P0-3: 先校验 jti 是否在黑名单（已登出 token）
             // Redis 不可用时降级放行 (匹配 SecurityConfig 整体的 fail-open 策略)
+            // P0-3b 2026-08-31: 命中时直接 401 status + body, 不进 controller 链
+            //   原实现仅 short-circuit filterChain, 导致 controller 仍被调用
+            //   (fallback LoginUser 装配 → @PreAuthorize 拒绝 → 业务抛 401 body, 但 HTTP 200)
+            //   修正: 直接写 401 response, 避免业务代码执行 + 攻击面收敛
             if (stringRedisTemplate != null) {
                 String jti = jwtUtils.getJtiFromToken(jwt);
                 if (jti != null && Boolean.TRUE.equals(
                         stringRedisTemplate.hasKey("blacklist:" + jti))) {
-                    // 黑名单命中: 视为未认证, 由 Spring Security 授权规则拒绝
-                    filterChain.doFilter(request, response);
+                    writeUnauthorizedResponse(response, jti);
                     return;
                 }
             }
@@ -113,5 +116,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * P0-3b: 黑名单命中时直接写 401 response, 不进 controller 链.
+     * 行为: HTTP 401, Content-Type application/json, 统一 body 格式 (与 GlobalExceptionHandler 一致).
+     * 调用方必须在写后立即 return, 不再调用 filterChain.doFilter.
+     *
+     * @param response servlet response
+     * @param jti      命中黑名单的 jti, 写入 X-Blacklist-Jti header 便于审计
+     */
+    private void writeUnauthorizedResponse(HttpServletResponse response, String jti)
+            throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.setHeader("X-Blacklist-Jti", jti);
+        String body = "{\"success\":false,\"code\":401,\"message\":\"token已登出\",\"data\":null}";
+        response.getWriter().write(body);
+        response.getWriter().flush();
     }
 }
