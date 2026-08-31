@@ -47,7 +47,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-framework` | 内部 SDK (MyBatis, Redis, Security, Tracing) | 封装底层技术能力，`framework-security` 对 `api` 依赖 `optional` + `@ConditionalOnClass` |
 | `cloud-infra-starter` | 引导与自动配置组件 | 负责框架能力的自动装配 (租户、平台属性) |
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
-| `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 弱密钥黑名单 |
+| `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
 | `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层，**所有 Controller 已补齐 @PreAuthorize** |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
@@ -76,13 +76,13 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **Spring Boot**: 4.1.0
 - **Spring Cloud**: 2025.1.2
 - **JDK**: 25
-- **数据库**: PostgreSQL 16 / MySQL 8.4
-- **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 9.x, RabbitMQ 3.x
+- **数据库**: PostgreSQL 16 (实际使用) / MySQL 8.4 (驱动可配)
+- **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 8.18, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-08)
 - **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, 526 tests, 0 coverage violations
-- **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 自动清理)，文件魔数校验
+- **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层)，文件魔数校验
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
