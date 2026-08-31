@@ -10,61 +10,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>cloud-infra-codegen</artifactId>
+    <packaging>pom</packaging>
     <name>cloud-infra-codegen</name>
     <description>Cloud-Infra 代码生成框架 - 消除 RuoYi 手工 CRUD 样板代码</description>
 
-    <dependencies>
-        <!-- 核心依赖 -->
-        <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>cloud-infra-common</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-extension</artifactId>
-        </dependency>
-
-        <!-- 模板引擎 -->
-        <dependency>
-            <groupId>org.freemarker</groupId>
-            <artifactId>freemarker</artifactId>
-        </dependency>
-
-        <!-- 配置支持 -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <!-- Lombok (用于生成简洁的 model 类) -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- PostgreSQL 驱动 (代码生成时需要) -->
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Spring Boot CLI 依赖 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-
-        <!-- 测试 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    <modules>
+        <module>cloud-infra-codegen-core</module>
+        <module>cloud-infra-codegen-maven-plugin</module>
+    </modules>
 </project>
