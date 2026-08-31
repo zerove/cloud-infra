@@ -72,13 +72,13 @@ public class ${table.className}ServiceImpl extends ServiceImpl<${table.className
     private LambdaQueryWrapper<${table.className}> buildQueryWrapper(${table.className} query) {
         LambdaQueryWrapper<${table.className}> wrapper = new LambdaQueryWrapper<>();
 <#list table.fields as field>
-    <#if !field.primaryKey && field.notNull && !field.fill && !field.logicDelete>
+    <#if !field.primaryKey && !field.fill && !field.logicDelete>
         if (query.get${field.propertyName?cap_first}() != null) {
-            wrapper.eq(${table.className}::get${field.propertyName?cap_first}, query.get${field.propertyName?cap_first}());
-        }
-    <#elseif !field.primaryKey && !field.fill && !field.logicDelete>
-        if (query.get${field.propertyName?cap_first}() != null) {
+            <#if field.javaType == "java.lang.String">
             wrapper.like(${table.className}::get${field.propertyName?cap_first}, query.get${field.propertyName?cap_first}());
+            <#else>
+            wrapper.eq(${table.className}::get${field.propertyName?cap_first}, query.get${field.propertyName?cap_first}());
+            </#if>
         }
     </#if>
 </#list>

@@ -27,7 +27,7 @@ public class TemplateEngine {
     }
 
     /**
-     * 设置模板加载路径
+     * 设置模板加载路径（文件系统目录）
      */
     public TemplateEngine setTemplateLoader(String templateDir) {
         try {
@@ -35,6 +35,18 @@ public class TemplateEngine {
         } catch (IOException e) {
             throw new RuntimeException("无法加载模板目录: " + templateDir, e);
         }
+        return this;
+    }
+
+    /**
+     * 从 classpath 设置模板加载路径（如 /templates/）
+     *
+     * <p>适用于从 jar 资源加载模板，避免文件路径依赖。
+     */
+    public TemplateEngine setClasspathTemplateLoader(String classpathDir) {
+        String normalized = classpathDir.startsWith("/") ? classpathDir : "/" + classpathDir;
+        configuration.setClassLoaderForTemplateLoading(
+            this.getClass().getClassLoader(), normalized);
         return this;
     }
 

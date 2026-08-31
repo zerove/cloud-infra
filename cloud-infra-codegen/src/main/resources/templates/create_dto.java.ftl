@@ -4,6 +4,24 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+<#assign hasDateTime = false>
+<#assign hasBigDecimal = false>
+<#list table.fields as field>
+<#if !field.primaryKey && !field.fill && !field.logicDelete>
+<#if field.javaType == "java.time.LocalDateTime" || field.javaType == "java.time.LocalDate" || field.javaType == "java.time.LocalTime">
+<#assign hasDateTime = true>
+</#if>
+<#if field.javaType == "java.math.BigDecimal">
+<#assign hasBigDecimal = true>
+</#if>
+</#if>
+</#list>
+<#if hasDateTime>
+import java.time.*;
+</#if>
+<#if hasBigDecimal>
+import java.math.BigDecimal;
+</#if>
 
 <#if table.comment??>
 /**
@@ -13,8 +31,8 @@ import lombok.Data;
 @Data
 public class ${table.className}CreateDTO {
 <#list table.fields as field>
-    <#if !field.primaryKey>
-    <#if field.notNull>
+    <#if !field.primaryKey && !field.fill && !field.logicDelete>
+    <#if field.javaType == "java.lang.String">
     @NotBlank(message = "${field.comment}不能为空")
     <#else>
     @NotNull(message = "${field.comment}不能为空")

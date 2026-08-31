@@ -100,3 +100,7 @@ nacos-mysql.sql
 
 # Issue tracker: 本地 Markdown 提案（见 docs/agents/issue-tracker.md）
 /.scratch/
+
+# Dry run tools (manual development verification, not part of production test suite)
+**/SysUserDryRun.java
+**/*DryRun.java
