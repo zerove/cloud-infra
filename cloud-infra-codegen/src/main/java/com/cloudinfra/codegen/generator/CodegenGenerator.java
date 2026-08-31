@@ -14,19 +14,40 @@ import java.util.Map;
 /**
  * 代码生成器 - 主入口
  *
- * 基于 FreeMarker 模板引擎，自动生成 Entity、Mapper、Service、Controller、DTO、VO、Converter 等代码
+ * <p>基于 FreeMarker 模板引擎，自动生成 Entity、Mapper、Service、Controller、DTO、VO、Converter 等代码
+ *
+ * <p>模板加载优先级：
+ * <ol>
+ *   <li>classpath:/templates/ (默认，从 jar 资源加载)</li>
+ *   <li>用户自定义目录 (通过构造器指定)</li>
+ * </ol>
  */
 public class CodegenGenerator {
 
+    /** 默认 classpath 模板目录 */
+    public static final String DEFAULT_CLASSPATH_TEMPLATES = "/templates";
+
     private final CodegenConfig config;
     private final TemplateEngine templateEngine;
-    private final String templateDir;
 
     public CodegenGenerator(CodegenConfig config) {
+        this(config, null);
+    }
+
+    /**
+     * @param config 代码生成配置
+     * @param templateDir 自定义模板目录 (为 null 时使用 classpath 默认)
+     */
+    public CodegenGenerator(CodegenConfig config, String templateDir) {
         this.config = config;
         this.templateEngine = new TemplateEngine();
-        this.templateDir = config.getOutputDir() + "templates/";
-        this.templateEngine.setTemplateLoader(templateDir);
+        if (templateDir != null) {
+            // 自定义文件目录
+            this.templateEngine.setTemplateLoader(templateDir);
+        } else {
+            // 默认从 classpath 加载
+            this.templateEngine.setClasspathTemplateLoader(DEFAULT_CLASSPATH_TEMPLATES);
+        }
     }
 
     /**
