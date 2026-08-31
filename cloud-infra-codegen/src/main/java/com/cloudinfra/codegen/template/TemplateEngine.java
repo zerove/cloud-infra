@@ -1,0 +1,86 @@
+package com.cloudinfra.codegen.template;
+
+import com.cloudinfra.codegen.model.TableModel;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
+import freemarker.template.TemplateExceptionHandler;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
+
+/**
+ * FreeMarker 模板引擎包装类
+ */
+public class TemplateEngine {
+
+    private final Configuration configuration;
+
+    public TemplateEngine() {
+        configuration = new Configuration(Configuration.VERSION_2_3_33);
+        configuration.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+        configuration.setDefaultEncoding(StandardCharsets.UTF_8.name());
+    }
+
+    /**
+     * 设置模板加载路径
+     */
+    public TemplateEngine setTemplateLoader(String templateDir) {
+        try {
+            configuration.setDirectoryForTemplateLoading(new File(templateDir));
+        } catch (IOException e) {
+            throw new RuntimeException("无法加载模板目录: " + templateDir, e);
+        }
+        return this;
+    }
+
+    /**
+     * 渲染模板到字符串
+     */
+    public String renderToString(String templateName, Map<String, Object> dataModel) {
+        try {
+            Template template = configuration.getTemplate(templateName);
+            StringWriter writer = new StringWriter();
+            template.process(dataModel, writer);
+            return writer.toString();
+        } catch (IOException | TemplateException e) {
+            throw new RuntimeException("渲染模板失败: " + templateName, e);
+        }
+    }
+
+    /**
+     * 渲染模板到文件
+     */
+    public void renderToFile(String templateName, Map<String, Object> dataModel,
+                              String outputPath, boolean skipIfExists) throws IOException {
+        Path output = Paths.get(outputPath);
+
+        if (skipIfExists && Files.exists(output)) {
+            System.out.println("跳过已存在的文件: " + output);
+            return;
+        }
+
+        Files.createDirectories(output.getParent());
+
+        String content = renderToString(templateName, dataModel);
+
+        try (BufferedWriter writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
+            writer.write(content);
+        }
+    }
+
+    /**
+     * 构建数据模型
+     */
+    public static Map<String, Object> buildDataModel(TableModel table, com.cloudinfra.codegen.config.CodegenConfig config) {
+        return Map.of(
+            "table", table,
+            "config", config,
+            "fields", table.getFields()
+        );
+    }
+}

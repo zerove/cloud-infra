@@ -57,6 +57,7 @@
         <module>cloud-infra-common</module>
         <module>cloud-infra-framework</module>
         <module>cloud-infra-api</module>
+        <module>cloud-infra-codegen</module>
         <module>cloud-infra-gateway</module>
         <module>cloud-infra-auth</module>
         <module>cloud-infra-modules</module>
