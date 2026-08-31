@@ -84,7 +84,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, 526 tests, 0 coverage violations
 - **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 自动清理)，文件魔数校验
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient)
-- **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 57 RPS, p99 1066ms)
+- **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
 
