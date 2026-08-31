@@ -103,4 +103,3 @@ nacos-mysql.sql
 
 # Dry run tools (manual development verification, not part of production test suite)
 **/SysUserDryRun.java
-**/*DryRun.java
