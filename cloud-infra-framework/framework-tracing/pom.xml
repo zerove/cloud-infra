@@ -21,8 +21,8 @@
             <groupId>org.apache.skywalking</groupId>
             <artifactId>apm-toolkit-logback-1.x</artifactId>
             <!-- 9.7.0 的根 parent java-agent:9.7.0 未发布到 Central（上游发布缺陷），
-                 Maven 解析 parent 链 404 导致依赖不可用。与 apm-toolkit-trace 统一 9.6.0 -->
-            <version>9.6.0</version>
+                 Maven 解析 parent 链 404 导致依赖不可用。与 apm-toolkit-trace 统一 9.7.0 -->
+            <version>9.7.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.skywalking</groupId>
