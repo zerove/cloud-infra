@@ -110,7 +110,6 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-core</artifactId>
         </dependency>
-        <!-- Spring Cloud Stream for event-driven architecture -->
         </dependencies>
     <build>
         <plugins>
