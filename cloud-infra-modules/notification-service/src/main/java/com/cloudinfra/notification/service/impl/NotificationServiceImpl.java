@@ -22,8 +22,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -51,8 +49,6 @@ public class NotificationServiceImpl implements INotificationService {
     private final ObjectMapper objectMapper;
     private final ExecutorService dispatchExecutor;
 
-    // Manual logger for static contexts
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NotificationServiceImpl.class);
 
     @Override
     @Transactional(rollbackFor = Exception.class)

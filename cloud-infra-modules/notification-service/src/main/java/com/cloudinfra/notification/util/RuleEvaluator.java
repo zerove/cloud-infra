@@ -3,17 +3,12 @@ package com.cloudinfra.notification.util;
 import com.cloudinfra.notification.domain.NotificationRule;
 import lombok.extern.slf4j.Slf4j;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * 规则判定工具类
  * 负责执行指标值与阈值的比较逻辑
  */
 @Slf4j
 public class RuleEvaluator {
-
-    private static final Logger log = LoggerFactory.getLogger(RuleEvaluator.class);
 
     /**
      * 判定规则是否触发
@@ -42,7 +37,7 @@ public class RuleEvaluator {
                     yield false;
                 }
             };
-        } catch (Exception e) {
+        } catch (NullPointerException e) {
             log.error("规则判定异常 [RuleID: {}]: {}", rule.getId(), e.getMessage());
             return false;
         }
