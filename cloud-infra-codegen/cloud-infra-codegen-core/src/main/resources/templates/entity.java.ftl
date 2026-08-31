@@ -14,7 +14,11 @@ import lombok.EqualsAndHashCode;
 <#assign hasDateTime = false>
 <#list table.fields as field>
 <#if field.javaType == "java.time.LocalDateTime" || field.javaType == "java.time.LocalDate" || field.javaType == "java.time.LocalTime">
+<#if table.baseEntity && (field.propertyName == "createBy" || field.propertyName == "createTime" || field.propertyName == "updateBy" || field.propertyName == "updateTime")>
+<#-- skip inherited base fields -->
+<#else>
 <#assign hasDateTime = true>
+</#if>
 </#if>
 </#list>
 <#if hasDateTime>
@@ -39,6 +43,8 @@ public class ${table.className} <#if table.baseEntity>extends BaseEntity</#if> {
     /** ${field.comment} (逻辑删除: 0-未删除, 1-已删除) */
     @TableLogic
     private ${field.getSimpleJavaType()} ${field.propertyName};
+    <#elseif table.baseEntity && (field.propertyName == "createBy" || field.propertyName == "createTime" || field.propertyName == "updateBy" || field.propertyName == "updateTime")>
+    <#-- 审计字段继承自 BaseEntity, 无需重复声明 -->
     <#elseif field.fill>
     /** ${field.comment} */
     @TableField(fill = FieldFill.${field.fillStrategy?upper_case})
