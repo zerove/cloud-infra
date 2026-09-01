@@ -19,6 +19,7 @@
 | 5 | `8b6b6de` | fix(codegen): M5-04b SQL 模板 PG 化 + 回归测试 |
 | 6 | `0ef0005` | fix(codegen): M5-04c VO @Schema + UpdateDTO @Size |
 | 7 | `2ff8d50` | verify(codegen): M5-05 FlywayDdlParser 端到端 (15 表自动生成) |
+| 8 | `8430811` | feat(metrics): M5-03 业务告警指标接入 (Counter AOP 化) |
 
 **另: 8 个未推送 commits** 在会话开始时已推送 (含 P0-3b 修复 + codegen 3660 行)。
 
@@ -115,21 +116,20 @@
 | M5-04b | SQL 模板 PG 化 | closed (done) | schema.sql.ftl + 回归测试 |
 | M5-04c | VO @Schema + UpdateDTO @Size | closed (done) | vo.java.ftl + update_dto.java.ftl |
 | M5-05 | FlywayDdlParser 端到端 15 表 | closed (verified) | docs/codegen/2026-09-01-flyway-parser-sys-user.md |
+| M5-03 | 业务告警指标接入 (Counter AOP 化) | closed (done) | commit 8430811 (login/upload +BusinessMetric 注解) |
 
 ## 5. 未关闭的 M5 issues (留待未来 session)
 
 | # | Issue | 状态 | 优先级 |
 |---|---|---|---|
-| M5-03 | 业务告警指标接入 (auth_login_attempts_total + file_upload_failures_total) | open | P0 |
 | M5-06 | CONTEXT.md / ROADMAP / ARCHITECTURE / README 同步 codegen | open | P1 |
 | M5-07 | v1.0.0 release notes + git tag | open | P1 |
 
 ## 6. 后续 session 推荐起点
 
 **优先级最高的剩余任务**:
-1. **M5-03 (业务告警指标)** — 11 告警规则里 2 条业务类指标未实现,简单工作量,补齐后 v1.0.0 真的"就绪"
-2. **M5-07 (v1.0.0 release)** — 在 M5-03 完成后, 写 release notes + git tag v1.0.0
-3. **M5-06 (文档同步)** — 在 v1.0.0 release 时一并补 CONTEXT.md / ROADMAP.md
+1. **M5-07 (v1.0.0 release)** — 写 release notes + git tag v1.0.0
+2. **M5-06 (文档同步)** — 在 v1.0.0 release 时一并补 CONTEXT.md / ROADMAP.md / ARCHITECTURE.md
 
 ---
 
