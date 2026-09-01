@@ -38,7 +38,7 @@ public class ${table.className}UpdateDTO {
 <#list table.fields as field>
     <#if !field.primaryKey && !field.fill && !field.logicDelete>
     <#if field.javaType == "java.lang.String">
-    @Size(max = ${field.length!256}, message = "${field.comment}长度不能超过${field.length!256}")
+    @Size(max = ${field.length!255}, message = "${field.comment}长度不能超过${field.length!255}")
     </#if>
     private ${field.getSimpleJavaType()} ${field.propertyName};
     </#if>
