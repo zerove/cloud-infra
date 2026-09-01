@@ -39,13 +39,23 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **Developer Guide**: Create a "How-to" guide for implementing new modules using the framework.
 - [x] 🟢 **文档版本校准**（H3 已完成, commit a6c61ad CI 文档版本门禁 + README/CONTEXT.md 校正）。
 
-### 4. Security Hardening (New, 2026-08)
+### 4. Security Hardening (2026-08)
 **Goal:** Close identity/cache/credential gaps found in the 2026-08 audit.
 - [x] 🟢 **GraalVM Native 网关与认证服务交付**：网关 1.37s / auth 11.6s 启动，健康验证通过（提交链 f1e3e7a…07740fd）。
 - [x] 🟢 **权限缓存失效链路**（S2 已完成, commit 39ac527 + 6c55331 角色删除补齐）。
 - [x] 🟢 **令牌吊销机制**（S4 已完成, commit ae6249f 用户禁用/删除/改密后吊销存量会话, JWT 黑名单 Redis TTL）。
 - [x] 🟢 **MQ 凭据治理**（S3 已完成, deploy/compose.yaml 用 ${RABBITMQ_USER:?} 强制占位符）。
 - [x] 🟢 **插件系统安全模型**（commit 7ac18f7 ADR-010 实施, dev 启用, prod 禁用）。
+
+### 5. Code Generation & Business Alert (2026-09, v1.0.0 候选)
+**Goal:** 消除 RuoYi 手工 CRUD 样板 + 业务告警闭环.
+- [x] 🟢 **cloud-infra-codegen 模块** (commit b9a2a84..1359496): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接).
+- [x] 🟢 **codegen 模板 PG 化** (commit 8b6b6de): MySQL → PostgreSQL 16 风格 (BIGSERIAL, COMMENT ON, IF NOT EXISTS) + 回归测试.
+- [x] 🟢 **VO @Schema + UpdateDTO @Size 255** (commit 0ef0005): Swagger 字段描述完整 + 校验合理.
+- [x] 🟢 **FlywayDdlParser 端到端验证** (commit 2ff8d50): 15 表自动解析, 智能识别 SMALLINT/VARCHAR(N)/UNIQUE/DEFAULT/@TableLogic.
+- [x] 🟢 **M5-03 业务告警指标接入** (commit 8430811): @BusinessMetric 注解 + AOP 切面, auth.login.attempts{result=success|failure} + file.upload.failures{} 真正落地, 11 告警规则中 2 条业务类 (LoginFailureRateHigh + FileUploadFailureHigh) 可触发.
+- [x] 🟢 **P0-3b 端到端 401 实测** (commit 370dcd1 + ae06566): JWT blacklist 直连业务模块实测 HTTP 401.
+- [x] 🟢 **deploy compose 内存修复** (commit ef0d69d): cloud-system 768m→2g + --enable-native-access=ALL-UNNAMED, 解决 Caffeine ClassLoader 死锁.
 
 ---
 

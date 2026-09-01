@@ -15,6 +15,14 @@
 - `cloud-infra-modules` $\rightarrow$ `cloud-infra-common` (原因: 依赖通用工具类及全局异常定义)
 - `cloud-infra-modules` $\rightarrow$ `cloud-infra-api` (原因: 调用其他服务的 Feign 接口)
 - `cloud-infra-gateway` $\rightarrow$ `cloud-infra-auth` (原因: 依赖认证中心进行 Token 校验与身份验证)
+- `cloud-infra-codegen` $\rightarrow$ `cloud-infra-common` (原因: 依赖通用工具类; 同时作为开发期工具, 不打包进运行时镜像)
+
+## 🛠️ 代码生成框架 (cloud-infra-codegen, 2026-09)
+
+- **核心库** `cloud-infra-codegen-core`: 10+ FreeMarker 模板 (entity / mapper / CreateDTO / UpdateDTO / VO / Converter / service / impl / controller / schema.sql)
+- **Maven 插件** `cloud-infra-codegen-maven-plugin`: JDK 17 编译, 自包含精简模板, 集成到构建流程
+- **FlywayDdlParser**: 从 Flyway DDL 文件解析表元数据, 无需 DB 连接, 支持 PostgreSQL 16 完整特性 (SMALLINT / BIGSERIAL / VARCHAR(N) / UNIQUE / DEFAULT / @TableLogic)
+- **AOP 集成** (`@BusinessMetric`): 业务方法标注注解即可埋点, Counter 按需注册, 避免 try-catch (合规 adg java-catch-all 规则)
 
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
