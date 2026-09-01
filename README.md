@@ -2,17 +2,30 @@
 
 高性能、企业级云基础设施平台，基于最新 Java 生态构建。专为极致并发、分布式可扩展性和开发者生产力而设计。
 
-## 📌 v1.0.0-rc1 (2026-08-29)
+## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-rc1-blue) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-88%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-37%2F37-success)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
 
-**完整状态**: [HANDOFF-2026-08-29.md](docs/HANDOFF-2026-08-29.md) · 17 个新 commits · 5 项 P0 安全闭环 · 11 Prometheus 告警 · p99 970ms
+**v1.0.0 关键变更** (相对 v1.0.0-rc1):
+- ✅ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)
+- ✅ **P0-3b JWT blacklist 端到端 401 实测通过** (HTTP 401 + Redis blacklist TTL 24h)
+- ✅ **Caffeine ClassLoader 死锁修复**: cloud-system 内存 768m→2g + `--enable-native-access=ALL-UNNAMED`
+- ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
+- ✅ **AGENTS.md 同步 codegen 模块** (55cd647)
+
+**完整状态**: [SESSION-SUMMARY-2026-09-01.md](.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md) · 10 个新 commits · 5 项 P0 闭环 · 11 Prometheus 告警全启用 · p99 165ms · 101 测试全过
 
 **快速开始**:
 ```bash
 ./deploy/up.sh              # 启动基础设施 + 同步 Nacos 配置
 bash e2e-test.sh            # 6/6 业务断言 PASS
 ./deploy/up.sh --check      # 0 配置漂移
+
+# 代码生成 (新!)
+mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
+  com.cloudinfra:cloud-infra-codegen-maven-plugin:1.0.0-SNAPSHOT:generate \
+  -Dcodegen.url=jdbc:postgresql://localhost:5432/cloud_infra \
+  -Dcodegen.moduleName=system -Dcodegen.tableNames=sys_user
 ```
 
 ## 🚀 技术栈
@@ -40,6 +53,7 @@ bash e2e-test.sh            # 6/6 业务断言 PASS
     - `search-service`: 基于 Elasticsearch 的高性能搜索。
 - **`cloud-infra-api`**: 共享 DTO 和 Feign 客户端，确保服务间通信的类型安全。
 - **`cloud-infra-common`**: 基础工具类和通用基类。
+- **`cloud-infra-codegen`** (新!): 代码生成框架。`core` 含 10+ FreeMarker 模板 + FlywayDdlParser, `maven-plugin` 子模块 JDK 17 编译, 集成到构建流程, 消除 RuoYi 风格手工 CRUD 样板.
 
 ## 📈 可观测性
 
