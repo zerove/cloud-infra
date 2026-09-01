@@ -4,6 +4,7 @@
 
 > **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin, 0 commit drift)
 > **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 101 tests pass, 全部关键能力经过运行时实测
+> **完整交接**: [docs/HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) (v1.0.0 正式版)
 > **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md`
 
 ---

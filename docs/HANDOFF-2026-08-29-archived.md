@@ -1,5 +1,9 @@
 # Cloud-Infra 项目交接报告 (2026-08-29)
 
+> ⚠️ **ARCHIVED (2026-09-01)**: 此文档是 v1.0.0-rc1 交接, 已被 [HANDOFF-2026-09-01.md](HANDOFF-2026-09-01.md) 替代 (v1.0.0 正式版交接)。
+> 文件重命名为 `HANDOFF-2026-08-29-archived.md` 仅为避免与新交接文档混淆, 内容仍可参考。
+> 详见 `.scratch/2026-q3-roadmap/PRD.md` (90 天路线图) + `SESSION-SUMMARY-2026-09-01.md` (完整会话总结)。
+
 **生成时间**: 2026-08-29
 **基线 commit**: `cef11e5` (master HEAD)
 **仓库**: https://github.com/zerove/cloud-infra
