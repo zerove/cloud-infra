@@ -489,11 +489,14 @@ services:
       dockerfile: Dockerfile
     image: localhost/cloud-infra-system:latest
     container_name: cloud-system
-    mem_limit: 768m
+    # 2026-09-01 P0-3b 验证: 768m 触发 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁
+    # 2GB heap + --enable-native-access=ALL-UNNAMED 实测 86.19s 启动成功
+    # 详见 docs/perf/2026-09-01-p0-3b-verify.md
+    mem_limit: 2g
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx512m -Xms256m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx1536m -Xms512m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
