@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-12-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
 
 **v1.0.0 关键变更** (相对 v1.0.0-rc1):
 - ✅ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)
@@ -13,7 +13,9 @@
 - ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
 - ✅ **AGENTS.md 同步 codegen 模块** (55cd647)
 
-**完整状态**: [SESSION-SUMMARY-2026-09-01.md](.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md) · 10 个新 commits · 5 项 P0 闭环 · 11 Prometheus 告警全启用 · p99 165ms · 101 测试全过
+**完整状态**: [HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) · 26 个新 commits · 9 P0/M5 issues closed · 11 Prometheus 告警 (2 业务类运行时实测) · p99 165ms · 101 测试全过
+
+**v1.0.0 零信任发布**: 6 个质量门全部通过, git tag `e6b786d` on origin, 0 commit drift. 详见 [docs/releases/v1.0.0.md](docs/releases/v1.0.0.md)
 
 **快速开始**:
 ```bash
