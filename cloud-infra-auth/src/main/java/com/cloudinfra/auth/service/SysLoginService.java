@@ -7,6 +7,7 @@ import com.cloudinfra.auth.exception.AuthExceptionCode;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.enums.ResultCode;
+import com.cloudinfra.framework.web.monitor.BusinessMetric;
 import java.time.Duration;
 import java.util.Map;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -47,6 +48,12 @@ public class SysLoginService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    @BusinessMetric(
+        metric = "auth.login.attempts",
+        reason = "login",
+        resultOnSuccess = "success",
+        resultOnFailure = "failure"
+    )
     public Result<Map<String, Object>> login(LoginUser loginUser) {
         // 1. 验证码校验（失败抛出业务异常，由统一异常处理返回）
         validateCaptcha(loginUser.getUsername(), loginUser.getCaptcha(), loginUser.getUuid());
