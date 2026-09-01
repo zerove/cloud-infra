@@ -120,6 +120,46 @@ class CodegenGeneratorTest {
         assertTrue(content.contains("class TestUser"));
     }
 
+    @Test
+    void testPostgresSchemaTemplateRendersWithoutNullLength() {
+        // 2026-09-01 回归测试: schema.sql.ftl 改 PG 风格后, 即使 FieldModel.length = null
+        // 也必须正常渲染 (不能触发 FreeMarker "field.length is null" 错误)
+        TableModel table = createSampleTableWithNullLength();
+        Path templateDir = tempDir.resolve("pg-template");
+        try {
+            Files.createDirectories(templateDir);
+            // 直接从 main resources 复制 schema.sql.ftl
+            Path mainTemplate = Path.of("src/main/resources/templates/schema.sql.ftl");
+            if (Files.exists(mainTemplate)) {
+                Files.copy(mainTemplate, templateDir.resolve("schema.sql.ftl"));
+            } else {
+                // 兜底: 写一个最小化 PG 模板
+                Files.writeString(templateDir.resolve("schema.sql.ftl"),
+                    "CREATE TABLE IF NOT EXISTS ${table.tableName} (\n" +
+                    "<#list table.fields as field>\n" +
+                    "    <#if field.primaryKey>${field.columnName} BIGSERIAL PRIMARY KEY<#if field_has_next>,</#if>\n" +
+                    "    <#else>${field.columnName} ${field.jdbcType}<#if field_has_next>,</#if>\n" +
+                    "    </#if>\n" +
+                    "</#list>\n" +
+                    ");\n");
+            }
+            TemplateEngine pgEngine = new TemplateEngine();
+            pgEngine.setTemplateLoader(templateDir.toString());
+
+            String result = pgEngine.renderToString("schema.sql.ftl",
+                Map.of("table", table, "config", config));
+            assertNotNull(result);
+            assertTrue(result.contains("CREATE TABLE IF NOT EXISTS test_user"),
+                () -> "应包含 CREATE TABLE, 实际: " + result);
+            assertTrue(result.contains("BIGSERIAL PRIMARY KEY"),
+                () -> "PG 风格必须有 BIGSERIAL, 实际: " + result);
+            // 关键回归点: 没有 length 的字段也不能崩
+            assertFalse(result.contains("null"), () -> "不应出现 'null' 字面, 实际: " + result);
+        } catch (IOException e) {
+            fail("Template rendering failed: " + e.getMessage());
+        }
+    }
+
     private TableModel createSampleTable() {
         FieldModel idField = new FieldModel("id", "id", "java.lang.Long", "BIGINT", "主键", true);
         idField.setPrimaryKey(true);
@@ -127,6 +167,26 @@ class CodegenGeneratorTest {
         FieldModel nameField = new FieldModel("name", "name", "java.lang.String", "VARCHAR", "名称", false);
         nameField.setNotNull(true);
         nameField.setLength(50);
+
+        TableModel table = new TableModel();
+        table.setTableName("test_user");
+        table.setComment("测试用户表");
+        table.setClassName("TestUser");
+        table.setClassAliasName("testUser");
+        table.setPrimaryKey(idField);
+        table.setFields(List.of(idField, nameField));
+        table.setModuleName("test");
+        table.setPackageName("com.cloudinfra.test");
+        return table;
+    }
+
+    private TableModel createSampleTableWithNullLength() {
+        // 关键差异: 不设 length / notNull, 触发 2026-09-01 修复前 FreeMarker null 错误
+        FieldModel idField = new FieldModel("id", "id", "java.lang.Long", "BIGINT", "主键", true);
+        idField.setPrimaryKey(true);
+
+        FieldModel nameField = new FieldModel("name", "name", "java.lang.String", "VARCHAR", "名称", false);
+        // 故意不调用 setLength() / setNotNull()
 
         TableModel table = new TableModel();
         table.setTableName("test_user");
