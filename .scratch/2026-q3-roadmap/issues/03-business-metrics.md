@@ -14,6 +14,9 @@ Depends: 无
 
 ## 改动 (已提交 commit 8430811)
 
+> **运行时验证**: commit 2c88ea2 (本会话最后) — `auth_login_attempts_total{result="failure"} 7.0`
+> 完整报告: `docs/perf/2026-09-01-m5-03-runtime-verify.md`
+
 ### 1. 框架层 (cloud-infra-framework/framework-web)
 
 **新增** `BusinessMetric` 注解:
