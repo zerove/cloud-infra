@@ -36,6 +36,18 @@
                     <parameters>true</parameters>
                 </configuration>
             </plugin>
+            <plugin>
+                <!-- 排除 dry-run 工具类 (main 方法, 非单元测试) -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*Demo.java</exclude>
+                        <exclude>**/*DryRun.java</exclude>
+                        <exclude>**/*GrayMigrate.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

@@ -49,6 +49,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
 | `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
 | `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层，**所有 Controller 已补齐 @PreAuthorize** |
+| `cloud-infra-codegen` | 代码生成框架 (消除 RuoYi 手工 CRUD 样板) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块;支持 Flyway DDL 解析,无需 DB 连接 |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
 ### 3. 核心业务流程
@@ -80,13 +81,14 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 8.18, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
-### 4. 质量基线 (2026-08)
-- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, 526 tests, 0 coverage violations
-- **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层)，文件魔数校验
-- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient)
+### 4. 质量基线 (2026-08/09)
+- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, 526+ tests, 0 coverage violations
+- **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层)，文件魔数校验，P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
+- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
+- **代码生成**: `cloud-infra-codegen` 模块含 10+ 模板 (FreeMarker .ftl),支持 Maven 插件/CLI/编程式三种调用,基于 Flyway DDL 文件解析 (无需 DB 连接, commit 1359496)
 
 ## Agent skills
 
