@@ -15,6 +15,7 @@ import com.cloudinfra.file.service.StorageStrategy;
 import com.cloudinfra.file.service.StorageQuotaService;
 import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
+import com.cloudinfra.framework.web.monitor.BusinessMetric;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class FileServiceImpl implements IFileService {
 
 
@@ -41,8 +41,23 @@ public class FileServiceImpl implements IFileService {
     private final FilePermissionService permissionService;
     private final StorageQuotaService quotaService;
 
+    public FileServiceImpl(
+        StorageFactory storageFactory,
+        FileMetadataMapper metadataMapper,
+        FileVersionMapper versionMapper,
+        FilePermissionService permissionService,
+        StorageQuotaService quotaService
+    ) {
+        this.storageFactory = storageFactory;
+        this.metadataMapper = metadataMapper;
+        this.versionMapper = versionMapper;
+        this.permissionService = permissionService;
+        this.quotaService = quotaService;
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @BusinessMetric(metric = "file.upload.failures", reason = "upload")
     public FileMetadataVO upload(Long userId, FileContent content) throws IOException {
         // 1. 存储配额预检查（友好提示） + 原子预留（真正强校验）
         quotaService.checkQuota(userId, content.size());
