@@ -57,6 +57,13 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **P0-3b 端到端 401 实测** (commit 370dcd1 + ae06566): JWT blacklist 直连业务模块实测 HTTP 401.
 - [x] 🟢 **deploy compose 内存修复** (commit ef0d69d): cloud-system 768m→2g + --enable-native-access=ALL-UNNAMED, 解决 Caffeine ClassLoader 死锁.
 
+### 5.1 v1.0.0 Release Tag (2026-09-01, immutable)
+- **tag 位置**: `e6b786d` (SESSION-SUMMARY 同步, 含 M5-03 运行时验证报告 2c88ea2)
+- **远端可见**: https://github.com/zerove/cloud-infra/releases/tag/v1.0.0
+- **ahead origin/master**: 0 commits
+- **质量门后修正** (commit 9760bfb + 45e14b8): AGENTS.md / ARCHITECTURE.md 标注 v1.0.0 + issue 描述修正 (stale 内容), 未 force-push tag (符合 immutable release 实践)
+- **未来补丁**: 应该是 v1.0.1, 不动 v1.0.0 tag
+
 ---
 
 ## 📅 Timeline & Milestones
