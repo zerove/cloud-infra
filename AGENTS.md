@@ -2,6 +2,10 @@
 
 本文件为 OpenCode 代理提供该仓库的快速上手指南、核心指令及架构上下文。
 
+> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin, 0 commit drift)
+> **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 101 tests pass, 全部关键能力经过运行时实测
+> **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md`
+
 ---
 
 ## 🛠️ 开发者快速指南 (Developer Operations)
@@ -82,7 +86,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-08/09)
-- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, 526+ tests, 0 coverage violations
+- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, **101 tests, 0 fail** (2026-09-01 实测)
 - **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层)，文件魔数校验，P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)

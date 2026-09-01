@@ -1,5 +1,9 @@
 # 架构定义 (ARCHITECTURE.md)
 
+> **当前状态**: v1.0.0 (2026-09-01) — Production-Ready Release
+> **关键能力**: 11 个 ADR, 101 tests pass, P0-3b JWT blacklist 端到端 401 实测, M5-03 业务告警 Counter 运行时实测 (Counter 7.0)
+> **git tag**: v1.0.0 on origin (e6b786d, 0 commit drift)
+
 ## 📐 分层结构 (Layering)
 - **API Layer**: 
     - `cloud-infra-api`: 定义全平台共享的 Feign 客户端接口及 DTO，作为服务间契约。
