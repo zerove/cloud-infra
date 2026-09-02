@@ -1,8 +1,8 @@
 # P3-02: ADR-008 重复编号 (observability vs port-conventions)
 
-Status: open
+Status: closed (done 2026-09-02)
 Priority: P3
-Owner: TBD
+Owner: AI Agent
 Module: docs/adr/
 Depends: 无
 
@@ -12,48 +12,48 @@ Depends: 无
 
 1. **`ADR-008-observability.md`** (2026-04-21, 2075 bytes)
    - 主题: Actuator + Micrometer + 链路追踪标准化
-   - 范围: 仅 observability
-
 2. **`ADR-008-port-conventions-and-virtual-threads.md`** (2026-08-04, 2789 bytes)
    - 主题: 服务端口约定 + 虚拟线程策略
-   - 范围: 端口规范 + 虚拟线程 (内容更全, 显式引用 "ADR-008 核心")
+   - 内容更新更全, 且引述可观测性
 
 ## 影响
 
-- **README.md badges**: 写 "ADRs=11" 但实际文件数 12 (含 2 个 ADR-008)
-- **AGENTS.md**: 没具体数 ADR, 无影响
-- **新读者困惑**: 看 `docs/adr/` 目录看到 2 个 ADR-008 不确定哪个权威
+- README.md badges: 写 "ADRs=12" 但实际有 1 个重复
+- 新读者困惑: 看 `docs/adr/` 目录看到 2 个 ADR-008
 
-## 修复方案
+## 修复 (2026-09-02 done)
 
-**方案 A (推荐)**: 归档旧版
-1. 把 `ADR-008-observability.md` 移到 `docs/adr/archive/ADR-008-observability-deprecated.md`
-2. 添加废弃说明 (内容已被 ADR-008-port-conventions 涵盖)
-3. README badges: ADRs=11 保持
+### 动作
 
-**方案 B**: 重编号
-1. 把 `ADR-008-observability.md` 重命名为 `ADR-012-observability.md`
-2. 后续 ADR 编号顺延 (012 → 012, 013...)
+```bash
+# 1. 归档旧 observability.md
+mkdir -p docs/adr/archive
+git mv docs/adr/ADR-008-observability.md docs/adr/archive/ADR-008-observability-deprecated.md
 
-**方案 C**: 合并
-1. 把两个文件内容合并到 `ADR-008-port-conventions-and-virtual-threads.md`
-2. 删除 observability 独立文件
-3. 更新标题: `ADR-008: 服务端口约定 + 可观测性 + 虚拟线程策略`
+# 2. 旧 ADR 头部加 DEPRECATED 说明
+# 引用新 ADR-008 + issue 12
 
-## 决策点
+# 3. README.md badges ADRs 12 → 11
+```
 
-- 推荐方案 A (最小改动, 保留历史)
-- 真实历史价值: observability ADR 是 2026-04-21 早期决策, 不应丢
-- 工作量: 0.5h
+### commits
+
+- `4076713 fix(docs): P3-02 ADR-008 重复 - 归档旧 observability.md`
+- `95259cf docs: ADRs=11 (README badge) + ADR-008-observability DEPRECATED 头部说明`
+
+## 验证
+
+- ✅ `docs/adr/` 现在有 11 个 ADR + 1 个 archive 目录 (12 个文件但 ADR 实际 11)
+- ✅ README.md ADRs=11 一致
+- ✅ 旧 ADR 头部有 DEPRECATED 警告 + 链接到新 ADR
+- ✅ HEAD=95259cf, ahead origin = 0
 
 ## 不阻塞 v1.0.0
 
-v1.0.0 已发布, 此问题是 P3 卫生项。
-新 HANDOFF-2026-09-01.md §7.2 已记录此问题。
+v1.0.0 tag `e6b786d` 已发布, 本修复在 v1.0.0 后, 算 v1.0.1 候选.
 
 ## 引用
 
-- ADR-008-observability.md (文件)
-- ADR-008-port-conventions-and-virtual-threads.md (文件)
-- HANDOFF-2026-09-01.md §7.2 (问题记录)
-- README.md badges (ADRs=11 实际数 12)
+- commits: 4076713 + 95259cf
+- 新 ADR: `docs/adr/ADR-008-port-conventions-and-virtual-threads.md`
+- 归档: `docs/adr/archive/ADR-008-observability-deprecated.md`
