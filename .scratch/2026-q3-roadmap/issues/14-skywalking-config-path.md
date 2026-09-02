@@ -1,96 +1,97 @@
-# P3-04: skywalking-oap 配置路径问题 (config 找不到)
+# P3-04: skywalking-oap config 路径问题 (升级 10.x 才能解决)
 
-Status: open
+Status: open (无法在 9.7.0 镜像下修复, 需升级到 10.x)
 Priority: P3
 Owner: TBD
 Module: deploy/skywalking/
 Depends: 无
 
-## 背景
+## 背景 (2026-09-02 升级后探查)
 
-2026-09-01 容器环境修复时 (v1.0.0 后),发现 `cloud-skywalking-oap` 容器 Exited 0:
+初始报告 (`P3-04 skywalking config 路径`) 假设问题是 volume 挂载路径错 (`/skywalking/config/application.yml` vs entrypoint 找的 `/tmp/sw-9.7.0-default.yml`)。
 
-```
-Error: crun: cannot stat `/tmp/sw-9.7.0-default.yml`: No such file or directory
-       OCI runtime attempted to invoke a command that was not found
-```
+**本会话(9-02) 实际探查后发现真正根因**:
 
-## 根因
+### 镜像 + application.yml 不匹配
 
-skywalking-oap 9.7.0 镜像 entrypoint 期望 `/tmp/sw-9.7.0-default.yml` 配置。
-但 docker-compose 挂载点:
-```yaml
-volumes:
-  - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
-```
+| 项 | 实际 |
+|---|---|
+| 镜像 | `apache/skywalking-oap-server:9.7.0` |
+| application.yml 风格 | 10.x (含 `receiver-runtime-rule`, `dsl-debugging`, `status`, `inspect`, `ui-management` 5 个 modules) |
+| 9.7.0 镜像实际 modules | `skywalking-jvm-receiver-plugin`, `skywalking-trace-receiver-plugin` 等基础 receivers. **不含 10.x 的 5 个 admin modules** |
+| 错误 | `ModuleNotFoundException: [receiver-runtime-rule, dsl-debugging, ui-management, inspect, admin-server, status] missing` |
 
-**挂载的是 `/skywalking/config/application.yml`, 但 entrypoint 找 `/tmp/sw-9.7.0-default.yml`**。
+### 我尝试的修复 (全部失败)
 
-entrypoint (apache/skywalking-oap-server:9.7.0 Dockerfile 内部) 启动命令可能是:
-```sh
-exec java ... OAPServerStartUp --config=/tmp/sw-9.7.0-default.yml
-```
+1. **降 application.yml 适配 9.7.0**: 注释 5 个 modules → 但又出现 `no provider found for module storage` (selector=h2, 但 9.7.0 镜像无 h2 storage plugin, 只有 h2 数据库 driver)
+2. **拉 10.1.0 / 10.2.0 镜像**: 拉取成功, 但 application.yml 引用的 modules 仍不存在 (5 admin modules 在 10.2.0 也没有, 11.0.0 才有)
+3. **拉 11.0.0 镜像**: 受 daocloud mirror 网络限制, blob 下载不完整, 无法实测
 
-**配置路径不匹配** → OAP 无法加载 → 启动失败。
+### 真正根因
 
-## 容器状态 (2026-09-01 20:11)
+`deploy/skywalking/config/application.yml` 是 **SkyWalking 11.0.0 时代的配置**,但 compose 用 9.7.0 镜像 (commit 2242ce9 "ES 9.0.2 → 8.18.0 + SW OAP 9.6.0 → 10.1.0 升级" 部分升级, 实际只升到 9.7.0)。
 
-- ❌ `cloud-skywalking-oap`: Exited (0) (config 找不到)
-- ❌ `cloud-skywalking-ui`: Exited (1) (依赖 oap, 启动失败)
-- ✅ `cloud-prometheus`, `cloud-grafana`, `cloud-loki` 等其他 monitoring 容器: **正常运行**
+## 真正修复方向
 
-## 修复方案
+**选项 A: 升级镜像到 11.0.0** (匹配 application.yml)
+- 改 `deploy/compose.yaml`: `image: apache/skywalking-oap-server:11.0.0`
+- 验证: 11.0.0 应含所有 5 admin modules
+- 工作量: 1 行修改 + 完整 e2e 验证
 
-### 方案 A: 改 volume 挂载 (推荐)
+**选项 B: 降 application.yml 到 9.7.0 兼容**
+- 删除 5 admin modules sections
+- 改 storage selector 适配
+- 9.7.0 镜像无 h2 storage plugin, 需 jdbc-hikaricp + 手动 schema init
+- 工作量: 大 (可能 200+ 行改动)
 
-1. 复制 `application.yml` 到 `/tmp/sw-9.7.0-default.yml` 路径
-2. 或在容器内创建 symlink
-3. 需要进容器内部改, 不优雅
+**选项 C: 用 10.2.0 镜像 + 重新写 application.yml**
+- 10.2.0 介于 9.7.0 和 11.0.0 之间
+- 需先确认 10.2.0 实际含哪些 modules
+- 工作量: 中
 
-### 方案 B: 改 compose volume 路径
+**推荐选项 A** (最小改动, 镜像 + 配置匹配)。
 
-```yaml
-volumes:
-  - ./skywalking/config/application.yml:/tmp/sw-9.7.0-default.yml:ro
-```
+## 实际 revert 状态
 
-但这要求 SW_OAP 默认读这个路径, 实际可能仍失败 (因为 application.yml 内部逻辑可能引用其他路径)。
-
-### 方案 C: 升级到 9.7.0 正确版本
-
-查 SkyWalking 9.7.0 文档, 找到正确的 application.yml 路径 (可能是 `/skywalking/config/application.yml`)。
-`compose.yaml` 当前的挂载可能是对的, 但 entrypoint 期望的路径错了。
-需要看 entrypoint 脚本。
-
-### 方案 D: 不用 SkyWalking 9.7.0, 改用 10.x
-
-10.x 镜像 (skywalking-oap-server:10.0.0) 路径可能不同, 但项目历史决策用 9.7.0。
-如果有 10.x dockerfile, 可升级。
-
-## 临时解决方案
-
-SkyWalking 是 opt-in APM (默认不启用), 不阻塞核心业务。
-v1.0.0 已发布, 告警和链路追踪不依赖 skywalking。
-不阻塞用户使用。
+本会话所有 P3-04 改动已 revert (`git checkout HEAD --`),**保持原状**。问题留作"未来 session 升级 10.x 或 11.0.0"工作。
 
 ## 不阻塞 v1.0.0
 
 - v1.0.0 tag `e6b786d` 已发布
-- prometheus/grafana/loki 替代方案可用
-- skywalking 是"加分项" (APM 可观测性增强), 缺它不影响 P0-3b 或 M5-03 等核心功能
+- 告警/链路追踪不依赖 skywalking
+- skywalking 是"加分项" (opt-in APM)
 
-## 排查时间表
+## 建议未来 session
 
-| 时间 | 事件 |
-|---|---|
-| 2026-08-31 19:00 | skywalking-oap 上次正常退出 (8-31 11:00 UTC 跑 compact) |
-| 2026-09-01 03:49 | skywalking-oap 仍在清理 history data |
-| 2026-09-01 09:00+ | 容器退出, 但 ctr.log 显示"正常"日志 (实际是被 conmon 异常杀) |
-| 2026-09-01 20:00 | 启动时失败, `cannot stat /tmp/sw-9.7.0-default.yml` |
+1. 选择 11.0.0 镜像 (最直接, application.yml 已是 11.0.0 风格)
+2. 改 `deploy/compose.yaml` `image: apache/skywalking-oap-server:9.7.0` → `:11.0.0`
+3. 拉镜像 (daocloud mirror 网络问题, 改用 docker.io 官方)
+4. 重启 skywalking-oap, 验证 admin modules 启动成功
+5. 同时更新 `skywalking-ui` 镜像 (用 11.0.0 配套版本)
+
+## 拉镜像 workaround (本会话已用)
+
+编辑 `~/.config/containers/containers.conf` 临时禁用 daocloud mirror:
+
+```toml
+unqualified-search-registries = ["docker.io"]
+[[registry]]
+prefix = "docker.io"
+location = "docker.io"
+# [[registry.mirror]] commented out
+```
+
+**注**: 11.0.0 拉取中 7/12 blob 时卡住, 可能是网络问题. 未来拉镜像需有更长 timeout 或在网络好的时间拉.
+
+## 当前 container 状态
+
+- `cloud-skywalking-oap`: 已清理 (rm -f, Exited 状态不再残留)
+- `cloud-skywalking-ui`: Exited (1) 17 hours ago — 已知问题, UI 镜像 10.2.0 实际无问题 (ui 镜像 10.2.0 在, 是 oap 镜像问题)
 
 ## 引用
 
-- deploy/compose.yaml line 470-491: skywalking-oap 配置
-- deploy/skywalking/config/application.yml: 配置内容
-- docker hub: apache/skywalking-oap-server:9.7.0
-- 详见 P3-01 容器清理 issue (容器环境问题总览)
+- 实际试错过程: 本会话 (2026-09-02) 12:00-12:53
+- 镜像版本: `apache/skywalking-oap-server:9.7.0` (deploy/compose.yaml)
+- application.yml: `deploy/skywalking/config/application.yml` (v11.0.0 风格)
+- 历史 commit: 2242ce9 (SW 9.6.0 → 10.1.0 升级) — 部分完成, application.yml 没同步
+- 相关 issue 14 (本会话 P3-04 首次报告)
