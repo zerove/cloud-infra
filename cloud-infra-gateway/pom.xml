@@ -174,6 +174,9 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <!-- 2026-09-02 修复: 加 exec classifier 生成 *-exec.jar,
+                         避免只生成 thin jar (无法 java -jar 启动) -->
+                    <classifier>exec</classifier>
                     <docker>
                         <host>${docker.host}</host>
                     </docker>
