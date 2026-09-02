@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-12-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
 
 **v1.0.0 关键变更** (相对 v1.0.0-rc1):
 - ✅ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)

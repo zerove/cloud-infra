@@ -1,8 +1,16 @@
 # ADR-008: 可观测性标准化（Actuator + Micrometer + 链路追踪）
 
-**状态**: 已接受  
-**日期**: 2026-04-21  
-**提出者**: 架构组  
+> ⚠️ **DEPRECATED (2026-09-02)**: 此文件已废弃。
+>
+> 实际生效的是 [`ADR-008-port-conventions-and-virtual-threads.md`](../ADR-008-port-conventions-and-virtual-threads.md),
+> 内容已涵盖端口规范 + 虚拟线程 + 可观测性引用 (2026-08-04 更新, 更全面)。
+>
+> 本文件保留为历史参考, 不应再被引用。
+> 详见 issue: `.scratch/2026-q3-roadmap/issues/12-adr-008-duplicate.md`
+
+**状态**: DEPRECATED (历史: 已接受 2026-04-21)
+**日期**: 2026-04-21
+**提出者**: 架构组
 
 ## 背景
 
