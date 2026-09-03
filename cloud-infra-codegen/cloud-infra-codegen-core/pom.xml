@@ -53,10 +53,11 @@
 
     <dependencies>
         <!-- 核心依赖 -->
-        <dependency>
-            <groupId>com.cloudinfra</groupId>
-            <artifactId>cloud-infra-common</artifactId>
-        </dependency>
+        <!-- M5-08 (2026-09-03): 删 cloud-infra-common 依赖
+             core 0 个 java 文件用 common (只是 .ftl 模板字符串引用, 用户责任)
+             该依赖导致 codegen-maven-plugin 复用 core 时触发 "Unsupported class file major version 69"
+             (cloud-infra-common JDK 25 编译, maven-plugin-plugin 3.13.0 不能分析)
+             删除后 maven-plugin 可安全依赖 core. -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus</artifactId>

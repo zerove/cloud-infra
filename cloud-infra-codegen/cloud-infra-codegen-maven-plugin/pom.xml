@@ -54,6 +54,15 @@
             <artifactId>freemarker</artifactId>
         </dependency>
 
+        <!-- M5-08 (2026-09-03): 复用 cloud-infra-codegen-core 的 10 个 .ftl 模板 + CodegenGenerator
+             core 已删 cloud-infra-common 依赖 (避免 major version 69 错误).
+             删除了 maven-plugin 原来的 5 个 .tpl 模板 + 内联 FreeMarker, 减少维护成本. -->
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-codegen-core</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- PostgreSQL 驱动 (代码生成时需要连接到目标数据库) -->
         <dependency>
             <groupId>org.postgresql</groupId>
