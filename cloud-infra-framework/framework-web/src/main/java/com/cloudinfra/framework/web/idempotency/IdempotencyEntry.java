@@ -1,5 +1,7 @@
 package com.cloudinfra.framework.web.idempotency;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.time.Duration;
 
 /**
@@ -47,6 +49,7 @@ public class IdempotencyEntry {
         return e;
     }
 
+    @JsonIgnore
     public boolean isSuccess() {
         return statusCode != null;
     }

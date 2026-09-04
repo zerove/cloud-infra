@@ -39,6 +39,20 @@
 - **可选启用**: `cloud-infra.tenant.enabled=false` 时 TenantContext.hasTenant() 短路, 兼容单租户模式
 - **Gateway 防御**: `SecurityFilter` 透传 `X-Tenant-Id` 时校验 `[a-zA-Z0-9\-_]{1,50}`, 阻断 CRLF 注入与过长 DoS
 
+## 🔁 统一幂等框架 (M6-02, 2026-09)
+
+**链路**: 客户端 → Controller (`@Idempotent`) → `IdempotentAspect` → `IdempotencyStore` → Redis (lock + status + response 三 key)
+
+- **双模式**: REJECT (默认, 防抖/拒绝二次) + REPLAY (返回首次结果, 网络重试/支付场景)
+- **Idempotency-Key 头**: RFC 草案风格 (兼容 X-Request-Token); 缺 key 时回退 `userId + URI + body digest`
+- **Redis 三 key**:
+  - `idempotency:{hash}:lock`     - SET NX EX 短锁 (30s), 防并发首次
+  - `idempotency:{hash}:status`   - IN_FLIGHT / COMPLETED
+  - `idempotency:{hash}:response` - JSON 响应体, REPLAY 缓存 (默认 86400s = 24h)
+- **异常路径**: REPLAY 模式下业务异常 → releaseLock, 不缓存 (允许调整参数重试)
+- **Redis 故障降级**: 所有 Redis 异常 warn log, 默认放行业务 (避免单点)
+- **业务应用**: AuthController.register 用 REPLAY 模式
+
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
 - **决策 2**: 启用 **Generational ZGC** $\rightarrow$ [理由: 维持微秒级 GC 停顿，确保高并发下的低延迟响应]
