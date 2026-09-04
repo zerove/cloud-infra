@@ -73,3 +73,11 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **M6-01 Phase C Gateway 集成** (commit pending): `SecurityFilter.propagateTenantHeader` 透传 `X-Tenant-Id` (含防御性 [a-zA-Z0-9\-_] 校验) + `TenantContextFilterTest` 9 个端到端测试覆盖 header/query/requireTenant/finally 清理.
 *   **架构影响**: 业务 Mapper 加类级注解即可启用多租户, 零业务侵入. interceptor 链顺序 Pagination → Tenant → DataScope, 串联而非覆盖.
 *   **测试矩阵**: common (14) + framework-mybatis (16) + system-module (77) + file-service (36) + notification-service (13) = 156 测试通过 (Phase A/B/C 合计 +9).
+
+## ✅ Recent Optimizations (2026-09) — M6-02 统一幂等框架
+*   **双模式幂等注解** (commit 1945dd4): `@Idempotent.Mode` 加 REJECT (防抖, 默认) + REPLAY (返回首次结果, PRD 核心要求); `keyHeader` 默认 `Idempotency-Key` (RFC 草案, 兼容 X-Request-Token).
+*   **Redis JSON 响应缓存**: `IdempotencyEntry` POJO + `IdempotencyStore` 三 key 设计 (`lock`/`status`/`response`), IN_FLIGHT/COMPLETED 状态机, Redis 异常自动降级.
+*   **IdempotentAspect 重写**: `@Around` 包裹, REJECT 模式 SET NX EX 抛异常, REPLAY 模式读缓存命中即返回, 业务异常 releaseLock 不缓存.
+*   **Testcontainers 集成测试**: `IdempotencyStoreIT` 5 测试真实 Redis 7-alpine (SET NX 互斥 + JSON 往返 + 多 key 隔离).
+*   **业务应用**: `AuthController.register` 改 REPLAY 模式 (24h TTL, 网络重试场景).
+*   **测试矩阵**: framework-web 单测 30 + 集成 5 = 35 (新增 22), 全模块合计 **218 测试通过**.

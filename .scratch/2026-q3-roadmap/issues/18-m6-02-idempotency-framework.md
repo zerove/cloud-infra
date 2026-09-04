@@ -1,10 +1,22 @@
 # M6-02: 统一幂等框架 (Idempotency Key + Redis)
 
-Status: open (survey done 2026-09-04, infra 70% 就绪, 缺"返回首次结果"语义)
+Status: closed (done 2026-09-04, integration verified)
 Priority: P0
 Owner: AI Agent
-Module: cloud-infra-common + cloud-infra-framework/framework-web
+Module: cloud-infra-common + cloud-infra-framework/framework-web + cloud-infra-auth
 Depends: 无 (前置 M6-01 完成, Redis 基础设施就绪)
+
+## 结论
+
+**M6-02 全部 3 个阶段完成**, 统一幂等框架已上线:
+- @Idempotent 双模式 (REJECT 防抖 + REPLAY 返回首次结果)
+- Idempotency-Key RFC 头规范 (兼容 X-Request-Token)
+- IdempotencyStore (Redis JSON 缓存, IN_FLIGHT/COMPLETED 双状态)
+- IdempotentAspect 重写 (@Around + 双模式分发 + 异常路径处理)
+- AuthController.register 改 REPLAY (24h TTL, 网络重试场景)
+- 17 单元测试 + 5 Testcontainers 集成测试 (真实 Redis) 全部通过
+
+**Commits**: 1945dd4 (Phase A + B + C)
 
 ## 背景 (PRD M6-02)
 
@@ -91,10 +103,47 @@ idempotency:{keyHash}:error     -> JSON {exceptionClass, message}
 
 ## 进度
 
-- [x] **2026-09-04 23:59**: kickoff + infra survey (本 issue)
-- [ ] Phase A: Idempotency-Key 头 + REPLAY 模式 + 响应缓存 (待启动)
-- [ ] Phase B: 单元 + 集成测试
-- [ ] Phase C: 业务应用 + 文档同步
+- [x] **2026-09-04 23:59**: kickoff + infra survey
+- [x] **2026-09-05 00:30**: Phase A 完成 (双模式 + Idempotency-Key 头 + Redis 响应缓存 + 17 单元测试)
+- [x] **2026-09-05 01:03**: Phase B 完成 (IdempotencyStoreIT 5 集成测试, Testcontainers Redis)
+- [x] **2026-09-05 01:09**: Phase C 完成 (AuthController.register 改 REPLAY 模式, ROADMAP/AGENTS 同步)
+
+## 实施细节
+
+### Phase A: 框架升级
+
+- `@Idempotent` 注解扩展: `Mode` (REJECT/REPLAY), `keyHeader`, `storeResponse`, `expireSeconds`
+- `IdempotencyEntry`: 响应缓存 POJO (statusCode/body/errorClass/errorMessage), `isSuccess()` 加 `@JsonIgnore`
+- `IdempotencyStore`: Redis 双 key 设计 (lock + status + response), Redis 异常降级
+- `IdempotencyAutoConfiguration`: 注册 Store Bean
+- `IdempotentAspect`: `@Around` 包裹, 双模式分发, Key 优先级 (Idempotency-Key > X-Request-Token > 自动生成)
+
+### Phase B: Testcontainers 集成测试
+
+- `IdempotencyStoreIT` (5 测试, 真实 Redis 7-alpine 容器):
+  - tryAcquire SET NX 互斥
+  - storeResponse + read JSON 往返
+  - read IN_FLIGHT 返回 null
+  - releaseLock 重新获得锁
+  - 多 key 隔离
+
+### Phase C: 业务应用
+
+- `AuthController.register`: `@Idempotent(REPLAY, 86400s, Idempotency-Key)` - 网络重试返回相同结果
+
+### 累计测试矩阵
+
+| 模块 | 测试数 | 累计 + |
+|---|---|---|
+| common | 14 | +0 |
+| framework-mybatis | 16 | +0 |
+| framework-web (单测) | 30 | +17 (Idempotency) |
+| framework-web (集成) | 5 | +5 (Redis IT) |
+| system-module | 77 | +0 |
+| file-service | 36 | +0 |
+| notification-service | 13 | +0 |
+| auth | 27 | +0 |
+| **合计** | **218** | **+22** |
 
 ## 不在本 issue 范围
 

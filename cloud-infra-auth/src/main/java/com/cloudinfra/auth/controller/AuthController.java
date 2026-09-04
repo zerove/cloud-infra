@@ -43,7 +43,7 @@ public class AuthController {
 
     @Operation(summary = "注册")
     @PostMapping("/register")
-    @Idempotent
+    @Idempotent(mode = Idempotent.Mode.REPLAY, expireSeconds = 86400, keyHeader = "Idempotency-Key")
     public Result<Void> register(@RequestBody LoginUser registerUser, HttpServletRequest request) {
         if (!PasswordValidator.isValid(registerUser.getPassword())) {
             return Result.fail(
