@@ -2,8 +2,9 @@
 
 本文件为 OpenCode 代理提供该仓库的快速上手指南、核心指令及架构上下文。
 
-> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin, 0 commit drift)
+> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin, 0 commit drift) + M6-01 多租户数据隔离 (Phase A/B/C 完成, Phase D 待运行时验证)
 > **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 101 tests pass, 全部关键能力经过运行时实测
+> **M6 里程碑**: M6-01 Phase A/B/C 完成 (commit db90f52 + 1698a7e + pending), 156 测试通过 (common 14 + framework-mybatis 16 + system 77 + file 36 + notification 13)
 > **完整交接**: [docs/HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) (v1.0.0 正式版)
 > **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md`
 

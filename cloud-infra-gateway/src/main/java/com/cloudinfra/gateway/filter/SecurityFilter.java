@@ -95,6 +95,12 @@ AuthContext authContext = new AuthContext(
                 headers.put("X-User-Name", identity.username());
             }
             headers.put(TRACE_ID, traceId);
+            // 多租户上下文传播 (M6-01): 透传 X-Tenant-Id 到下游,
+            // 下游 TenantContextFilter 读取并注入 TenantContext (ThreadLocal),
+            // TenantSqlInterceptor 自动追加 WHERE tenant_id = ?
+            // - 缺失则不注入, 下游走 requireTenant=false 短路放行 (单租户模式兼容)
+            // - 后续 M7+ 可从 JWT claim 提取 tenantId 实现自动绑定
+            propagateTenantHeader(request, headers);
             // 先剥离外部伪造的内部调用标识，再注入网关自己的签名：
             // 下游统一验签通过才信任身份头，内网直连无有效签名即被拒
             String nonce = Long.toHexString(System.currentTimeMillis()) + ':'
@@ -131,6 +137,25 @@ AuthContext authContext = new AuthContext(
             default -> response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
                 "Unknown auth status: " + result.status());
         }
+    }
+
+    /**
+     * 透传 X-Tenant-Id header 到下游 (M6-01).
+     *
+     * 防御性校验: 仅透传符合 [a-zA-Z0-9\\-_]{1,50} 的 tenantId,
+     * 阻断 HTTP header 注入 (CRLF) 与过长字符串 DoS.
+     */
+    private void propagateTenantHeader(HttpServletRequest request, Map<String, String> headers) {
+        String tenantId = request.getHeader("X-Tenant-Id");
+        if (tenantId == null || tenantId.isBlank()) {
+            return;
+        }
+        String trimmed = tenantId.trim();
+        if (trimmed.length() > 50 || !trimmed.matches("[a-zA-Z0-9\\-_]+")) {
+            log.warn("[SecurityFilter] 非法 X-Tenant-Id 拒绝透传: length={}", trimmed.length());
+            return;
+        }
+        headers.put("X-Tenant-Id", trimmed);
     }
 
     @Override

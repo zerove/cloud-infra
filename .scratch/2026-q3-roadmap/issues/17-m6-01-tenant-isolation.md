@@ -77,15 +77,67 @@ Depends: 无 (前置 v1.0.0 已发布, 多租户基础设施 80% 就绪)
 ## 进度
 
 - [x] **2026-09-04 21:46**: kickoff, infra pre-survey
-- [x] **2026-09-04 22:25**: Phase A 完成 (commit pending)
+- [x] **2026-09-04 22:25**: Phase A 完成
   - V14__add_tenant_id_columns.sql: 9 表加 tenant_id + 11 索引
   - @TenantFilter 注解 (column + rejectWhenMissing)
   - TenantSqlInterceptor: 自动识别注解, 改写 SQL, 防御性 tenantId 校验
-  - TenantSqlInterceptorTest: 12 个单元测试 (select/insert/update/delete/类级注解/自定义列名/SQL注入防护)
+  - TenantSqlInterceptorTest: 12 个单元测试
   - MybatisPlusConfig 注册拦截器链 (Tenant → DataScope 顺序)
-- [ ] Phase B: 业务模块回填
-- [ ] Phase C: Gateway 集成 + 端到端验证
-- [ ] Phase D: 文档同步
+- [x] **2026-09-04 22:36**: Phase B 完成
+  - 9 个核心 Mapper 加类级 @TenantFilter
+  - file-service schema.sql 同步加 tenant_id
+- [x] **2026-09-04 22:55**: Phase C 代码完成 (运行时验收留 Phase D)
+  - SecurityFilter.propagateTenantHeader: 透传 X-Tenant-Id (防御性 [a-zA-Z0-9\-_] 校验)
+  - TenantContextFilterTest: 9 个端到端测试
+- [ ] Phase D: 容器起 PG/Redis + 跨租户查询隔离运行时验证
+
+## Phase C 实施细节
+
+### 新增文件
+
+| 文件 | 行数 | 说明 |
+|---|---|---|
+| `cloud-infra-common/src/test/java/com/cloudinfra/common/core/tenant/TenantContextFilterTest.java` | 177 | 9 端到端测试 (header/query/require/finally) |
+
+### 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `cloud-infra-gateway/src/main/java/com/cloudinfra/gateway/filter/SecurityFilter.java` | 加 propagateTenantHeader 方法 + 调用点 |
+| `AGENTS.md` | 顶部状态加 M6-01 进度 |
+| `ROADMAP.md` | 追加 M5 完成 + M6 多租户段 |
+| `CONTEXT.md` | 追加 "Recent Optimizations (2026-09) — M6-01 多租户数据隔离" |
+| `ARCHITECTURE.md` | 追加 "🏢 多租户数据隔离 (M6-01, 2026-09)" |
+
+### Phase C 测试结果
+
+```
+Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[cloud-infra-common TenantContext* 全部通过]
+
+TenantContextTest: 5 测试 (原有)
+TenantContextFilterTest: 9 测试 (新增)
+- shouldInjectTenantFromHeader ✅
+- shouldInjectTenantFromQueryParam ✅
+- shouldIgnoreBlankHeader ✅
+- shouldRejectWhenTenantRequiredButMissing ✅
+- shouldAcceptWhenTenantRequiredAndPresent ✅
+- shouldPreferHeaderOverQueryParam ✅
+- shouldTrimHeaderValue ✅
+- shouldHaveCorrectOrder ✅
+- shouldClearTenantContextOnException ✅
+```
+
+### 累计测试矩阵 (Phase A/B/C)
+
+| 模块 | 测试数 | 状态 |
+|---|---|---|
+| common | 14 (TenantContext 5 + TenantContextFilter 9) | ✅ |
+| framework-mybatis | 16 (crypto 4 + Tenant 12) | ✅ |
+| system-module | 77 | ✅ |
+| file-service | 36 | ✅ |
+| notification-service | 13 | ✅ |
+| **合计** | **156** | **✅** |
 
 ## Phase A 实施细节
 

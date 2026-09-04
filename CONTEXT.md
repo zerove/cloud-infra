@@ -66,3 +66,10 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **M5-04c 模板增强** (commit 0ef0005): VO 加 @Schema 注解, UpdateDTO @Size 256→255.
 *   **M5-05 FlywayDdlParser 端到端** (commit 2ff8d50): 15 表自动解析 + 智能识别 @TableLogic + SMALLINT/VARCHAR(N)/UNIQUE/DEFAULT.
 *   **M5-03 业务告警指标 AOP 化** (commit 8430811): @BusinessMetric 注解 + AOP 切面, Counter 按需注册, 11 告警规则中 2 条业务类 (`auth_login_attempts_total` + `file_upload_failures_total`) 真正落地.
+
+## ✅ Recent Optimizations (2026-09) — M6-01 多租户数据隔离
+*   **M6-01 Phase A 基础设施** (commit db90f52): V14 migration (9 张业务表加 tenant_id 列 + 11 索引) + `@TenantFilter` 注解 + `TenantSqlInterceptor` 自动拦截器 + 12 单元测试.
+*   **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加类级 `@TenantFilter` (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql 同步.
+*   **M6-01 Phase C Gateway 集成** (commit pending): `SecurityFilter.propagateTenantHeader` 透传 `X-Tenant-Id` (含防御性 [a-zA-Z0-9\-_] 校验) + `TenantContextFilterTest` 9 个端到端测试覆盖 header/query/requireTenant/finally 清理.
+*   **架构影响**: 业务 Mapper 加类级注解即可启用多租户, 零业务侵入. interceptor 链顺序 Pagination → Tenant → DataScope, 串联而非覆盖.
+*   **测试矩阵**: common (14) + framework-mybatis (16) + system-module (77) + file-service (36) + notification-service (13) = 156 测试通过 (Phase A/B/C 合计 +9).
