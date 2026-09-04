@@ -97,3 +97,20 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 文档版本漂移一次性校正（README/CONTEXT.md 已对齐 pom, CI 加 docs version gate, commit a6c61ad）。
 - [x] E2E 测试真实化（e2e-test.sh 6 场景真实断言, 替换 mock token, commit e1b2a2e H5）。
 - [x] 插件系统安全模型（commit 7ac18f7 ADR-010, dev 启用, prod 禁用, HotDeploymentWatcher @ConditionalOnProperty）。
+
+### Milestone 5: v1.0.0 Production-Ready (2026-09, 已发布)
+*Focus: P0 修复 + codegen 价值验证 + 业务告警闭环.*
+- [x] 🟢 **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行)
+- [x] 🟢 **P0-3b 端到端 401 实测** (commit 5a82318): JWT blacklist 运行时验证
+- [x] 🟢 **codegen 灰度迁移 sys_post** (commit 0ccdf52): 验证 codegen 输出与手写代码语义一致
+- [x] 🟢 **M5-03 业务告警 AOP 化** (commit 8430811 + 2c88ea2): @BusinessMetric 注解 + 运行时 Counter 7.0 实测
+- [x] 🟢 **v1.0.0 tag** (tag at `e6b786d`, 远端可见, ahead=0, immutable)
+
+### Milestone 6: Multi-Tenant Isolation (2026-09, in progress)
+*Focus: 业务 SQL 跨租户隔离, 零业务侵入接入.*
+- [x] 🟢 **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
+- [x] 🟢 **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加 @TenantFilter (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql tenant_id
+- [x] 🟢 **M6-01 Phase C Gateway 集成** (commit pending): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
+- [ ] **M6-01 Phase D 端到端运行时验证**: 容器起 PG/Redis, 跨租户查询隔离实测 (issue 17 Phase C 运行时验收)
+- [ ] **M6-02 统一幂等框架**: Idempotency Key + Redis (PRD M6-02)
+- [ ] **M6-03 Outbox 框架化**: @EnableOutbox 注解 + 业务模块零侵入 (PRD M6-03)

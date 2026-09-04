@@ -28,6 +28,17 @@
 - **FlywayDdlParser**: 从 Flyway DDL 文件解析表元数据, 无需 DB 连接, 支持 PostgreSQL 16 完整特性 (SMALLINT / BIGSERIAL / VARCHAR(N) / UNIQUE / DEFAULT / @TableLogic)
 - **AOP 集成** (`@BusinessMetric`): 业务方法标注注解即可埋点, Counter 按需注册, 避免 try-catch (合规 adg java-catch-all 规则)
 
+## 🏢 多租户数据隔离 (M6-01, 2026-09)
+
+**链路**: 客户端 → Gateway `SecurityFilter.propagateTenantHeader` → 业务 `TenantContextFilter` → `TenantContext` (ThreadLocal) → `TenantSqlInterceptor` → SQL `WHERE tenant_id = ?`
+
+- **Schema**: V14 migration (9 张业务表 + tenant_id VARCHAR(50) + 11 索引)
+- **注解**: `@TenantFilter` (类级或方法级, column + rejectWhenMissing)
+- **拦截器链顺序**: Pagination → Tenant → DataScope (串联而非覆盖)
+- **零业务侵入**: 业务 Mapper 加类级 `@TenantFilter` 即可, 无需改 SQL
+- **可选启用**: `cloud-infra.tenant.enabled=false` 时 TenantContext.hasTenant() 短路, 兼容单租户模式
+- **Gateway 防御**: `SecurityFilter` 透传 `X-Tenant-Id` 时校验 `[a-zA-Z0-9\-_]{1,50}`, 阻断 CRLF 注入与过长 DoS
+
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
 - **决策 2**: 启用 **Generational ZGC** $\rightarrow$ [理由: 维持微秒级 GC 停顿，确保高并发下的低延迟响应]
