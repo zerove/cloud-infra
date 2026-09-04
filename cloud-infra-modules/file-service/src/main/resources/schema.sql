@@ -6,8 +6,11 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     file_size BIGINT,
     uploader VARCHAR(64),
     create_time TIMESTAMP,
-    current_version INT DEFAULT 1
+    current_version INT DEFAULT 1,
+    tenant_id VARCHAR(50) NOT NULL DEFAULT 'default'
 );
+
+CREATE INDEX IF NOT EXISTS idx_file_metadata_tenant_id ON file_metadata(tenant_id);
 
 CREATE TABLE IF NOT EXISTS file_permission (
     id BIGINT PRIMARY KEY,
