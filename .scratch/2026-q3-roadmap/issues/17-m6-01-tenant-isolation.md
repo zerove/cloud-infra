@@ -1,10 +1,23 @@
 # M6-01: 多租户数据隔离 (TenantContext 接业务)
 
-Status: open (kickoff 2026-09-04, infra pre-survey done)
+Status: closed (done 2026-09-04, runtime verified)
 Priority: P0
 Owner: AI Agent
-Module: cloud-infra-common + cloud-infra-framework/framework-mybatis + cloud-infra-modules/{system-module,file-service,notification-service,search-service}
+Module: cloud-infra-common + cloud-infra-framework/framework-mybatis + cloud-infra-modules/{system-module,file-service,notification-service,search-service} + cloud-infra-gateway
 Depends: 无 (前置 v1.0.0 已发布, 多租户基础设施 80% 就绪)
+
+## 结论
+
+**M6-01 全部 5 个阶段完成 (kickoff + Phase A/B/C/D)**, 多租户数据隔离能力已上线:
+- 9 张业务表加 tenant_id 列 + 10 索引 (V14 migration, 已 flyway 落地)
+- @TenantFilter 注解 + TenantSqlInterceptor 自动 SQL 改写 (拦截器链 Tenant → DataScope)
+- 9 个核心 Mapper 加类级注解 (零业务侵入)
+- Gateway SecurityFilter 透传 X-Tenant-Id (防御性 [a-zA-Z0-9\-_] 校验)
+- 跨租户查询隔离 PG 层面实测通过 (tenant-X 看不到 tenant-Y)
+- 累计 156 单元测试通过 (common 14 + framework-mybatis 16 + system 77 + file 36 + notification 13)
+- 运行时验证报告: docs/perf/2026-09-04-m6-01-runtime-verify.md (187 行)
+
+**Commits**: db90f52 (Phase A) + 1698a7e (Phase B) + 846258c (Phase C+D) + 17ee31a (Phase D 验证)
 
 ## 背景 (PRD M6-01)
 
