@@ -89,7 +89,12 @@ Depends: 无 (前置 v1.0.0 已发布, 多租户基础设施 80% 就绪)
 - [x] **2026-09-04 22:55**: Phase C 代码完成 (运行时验收留 Phase D)
   - SecurityFilter.propagateTenantHeader: 透传 X-Tenant-Id (防御性 [a-zA-Z0-9\-_] 校验)
   - TenantContextFilterTest: 9 个端到端测试
-- [ ] Phase D: 容器起 PG/Redis + 跨租户查询隔离运行时验证
+- [x] **2026-09-04 23:50**: Phase D 运行时验证完成
+  - V14 migration 自动应用 (flyway_schema_history version=14, success=t)
+  - 9 张业务表 tenant_id 列 + 10 个索引全部落地 (PG pg_indexes 验证)
+  - 跨租户查询隔离: tenant-X 看不到 tenant-Y 数据 (4→0, 0→0)
+  - 历史数据兼容: 4 sys_post + 1 sys_user 全部 default 租户
+  - 详见: docs/perf/2026-09-04-m6-01-runtime-verify.md (187 行)
 
 ## Phase C 实施细节
 
