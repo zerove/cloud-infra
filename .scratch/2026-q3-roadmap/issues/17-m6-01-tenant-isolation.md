@@ -76,11 +76,54 @@ Depends: 无 (前置 v1.0.0 已发布, 多租户基础设施 80% 就绪)
 
 ## 进度
 
-- [x] **2026-09-04**: kickoff, infra pre-survey (本 issue)
-- [ ] Phase A: Schema + 自动拦截器 (待启动)
+- [x] **2026-09-04 21:46**: kickoff, infra pre-survey
+- [x] **2026-09-04 22:25**: Phase A 完成 (commit pending)
+  - V14__add_tenant_id_columns.sql: 9 表加 tenant_id + 11 索引
+  - @TenantFilter 注解 (column + rejectWhenMissing)
+  - TenantSqlInterceptor: 自动识别注解, 改写 SQL, 防御性 tenantId 校验
+  - TenantSqlInterceptorTest: 12 个单元测试 (select/insert/update/delete/类级注解/自定义列名/SQL注入防护)
+  - MybatisPlusConfig 注册拦截器链 (Tenant → DataScope 顺序)
 - [ ] Phase B: 业务模块回填
 - [ ] Phase C: Gateway 集成 + 端到端验证
 - [ ] Phase D: 文档同步
+
+## Phase A 实施细节
+
+### 新增文件
+
+| 文件 | 行数 | 说明 |
+|---|---|---|
+| `cloud-infra-modules/system-module/src/main/resources/db/migration/V14__add_tenant_id_columns.sql` | 85 | 9 张业务表 + tenant_id + 索引 |
+| `cloud-infra-common/src/main/java/com/cloudinfra/common/core/annotation/TenantFilter.java` | 55 | @TenantFilter 注解 |
+| `cloud-infra-framework/framework-mybatis/src/main/java/com/cloudinfra/framework/mybatis/interceptor/TenantSqlInterceptor.java` | 185 | 自动拦截器 |
+| `cloud-infra-framework/framework-mybatis/src/test/java/com/cloudinfra/framework/mybatis/interceptor/TenantSqlInterceptorTest.java` | 320 | 12 单元测试 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `cloud-infra-framework/framework-mybatis/src/main/java/com/cloudinfra/framework/mybatis/config/MybatisPlusConfig.java` | 注册 TenantSqlInterceptor 在 DataScope 之前 |
+
+### 测试结果
+
+```
+Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+[framework-mybatis 全部测试通过]
+
+TenantSqlInterceptorTest:
+- shouldAddWhereForSelectWithoutWhere ✅
+- shouldAddAndForSelectWithWhere ✅
+- shouldInsertBeforeOrderBy ✅
+- shouldInsertBeforeLimit ✅
+- shouldAddAndForUpdate ✅
+- shouldAddAndForDelete ✅
+- shouldNotModifySqlWithoutAnnotation ✅
+- shouldNotModifySqlWhenTenantMissingAndNotRequired ✅
+- shouldRejectWhenTenantMissingAndRequired ✅
+- shouldRejectIllegalTenantId ✅ (SQL 注入防护)
+- shouldApplyClassLevelAnnotation ✅
+- shouldUseCustomColumn ✅
+```
 
 ## 关联
 

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.cloudinfra.framework.mybatis.handler.MyBatisPlusMetaObjectHandler;
 import com.cloudinfra.framework.mybatis.interceptor.DataScopeInterceptor;
+import com.cloudinfra.framework.mybatis.interceptor.TenantSqlInterceptor;
 import org.apache.ibatis.logging.LogFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -35,6 +36,8 @@ public class MybatisPlusConfig {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         // 分页拦截器：启用 PG 方言分页（page/size 由 Page 参数驱动）
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
+        // 多租户拦截器 (M6-01): 自动追加 WHERE tenant_id = ?, 须在 DataScope 之前执行以保证串联
+        interceptor.addInnerInterceptor(new TenantSqlInterceptor());
         interceptor.addInnerInterceptor(new DataScopeInterceptor());
         return interceptor;
     }
