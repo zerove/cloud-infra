@@ -53,6 +53,16 @@
 - **Redis 故障降级**: 所有 Redis 异常 warn log, 默认放行业务 (避免单点)
 - **业务应用**: AuthController.register 用 REPLAY 模式
 
+## 📨 Outbox 框架化 (M6-03, 2026-09)
+
+**链路**: 业务方法 (`@PublishOutbox`) → `PublishOutboxAspect` (`@Around`) → `OutboxEventPublisher.publishTransactional()` → outbox_event 表 → `OutboxEventDispatcher` 异步轮询 → Spring Cloud Stream
+
+- **`@EnableOutbox` 注解**: 业务模块加一行启用, `@Import(OutboxAutoConfiguration)` 触发装配 OutboxEventPublisher + Aspect Bean
+- **`@PublishOutbox` 注解**: 业务方法标注即自动入 outbox, SpEL 提取 aggregateId (`#root.userId` 模式), 业务异常不写入 (与业务表同事务)
+- **零侵入接入**: 兼容现有 `OutboxEventPublisher.publishTransactional()` 显式 API (annotation-driven / explicit 双轨)
+- **异常容错**: 序列化失败 warn log + 跳过 (不阻塞业务), Redis 不可用降级 (Dispatcher 启动期容错)
+- **测试覆盖**: PublishOutboxAspectTest 5 单测 (完整 publish + 默认值 + null 跳过 + 异常跳过 + 序列化失败跳过)
+
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
 - **决策 2**: 启用 **Generational ZGC** $\rightarrow$ [理由: 维持微秒级 GC 停顿，确保高并发下的低延迟响应]
