@@ -1,10 +1,40 @@
 # M6-05: OpenAPI 自动生成 (基于 Controller 注解)
 
-Status: open (survey done 2026-09-05, springdoc 80% 集成)
+Status: open (Phase A 完成, Phase B/C 待启动)
 Priority: P1
 Owner: AI Agent
 Module: cloud-infra-framework/framework-web + 各业务模块
 Depends: 无 (前置 springdoc-openapi 已集成)
+
+## 进度
+
+- [x] **2026-09-05 02:15**: Phase A 完成 (@EnableOpenApi + OpenApiAutoConfiguration + 6 单元测试, commit pending)
+- [ ] Phase B: OpenApiExporter + 聚合脚本 (build-openapi.sh)
+- [ ] Phase C: HTML 发布 + 文档同步
+
+## Phase A 实施细节
+
+### 新增文件
+
+| 文件 | 行数 | 说明 |
+|---|---|---|
+| `framework-web/.../openapi/EnableOpenApi.java` | 40 | 业务模块加一行启用 |
+| `framework-web/.../openapi/OpenApiAutoConfiguration.java` | 82 | Info + JWT Bearer + Server |
+| `framework-web/.../openapi/OpenApiAutoConfigurationTest.java` | 92 | 6 测试 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `framework-web/pom.xml` | 加 springdoc-openapi optional 依赖 |
+
+### 关键设计
+
+- **非破坏**: 业务模块未加 @EnableOpenApi 时 springdoc 默认行为不变
+- **可选依赖**: springdoc 作为 optional, 业务模块按需引入 (避免 framework-web 强依赖)
+- **title 推断**: cloud-system → "Cloud-Infra System" (从 spring.application.name)
+- **JWT Bearer**: 与现有 HeaderAuthenticationFilter 兼容 (X-User-Id/Authorization)
+- **Contact/License**: 默认 Apache 2.0 + Cloud-Infra Team
 
 ## 背景 (PRD M6-05)
 

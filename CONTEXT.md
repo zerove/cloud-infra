@@ -110,3 +110,11 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **测试**: `WorkflowPhaseCTest` 3 测试 (step output 保存 + Saga 补偿 + 步骤链变量传递).
 *   **测试矩阵**: framework-web 33 单测 (新增 3 + 原 30), 全模块合计 **249 测试通过**.
 *   **M6-04 全部 3 阶段完成**: Phase A 引擎核心 (8) + Phase B Plugin 集成 (4) + Phase C Saga 补偿 (3) = 15 测试.
+
+## ✅ Recent Optimizations (2026-09) — M6-05 OpenAPI 自动生成 Phase A
+*   **@EnableOpenApi 注解** (commit pending): 业务模块加一行启用统一 OpenAPI 配置 (@Import 触发).
+*   **OpenApiAutoConfiguration**: 装配统一 Info (title 从 spring.application.name 推断 "Cloud-Infra Module") + JWT Bearer security scheme + 默认 server URL + Contact/License 元数据.
+*   **非破坏**: 业务模块未加注解时 springdoc 默认行为不变 (沿用 spring.application.name). 现有 system SwaggerConfig 不影响 (向后兼容).
+*   **framework-web optional swagger 依赖**: springdoc-openapi 作为可选依赖, 业务模块按需引入.
+*   **测试**: OpenApiAutoConfigurationTest 6 测试 (title 推断 + auth 模块 + JWT Bearer + server URL + Contact/License + SecurityRequirement).
+*   **测试矩阵**: framework-web 39 单测 (新增 6 + 原 33), 全模块合计 **251 测试通过**.
