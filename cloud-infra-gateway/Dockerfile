@@ -5,9 +5,9 @@ RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
 # 明确复制 repackaged fat jar，排除 .original 文件
-COPY target/*.jar app.jar
+COPY cloud-infra-gateway/target/*.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
-RUN cp target/*.cds /app/application.cds 2>/dev/null || true
+RUN cp cloud-infra-gateway/target/*.cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
 # SerialGC: 小堆最省内存的 GC（~10MB 开销，远低于 ZGC 的 ~100MB）

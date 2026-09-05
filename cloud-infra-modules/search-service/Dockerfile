@@ -4,9 +4,9 @@ WORKDIR /app
 RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra 
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
-COPY target/*.jar app.jar
+COPY cloud-infra-modules/search-service/target/*-exec.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
-RUN cp target/*.cds /app/application.cds 2>/dev/null || true
+RUN cp cloud-infra-modules/search-service/target/*-cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
 ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
@@ -14,7 +14,7 @@ ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+
 # entrypoint.sh: 等 Nacos 上 notification-service 注册, 拉其 IP, 注入 SERVICE_HOST_MAP env
 # 解决容器内 'notification-service' DNS 解析到 podman 内部错误 IP 198.18.0.30
 # 让 FeignHostConfig 拿到实际 IP 替换 host header (search-service 通过 Feign 调 notification-service)
-COPY --chmod=755 target/classes/entrypoint.sh /app/entrypoint.sh
+COPY --chmod=755 cloud-infra-modules/search-service/target/classes/entrypoint.sh /app/entrypoint.sh
 
 # SkyWalking APM agent - 通过 SW_AGENT_ENABLED=true 启用 (默认 false 不影响现状)
 COPY --from=apache/skywalking-java-agent:9.6.0-java17 /skywalking/agent /skywalking/agent

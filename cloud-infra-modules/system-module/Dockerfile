@@ -4,9 +4,9 @@ WORKDIR /app
 RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra 
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
-COPY target/*-exec.jar app.jar
+COPY cloud-infra-modules/system-module/target/*-exec.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
-RUN cp target/*.cds /app/application.cds 2>/dev/null || true
+RUN cp cloud-infra-modules/system-module/target/*-cds /app/application.cds 2>/dev/null || true
 
 # JVM 内存优化 + CDS 启动加速
 ENV JAVA_OPTS="-XX:+UseG1GC -Xmx512m -Xms256m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
