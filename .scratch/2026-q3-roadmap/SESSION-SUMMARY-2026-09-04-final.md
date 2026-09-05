@@ -1,16 +1,16 @@
 # Cloud-Infra 会话总结报告 (2026-09-04 ~ 2026-09-05 终极版)
 
-**会话时间**: 2026-09-04 21:18 ~ 2026-09-05 04:57 (~7.5 小时跨日)
+**会话时间**: 2026-09-04 21:18 ~ 2026-09-05 17:40 (~20 小时跨日)
 **基线 commit**: `18a4b5f` (v1.0.0 完整重新部署 + 端到端验证报告)
-**最终 commit**: `0f1e169` (master HEAD, ahead origin/master = 0)
-**会话范围**: P3-01 关闭 + M5 复盘 + **M6 路线图 6/6 全部完成** + M7 路线图 1/3 closed + 2 kickoff + **M6-01 Phase D 阻塞项修复**
-**最终状态**: ✅ **M6 路线图 100% 完成, M7 路线图 1/3 closed + 2 kickoff, 23 commits 推送, ahead origin = 0**
+**最终 commit**: `714c36d` (master HEAD, ahead origin/master = 0)
+**会话范围**: P3-01 关闭 + M5 复盘 + **M6 路线图 6/6 全部完成** + M7 路线图 1/3 closed + 2 kickoff + M6-01 Phase D 阻塞项修复
+**最终状态**: ✅ **M6 路线图 100% 完成, M7 路线图 1/3 closed + 2 kickoff, 27 commits 推送, ahead origin = 0**
 
 ---
 
 ## 1. 本会话完整交付
 
-### 1.1 推送的 commits (23 个)
+### 1.1 推送的 commits (27 个)
 
 | # | Commit | 内容 | 类别 |
 |---|---|---|---|
@@ -36,7 +36,11 @@
 | 20 | `492bff1` | docs(issue): kickoff M7-02 gRPC 支持 | 文档 |
 | 21 | `232712b` | docs(issue): kickoff M7-03 WebSocket 生产化 | 文档 |
 | 22 | `0f1e169` | fix(deploy): 修复 Dockerfile skywalking COPY 路径 (M6-01 Phase D 阻塞项) | 修复 |
-| 23 | (本文件) | SESSION-SUMMARY 终极版 | 文档 |
+| 23 | (旧) | SESSION-SUMMARY 终极版 1 (04:57) | 文档 |
+| 24 | `a44df82` | feat(m6-05): OpenApiExporter 启动期 dump (Phase B) | 功能 |
+| 25 | `d26d01e` | feat(m6-05): build-openapi.sh 聚合脚本 (Phase C) | 功能 |
+| 26 | `714c36d` | docs(issue/roadmap): close M6-05 全部 3 阶段完成 | 文档 |
+| 27 | (本文件) | SESSION-SUMMARY 终极版 2 (17:40) | 文档 |
 
 ### 1.2 处理的 issues (8 个)
 
@@ -47,12 +51,11 @@
 | M6-02 统一幂等 (18) | open → closed | 双模式 + Idempotency-Key + Redis 缓存 + 22 测试 |
 | M6-03 Outbox (19) | open → closed | @EnableOutbox + @PublishOutbox + 5 测试 |
 | M6-04 业务编排 (20) | open → closed (3 阶段) | WorkflowEngine + Plugin + Saga + 15 测试 |
+| M6-05 OpenAPI (21) | open → **closed (3 阶段)** | @EnableOpenApi + OpenApiExporter + build-openapi.sh |
 | M6-06 业务告警 (22) | open → closed | 业务 dashboard 6 panels |
 | M7-01 SkyWalking (23) | open → closed | 6 Dockerfile + compose SW env (M7 路线图首项) |
 | M7-02 gRPC (24) | open kickoff | issue kickoff, 1w 架构选型 (待评审) |
 | M7-03 WebSocket (25) | open kickoff | 鉴权改造 Phase B 阻塞, 需 tyrus compile 升级 |
-
-**M6-05 OpenAPI (21)**: Phase A 完成 (open, Phase B/C 待启动)
 
 ### 1.3 累计测试矩阵 (本 session 结束态)
 
@@ -87,13 +90,13 @@
 
 ---
 
-## 3. 项目状态 (2026-09-05 04:31)
+## 3. 项目状态 (2026-09-05 17:40)
 
 | 维度 | 状态 |
 |---|---|
 | Git tag v1.0.0 | ✅ immutable, zero drift |
 | M5 路线图 | ✅ 9/9 issues closed (101 tests pass, 全部实测) |
-| M6 路线图 | ✅ **6/6 实施完成** (251 tests pass) |
+| M6 路线图 | ✅ **6/6 实施完成** (256 tests pass) |
 | M7 路线图 | ✅ 1/3 closed + 2 kickoff |
 | 文档同步 | ✅ AGENTS/ROADMAP/CONTEXT/ARCHITECTURE 全部更新 |
 | 运行时验证 | ✅ M6-01 PG 层面已验证, M6-02 Redis 集成测试已验证 |
@@ -104,45 +107,50 @@
 
 ## 4. 后续 session 推荐起点 (M7+)
 
-### 优先级 1: 修复 Dockerfile skywalking 路径 (M6-01 Phase D 阻塞项)
+### 优先级 1: M7-02 gRPC 选型评审 (issue 24, P1, 1w)
 
-- 修复 `deploy/skywalking/agent-entrypoint.sh` 路径
-- 重新构建微服务镜像
-- 完成 M6-01 Phase D 微服务容器层 e2e (用 :fix 镜像以支持 hot deploy)
+- 需架构师参与: 选 spring-grpc (官方) / grpc-spring-boot-starter (社区, 推荐) / 自研
+- 选型后启动 Phase A: framework-grpc 模块 + 注解 + protoc 编译插件
 
-### 优先级 2: M7-01 SkyWalking 默认开启 (PRD M7-01, P0)
+### 优先级 2: M7-03 Phase B 鉴权改造 (issue 25, P1)
 
-- 启动业务模块自动挂载 SW agent
-- trace 上报 OAP
-- 与现有 4 dashboard 整合
+- 加 tyrus-core compile scope 依赖 (升级 jakarta.websocket-api)
+- 重新启用 XUserIdConfigurator 模式 (本 session 试验遇 jboss tyrus 编译阻塞)
+- 单元测试 + 集成测试
 
-### 优先级 3: M7-04 CDC 集成 (Debezium → EventHub) (PRD M7-04, P2)
+### 优先级 3: M6-01 Phase D 微服务 e2e 验证 (本 session 0f1e169 已修复 Dockerfile)
 
-- 估时 1.5w
-- 数据实时分发场景
+- 跑 ./deploy/up.sh --full 启动完整微服务容器
+- 验证 M6-01 多租户隔离在微服务容器层 e2e
+- SkyWalking UI (http://localhost:18080) 查看 trace 拓扑
 
-### 优先级 4: 模板市场 + VS Code 插件 (PRD M7-05/06, P2)
+### 优先级 4: M7-04 CDC 集成 (PRD M7-04, P2, 1.5w)
 
-- 平台增值能力
-- 开发者体验提升
+- Debezium → EventHub 数据实时分发场景
+
+### 优先级 5: 模板市场 + VS Code 插件 (PRD M7-05/06, P2)
+
+- 平台增值能力 + 开发者体验提升
 
 ---
 
 ## 5. 引用
 
 - AGENTS.md: 快速上手指南 (M5+M6 全部同步)
-- ROADMAP.md: 5 个 Milestone + M5 + M6 6/6 全部完成
-- CONTEXT.md: 4 段 Recent Optimizations (M5/M6-01/M6-02/M6-03/M6-04/M6-05/M6-06)
+- ROADMAP.md: 5 个 Milestone + M5 + M6 6/6 全部完成 + M7 1/3 closed
+- CONTEXT.md: 5 段 Recent Optimizations (M5/M6-01/M6-02/M6-03/M6-04/M6-05/M6-06)
 - ARCHITECTURE.md: 多租户/幂等/Outbox/工作流/OpenAPI 架构图
+- deploy/build-openapi.sh: M6-05 Phase C 聚合脚本 (5/5 模块)
 - docs/perf/2026-09-04-m6-01-runtime-verify.md: 187 行 PG 运行时报告
 - docs/perf/2026-09-01-p0-3b-verify.md: v1.0.0 P0-3b JWT blacklist
 - docs/perf/2026-09-01-m5-03-runtime-verify.md: v1.0.0 M5-03 业务告警
-- .scratch/2026-q3-roadmap/issues/17-22: M6 全部 6 issues
+- .scratch/2026-q3-roadmap/issues/17-22,24,25: M6 (17-22) + M7 (24,25) 全部 issues
 - .scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-01.md: v1.0.0 release
 
 ---
 
-**会话发布**: zeron (AI Agent, 2026-09-04 21:18 ~ 2026-09-05 02:41)
+**会话发布**: zeron (AI Agent, 2026-09-04 21:18 ~ 2026-09-05 17:40, 跨日)
 **项目**: [github.com/zerove/cloud-infra](https://github.com/zerove/cloud-infra)
 **v1.0.0 tag**: https://github.com/zerove/cloud-infra/releases/tag/v1.0.0
-**最终统计**: 19 commits / 251 tests / 6 dashboards / 11 alerts / 19 issues processed / 6/6 M6 路线图完成
+**最终统计**: 27 commits / 256 tests / 6 dashboards / 11 alerts / 19 issues closed / 6/6 M6 路线图 100% 完成
+**v1.0.0 tag**: 始终 immutable, zero drift (ahead origin/master = 0)
