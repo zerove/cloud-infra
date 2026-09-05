@@ -118,3 +118,19 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **framework-web optional swagger 依赖**: springdoc-openapi 作为可选依赖, 业务模块按需引入.
 *   **测试**: OpenApiAutoConfigurationTest 6 测试 (title 推断 + auth 模块 + JWT Bearer + server URL + Contact/License + SecurityRequirement).
 *   **测试矩阵**: framework-web 39 单测 (新增 6 + 原 33), 全模块合计 **251 测试通过**.
+
+## ✅ Recent Optimizations (2026-09) — M6-06 业务告警 Dashboard
+*   **business dashboard 新增** (commit pending): `deploy/monitoring/grafana/dashboards/cloud-infra-business.json` 6 panels 专用于 @BusinessMetric 业务指标.
+*   **panel 设计 (RED/USE 指标)**:
+  1. 登录尝试速率 (按 success/failure 分组, timeseries)
+  2. 登录失败率 (stat 阈值 green<5% / yellow 5-15% / red>15%)
+  3. 文件上传失败速率 (按 reason 分组, timeseries)
+  4. 业务告警实时状态 (Firing Alerts 表格)
+  5. 登录尝试吞吐量 (按小时, bargauge)
+  6. 文件上传吞吐量 (按小时, bargauge)
+*   **PromQL 示例**:
+  - `sum by (result) (rate(auth_login_attempts_total[5m]))`
+  - `sum(rate(auth_login_attempts_total{result="failure"}[5m])) / clamp_min(sum(rate(auth_login_attempts_total[5m])), 1)`
+  - `ALERTS{alertstate="firing", alertgroup=~".*(LoginFailure|FileUpload).*"}`
+*   **测试**: 手动验证 JSON 合法 (6 panels, title="Cloud-Infra 业务告警", tags=[cloud-infra, business, M6-06]).
+*   **M6 路线图完成 (6/6)**: M6-01/02/03/04/05/06 全部实施完成.
