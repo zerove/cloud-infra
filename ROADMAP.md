@@ -122,6 +122,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M6-05 Phase C 聚合脚本** (commit d26d01e): build-openapi.sh 拉取/合并 5 模块 + 输出 openapi-unified.json + openapi-summary.md - **M6 路线图 6/6 全部完成 🎉**
 - [x] 🟢 **M6-06 业务告警 Dashboard** (commit 9ddd7d0): cloud-infra-business.json 6 panels (RED/USE 指标: 登录速率/失败率/上传失败/告警状态/吞吐量) - 补完 M6 路线图
 - [x] 🟢 **M7-01 SkyWalking 默认开启** (commit 937e3de): 6 Dockerfile 加 `ENV SW_AGENT_ENABLED=true` + compose.yaml 6 业务模块加 SW env + depends_on cloud-skywalking-oap (M7 路线图首项完成)
+- [x] 🟢 **M6-01 Phase D Dockerfile 路径修复** (commit 0f1e169, 验证 commit 66ec01a): 6 Dockerfile `COPY deploy/...` 路径 + compose build context `..` 修复, `./deploy/up.sh --full` 可成功 build 镜像
 - [ ] **M7-02 gRPC 支持** (issue 24, kickoff, 估时 1w, 待架构师评审)
-- [ ] **M7-03 WebSocket 生产化** (issue 25, kickoff, 阻塞: jakarta.websocket-api 不提供 HandshakeResponse, 需 tyrus-core compile scope 升级 - Phase B 实施)
+- [ ] **M7-03 WebSocket 生产化** (issue 25, 阻塞: tyrus 2.2 + jakarta.websocket-api 2.2 缺 HandshakeResponse, 推荐方案 A 升级 jakarta.websocket-api 2.3+)
 - 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
