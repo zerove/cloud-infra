@@ -401,8 +401,8 @@ services:
   gateway:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-gateway
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-gateway/Dockerfile
     image: localhost/cloud-infra-gateway:latest
     container_name: cloud-gateway
     mem_limit: 448m
@@ -446,8 +446,8 @@ services:
   auth:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-auth
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-auth/Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
     mem_limit: 576m
@@ -495,8 +495,8 @@ services:
   system:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-modules/system-module
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-modules/system-module/Dockerfile
     image: localhost/cloud-infra-system:latest
     container_name: cloud-system
     # 2026-09-01 P0-3b 验证: 768m 触发 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁
@@ -545,8 +545,8 @@ services:
   file:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-modules/file-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-modules/file-service/Dockerfile
     image: localhost/cloud-infra-file:latest
     container_name: cloud-file
     mem_limit: 448m
@@ -592,8 +592,8 @@ services:
   notification:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-modules/notification-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-modules/notification-service/Dockerfile
     image: localhost/cloud-infra-notification:latest
     container_name: cloud-notification
     mem_limit: 448m
@@ -639,8 +639,8 @@ services:
   search:
     profiles: ["full"]
     build:
-      context: ../cloud-infra-modules/search-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cloud-infra-modules/search-service/Dockerfile
     image: localhost/cloud-infra-search:latest
     container_name: cloud-search
     mem_limit: 448m
