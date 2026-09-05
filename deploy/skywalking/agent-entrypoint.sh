@@ -1,3 +1,4 @@
+#!/bin/sh
 # SkyWalking 通用 entrypoint 包装
 #
 # 用法 (在 docker run / compose env):
