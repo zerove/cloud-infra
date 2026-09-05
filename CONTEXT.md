@@ -81,3 +81,10 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **Testcontainers 集成测试**: `IdempotencyStoreIT` 5 测试真实 Redis 7-alpine (SET NX 互斥 + JSON 往返 + 多 key 隔离).
 *   **业务应用**: `AuthController.register` 改 REPLAY 模式 (24h TTL, 网络重试场景).
 *   **测试矩阵**: framework-web 单测 30 + 集成 5 = 35 (新增 22), 全模块合计 **218 测试通过**.
+
+## ✅ Recent Optimizations (2026-09) — M6-03 Outbox 框架化
+*   **@EnableOutbox 注解** (commit 7c5f8a3): 业务模块加一行 `@EnableOutbox` 即启用 Outbox, `@Import` 触发 `OutboxAutoConfiguration` 装配 `OutboxEventPublisher` Bean.
+*   **@PublishOutbox 注解 + AOP**: `PublishOutboxAspect` 用 `@Around` 拦截带注解的方法, SpEL 提取 aggregateId (`#root.userId` 模式), 事务提交后自动入 outbox_event 表. 业务异常不写入, 序列化失败不阻塞业务.
+*   **零业务侵入**: 兼容现有 `OutboxEventPublisher.publishTransactional()` 显式 API, 业务模块可选择注解驱动或显式调用.
+*   **测试**: `PublishOutboxAspectTest` 5 测试覆盖 (完整 publish + 默认值 + null 返回跳过 + 业务异常跳过 + 序列化失败跳过).
+*   **测试矩阵**: framework-mybatis 单测 21 (新增 5 Outbox Aspect), 全模块合计 **223 测试通过**.

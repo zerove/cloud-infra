@@ -113,4 +113,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
 - [ ] **M6-01 Phase D 端到端运行时验证**: 容器起 PG/Redis, 跨租户查询隔离实测 (issue 17 Phase C 运行时验收)
 - [x] 🟢 **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + AuthController register 改 REPLAY + 17 单元测试 + 5 Testcontainers 集成测试
-- [ ] **M6-03 Outbox 框架化**: @EnableOutbox 注解 + 业务模块零侵入 (PRD M6-03)
+- [x] 🟢 **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
+- [ ] **M6-04 业务编排引擎**: plugin 机制 (PRD M6-04)
+- [ ] **M6-05 OpenAPI 自动生成**: Controller 注解 (PRD M6-05)
+- [ ] **M6-06 业务告警 dashboard**: RED/USE 指标 (PRD M6-06)

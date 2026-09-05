@@ -1,10 +1,20 @@
 # M6-03: Outbox Pattern 库抽到 framework-mybatis
 
-Status: open (survey done 2026-09-04, infra 90% 就绪, 缺 @EnableOutbox 注解 + 业务零侵入)
+Status: closed (done 2026-09-05)
 Priority: P0
 Owner: AI Agent
 Module: cloud-infra-framework/framework-mybatis
 Depends: 无 (前置 v1.0.0 已发布, Outbox 基础设施 90% 就绪)
+
+## 结论
+
+**M6-03 全部 3 个阶段完成**, Outbox 框架化已上线:
+- `@EnableOutbox` 注解 + `OutboxAutoConfiguration` (业务模块 1 行启用)
+- `@PublishOutbox` 注解 + AOP (`@Around` 拦截, SpEL aggregateId, 事务提交后入表)
+- 兼容现有 `OutboxEventPublisher.publishTransactional()` (零破坏)
+- PublishOutboxAspect 5 单元测试全绿
+
+**Commit**: 7c5f8a3 (本 session)
 
 ## 背景 (PRD M6-03)
 
@@ -101,10 +111,10 @@ public LoginResult login(LoginRequest req) {
 
 ## 进度
 
-- [x] **2026-09-04 17:18**: kickoff + infra survey (本 issue)
-- [ ] Phase A: @EnableOutbox 注解 + AutoConfiguration
-- [ ] Phase B: @PublishOutbox 注解 + AOP
-- [ ] Phase C: 单元测试 + 文档同步
+- [x] **2026-09-04 17:18**: kickoff + infra survey
+- [x] **2026-09-05 00:30**: Phase A 完成 (@EnableOutbox + AutoConfig + @PublishOutbox + AOP)
+- [x] **2026-09-05 00:38**: Phase B 完成 (PublishOutboxAspectTest 5 测试全绿)
+- [x] **2026-09-05 00:39**: Phase C 完成 (issue closed + 文档同步)
 
 ## 不在本 issue 范围
 
