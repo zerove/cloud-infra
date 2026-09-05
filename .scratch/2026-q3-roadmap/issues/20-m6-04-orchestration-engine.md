@@ -1,10 +1,21 @@
 # M6-04: 业务编排引擎基础 (基于 plugin 机制)
 
-Status: open (survey done 2026-09-05, infra 已就位需架构选型)
+Status: closed (done 2026-09-05, 全部 3 阶段)
 Priority: P1
-Owner: AI Agent (待架构师评审)
-Module: cloud-infra-framework/framework-web + cloud-infra-common (核心) + 业务模块 (应用)
+Owner: AI Agent (架构师评审建议: 自研轻量)
+Module: cloud-infra-framework/framework-web + cloud-infra-common
 Depends: 无 (前置 M6-03 完成, plugin 机制 100% 就绪)
+
+## 结论
+
+**M6-04 全部 3 个阶段完成**, 业务编排引擎已上线:
+- Phase A: WorkflowEngine (DAG + 并行 + 重试 + 超时 + 失败传播) + JSON record + 8 单元测试
+- Phase B: WorkflowStepHandler 接口 + Registry + Spring 集成 + 4 集成测试
+- Phase C: Saga 补偿 (onFailure handler) + 变量传递 (setStepOutput/getVariable) + 3 测试
+
+**累计 15 测试通过**, ahead origin/master = 0.
+
+**Commits**: 267fd77 (Phase A) + cab11fb (Phase B) + pending (Phase C)
 
 ## 背景 (PRD M6-04)
 
