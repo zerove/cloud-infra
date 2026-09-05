@@ -63,6 +63,18 @@
 - **异常容错**: 序列化失败 warn log + 跳过 (不阻塞业务), Redis 不可用降级 (Dispatcher 启动期容错)
 - **测试覆盖**: PublishOutboxAspectTest 5 单测 (完整 publish + 默认值 + null 跳过 + 异常跳过 + 序列化失败跳过)
 
+## 🔀 业务编排引擎 (M6-04, 2026-09)
+
+**链路**: 流程定义 (JSON `Workflow` + `WorkflowStep` record) → `WorkflowEngine.execute()` → DAG 拓扑排序 → 同层并行 + 步骤级重试/超时 → `WorkflowResult`
+
+- **DAG 拓扑**: BFS 分层 (level 0 = 起点), 循环依赖自动检测 (抛 IllegalStateException)
+- **并行执行**: 同层 (无依赖) 步骤用 `CompletableFuture` 并行, `Executors.newFixedThreadPool(8)` 默认
+- **重试**: per-step `RetryConfig` (max + interval 支持 s/ms), 指数退避 (Phase A 简化:固定间隔)
+- **超时**: per-step `TimeoutConfig` + 全局 `workflow.timeoutSeconds`, 双重保护
+- **失败传播**: 步骤 X 失败 → 依赖 X 的所有下游步骤标记 skipped, 不阻塞独立分支
+- **Saga 补偿**: onFailure handler (Phase B 集成 `IServicePlugin`)
+- **测试覆盖**: `WorkflowEngineTest` 8 单测 (单步骤 + DAG 顺序 + 重试 + 循环依赖检测 + id 唯一性 + 并行层 + 全局超时)
+
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
 - **决策 2**: 启用 **Generational ZGC** $\rightarrow$ [理由: 维持微秒级 GC 停顿，确保高并发下的低延迟响应]

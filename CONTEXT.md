@@ -88,3 +88,10 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **零业务侵入**: 兼容现有 `OutboxEventPublisher.publishTransactional()` 显式 API, 业务模块可选择注解驱动或显式调用.
 *   **测试**: `PublishOutboxAspectTest` 5 测试覆盖 (完整 publish + 默认值 + null 返回跳过 + 业务异常跳过 + 序列化失败跳过).
 *   **测试矩阵**: framework-mybatis 单测 21 (新增 5 Outbox Aspect), 全模块合计 **223 测试通过**.
+
+## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase A
+*   **流程定义** (commit pending): `Workflow`/`WorkflowStep`/`RetryConfig`/`TimeoutConfig` record, Jackson 序列化友好, JSON 步骤定义 + DAG 依赖.
+*   **引擎核心**: `WorkflowEngine` 同层并行执行 + BFS 拓扑排序 (无环 DAG) + 步骤级重试 + 超时 + 全局超时 + 失败传播 (依赖步骤跳过).
+*   **配套**: `WorkflowContext` (trigger + variables) + `WorkflowResult` (success/outputs/errors/skipped/durationMs).
+*   **测试**: `WorkflowEngineTest` 8 测试覆盖 (单步骤 + DAG 顺序 + 重试配置 + 失败传播 + 循环依赖检测 + 步骤 id 唯一性 + 并行层 + 全局超时).
+*   **测试矩阵**: common 33 (新增 8), 全模块合计 **231 测试通过**.
