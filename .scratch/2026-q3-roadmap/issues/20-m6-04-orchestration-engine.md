@@ -163,11 +163,10 @@ PluginContext.getService(pluginClass)
 
 ## 进度
 
-- [x] **2026-09-05 01:00**: kickoff + infra survey (本 issue)
-- [ ] **待架构师评审**: 选项 A/B/C 选型
-- [ ] Phase A: 流程定义 + 引擎核心 (待启动)
-- [ ] Phase B: Plugin 集成 + 补偿
-- [ ] Phase C: 单元测试 + 示例 + ADR
+- [x] **2026-09-05 01:00**: kickoff + infra survey
+- [x] **2026-09-05 01:11**: Phase A 完成 (WorkflowEngine + WorkflowStep + WorkflowContext + WorkflowResult + 8 单元测试)
+- [ ] Phase B: PluginStepHandler 抽象 + Saga 补偿 (待架构师评审)
+- [ ] Phase C: 单元测试 + 示例 workflow + ADR-012
 
 ## 不在本 issue 范围
 
