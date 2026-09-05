@@ -17,7 +17,7 @@ COPY --from=apache/skywalking-java-agent:9.6.0-java17 /skywalking/agent /skywalk
 COPY ../../deploy/skywalking/agent-entrypoint.sh /app/agent-entrypoint.sh
 ENV SW_AGENT_SERVICE=system-module
 ENV SW_AGENT_OAP=cloud-skywalking-oap:11800
-# SW_AGENT_ENABLED=true  # 取消注释启用
+ENV SW_AGENT_ENABLED=true
 
-# 启用 SkyWalking agent: 设置 SW_AGENT_ENABLED=true (compose 配), entrypoint.sh 自动启用字节码增强
+# 启用 SkyWalking agent: agent-entrypoint.sh 检测 SW_AGENT_ENABLED=true 自动挂载字节码增强
 ENTRYPOINT ["/app/agent-entrypoint.sh"]

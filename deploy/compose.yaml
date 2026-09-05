@@ -423,6 +423,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
@@ -434,6 +437,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       redis:
         condition: service_healthy
     logging: *default-logging
@@ -465,6 +470,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
@@ -476,6 +484,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -509,6 +519,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       # 宽松探针: 应用启动需数分钟, 就绪前频繁探测会触发并发类加载(与 Nacos 注册抢 fat jar 锁)导致死锁
@@ -521,6 +534,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -552,6 +567,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
@@ -563,6 +581,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -594,6 +614,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
@@ -605,6 +628,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -636,6 +661,9 @@ services:
       no_proxy: "*"
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
+      # SkyWalking agent (M7-01: 默认开启)
+      SW_AGENT_ENABLED: "true"
+      SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
@@ -647,6 +675,8 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      cloud-skywalking-oap:
+        condition: service_started
       elasticsearch:
         condition: service_healthy
     logging: *default-logging
