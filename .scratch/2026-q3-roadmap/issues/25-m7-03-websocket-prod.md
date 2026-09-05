@@ -1,14 +1,51 @@
 # M7-03: WebSocket 生产化 (TLS + 心跳 + 鉴权)
 
-Status: open (survey done 2026-09-05, infra 90% 就位)
+Status: open (Phase A 心跳已就位, Phase B 鉴权被 tyrus 2.2 阻塞)
 Priority: P1
-Owner: AI Agent
+Owner: AI Agent (需升级 jakarta.websocket-api 依赖)
 Module: cloud-infra-modules/notification-service
 Depends: 无 (前置 spring-boot-starter-websocket + WebSocketConfig 已就位)
 
 ## 背景 (PRD M7-03)
 
 > WebSocket 生产化 (TLS + 心跳 + 鉴权).
+
+## Phase B 鉴权改造精确阻塞分析 (2026-09-05 12:11 实测)
+
+JSR-356 `Configurator.modifyHandshake(sec, request, response)` 签名使用 `jakarta.websocket.HandshakeResponse`, 但 `jakarta.websocket-api 2.2.0` jar 中**只暴露 `HandshakeRequest`**, `HandshakeResponse` 缺失. 实测:
+
+```
+jakarta.websocket-api 2.2.0 内:
+  - jakarta/websocket/server/HandshakeRequest.class  (✅ 存在)
+  - jakarta/websocket/HandshakeResponse.class  (❌ 缺失, 需 jakarta.websocket-api 2.3+)
+  - ServerEndpointConfig$Configurator.modifyHandshake 3 参 (编译失败)
+```
+
+tyrus-core 2.2.0 内部 `TyrusServerEndpointConfigurator` 实现了完整 3 参 modifyHandshake, 但 tyrus-core 是 **runtime scope**, 业务代码不能直接引用.
+
+**3 种解决路径 (后续 session 选型)**:
+
+### 方案 A: 升级 jakarta.websocket-api 到 2.3+ (推荐)
+
+- 检查 Maven 仓库最新 jakarta.websocket-api 版本
+- 修改 `cloud-infra-modules/notification-service/pom.xml` 加 `jakarta.websocket:jakarta.websocket-api:2.3.0+` compile scope
+- 业务代码可直接 import `jakarta.websocket.HandshakeResponse`
+- 风险: 需 spring-boot-starter-websocket 兼容该版本
+
+### 方案 B: 用 spring 的 HandshakeInterceptor (不同包)
+
+- `org.springframework.web.socket.server.HandshakeInterceptor` (Spring 包装, 非 JSR-356)
+- 与 spring-websocket 集成, 但**仅对 spring WebSocketHandler 生效, 不可用于 `@ServerEndpoint` 注解模式**
+- 现有架构走 JSR-356 `@ServerEndpoint`, 改造量大
+
+### 方案 C: 自定义 Servlet Filter 拦截 Upgrade 请求
+
+- 拦截 HTTP `Upgrade: websocket` 握手请求
+- 校验 X-User-Id 头 + 写 session 属性
+- 通过 `HttpServletRequest.getSession()` 间接传值
+- 风险: Filter 链与 WebSocket 握手时序难对齐
+
+**推荐方案 A** (最少代码改动, 最符合 JSR-356 标准).
 
 ## 现状盘点 (2026-09-05)
 
@@ -20,9 +57,10 @@ Depends: 无 (前置 spring-boot-starter-websocket + WebSocketConfig 已就位)
 | notification-service | `NotificationServiceImpl` | ✅ 集成 | 事务提交后 pushToUser 实时推送 |
 | notification-service | `NotificationSecurityConfig` | ✅ 完整 | `/notification/ws/**` permitAll |
 | notification-service | `MetricsBinder` | ✅ 完整 | WS 指标桥接 |
+| notification-service | `tyrus-core` | ✅ 依赖 | 2.2.0 (runtime scope) |
 | **TLS (wss://)** | 未配 | ❌ **缺失** | 需 HTTPS 配置 + 证书 |
-| **心跳 (heartbeat)** | 未配 | ❌ **缺失** | 客户端 30s ping, server 10s pong |
-| **鉴权 (X-User-Id)** | userId 在 URL | ❌ **缺失** | 应从 SecurityContext 提取, 不信任 URL |
+| **心跳 (heartbeat)** | **已实现** (onMessage 'ping' → 'pong' JSON) | ✅ | 文本 ping-pong |
+| **鉴权 (X-User-Id)** | userId 在 URL (可伪造) | ❌ **安全风险** | 应从 SecurityContext 提取, 不信任 URL |
 | **容器配置** | 64KB/30min | ✅ 完整 | text 64KB, idle 30min |
 
 ## 验收标准 (PRD)
@@ -90,9 +128,10 @@ public void onPing(Session session, ByteBuffer message) {
 ## 进度
 
 - [x] **2026-09-05 03:11**: kickoff + infra survey (本 issue)
-- [ ] Phase A: 心跳 + 鉴权
-- [ ] Phase B: TLS
-- [ ] Phase C: 测试 + 文档
+- [x] **2026-09-05 12:11**: 精确化 Phase B 阻塞分析 (3 方案: A 升级 jakarta.websocket-api 2.3+ / B spring HandshakeInterceptor / C Servlet Filter), 推荐方案 A
+- [ ] Phase A 文档同步 (heartbeat 已实现, 补 ARCHITECTURE.md 章节)
+- [ ] Phase B: 选方案 + 实施 (推荐方案 A, 升级 jakarta.websocket-api)
+- [ ] Phase C: TLS + 测试 + 文档
 
 ## 不在本 issue 范围
 
