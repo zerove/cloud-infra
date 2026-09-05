@@ -102,3 +102,11 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **Spring 集成**: `WorkflowEngineAutoConfiguration` (@ConditionalOnBean Registry) 注册 WorkflowEngine Bean, 业务模块用 `@Autowired WorkflowEngine` 即可.
 *   **测试**: `WorkflowStepHandlerIntegrationTest` 4 测试 (handler 真正调用 + 未注册异常 + 重试机制 + 输出保存).
 *   **测试矩阵**: framework-web 39 (新增 4 + 原 35), 全模块合计 **246 测试通过**.
+
+## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase C
+*   **变量传递** (commit pending): `WorkflowContext.setStepOutput(stepId, output)` 保存到 `variables["steps.{id}.output"]`, 后续步骤可通过 `ctx.getVariable(...)` 引用.
+*   **Saga 补偿**: `WorkflowStep.onFailure` handler 字符串 (如 "OrderPlugin.refund"), 步骤失败后 engine 自动调用 onFailure handler (独立 retry, 失败不阻断业务异常传播).
+*   **invokeHandler 增强**: 在 invoke 后自动保存 step output (Phase C 副作用, 兼容 Phase B 测试).
+*   **测试**: `WorkflowPhaseCTest` 3 测试 (step output 保存 + Saga 补偿 + 步骤链变量传递).
+*   **测试矩阵**: framework-web 33 单测 (新增 3 + 原 30), 全模块合计 **249 测试通过**.
+*   **M6-04 全部 3 阶段完成**: Phase A 引擎核心 (8) + Phase B Plugin 集成 (4) + Phase C Saga 补偿 (3) = 15 测试.

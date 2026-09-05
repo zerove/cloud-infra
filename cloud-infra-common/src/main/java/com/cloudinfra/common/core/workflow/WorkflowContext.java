@@ -34,12 +34,30 @@ public record WorkflowContext(
         this(trigger, new java.util.HashMap<>());
     }
 
+    /**
+     * 优先读 variables, 否则读 trigger.
+     */
     public Object get(String key) {
         Object v = variables.get(key);
         return v != null ? v : trigger.get(key);
     }
 
+    /**
+     * 仅读 workflow 共享变量 (不含 trigger).
+     * 用于步骤间传递 (如 ${steps.create-order.output.orderId}).
+     */
+    public Object getVariable(String key) {
+        return variables.get(key);
+    }
+
     public void setVariable(String key, Object value) {
         variables.put(key, value);
+    }
+
+    /**
+     * 将步骤输出保存到 variables, 供后续步骤引用.
+     */
+    public void setStepOutput(String stepId, Object output) {
+        variables.put("steps." + stepId + ".output", output);
     }
 }

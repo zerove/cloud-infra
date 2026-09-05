@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * 业务编排引擎 (M6-04)
@@ -190,15 +191,53 @@ public class WorkflowEngine {
                 }
             }
         }
-        // 所有重试均失败, 抛错 (外层捕获并记录 stepErrors)
+        // 所有重试均失败. Phase C: 尝试 onFailure 补偿 (handler.compensate)
+        if (step.onFailure() != null) {
+            log.info("[WorkflowEngine] 步骤 {} 失败, 触发 onFailure 补偿", step.id());
+            try {
+                // onFailure 是补偿 handler 字符串 (如 "OrderPlugin.refund")
+                var originalHandler = step.handler();
+                var compStep = new WorkflowStep(
+                    step.id() + "-compensation", "plugin", List.of(),
+                    step.onFailure(), Map.of(), null, null, null
+                );
+                // 临时替换 handler 字符串, invokeHandler 会调用 handlerInvoker
+                // handlerInvoker 负责调用对应方法
+                invokeHandler(compStep, context, outputs);
+                log.info("[WorkflowEngine] 补偿成功: onFailure={}", step.onFailure());
+            } catch (Throwable compError) {
+                log.error("[WorkflowEngine] 补偿失败: onFailure={}, err={}", step.onFailure(), compError.getMessage());
+            }
+        }
         throw new RuntimeException("步骤 " + step.id() + " 重试 " + maxAttempts + " 次均失败", lastError);
     }
 
     /**
      * 调用处理器. 通过 handlerInvoker 委托 (Phase A/B 统一入口).
+     * Phase C: 在执行后保存步骤输出到 context.variables (key="steps.{id}.output").
      */
     private Object invokeHandler(WorkflowStep step, WorkflowContext context, Map<String, Object> outputs) {
-        return handlerInvoker.apply(step.handler(), context);
+        Object result = handlerInvoker.apply(step.handler(), context);
+        // Phase C: 保存步骤输出供后续步骤引用
+        context.setStepOutput(step.id(), result);
+        return result;
+    }
+
+    /**
+     * Phase C: Saga 补偿 - 调用 handler.compensate(). 通过 ApplicationContext 查 handler 实例.
+     */
+    private void executeCompensation(WorkflowStep step, WorkflowContext context, Throwable cause,
+                                     BiFunction<String, WorkflowContext, Object> compensateInvoker) {
+        if (compensateInvoker == null) {
+            log.warn("[WorkflowEngine] 步骤 {} 失败, 但无 handlerLookup 配置, 无法补偿", step.id());
+            return;
+        }
+        try {
+            log.info("[WorkflowEngine] 执行补偿: stepId={}", step.id());
+            compensateInvoker.apply(step.handler(), context);
+        } catch (Throwable t) {
+            log.error("[WorkflowEngine] 补偿失败: stepId={}, err={}", step.id(), t.getMessage());
+        }
     }
 
     /**
