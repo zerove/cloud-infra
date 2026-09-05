@@ -116,6 +116,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
 - [x] 🟢 **M6-04 Phase A 业务编排引擎基础** (commit 267fd77): WorkflowEngine (DAG 拓扑 + 并行层 + 重试 + 超时 + 失败传播) + WorkflowStep/RetryConfig/TimeoutConfig JSON record + 8 单元测试
 - [x] 🟢 **M6-04 Phase B Plugin 集成** (commit cab11fb): WorkflowStepHandler 接口 + WorkflowStepHandlerRegistry (启动扫描) + WorkflowEngineAutoConfiguration (@ConditionalOnBean) + handlerInvoker 委托 + 4 集成测试
-- [x] 🟢 **M6-04 Phase C Saga 补偿 + 变量传递** (commit pending): onFailure handler 字符串触发补偿 + setStepOutput 保存步骤输出 + WorkflowContext.getVariable 读取 + 3 测试
-- [ ] **M6-05 OpenAPI 自动生成**: @EnableOpenApi + 统一抽取 + 文档发布 (issue 21)
+- [x] 🟢 **M6-04 Phase C Saga 补偿 + 变量传递** (commit 6d363c9): onFailure handler 字符串触发补偿 + setStepOutput 保存步骤输出 + WorkflowContext.getVariable 读取 + 3 测试
+- [x] 🟢 **M6-05 Phase A 统一 OpenAPI 配置** (commit pending): @EnableOpenApi 注解 + OpenApiAutoConfiguration (Info/JWT Bearer/Server) + framework-web optional swagger 依赖 + 6 测试 (非破坏, 业务模块可选启用)
+- [ ] **M6-05 Phase B/C**: OpenApiExporter + 聚合脚本 + HTML 发布 (issue 21)
 - [ ] **M6-06 业务告警 dashboard**: RED/USE 指标 (PRD M6-06)

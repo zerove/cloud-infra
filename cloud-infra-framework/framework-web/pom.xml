@@ -97,5 +97,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- OpenAPI / Swagger (M6-05 optional, 业务模块启用 @EnableOpenApi 时需要) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 </project>
