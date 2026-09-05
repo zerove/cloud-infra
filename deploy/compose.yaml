@@ -437,7 +437,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       redis:
         condition: service_healthy
@@ -484,7 +484,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       postgres:
         condition: service_healthy
@@ -534,7 +534,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       postgres:
         condition: service_healthy
@@ -581,7 +581,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       postgres:
         condition: service_healthy
@@ -628,7 +628,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       postgres:
         condition: service_healthy
@@ -675,7 +675,7 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
-      cloud-skywalking-oap:
+      skywalking-oap:
         condition: service_started
       elasticsearch:
         condition: service_healthy
