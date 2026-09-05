@@ -1,6 +1,6 @@
 # M6-05: OpenAPI 自动生成 (基于 Controller 注解)
 
-Status: open (Phase A 完成, Phase B/C 待启动)
+Status: open (Phase A + B 完成, Phase C 待启动)
 Priority: P1
 Owner: AI Agent
 Module: cloud-infra-framework/framework-web + 各业务模块
@@ -8,9 +8,9 @@ Depends: 无 (前置 springdoc-openapi 已集成)
 
 ## 进度
 
-- [x] **2026-09-05 02:15**: Phase A 完成 (@EnableOpenApi + OpenApiAutoConfiguration + 6 单元测试, commit pending)
-- [ ] Phase B: OpenApiExporter + 聚合脚本 (build-openapi.sh)
-- [ ] Phase C: HTML 发布 + 文档同步
+- [x] **2026-09-05 02:15**: Phase A 完成 (@EnableOpenApi + OpenApiAutoConfiguration + 6 单元测试, commit 6e6a19e)
+- [x] **2026-09-05 16:06**: Phase B 完成 (OpenApiExporter 启动期 dump openapi.json + 5 单元测试, commit pending)
+- [ ] Phase C: 聚合脚本 build-openapi.sh + HTML 发布 + 文档同步
 
 ## Phase A 实施细节
 
