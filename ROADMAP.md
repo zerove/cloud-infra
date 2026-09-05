@@ -119,5 +119,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M6-04 Phase C Saga 补偿 + 变量传递** (commit 6d363c9): onFailure handler 字符串触发补偿 + setStepOutput 保存步骤输出 + WorkflowContext.getVariable 读取 + 3 测试
 - [x] 🟢 **M6-05 Phase A 统一 OpenAPI 配置** (commit 6e6a19e): @EnableOpenApi 注解 + OpenApiAutoConfiguration (Info/JWT Bearer/Server) + framework-web optional swagger 依赖 + 6 测试 (非破坏, 业务模块可选启用)
 - [x] 🟢 **M6-06 业务告警 Dashboard** (commit 9ddd7d0): cloud-infra-business.json 6 panels (RED/USE 指标: 登录速率/失败率/上传失败/告警状态/吞吐量) - 补完 M6 路线图
-- [x] 🟢 **M7-01 SkyWalking 默认开启** (commit pending): 6 Dockerfile 加 `ENV SW_AGENT_ENABLED=true` + compose.yaml 6 业务模块加 SW env + depends_on cloud-skywalking-oap (M7 路线图首项完成)
-- 未来 M7+: gRPC / WebSocket 生产化 / CDC / 模板市场 / VS Code 插件 (PRD M7)
+- [x] 🟢 **M7-01 SkyWalking 默认开启** (commit 937e3de): 6 Dockerfile 加 `ENV SW_AGENT_ENABLED=true` + compose.yaml 6 业务模块加 SW env + depends_on cloud-skywalking-oap (M7 路线图首项完成)
+- [ ] **M7-02 gRPC 支持** (issue 24, kickoff, 估时 1w, 待架构师评审)
+- [ ] **M7-03 WebSocket 生产化** (issue 25, kickoff, 阻塞: jakarta.websocket-api 不提供 HandshakeResponse, 需 tyrus-core compile scope 升级 - Phase B 实施)
+- 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
