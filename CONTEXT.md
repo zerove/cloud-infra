@@ -134,3 +134,10 @@ Developers should start by looking at the `docs/superpowers` directory for speci
   - `ALERTS{alertstate="firing", alertgroup=~".*(LoginFailure|FileUpload).*"}`
 *   **测试**: 手动验证 JSON 合法 (6 panels, title="Cloud-Infra 业务告警", tags=[cloud-infra, business, M6-06]).
 *   **M6 路线图完成 (6/6)**: M6-01/02/03/04/05/06 全部实施完成.
+
+## ✅ Recent Optimizations (2026-09) — M7-01 SkyWalking 默认开启
+*   **6 Dockerfile 取消注释** (commit pending): 移除 `# SW_AGENT_ENABLED=true` 注释, 改为 `ENV SW_AGENT_ENABLED=true` 直接启用. 覆盖 gateway/auth/system/notification/search/file 6 个业务模块.
+*   **compose.yaml 业务模块 SW 配置** (commit pending): 6 个 full profile 业务模块 service 加 `SW_AGENT_ENABLED: "true"` + `SW_AGENT_OAP: cloud-skywalking-oap:11800` 环境变量, depends_on 加 `cloud-skywalking-oap: condition: service_started`.
+*   **agent-entrypoint.sh 已就位**: 检测 SW_AGENT_ENABLED 自动挂载字节码增强 (无需重写).
+*   **非破坏**: dev/local 启动时可通过 `.env` 设 `SW_AGENT_ENABLED=false` 关闭 (默认开启, 需显式关闭).
+*   **测试**: YAML 语法验证 OK (23 services, 6 个 SW 依赖).
