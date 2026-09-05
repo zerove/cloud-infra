@@ -111,7 +111,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
 - [x] 🟢 **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加 @TenantFilter (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql tenant_id
 - [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
-- [ ] **M6-01 Phase D 端到端运行时验证**: 容器起 PG/Redis, 跨租户查询隔离实测 (issue 17 Phase C 运行时验收)
+- [x] 🟢 **M6-01 Phase D 端到端运行时验证** (commit 17ee31a): 容器起 PG/Redis, 跨租户查询隔离实测完成 (4 sys_post + 1 sys_user 全部 default 租户兼容, tenant-X 查询 0 行隔离)
 - [x] 🟢 **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + AuthController register 改 REPLAY + 17 单元测试 + 5 Testcontainers 集成测试
 - [x] 🟢 **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
 - [x] 🟢 **M6-04 Phase A 业务编排引擎基础** (commit 267fd77): WorkflowEngine (DAG 拓扑 + 并行层 + 重试 + 超时 + 失败传播) + WorkflowStep/RetryConfig/TimeoutConfig JSON record + 8 单元测试
