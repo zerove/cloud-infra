@@ -4,12 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
 
 /**
  * 业务编排引擎 (M6-04)
@@ -49,17 +50,32 @@ public class WorkflowEngine {
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final ExecutorService executor;
+    private final BiFunction<String, WorkflowContext, Object> handlerInvoker;
 
     public WorkflowEngine() {
         this(Executors.newFixedThreadPool(8, r -> {
             Thread t = new Thread(r, "workflow-engine");
             t.setDaemon(true);
             return t;
-        }));
+        }), (handler, ctx) -> {
+            // 默认: 返回空结果 (Phase A 简化, Phase B 注入 handlerInvoker)
+            log.debug("[WorkflowEngine] 无 handlerInvoker, 返回空 (handler={})", handler);
+            return Map.of("handler", handler);
+        });
     }
 
     public WorkflowEngine(ExecutorService executor) {
+        this(executor, (handler, ctx) -> Map.of("handler", handler));
+    }
+
+    /**
+     * Phase B 构造: 注入 handler 调用器 (如 WorkflowStepHandlerRegistry.lookup).
+     * @param handlerInvoker (handler string, WorkflowContext) → result
+     */
+    public WorkflowEngine(ExecutorService executor,
+                          BiFunction<String, WorkflowContext, Object> handlerInvoker) {
         this.executor = executor;
+        this.handlerInvoker = handlerInvoker;
     }
 
     /**
@@ -179,12 +195,10 @@ public class WorkflowEngine {
     }
 
     /**
-     * 调用处理器. Phase A 默认用 sync invoke (Phase B 接 PluginStepHandler).
+     * 调用处理器. 通过 handlerInvoker 委托 (Phase A/B 统一入口).
      */
     private Object invokeHandler(WorkflowStep step, WorkflowContext context, Map<String, Object> outputs) {
-        // Phase A: 简化实现, 返回空结果. Phase B 通过 PluginStepHandler 真正调用.
-        log.debug("[WorkflowEngine] invokeHandler (Phase A 简化): id={}", step.id());
-        return Map.of("id", step.id(), "args", step.args());
+        return handlerInvoker.apply(step.handler(), context);
     }
 
     /**

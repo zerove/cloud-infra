@@ -95,3 +95,10 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **配套**: `WorkflowContext` (trigger + variables) + `WorkflowResult` (success/outputs/errors/skipped/durationMs).
 *   **测试**: `WorkflowEngineTest` 8 测试覆盖 (单步骤 + DAG 顺序 + 重试配置 + 失败传播 + 循环依赖检测 + 步骤 id 唯一性 + 并行层 + 全局超时).
 *   **测试矩阵**: common 33 (新增 8), 全模块合计 **231 测试通过**.
+
+## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase B
+*   **PluginStepHandler 集成** (commit pending): `WorkflowStepHandler` 接口 + `WorkflowStepHandlerRegistry` (启动自动扫描 @Component Bean, 按 "BeanName.methodName" 索引).
+*   **WorkflowEngine 注入 handlerInvoker**: `BiFunction<String, WorkflowContext, Object>` 委托, Phase A 用默认空实现, Phase B 接 Registry 自动查找.
+*   **Spring 集成**: `WorkflowEngineAutoConfiguration` (@ConditionalOnBean Registry) 注册 WorkflowEngine Bean, 业务模块用 `@Autowired WorkflowEngine` 即可.
+*   **测试**: `WorkflowStepHandlerIntegrationTest` 4 测试 (handler 真正调用 + 未注册异常 + 重试机制 + 输出保存).
+*   **测试矩阵**: framework-web 39 (新增 4 + 原 35), 全模块合计 **246 测试通过**.
