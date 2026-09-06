@@ -5,3 +5,32 @@ spring:
     nacos:
       config:
         fail-fast: true
+
+# M7-03 Phase B: TLS (wss://) 生产配置
+# 证书通过 SSL_KEYSTORE_PATH / SSL_KEYSTORE_PASSWORD 环境变量注入 (compose.yaml 强制模式)
+# 缺失时启动失败 (强制生产安全, 避免明文 ws:// 部署)
+server:
+  ssl:
+    enabled: ${SSL_ENABLED:true}
+    protocol: TLS
+    # PKCS12 keystore (推荐, JDK 25 默认支持)
+    key-store: ${SSL_KEYSTORE_PATH:/etc/ssl/notification.p12}
+    key-store-type: PKCS12
+    key-store-password: ${SSL_KEYSTORE_PASSWORD:}
+    key-alias: ${SSL_KEY_ALIAS:notification}
+    key-password: ${SSL_KEY_PASSWORD:}
+    # 客户端证书 (双向 TLS, 默认关闭)
+    client-auth: ${SSL_CLIENT_AUTH:none}
+    # 支持的 TLS 版本 (禁用 SSLv3/TLSv1.0/1.1)
+    enabled-protocols: TLSv1.3,TLSv1.2
+    # 加密套件 (JDK 25 默认安全列表)
+    ciphers: TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256,TLS_CHACHA20_POLY1305_SHA256
+
+# WebSocket 容器在 TLS 终止后空闲超时 (HTTPS 终止由 Gateway/Nginx 完成, 内部通信仍 HTTP)
+# 若直接在 notification-service 终止 TLS, 则 wss:// 走 443
+# 推荐架构: Nginx 终止 TLS → ws://notification:8084/notification/ws 内部明文 (PaaS 内部网络可信)
+management:
+  server:
+    # management 端口与业务端口分离, 内部网络仍 HTTP
+    ssl:
+      enabled: false
