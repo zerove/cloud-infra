@@ -1,0 +1,43 @@
+// M7-02 Phase A: Hello proto (gRPC 基础设施验证)
+syntax = "proto3";
+
+package cloudinfra.grpc;
+
+option java_package = "com.cloudinfra.grpc.lib";
+option java_multiple_files = true;
+
+// ---- Echo Service ----
+
+service EchoService {
+  // 简单回显
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  // 带元数据的回显
+  rpc EchoWithMetadata(EchoRequest) returns (EchoResponse);
+  // 健康检查
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// Echo
+message EchoRequest {
+  string message = 1;
+  int32 count = 2;  // 重复次数
+}
+
+message EchoResponse {
+  string message = 1;
+  int64 timestamp = 2;
+  string server_version = 3;
+}
+
+// Health
+message HealthRequest {}
+
+message HealthResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+  string version = 2;
+}

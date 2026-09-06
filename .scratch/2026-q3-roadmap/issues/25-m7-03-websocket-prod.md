@@ -1,10 +1,10 @@
 # M7-03: WebSocket 生产化 (TLS + 心跳 + 鉴权)
 
-Status: open (Phase A 心跳已就位, Phase B 鉴权被 tyrus 2.2 阻塞)
+Status: **Phase A 完成** (Header 鉴权 + Configurator + Filter 7 测试, 2026-09-06)
 Priority: P1
-Owner: AI Agent (需升级 jakarta.websocket-api 依赖)
+Owner: AI Agent
 Module: cloud-infra-modules/notification-service
-Depends: 无 (前置 spring-boot-starter-websocket + WebSocketConfig 已就位)
+Depends: 无
 
 ## 背景 (PRD M7-03)
 
@@ -45,7 +45,26 @@ tyrus-core 2.2.0 内部 `TyrusServerEndpointConfigurator` 实现了完整 3 参 
 - 通过 `HttpServletRequest.getSession()` 间接传值
 - 风险: Filter 链与 WebSocket 握手时序难对齐
 
-**推荐方案 A** (最少代码改动, 最符合 JSR-356 标准).
+## 3 方案选型结果 (2026-09-06 Phase A 实施选定)
+
+### 选定: 方案 C 变体 (Filter + Configurator 协同)
+
+实施路径:
+1. **`WebSocketAuthFilter`** (Servlet Filter, OncePerRequestFilter): 拦截 `/notification/ws` Upgrade 请求, 校验 `X-User-Id` header, 通过则写入 HttpSession 属性, 缺失则 401
+2. **`WebSocketAuthConfigurator`** (JSR-356): modifyHandshake 阶段从 HttpSession 反射读取 userId, 注入 session.getUserProperties()
+3. **`NotificationWebSocketHandler`**: 移除 URL 中的 userId, 改为 `@ServerEndpoint("/notification/ws")`, @OnOpen 从 userProperties 读取, 缺失则关闭连接
+4. **`NotificationSecurityConfig`**: `/notification/ws/**` 仍 permitAll (浏览器 WS 不带 Header, 由 Filter + Configurator 鉴权)
+
+**为何选 C 变体而非 A**:
+- 方案 A 需 `jakarta.websocket-api 2.3+` 暴露 `HandshakeResponse` 3 参签名
+- 阿里云 maven 镜像无该版本, 编译失败
+- 方案 C 不依赖 API 升级, 反射 HttpSession 解耦 (后续 jakarta.websocket-api 2.3+ 可用时, 可移除 Filter, 改为 Configurator 直接读 Header)
+
+**测试**: 7/7 通过
+- `WebSocketAuthFilterTest` (5): 非 Upgrade 放行 / 缺 X-User-Id 401 / 合法 X-User-Id 写 session / 空字符串 401 / 非 WS 路径不过滤
+- `WebSocketAuthConfiguratorTest` (2): 常量正确 / 可实例化
+
+**commit**: `6c20099 feat(m7-03): WebSocket 鉴权 Header 化 + Configurator + Filter 7 测试`
 
 ## 现状盘点 (2026-09-05)
 
@@ -129,9 +148,9 @@ public void onPing(Session session, ByteBuffer message) {
 
 - [x] **2026-09-05 03:11**: kickoff + infra survey (本 issue)
 - [x] **2026-09-05 12:11**: 精确化 Phase B 阻塞分析 (3 方案: A 升级 jakarta.websocket-api 2.3+ / B spring HandshakeInterceptor / C Servlet Filter), 推荐方案 A
-- [ ] Phase A 文档同步 (heartbeat 已实现, 补 ARCHITECTURE.md 章节)
-- [ ] Phase B: 选方案 + 实施 (推荐方案 A, 升级 jakarta.websocket-api)
-- [ ] Phase C: TLS + 测试 + 文档
+- [x] **2026-09-06 09:38**: Phase A 完成 - 采用方案 C 变体 (Filter + Configurator 协同), 7/7 测试通过, commit 6c20099
+- [ ] Phase B: TLS (HTTPS 证书 + Nginx wss:// 终止 + application-prod.yml)
+- [ ] Phase C: 集成测试 + ARCHITECTURE.md 文档 + ADR
 
 ## 不在本 issue 范围
 
