@@ -16,6 +16,7 @@
 
     <modules>
         <module>framework-web</module>
+        <module>framework-grpc</module>
         <module>framework-mybatis</module>
         <module>framework-redis</module>
         <module>framework-security</module>
