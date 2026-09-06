@@ -5,15 +5,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.binder.MeterBinder;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.OnClose;
 import jakarta.websocket.OnError;
 import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
-import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -29,16 +26,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>维护 userId -> Set<Session> 映射, 一个用户多个设备连接时全部推送.
  * 业务侧调用 {@link #pushToUser(Long, Object)} 即可向某用户所有活跃连接广播.</p>
  *
+ * <p><b>M7-03 鉴权改造</b>: 移除 URL 中的 userId ({@code /notification/ws/{userId}}),
+ * 改为 {@code /notification/ws} 无参路径, userId 来自 {@link WebSocketAuthConfigurator}
+ * 在握手阶段注入的 session.getUserProperties() (从 X-User-Id header 提取).
+ * 客户端无法伪造 URL 中的 userId, 安全性大幅提升.</p>
+ *
+ * <p><b>心跳</b>: 文本 ping/pong (业务自定义, onMessage 协议), 同时支持 RFC 6455 帧级 onPong.</p>
+ *
  * <p>线程安全: 使用 ConcurrentHashMap + Set 自身同步.
  * 推送失败自动从映射中移除 session, 避免内存泄漏.</p>
- *
- * <p>端点: ws://host:8084/notification/ws/{userId}</p>
- * <p>协议: 客户端发 "ping" 文本 → server 回 "pong".
- * 业务推送: server -> client 发送 JSON { type: "notification", userId, payload, timestamp }.</p>
  */
 @Slf4j
 @Component
-@ServerEndpoint("/notification/ws/{userId}")
+@ServerEndpoint(value = "/notification/ws", configurator = WebSocketAuthConfigurator.class)
 public class NotificationWebSocketHandler {
 
     private static final Map<Long, Set<Session>> sessions = new ConcurrentHashMap<>();
@@ -47,15 +47,6 @@ public class NotificationWebSocketHandler {
     private static volatile Counter PUSH_FAILURE;
     private static volatile Counter PING_RECEIVED;
 
-    /**
-     * Spring 启动后注入 MeterRegistry, 注册 WS 指标.
-     * 使用 static @PostConstruct 避免 JSR-356 @ServerEndpoint 自行 new 实例绕过 Spring 注入.
-     * 业务方可访问:
-     * - notification.ws.active_connections (gauge)
-     * - notification.ws.active_users (gauge)
-     * - notification.ws.push.total{result=success|failure} (counter)
-     * - notification.ws.ping.total (counter)
-     */
     @jakarta.annotation.PostConstruct
     public void initMetrics() {
         MeterRegistry registry = MetricsBinder.getRegistry();
@@ -81,21 +72,39 @@ public class NotificationWebSocketHandler {
     }
 
     @OnOpen
-    public void onOpen(Session session, @PathParam("userId") Long userId) {
-        if (userId == null) {
-            log.warn("WebSocket 缺少 userId, 关闭连接: sessionId={}", session.getId());
+    public void onOpen(Session session) {
+        // M7-03 鉴权: userId 必须由 Configurator 注入, 缺失则拒绝
+        String userIdStr = (String) session.getUserProperties()
+            .get(WebSocketAuthConfigurator.USER_ID_PROPERTY);
+        if (userIdStr == null || userIdStr.isBlank()) {
+            log.warn("WebSocket 拒绝: 握手阶段未通过鉴权 (缺少 X-User-Id), sessionId={}",
+                session.getId());
             try {
-                session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "missing userId"));
+                session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY,
+                    "missing X-User-Id header"));
             } catch (IOException ignored) {
                 // ignore
             }
             return;
         }
+        final Long userId;
+        try {
+            userId = Long.parseLong(userIdStr);
+        } catch (NumberFormatException e) {
+            log.warn("WebSocket 拒绝: X-User-Id 非数字, userId={}", userIdStr);
+            try {
+                session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY,
+                    "invalid X-User-Id"));
+            } catch (IOException ignored) {
+                // ignore
+            }
+            return;
+        }
+
         sessions.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(session);
-        log.info("WebSocket 连接建立: userId={}, sessionId={}, 当前连接数={}",
+        log.info("WebSocket 连接建立 (鉴权通过): userId={}, sessionId={}, 当前连接数={}",
             userId, session.getId(), sessions.get(userId).size());
 
-        // 发送欢迎消息
         sendJson(session, Map.of(
             "type", "connected",
             "userId", userId,
@@ -106,7 +115,7 @@ public class NotificationWebSocketHandler {
     @OnMessage
     public void onMessage(String payload, Session session) {
         // 业务侧只需 server -> client, 客户端可发 ping 心跳
-        if ("ping".equalsIgnoreCase(payload.trim())) {
+        if (payload != null && "ping".equalsIgnoreCase(payload.trim())) {
             if (PING_RECEIVED != null) {
                 PING_RECEIVED.increment();
             }
@@ -210,15 +219,22 @@ public class NotificationWebSocketHandler {
         }
     }
 
+    /**
+     * M7-03 改造: userId 来源从 URL pathParam 改为 session userProperties (Configurator 注入)
+     */
     private static Long extractUserId(Session session) {
-        try {
-            String userIdStr = session.getPathParameters().get("userId");
-            if (userIdStr != null) {
-                return Long.parseLong(userIdStr);
-            }
-        } catch (NumberFormatException ignored) {
-            // ignore
+        if (session == null) {
+            return null;
         }
-        return null;
+        String userIdStr = (String) session.getUserProperties()
+            .get(WebSocketAuthConfigurator.USER_ID_PROPERTY);
+        if (userIdStr == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(userIdStr);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 }
