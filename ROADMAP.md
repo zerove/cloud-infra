@@ -127,5 +127,5 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [ ] **M7-02 gRPC 支持** (issue 24, in progress)
   - [x] 🟢 **M7-02 Phase A**: framework-grpc 模块基础设施 (commit 8ace1d8): EnableGrpcServer 注解 + CloudInfraGrpcProperties 配置 + GrpcServerAutoConfiguration + EchoService proto
   - [x] 🟢 **M7-02 Phase B**: EchoServiceImpl 业务逻辑 + 5 单元测试 (commit 3dc6649): Echo/EchoWithMetadata/Health RPC, count 安全上限, 5/5 测试通过
-  - [ ] **M7-02 Phase C**: 解决 LogNet 3.0.1 与 Spring Boot 4 集成冲突, 启用 @SpringBootTest 集成测试
+  - [x] ⚠️ **M7-02 Phase C**: LogNet optional + ConditionalOnClass 守护 (commit 774f10c): LogNet 3.0.1/5.2.0 基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突; 业务模块需显式引入 LogNet 才能启用 gRPC server; 集成测试/E2E 待 LogNet 升级或替换为 grpc-spring 替代方案
 - 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
