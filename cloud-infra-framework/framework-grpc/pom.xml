@@ -40,10 +40,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <!-- LogNet grpc-spring-boot-starter: 自动配置 gRPC server/client -->
+        <!-- optional=true: 业务模块按需引入, 避免与 Spring Boot 4 EnvironmentPostProcessor 冲突 -->
         <dependency>
             <groupId>io.github.lognet</groupId>
             <artifactId>grpc-spring-boot-starter</artifactId>
             <version>${grpc-spring-boot-starter.version}</version>
+            <optional>true</optional>
         </dependency>
         <!-- gRPC core (由 starter 传递, 显式声明便于版本控制) -->
         <dependency>

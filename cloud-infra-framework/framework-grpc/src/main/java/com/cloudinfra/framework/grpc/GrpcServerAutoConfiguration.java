@@ -2,6 +2,7 @@ package com.cloudinfra.framework.grpc;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
@@ -16,10 +17,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  *   <li>与 Spring Boot 4 虚拟线程兼容</li>
  * </ul>
  *
- * <p>依赖: grpc-spring-boot-starter (LogNet) 提供 gRPC server 核心能力.</p>
+ * <p>依赖: 业务模块需显式引入 io.github.lognet:grpc-spring-boot-starter (optional).
+ * LogNet 3.0.1/5.2.0 均基于 Spring Boot 3.x, 与 Spring Boot 4 集成存在
+ * EnvironmentPostProcessor 兼容问题. 详见 ROADMAP.md M7-02 Phase C.</p>
  */
 @Slf4j
 @AutoConfiguration
+@ConditionalOnClass(name = "org.lognet.springboot.grpc.autoconfigure.GRpcAutoConfiguration")
 @EnableConfigurationProperties(CloudInfraGrpcProperties.class)
 public class GrpcServerAutoConfiguration {
 
