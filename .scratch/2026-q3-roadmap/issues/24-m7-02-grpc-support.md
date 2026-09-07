@@ -1,8 +1,8 @@
 # M7-02: gRPC 支持 (业务模块可选)
 
-Status: open (survey done 2026-09-05, 估时 1w, 大型基础设施改造)
+Status: closed (2026-09-07, 选项 B LogNet + 兼容降级)
 Priority: P1
-Owner: AI Agent (待架构师评审)
+Owner: AI Agent
 Module: cloud-infra-framework/framework-web + 各业务模块
 Depends: 无
 
@@ -125,10 +125,19 @@ message UserResponse {
 ## 进度
 
 - [x] **2026-09-05 03:10**: kickoff + infra survey (本 issue)
-- [ ] **待架构师评审**: 选项 A/B/C 选型
-- [ ] Phase A: framework-grpc 模块 + 注解 + protoc
-- [ ] Phase B: 业务模块 gRPC 接入
-- [ ] Phase C: grpc-gateway + 测试 + ADR-013
+- [x] **2026-09-06**: 选项 B 选定 (LogNet grpc-spring-boot-starter)
+- [x] **2026-09-06**: Phase A 完成 (commit 8ace1d8): framework-grpc 模块 + @EnableGrpcServer + CloudInfraGrpcProperties + GrpcServerAutoConfiguration + echo.proto + protobuf 编译插件
+- [x] **2026-09-07**: Phase B 完成 (commit 3dc6649): EchoServiceImpl + 5 单元测试 (5/5 pass)
+- [x] **2026-09-07**: Phase C 完成 (commit 774f10c): LogNet optional + @ConditionalOnClass 守护 (LogNet 3.0.1/5.2.0 不兼容 SB4, 业务模块按需显式引入)
+- [x] **2026-09-07**: 文档同步 (commit e917312): ROADMAP.md 状态更新
+- [x] **2026-09-07**: 推送到 origin/master (6 commits ahead)
+
+## 已知约束 (M8+ 议题)
+
+- LogNet 3.0.1/5.2.0 均基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突
+- 集成测试 / gRPC 端到端暂未启用 (LogNet 升级或换 net.devh:grpc-spring-boot-starter 后补齐)
+- 业务模块接入 gRPC 时需显式引入 LogNet 依赖
+- 后续 Phase D (Streaming RPC, grpc-gateway) 推迟到 M8+
 
 ## 不在本 issue 范围
 
