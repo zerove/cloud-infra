@@ -126,6 +126,6 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **M7-03 WebSocket 鉴权改造** (commits 6c20099 + 6c30458): Phase A Filter + Configurator 协同 (解决 tyrus 2.2 + jwaa 2.2 HandshakeResponse 缺失) + 7 测试; Phase B TLS 配置 (PKCS12 keystore + Nginx wss:// 终止 + 证书生成脚本); 文档 ARCHITECTURE.md §5
 - [ ] **M7-02 gRPC 支持** (issue 24, in progress)
   - [x] 🟢 **M7-02 Phase A**: framework-grpc 模块基础设施 (commit 8ace1d8): EnableGrpcServer 注解 + CloudInfraGrpcProperties 配置 + GrpcServerAutoConfiguration + EchoService proto
-  - [ ] **M7-02 Phase B**: EchoServiceGrpc 实现与测试
-  - [ ] **M7-02 Phase C**: Gateway gRPC 路由与负载均衡
+  - [x] 🟢 **M7-02 Phase B**: EchoServiceImpl 业务逻辑 + 5 单元测试 (commit 3dc6649): Echo/EchoWithMetadata/Health RPC, count 安全上限, 5/5 测试通过
+  - [ ] **M7-02 Phase C**: 解决 LogNet 3.0.1 与 Spring Boot 4 集成冲突, 启用 @SpringBootTest 集成测试
 - 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
