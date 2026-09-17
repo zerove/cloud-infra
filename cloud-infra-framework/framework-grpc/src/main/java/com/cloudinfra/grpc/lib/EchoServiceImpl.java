@@ -2,15 +2,18 @@ package com.cloudinfra.grpc.lib;
 
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.lognet.springboot.grpc.GRpcService;
+import org.springframework.stereotype.Component;
 
 /**
  * EchoService gRPC 实现.
  *
  * <p>用于验证 gRPC 基础设施是否正常工作.
+ *
+ * <p>使用 {@link Component} 注解让 Spring 自动注册为 Bean,
+ * 原生自动配置会自动发现所有实现 {@link io.grpc.BindableService} 的 bean.
  */
 @Slf4j
-@GRpcService
+@Component
 public class EchoServiceImpl extends EchoServiceGrpc.EchoServiceImplBase {
 
     private static final String SERVER_VERSION = "1.0.0";

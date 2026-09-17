@@ -11,18 +11,17 @@
 
     <artifactId>framework-grpc</artifactId>
     <name>framework-grpc</name>
-    <description>gRPC framework integration (LogNet grpc-spring-boot-starter + protobuf-maven-plugin)</description>
+    <description>gRPC framework integration (原生自动配置 + protobuf-maven-plugin, 无 LogNet 依赖)</description>
 
     <properties>
-        <!-- gRPC Spring Boot Starter (LogNet 社区成熟版本) -->
-        <grpc-spring-boot-starter.version>3.0.1</grpc-spring-boot-starter.version>
+        <!-- gRPC 原生自动配置 (Spring Boot 4 兼容, 无 LogNet 依赖) -->
         <!-- protobuf 编译插件 -->
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
-        <protoc.version>3.25.5</protoc.version>
-        <!-- Protobuf Java runtime -->
-        <protobuf-java.version>3.25.5</protobuf-java.version>
-        <!-- grpc-java 版本需与 starter 兼容 -->
-        <grpc.version>1.65.1</grpc.version>
+        <protoc.version>4.34.2</protoc.version>
+        <!-- Protobuf Java runtime (与 protoc 版本匹配) -->
+        <protobuf-java.version>4.34.2</protobuf-java.version>
+        <!-- grpc-java 版本 (与 Spring Boot 4.1.0 兼容, 本地缓存已有 1.80.0) -->
+        <grpc.version>1.80.0</grpc.version>
     </properties>
 
     <dependencies>
@@ -39,15 +38,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- LogNet grpc-spring-boot-starter: 自动配置 gRPC server/client -->
-        <!-- optional=true: 业务模块按需引入, 避免与 Spring Boot 4 EnvironmentPostProcessor 冲突 -->
-        <dependency>
-            <groupId>io.github.lognet</groupId>
-            <artifactId>grpc-spring-boot-starter</artifactId>
-            <version>${grpc-spring-boot-starter.version}</version>
-            <optional>true</optional>
-        </dependency>
-        <!-- gRPC core (由 starter 传递, 显式声明便于版本控制) -->
+        <!-- gRPC core (原生集成, 无 LogNet starter 依赖) -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
@@ -61,6 +52,11 @@
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>
+            <version>${grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-services</artifactId>
             <version>${grpc.version}</version>
         </dependency>
         <!-- Protobuf runtime (生成代码运行需要) -->
@@ -97,12 +93,17 @@
             <artifactId>javax.annotation-api</artifactId>
             <version>1.3.2</version>
         </dependency>
-        <!-- gRPC 测试依赖 -->
+        <!-- gRPC 测试依赖 (进程内测试) -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-testing</artifactId>
             <version>${grpc.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-inprocess</artifactId>
+            <version>${grpc.version}</version>
         </dependency>
     </dependencies>
 
@@ -120,6 +121,10 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
+                    <release>${java.version}</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
