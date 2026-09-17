@@ -128,12 +128,16 @@ class IdempotentAspectTest {
     }
 
     @Test
-    @DisplayName("REPLAY: 二次调用命中缓存 → 直接返回首次响应 (不执行业务)")
+    @DisplayName("REPLAY: 二次调用命中缓存 → 按方法返回类型重放 (不执行业务)")
     void shouldReplayCachedResponse() throws Throwable {
         request.addHeader("Idempotency-Key", "token-replay-2");
-        IdempotencyEntry cached = IdempotencyEntry.success(200, "{\"token\":\"first\"}");
+        String jsonFirst = "{\"token\":\"first\"}";
+        IdempotencyEntry cached = IdempotencyEntry.success(200, jsonFirst);
         when(store.read(anyString())).thenReturn(cached);
         ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        org.aspectj.lang.reflect.MethodSignature signature = mock(org.aspectj.lang.reflect.MethodSignature.class);
+        when(signature.getReturnType()).thenReturn((Class) String.class);
+        when(pjp.getSignature()).thenReturn(signature);
 
         Object result = aspect.around(pjp, idempotentReplay());
 
@@ -156,6 +160,27 @@ class IdempotentAspectTest {
             .hasMessage("业务失败");
         verify(store).releaseLock(anyString());
         verify(store, never()).storeResponse(anyString(), any(IdempotencyEntry.class), anyInt());
+    }
+
+    @Test
+    @DisplayName("REPLAY 契约: 命中缓存后按方法返回类型反序列化为 Result")
+    void shouldReplayWithSameResultContract() throws Throwable {
+        request.addHeader("Idempotency-Key", "token-replay-contract");
+        String json = "{\"success\":true,\"code\":200,\"message\":\"操作成功\",\"data\":\"registered\"}";
+        when(store.read(anyString())).thenReturn(IdempotencyEntry.success(200, json));
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        org.aspectj.lang.reflect.MethodSignature signature = mock(org.aspectj.lang.reflect.MethodSignature.class);
+        when(signature.getReturnType()).thenReturn((Class) com.cloudinfra.common.core.domain.Result.class);
+        when(pjp.getSignature()).thenReturn(signature);
+
+        Object replayed = aspect.around(pjp, idempotentReplay());
+
+        assertThat(replayed).isInstanceOf(com.cloudinfra.common.core.domain.Result.class);
+        com.cloudinfra.common.core.domain.Result<?> typed =
+            (com.cloudinfra.common.core.domain.Result<?>) replayed;
+        assertThat(typed.isSuccess()).isTrue();
+        assertThat(typed.getData()).isEqualTo("registered");
+        verify(pjp, never()).proceed();
     }
 
     @Test

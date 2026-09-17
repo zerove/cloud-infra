@@ -49,10 +49,18 @@ public class IdempotentAspect {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final IdempotencyStore store;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     public IdempotentAspect(RedisTemplate<String, Object> redisTemplate, IdempotencyStore store) {
+        this(redisTemplate, store, new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
+    }
+
+    public IdempotentAspect(RedisTemplate<String, Object> redisTemplate,
+                            IdempotencyStore store,
+                            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.store = store;
+        this.objectMapper = objectMapper;
     }
 
     @Pointcut("execution(* com.cloudinfra..controller..*(..))")
@@ -105,7 +113,7 @@ public class IdempotentAspect {
         IdempotencyEntry cached = store.read(keyHash);
         if (cached != null) {
             log.debug("[IdempotentAspect] REPLAY 命中缓存, 直接返回首次响应 key={}", keyHash);
-            return replayResponse(cached);
+            return replayResponse(joinPoint, cached);
         }
 
         // 2. 尝试获得锁 (首次调用路径)
@@ -127,29 +135,58 @@ public class IdempotentAspect {
 
         // 4. 缓存响应 (仅当 storeResponse=true, 默认 true)
         if (idempotent.storeResponse()) {
+            // 契约: 缓存与重放保持方法返回类型一致, 避免首次 Result<T>、重放 String
+            String json;
+            try {
+                json = objectMapper.writeValueAsString(result);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                // 序列化失败则不缓存，保持与未开启幂等一致的重试行为
+                store.releaseLock(keyHash);
+                return result;
+            }
             store.storeResponse(keyHash,
-                IdempotencyEntry.success(200, String.valueOf(result)),
+                IdempotencyEntry.success(200, json),
                 idempotent.expireSeconds());
         }
         return result;
     }
 
     /**
-     * 重放首次响应. 当前实现: 直接返回缓存的 body (字符串形式).
-     * 更复杂的实现可支持响应码 + 多媒体类型 (Jackson HttpMessageConverter 序列化).
-     * <p>
-     * 设计权衡: 仅缓存 toString 后的响应 (足够 R 类的 ApiResponse 返回),
-     *           复杂 DTO 序列化由 ControllerAdvice 负责 (Spring 默认行为).
+     * 重放首次响应。
+     * 按方法返回类型反序列化，保证与首次调用类型契约一致，
+     * 不再把 Result<T> 退化为 String。
      */
-    private Object replayResponse(IdempotencyEntry cached) {
+    private Object replayResponse(ProceedingJoinPoint joinPoint, IdempotencyEntry cached) {
         if (!cached.isSuccess()) {
             // 首次响应是异常, 二次调用重抛 (保持一致)
             throw new GlobalException(
                 cached.getErrorMessage() != null ? cached.getErrorMessage() : "首次请求失败"
             );
         }
-        // body 是 String.valueOf(result), 直接返回 (Controller 通常返回 R<T> JSON)
-        return cached.getBody();
+        if (cached.getBody() == null) {
+            return null;
+        }
+        org.aspectj.lang.reflect.MethodSignature signature =
+            (org.aspectj.lang.reflect.MethodSignature) joinPoint.getSignature();
+        Class<?> returnType = signature.getReturnType();
+        if (returnType == Void.TYPE) {
+            return null;
+        }
+        if (returnType == String.class) {
+            // 新缓存保存返回值的 JSON 表示 (字符串带引号)；旧缓存为 String.valueOf 原文。
+            // 能按 JSON 字符串还原则还原，否则按原文重放，保持兼容。
+            try {
+                return objectMapper.readValue(cached.getBody(), String.class);
+            } catch (com.fasterxml.jackson.core.JacksonException e) {
+                return cached.getBody();
+            }
+        }
+        try {
+            return objectMapper.readValue(cached.getBody(), objectMapper.constructType(returnType));
+        } catch (com.fasterxml.jackson.core.JacksonException e) {
+            log.warn("[IdempotentAspect] 重放反序列化失败, 拒绝错误重放");
+            throw new GlobalException("幂等缓存不可用，请稍后重试");
+        }
     }
 
     // ========== Key 解析 ==========
