@@ -5,6 +5,9 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.cloud.stream.function.StreamBridge;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +34,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * Outbox 模式集成测试（真实 PostgreSQL，P1-R1/R2 配套验证）。
@@ -118,6 +127,30 @@ class OutboxIntegrationTest {
     private int count() {
         Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class);
         return n == null ? 0 : n;
+    }
+
+    @Test
+    void defaultPublisherEventCanBeDispatchedWithNullTenant() {
+        newTx().executeWithoutResult(status -> publisher.publishTransactional(
+            "order-events", "ORDER", "dispatch-1", "OrderCreated", "{\"number\":1}"));
+        var bridge = mock(StreamBridge.class);
+        when(bridge.send(eq("order-events"),
+            any(Object.class))).thenReturn(true);
+        var dispatcher = new OutboxEventDispatcher(repository, bridge, new ObjectMapper());
+        ReflectionTestUtils.setField(dispatcher, "enabled", true);
+        ReflectionTestUtils.setField(dispatcher, "batchSize", 100);
+
+        newTx().executeWithoutResult(status -> dispatcher.dispatchPendingEvents());
+
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM outbox_event", String.class))
+            .isEqualTo("DISPATCHED");
+        var sent = ArgumentCaptor.forClass(Object.class);
+        verify(bridge).send(eq("order-events"), sent.capture());
+        var envelope = (Map<?, ?>) sent.getValue();
+        assertThat(envelope.get("eventId")).isNotNull();
+        assertThat(envelope.containsKey("tenantId")).isTrue();
+        assertThat(envelope.get("tenantId")).isNull();
+        assertThat(envelope.get("payload")).isEqualTo(Map.of("number", 1));
     }
 
     @Test
