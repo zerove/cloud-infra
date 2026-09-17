@@ -235,4 +235,30 @@ public class SysUserServiceImplTest {
         assertThat(loginUser.getRoles()).isEmpty();
         assertThat(loginUser.getPermissions()).isEmpty();
     }
+    @Test
+    void shouldReturnGeneratedUserIdAndHonorRequestedPassword() {
+        SysUserCreateDTO dto = new SysUserCreateDTO();
+        dto.setUsername("alice");
+        dto.setPassword("request-password");
+        when(userMapper.insert(any(SysUser.class))).thenAnswer(call -> {
+            SysUser inserted = call.getArgument(0);
+            assertThat(inserted.getPassword()).isEqualTo("ENCODED:request-password");
+            inserted.setUserId(42L);
+            return 1;
+        });
+        assertThat(userService.createUserReturningId(dto)).isEqualTo(42L);
+        verify(configService, never()).selectConfigByKey(anyString());
+        verify(userMapper, never()).selectById(any());
+    }
+
+    @Test
+    void shouldRejectMissingGeneratedUserId() {
+        SysUserCreateDTO dto = new SysUserCreateDTO();
+        dto.setUsername("alice");
+        dto.setPassword("request-password");
+        when(userMapper.insert(any(SysUser.class))).thenReturn(1);
+        assertThatThrownBy(() -> userService.createUserReturningId(dto))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
 }

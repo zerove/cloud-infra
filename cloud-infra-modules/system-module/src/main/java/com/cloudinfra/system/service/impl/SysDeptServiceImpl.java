@@ -90,6 +90,20 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
 
     @Override
     public boolean insertDept(SysDeptCreateDTO deptDTO) {
+        return save(prepareNewDept(deptDTO));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createDeptReturningId(SysDeptCreateDTO deptDTO) {
+        SysDept dept = prepareNewDept(deptDTO);
+        if (!save(dept) || dept.getDeptId() == null) {
+            throw new IllegalStateException("Dept creation did not return a generated ID");
+        }
+        return dept.getDeptId();
+    }
+
+    private SysDept prepareNewDept(SysDeptCreateDTO deptDTO) {
         LambdaQueryWrapper<SysDept> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysDept::getDeptName, deptDTO.getDeptName())
                .eq(SysDept::getParentId, deptDTO.getParentId())
@@ -105,7 +119,7 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
         } else {
             dept.setAncestors("0");
         }
-        return save(dept);
+        return dept;
     }
 
     @Override
@@ -118,7 +132,7 @@ public class SysDeptServiceImpl extends ServiceImpl<SysDeptMapper, SysDept> impl
     @Override
     public boolean updateDept(SysDeptUpdateDTO deptDTO) {
         SysDept dept = deptConverter.updateDtoToEntity(deptDTO);
-        SysDept newParentDept = this.getById(dept.getParentId());
+        SysDept newParentDept = dept.getParentId() == null ? null : this.getById(dept.getParentId());
         SysDept oldDept = this.getById(dept.getDeptId());
         if (newParentDept != null && oldDept != null) {
             String newAncestors = newParentDept.getAncestors() + "," + newParentDept.getDeptId();

@@ -203,4 +203,34 @@ public class SysDeptServiceImplTest {
             .isInstanceOf(RuntimeException.class)
             .hasMessageContaining("rollback");
     }
+    @Test
+    void shouldReturnGeneratedDeptIdWithoutPostInsertScan() {
+        SysDeptCreateDTO dto = new SysDeptCreateDTO();
+        dto.setDeptName("研发部");
+        dto.setParentId(0L);
+        SysDept entity = new SysDept();
+        entity.setParentId(0L);
+        when(deptConverter.createDtoToEntity(dto)).thenReturn(entity);
+        when(deptMapper.insert(any(SysDept.class))).thenAnswer(call -> {
+            ((SysDept) call.getArgument(0)).setDeptId(73L);
+            return 1;
+        });
+        assertThat(deptService.createDeptReturningId(dto)).isEqualTo(73L);
+        verify(deptMapper, never()).selectList(any(Wrapper.class));
+        verify(deptMapper, times(1)).selectById(any(Serializable.class));
+    }
+
+    @Test
+    void shouldRejectMissingGeneratedDeptId() {
+        SysDeptCreateDTO dto = new SysDeptCreateDTO();
+        dto.setDeptName("研发部");
+        dto.setParentId(0L);
+        SysDept entity = new SysDept();
+        entity.setParentId(0L);
+        when(deptConverter.createDtoToEntity(dto)).thenReturn(entity);
+        when(deptMapper.insert(any(SysDept.class))).thenReturn(1);
+        assertThatThrownBy(() -> deptService.createDeptReturningId(dto))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
 }

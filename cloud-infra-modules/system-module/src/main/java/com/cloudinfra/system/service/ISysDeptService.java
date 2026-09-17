@@ -9,6 +9,8 @@ import com.cloudinfra.system.domain.dto.SysDeptUpdateDTO;
 import java.util.List;
 
 public interface ISysDeptService extends IService<SysDept> {
+    /** 创建并返回数据库生成的主键，避免按名称反查。 */
+    Long createDeptReturningId(SysDeptCreateDTO dto);
     List<SysDept> selectDeptList(SysDept dept);
     IPage<SysDept> selectDeptList(Page<SysDept> page, SysDept dept);
     List<SysDept> buildDeptTree(List<SysDept> depts);
