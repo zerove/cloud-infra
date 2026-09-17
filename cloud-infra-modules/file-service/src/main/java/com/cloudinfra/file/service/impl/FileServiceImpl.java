@@ -20,8 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,37 +39,44 @@ public class FileServiceImpl implements IFileService {
     private final FileVersionMapper versionMapper;
     private final FilePermissionService permissionService;
     private final StorageQuotaService quotaService;
+    private final TransactionTemplate transactionTemplate;
 
     public FileServiceImpl(
         StorageFactory storageFactory,
         FileMetadataMapper metadataMapper,
         FileVersionMapper versionMapper,
         FilePermissionService permissionService,
-        StorageQuotaService quotaService
+        StorageQuotaService quotaService,
+        org.springframework.transaction.support.TransactionTemplate transactionTemplate
     ) {
         this.storageFactory = storageFactory;
         this.metadataMapper = metadataMapper;
         this.versionMapper = versionMapper;
         this.permissionService = permissionService;
         this.quotaService = quotaService;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     @BusinessMetric(metric = "file.upload.failures", reason = "upload")
     public FileMetadataVO upload(Long userId, FileContent content) throws IOException {
-        // 1. 存储配额预检查（友好提示） + 原子预留（真正强校验）
+        // 1. 配额预检查（友好提示）+ 原子预留（短事务：StorageQuotaService 自带 DB 操作，
+        //    物理上传前锁定额度，避免慢上传期间持有配额行锁）
         quotaService.checkQuota(userId, content.size());
         quotaService.tryReserve(userId, content.size());
 
-        // 2. 物理上传
+        // 2. 物理上传（数据库事务外执行，避免慢存储长时间占用连接与配额行锁）
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
-        String storedPath = strategy.upload(content.fileName(), content.inputStream());
+        String storedPath;
+        try {
+            storedPath = strategy.upload(content.fileName(), content.inputStream());
+        } catch (IOException | RuntimeException e) {
+            // 上传失败：立即释放已预留额度，不留孤儿预留
+            quotaService.release(userId, content.size());
+            throw e;
+        }
 
-        // 3. 注册回滚补偿：若后续 DB 操作失败导致事务回滚，删除已落盘的孤儿文件
-        registerFileOnCleanup(strategy, storedPath);
-
-        // 4. 创建主元数据（记录真实上传者）
+        // 3. 元数据落库（程序化短事务，仅两次轻量 INSERT）
         FileMetadata metadata = new FileMetadata();
         metadata.setFileName(content.fileName());
         metadata.setFilePath(storedPath);
@@ -79,47 +85,42 @@ public class FileServiceImpl implements IFileService {
         metadata.setCreateTime(new Date());
         metadata.setUploader(String.valueOf(userId));
         metadata.setCurrentVersion(1);
-        metadataMapper.insert(metadata);
-        
-        // 5. 创建初始版本快照 v1
-        FileVersion version = new FileVersion();
-        version.setFileId(metadata.getId());
-        version.setVersionNumber(1);
-        version.setStoragePath(storedPath);
-        version.setCreateTime(LocalDateTime.now());
-        versionMapper.insert(version);
-        
+        try {
+            transactionTemplate.executeWithoutResult(status ->
+                persistMetadataAndVersion(metadata, 1, storedPath));
+        } catch (RuntimeException e) {
+            // 落库失败：回滚配额预留并删除已落盘的物理文件
+            quotaService.release(userId, content.size());
+            deleteQuietly(strategy, storedPath);
+            throw e;
+        }
+
         return mapToVo(metadata);
     }
 
     /**
-     * 注册事务回滚补偿：仅当事务最终回滚（ROLLED_BACK）时删除已落盘的孤儿文件，
-     * 避免失败上传留下孤儿文件占用存储。
+     * 元数据与版本快照在同一短事务内落库。
+     * 由 upload 在事务外通过 TransactionTemplate 调用，事务边界最小化。
      */
-    private void registerFileOnCleanup(StorageStrategy strategy, String storedPath) {
-        if (storedPath == null || !TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
+    private void persistMetadataAndVersion(FileMetadata metadata, int versionNumber, String storedPath) {
+        metadataMapper.insert(metadata);
+        FileVersion version = new FileVersion();
+        version.setFileId(metadata.getId());
+        version.setVersionNumber(versionNumber);
+        version.setStoragePath(storedPath);
+        version.setCreateTime(LocalDateTime.now());
+        versionMapper.insert(version);
+    }
+
+    private void deleteQuietly(StorageStrategy strategy, String storedPath) {
+        try {
+            strategy.delete(storedPath);
+        } catch (Exception cleanupError) {
+            log.warn("失败上传清理物理文件未成功，等待回收任务处理: {}", storedPath, cleanupError);
         }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != TransactionSynchronization.STATUS_ROLLED_BACK) {
-                    return;
-                }
-                try {
-                    boolean removed = strategy.delete(storedPath);
-                    if (removed) {
-                        log.debug("事务回滚，已清理孤儿文件: {}", storedPath);
-                    }
-                } catch (Exception e) {
-                    log.warn("事务回滚后清理孤儿文件失败: {}", storedPath, e);
-                }
-            }
-        });
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public FileMetadataVO update(Long fileId, FileContent content, Long userId) throws IOException {
         FileMetadata metadata = metadataMapper.selectById(fileId);
         if (metadata == null) {
@@ -131,30 +132,48 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to update this file");
         }
 
-        // 增量配额预留：新版本大小 - 旧版本大小（原子）
+        // 增量配额预留（短事务）：新版本大小 - 旧版本大小
         long delta = content.size() - (metadata.getFileSize() == null ? 0 : metadata.getFileSize());
         if (delta > 0) {
             quotaService.tryReserve(userId, delta);
         }
 
+        // 物理上传（数据库事务外）
         StorageStrategy strategy = storageFactory.getStrategy(content.size(), content.contentType());
-        String storedPath = strategy.upload(content.fileName(), content.inputStream());
-
-        // 注册回滚补偿：事务回滚时删除新落盘的版本文件，避免孤儿文件
-        registerFileOnCleanup(strategy, storedPath);
+        String storedPath;
+        try {
+            storedPath = strategy.upload(content.fileName(), content.inputStream());
+        } catch (IOException | RuntimeException e) {
+            if (delta > 0) {
+                quotaService.release(userId, delta);
+            }
+            throw e;
+        }
 
         int newVersion = metadata.getCurrentVersion() + 1;
         metadata.setCurrentVersion(newVersion);
         metadata.setFilePath(storedPath);
         metadata.setFileSize(content.size());
-        metadataMapper.updateById(metadata);
 
-        FileVersion version = new FileVersion();
-        version.setFileId(fileId);
-        version.setVersionNumber(newVersion);
-        version.setStoragePath(storedPath);
-        version.setCreateTime(LocalDateTime.now());
-        versionMapper.insert(version);
+        // 元数据落库（程序化短事务）
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                metadataMapper.updateById(metadata);
+                FileVersion version = new FileVersion();
+                version.setFileId(fileId);
+                version.setVersionNumber(newVersion);
+                version.setStoragePath(storedPath);
+                version.setCreateTime(LocalDateTime.now());
+                versionMapper.insert(version);
+            });
+        } catch (RuntimeException e) {
+            // 落库失败：回滚增量配额并删除新版本物理文件
+            if (delta > 0) {
+                quotaService.release(userId, delta);
+            }
+            deleteQuietly(strategy, storedPath);
+            throw e;
+        }
 
         return mapToVo(metadata);
     }
