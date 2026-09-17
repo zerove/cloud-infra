@@ -41,6 +41,11 @@
         <swagger-annotations.version>2.2.54</swagger-annotations.version>
         <jasypt.version>4.0.4</jasypt.version>
 
+        <!-- gRPC / Protobuf 版本 -->
+        <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
+        <protoc.version>4.34.2</protoc.version>
+        <grpc.version>1.80.0</grpc.version>
+
         <!-- Native Image Build Control -->
         <spring-boot.aot.skip>true</spring-boot.aot.skip>
         <native.image.skip>true</native.image.skip>
