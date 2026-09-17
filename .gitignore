@@ -32,6 +32,12 @@ nacos-mysql.sql
 .env
 .env.local
 
+# 本地通知 TLS 证书和私钥仅用于部署，不入库
+/deploy/ssl/notification/*
+!/deploy/ssl/notification/README.md
+!/deploy/ssl/notification/generate-certs.sh
+!/deploy/ssl/notification/nginx.conf
+
 # 清理临时跟踪文件
 notification_api_tracker.md
 search_service_tracker.md
