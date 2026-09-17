@@ -1,0 +1,15 @@
+# 与 compose.yaml 合并使用。仅启用通知服务直接终止 TLS，不启动额外代理。
+# 路径按第一个 compose 文件所在目录 deploy/ 解析。
+services:
+  notification:
+    environment:
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_KEY_STORE: /etc/ssl/notification/notification.p12
+      SERVER_SSL_KEY_STORE_TYPE: PKCS12
+      SERVER_SSL_KEY_STORE_PASSWORD: ${SSL_KEYSTORE_PASSWORD:?必须设置 SSL_KEYSTORE_PASSWORD}
+      SERVER_SSL_KEY_PASSWORD: ${SSL_KEYSTORE_PASSWORD:?必须设置 SSL_KEYSTORE_PASSWORD}
+      SERVER_SSL_KEY_ALIAS: ${SSL_KEY_ALIAS:-notification}
+      SERVER_SSL_ENABLED_PROTOCOLS: TLSv1.3,TLSv1.2
+      MANAGEMENT_SERVER_SSL_ENABLED: "false"
+    volumes:
+      - ./ssl/notification/notification.p12:/etc/ssl/notification/notification.p12:ro,Z
