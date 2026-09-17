@@ -5,11 +5,20 @@ import com.cloudinfra.framework.web.interceptor.FeignAuthInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Feign Trace ID 自动配置.
+ * <p>仅在非 auth 模块（或未显式配置 feignAuthInterceptor）时注册。
+ * auth 模块有自己的 FeignConfig 定义，避免 bean 冲突。
+ */
 @Configuration
 @ConditionalOnClass(feign.RequestInterceptor.class)
+// 排除 cloud-infra-auth 模块，该模块自行配置 feignAuthInterceptor
+// matchIfMissing=true: 当 spring.application.name 缺失或不为 cloud-infra-auth 时生效
+@ConditionalOnProperty(prefix = "spring.application", name = "name", havingValue = "cloud-infra-auth", matchIfMissing = false)
 public class FeignTraceIdAutoConfiguration {
 
     @Autowired
