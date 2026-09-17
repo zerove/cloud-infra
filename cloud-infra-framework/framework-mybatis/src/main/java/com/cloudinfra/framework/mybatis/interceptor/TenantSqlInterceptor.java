@@ -1,11 +1,18 @@
 package com.cloudinfra.framework.mybatis.interceptor;
 
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.StringValue;
+import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.select.Values;
 import com.cloudinfra.common.core.annotation.TenantFilter;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import org.apache.ibatis.executor.statement.StatementHandler;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.mapping.SqlCommandType;
 import org.apache.ibatis.reflection.MetaObject;
 import org.apache.ibatis.reflection.SystemMetaObject;
 import org.slf4j.Logger;
@@ -31,10 +38,9 @@ import java.util.Optional;
  *    - 有租户 → 追加 "AND tenant_id = '<tenant>'" 或 "WHERE tenant_id = '<tenant>'"
  *
  * 设计原则:
- * - 仅处理 SELECT/UPDATE/DELETE; INSERT 由 TenantInsertProcessor (MyBatis-Plus MetaObjectHandler)
- *   在 MetaObject 层面自动注入 tenant_id, 不在此拦截
- * - 不破坏原 SQL 结构: 仅追加片段, 不重写列名/表名
- * - 性能: 单条 SQL 仅 1 次字符串拼接 (平均 < 1μs), 无元数据反射开销
+ * - INSERT VALUES 使用结构化解析，自动追加当前上下文租户列及各行的值。
+ * - 多租户插入不接受调用方显式租户列，也不接受尚未支持的插入形式。
+ * - SELECT/UPDATE/DELETE 保留现有过滤逻辑。
  */
 public class TenantSqlInterceptor implements InnerInterceptor {
 
@@ -61,6 +67,11 @@ public class TenantSqlInterceptor implements InnerInterceptor {
             return;
         }
 
+        if (ms.getSqlCommandType() == SqlCommandType.INSERT) {
+            handleTenantInsert(metaObject, annotation);
+            return;
+        }
+
         // 单租户模式 + 无租户上下文: 短路放行 (避免污染 dev/test 环境)
         if (!TenantContext.hasTenant()) {
             // rejectWhenMissing=true 时, 即使非强制模式也拒绝 (业务显式选择)
@@ -71,6 +82,51 @@ public class TenantSqlInterceptor implements InnerInterceptor {
         }
 
         handleTenantFilter(metaObject, annotation);
+    }
+
+    private void handleTenantInsert(MetaObject metaObject, TenantFilter annotation) {
+        String tenantId = TenantContext.getTenantId().orElse(null);
+        if (tenantId == null) {
+            if (annotation.rejectWhenMissing()) {
+                throw new IllegalStateException("插入操作缺少必需的租户上下文");
+            }
+            return;
+        }
+        String column = annotation.column();
+        buildTenantCondition(column, tenantId);
+        if (!column.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            throw new IllegalArgumentException("非法租户列名");
+        }
+        TenantLineHandler handler = new TenantLineHandler() {
+            @Override
+            public Expression getTenantId() {
+                return new StringValue(tenantId);
+            }
+
+            @Override
+            public String getTenantIdColumn() {
+                return column;
+            }
+        };
+        TenantLineInnerInterceptor insertInterceptor = new TenantLineInnerInterceptor(handler) {
+            @Override
+            protected void processInsert(Insert insert, int index, String sql, Object context) {
+                if (!(insert.getSelect() instanceof Values) || insert.getColumns() == null
+                        || insert.getColumns().isEmpty() || insert.getConflictAction() != null
+                        || (insert.getDuplicateUpdateSets() != null && !insert.getDuplicateUpdateSets().isEmpty())
+                        || (insert.getWithItemsList() != null && !insert.getWithItemsList().isEmpty())) {
+                    throw new IllegalArgumentException("租户插入仅支持带列名的 VALUES，不支持查询插入或冲突更新");
+                }
+                boolean explicitTenant = insert.getColumns().stream()
+                    .anyMatch(c -> c.getColumnName().replace("\"", "").equalsIgnoreCase(column));
+                if (explicitTenant) {
+                    throw new IllegalArgumentException("租户列由上下文自动写入，不允许显式指定");
+                }
+                super.processInsert(insert, index, sql, context);
+            }
+        };
+        BoundSql boundSql = (BoundSql) metaObject.getValue("delegate.boundSql");
+        metaObject.setValue("delegate.boundSql.sql", insertInterceptor.parserSingle(boundSql.getSql(), null));
     }
 
     /**
