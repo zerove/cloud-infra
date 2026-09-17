@@ -40,13 +40,23 @@ class FileServiceImplTest {
     @Mock private StorageQuotaService quotaService;
     @Mock private StorageStrategy storageStrategy;
 
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private FileServiceImpl fileService;
 
     @BeforeEach
     void setUp() {
+        org.springframework.transaction.support.TransactionTemplate passThrough =
+            new org.springframework.transaction.support.TransactionTemplate(transactionManager) {
+                @Override
+                @SuppressWarnings("unchecked")
+                public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+                    return action.doInTransaction(null);
+                }
+            };
         fileService = new FileServiceImpl(
             storageFactory, metadataMapper, versionMapper,
-            permissionService, quotaService
+            permissionService, quotaService, passThrough
         );
     }
 
@@ -95,6 +105,61 @@ class FileServiceImplTest {
             .hasMessageContaining("quota exceeded");
 
         then(metadataMapper).should(never()).insert(any(FileMetadata.class));
+        then(versionMapper).should(never()).insert(any(FileVersion.class));
+    }
+
+    @Test
+    void upload_whenStorageUploadFails_shouldReleaseQuotaWithoutDbWrites() throws Exception {
+        Long userId = 1L;
+        FileContent content = new FileContent("x.txt", "text/plain", 50L, new ByteArrayInputStream("d".getBytes()));
+        given(storageFactory.getStrategy(content.size(), content.contentType())).willReturn(storageStrategy);
+        doThrow(new RuntimeException("storage down")).when(storageStrategy).upload(content.fileName(), content.inputStream());
+
+        assertThatThrownBy(() -> fileService.upload(userId, content))
+            .isInstanceOf(RuntimeException.class);
+
+        then(quotaService).should().tryReserve(userId, 50L);
+        then(quotaService).should().release(userId, 50L);
+        then(metadataMapper).should(never()).insert(any(FileMetadata.class));
+        then(versionMapper).should(never()).insert(any(FileVersion.class));
+    }
+
+    @Test
+    void upload_whenMetadataPersistFails_shouldReleaseQuotaAndDeleteOrphanFile() throws Exception {
+        Long userId = 1L;
+        FileContent content = new FileContent("y.txt", "text/plain", 60L, new ByteArrayInputStream("d".getBytes()));
+        given(storageFactory.getStrategy(content.size(), content.contentType())).willReturn(storageStrategy);
+        given(storageStrategy.upload(content.fileName(), content.inputStream())).willReturn("/uploads/y.txt");
+        given(metadataMapper.insert(any(FileMetadata.class))).willThrow(new RuntimeException("db down"));
+
+        assertThatThrownBy(() -> fileService.upload(userId, content))
+            .isInstanceOf(RuntimeException.class);
+
+        then(quotaService).should().release(userId, 60L);
+        then(storageStrategy).should().delete("/uploads/y.txt");
+        then(versionMapper).should(never()).insert(any(FileVersion.class));
+    }
+
+    @Test
+    void update_whenMetadataPersistFails_shouldRollbackQuotaDeltaAndDeleteNewVersionFile() throws Exception {
+        Long fileId = 7L, userId = 1L;
+        FileMetadata metadata = new FileMetadata();
+        metadata.setId(fileId);
+        metadata.setFilePath("/uploads/old.bin");
+        metadata.setFileSize(100L);
+        metadata.setCurrentVersion(3);
+        FileContent content = new FileContent("z.bin", "application/octet-stream", 150L, new ByteArrayInputStream("d".getBytes()));
+        given(metadataMapper.selectById(fileId)).willReturn(metadata);
+        given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(true);
+        given(storageFactory.getStrategy(content.size(), content.contentType())).willReturn(storageStrategy);
+        given(storageStrategy.upload(content.fileName(), content.inputStream())).willReturn("/uploads/z.bin");
+        doThrow(new RuntimeException("db down")).when(metadataMapper).updateById(any(FileMetadata.class));
+
+        assertThatThrownBy(() -> fileService.update(fileId, content, userId))
+            .isInstanceOf(RuntimeException.class);
+
+        then(quotaService).should().release(userId, 50L);
+        then(storageStrategy).should().delete("/uploads/z.bin");
         then(versionMapper).should(never()).insert(any(FileVersion.class));
     }
 
