@@ -1,9 +1,9 @@
 # M7-02: gRPC 支持 (业务模块可选)
 
-Status: closed (2026-09-07, 选项 B LogNet + 兼容降级)
+Status: in progress (2026-09-18，原生框架完成，系统业务适配层实验性接入，完整验收尚未完成)
 Priority: P1
 Owner: AI Agent
-Module: cloud-infra-framework/framework-web + 各业务模块
+Module: cloud-infra-framework/framework-grpc + 各业务模块
 Depends: 无
 
 ## 背景 (PRD M7-02)
@@ -131,13 +131,31 @@ message UserResponse {
 - [x] **2026-09-07**: Phase C 完成 (commit 774f10c): LogNet optional + @ConditionalOnClass 守护 (LogNet 3.0.1/5.2.0 不兼容 SB4, 业务模块按需显式引入)
 - [x] **2026-09-07**: 文档同步 (commit e917312): ROADMAP.md 状态更新
 - [x] **2026-09-07**: 推送到 origin/master (6 commits ahead)
+- [x] **2026-09-09**: **Phase C 原生重构完成** (本次提交): 移除 LogNet 依赖, 实现原生 Spring Boot 4 兼容的 gRPC 自动配置
+  - 升级 gRPC 1.65.1 → 1.80.0, protobuf 3.25.5 → 4.34.2
+  - 新增 `GrpcServerLifecycle`: SmartLifecycle + InitializingBean + DisposableBean 完整生命周期管理
+  - 重构 `GrpcServerAutoConfiguration`: 基于 `@ConditionalOnProperty` 自动发现 `BindableService` bean
+  - 扩展 `CloudInfraGrpcProperties`: 支持 keep-alive, SSL/TLS, 进程内模式, 连接池配置
+  - 更新 `EchoServiceImpl`: 使用 `@Component` 替代 `@GRpcService`, 由原生配置自动发现
+  - 新增集成测试 `GrpcServerLifecycleIntegrationTest`: 验证启动/停止/RPC调用全流程
+  - 单元测试 5/5 pass, 集成测试 4/4 pass, 编译通过
 
 ## 已知约束 (M8+ 议题)
 
-- LogNet 3.0.1/5.2.0 均基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突
-- 集成测试 / gRPC 端到端暂未启用 (LogNet 升级或换 net.devh:grpc-spring-boot-starter 后补齐)
-- 业务模块接入 gRPC 时需显式引入 LogNet 依赖
+### 2026-09-18 在途收尾与后续顺序
+
+- 原生框架提交：`8bcbe63`。系统适配层提交：`0c8ba36`，覆盖用户、部门协议及请求边界，默认关闭。
+- 系统适配层尚无调用身份、方法权限、租户上下文和数据范围保护，禁止生产开启。密码重置保持未实现。
+- 本 issue 原标记 closed 不满足 PRD 的“两业务模块客户端/服务端跑通”条件，因此重新开放。
+- 下一步先完成安全边界设计及实现，再接入第二业务模块，验证真实网络调用、拒绝未认证请求、权限及跨租户隔离。
+- HTTP 到 gRPC 转换及端到端验收仍待完成，不以 Echo 或模拟业务测试替代。
+- 第二业务模块验收前不继续扩大 CDC、模板市场等新功能范围。
+
+- **已解决**: LogNet 3.0.1/5.2.0 不兼容 Spring Boot 4 — 已移除 LogNet 依赖，改为原生实现
+- **已解决**: 集成测试 / gRPC 端到端 — 已新增 `GrpcServerLifecycleIntegrationTest` 验证完整流程
+- **已解决**: 业务模块需显式引入 LogNet 依赖 — 现无需第三方 starter，仅依赖 io.grpc:* 核心库
 - 后续 Phase D (Streaming RPC, grpc-gateway) 推迟到 M8+
+- 业务模块接入 gRPC 仍需显式引入 framework-grpc 依赖并添加 `@EnableGrpcServer` 注解
 
 ## 不在本 issue 范围
 
