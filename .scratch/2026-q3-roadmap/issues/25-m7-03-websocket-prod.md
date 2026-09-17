@@ -1,6 +1,6 @@
 # M7-03: WebSocket 生产化 (TLS + 心跳 + 鉴权)
 
-Status: **Phase A 完成** (Header 鉴权 + Configurator + Filter 7 测试, 2026-09-06)
+Status: in progress (2026-09-18，TLS 隔离组件集成验证完成，生产入口验收待补)
 Priority: P1
 Owner: AI Agent
 Module: cloud-infra-modules/notification-service
@@ -149,8 +149,9 @@ public void onPing(Session session, ByteBuffer message) {
 - [x] **2026-09-05 03:11**: kickoff + infra survey (本 issue)
 - [x] **2026-09-05 12:11**: 精确化 Phase B 阻塞分析 (3 方案: A 升级 jakarta.websocket-api 2.3+ / B spring HandshakeInterceptor / C Servlet Filter), 推荐方案 A
 - [x] **2026-09-06 09:38**: Phase A 完成 - 采用方案 C 变体 (Filter + Configurator 协同), 7/7 测试通过, commit 6c20099
-- [ ] Phase B: TLS (HTTPS 证书 + Nginx wss:// 终止 + application-prod.yml)
-- [ ] Phase C: 集成测试 + ARCHITECTURE.md 文档 + ADR
+- [x] Phase B: 直接 TLS 配置、无默认密码的证书脚本、可选编排覆盖文件。Nginx 方案尚未运行时验证。
+- [x] Phase C 组件集成测试：2026-09-18 通知模块 20 项通过。真实 TLS 1.2/1.3 握手、缺头 401、心跳、推送、连接清理、证书拒绝覆盖和无效密码。
+- [ ] 生产入口验收：可信网关身份校验、浏览器升级、完整安全过滤链、容器证书挂载和管理健康检查。不能用隔离组件测试替代。
 
 ## 不在本 issue 范围
 

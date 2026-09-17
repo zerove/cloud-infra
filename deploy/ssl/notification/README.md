@@ -1,6 +1,6 @@
 # 通知服务 TLS 部署
 
-## 直接终止 TLS（本次连通的部署路径）
+## 直接终止 TLS（配置已提供，容器部署尚未验收）
 
 在仓库根目录执行。先安全注入 `SSL_KEYSTORE_PASSWORD` 环境变量，至少 6 字符，无默认密码。
 
@@ -40,6 +40,7 @@ TLS 只加密传输，不认证 `X-User-Id` 的来源。生产过滤器依赖可
 
 `WebSocketIntegrationTest` 使用上述部署证书脚本、Spring 随机 TLS 端口和真实的 `WebSocketConfig`、`WebSocketAuthFilter`、`WebSocketAuthConfigurator`、`NotificationWebSocketHandler`。
 客户端只信任生成的证书，不关闭证书或主机名检查，断言缺失身份返回 401、合法头连接、心跳响应、用户推送及连接清理。
+分别限制客户端使用 TLS 1.2 和 TLS 1.3，额外验证证书脚本拒绝空密码、短密码和覆盖已有密钥库。2026-09-18 通知模块全量测试 20 项通过，其中本集成测试 3 项。
 这是隔离组件集成测试，不是手工替代服务，也不是生产容器端点验收。完整安全过滤链、Nacos、网关和实际容器挂载尚未运行时验证。
 
 ```bash
