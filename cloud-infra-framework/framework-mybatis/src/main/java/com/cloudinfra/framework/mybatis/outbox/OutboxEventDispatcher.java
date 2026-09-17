@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -99,17 +100,17 @@ public class OutboxEventDispatcher {
      * 投递单个事件
      */
     private void dispatchEvent(OutboxEvent event) {
-        // 包装消息，携带幂等键
-        Map<String, Object> message = Map.of(
-            "eventId", event.getId(),
-            "eventType", event.getEventType(),
-            "aggregateType", event.getAggregateType(),
-            "aggregateId", event.getAggregateId(),
-            "tenantId", event.getTenantId(),
-            "idempotencyKey", event.getIdempotencyKey(),
-            "timestamp", System.currentTimeMillis(),
-            "payload", deserializePayload(event.getPayload())
-        );
+        // 默认发布入口允许空租户，JSON null 也可能是有效负载。
+        // 保留信封字段，不使用拒绝空值的 Map.of。
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("eventId", event.getId());
+        message.put("eventType", event.getEventType());
+        message.put("aggregateType", event.getAggregateType());
+        message.put("aggregateId", event.getAggregateId());
+        message.put("tenantId", event.getTenantId());
+        message.put("idempotencyKey", event.getIdempotencyKey());
+        message.put("timestamp", System.currentTimeMillis());
+        message.put("payload", deserializePayload(event.getPayload()));
 
         boolean sent = streamBridge.send(event.getBindingName(), message);
         if (sent) {
