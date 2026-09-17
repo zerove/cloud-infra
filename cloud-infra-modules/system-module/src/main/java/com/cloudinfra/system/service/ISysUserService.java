@@ -8,6 +8,8 @@ import com.cloudinfra.system.domain.dto.SysUserCreateDTO;
 import com.cloudinfra.system.domain.dto.SysUserUpdateDTO;
 
 public interface ISysUserService {
+    /** 创建并返回数据库生成的主键，避免按名称反查。 */
+    Long createUserReturningId(SysUserCreateDTO dto);
     IPage<SysUser> selectUserList(Page<SysUser> page, SysUser user);
     SysUser selectUserById(Long userId);
     SysUser selectUserByUsername(String username);

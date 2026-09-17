@@ -46,7 +46,7 @@ public class SysUserServiceImpl implements ISysUserService {
     @Override
     public SysUser selectUserById(Long userId) {
         return Optional.ofNullable(userMapper.selectById(userId))
-            .orElseThrow(() -> new SystemBusinessException("用户不存在，ID: " + userId));
+            .orElseThrow(() -> new SystemBusinessException(com.cloudinfra.common.core.exception.SystemExceptionCode.USER_NOT_FOUND));
     }
 
     @Override
@@ -83,6 +83,25 @@ public class SysUserServiceImpl implements ISysUserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int insertUser(SysUserCreateDTO userDTO) {
+        SysUser user = prepareNewUser(userDTO);
+        String initPassword = configService.selectConfigByKey("sys.user.initPassword");
+        user.initializePassword(passwordEncoder, initPassword);
+        return userMapper.insert(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createUserReturningId(SysUserCreateDTO userDTO) {
+        SysUser user = prepareNewUser(userDTO);
+        // 新接口遵循请求中的密码，不覆盖为管理端初始化密码。
+        user.updatePassword(passwordEncoder, userDTO.getPassword());
+        if (userMapper.insert(user) != 1 || user.getUserId() == null) {
+            throw new IllegalStateException("User creation did not return a generated ID");
+        }
+        return user.getUserId();
+    }
+
+    private SysUser prepareNewUser(SysUserCreateDTO userDTO) {
         // 1. 业务唯一性校验
         if (selectUserByUsername(userDTO.getUsername()) != null) {
             throw new SystemBusinessException("用户名 [" + userDTO.getUsername() + "] 已存在，请更换");
@@ -99,9 +118,7 @@ public class SysUserServiceImpl implements ISysUserService {
         user.setEmail(userDTO.getEmail());
         user.setPhoneNumber(userDTO.getPhoneNumber());
 
-        String initPassword = configService.selectConfigByKey("sys.user.initPassword");
-        user.initializePassword(passwordEncoder, initPassword);
-        return userMapper.insert(user);
+        return user;
     }
 
     @Override
