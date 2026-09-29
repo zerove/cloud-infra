@@ -9,6 +9,7 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +29,7 @@ import java.util.List;
  * 非破坏: 业务模块未加 @EnableOpenApi 时, springdoc 默认行为不变 (沿用 spring.application.name).
  */
 @Configuration
+@ConditionalOnClass(OpenAPI.class)
 public class OpenApiAutoConfiguration {
 
     private static final String BEARER_SCHEME_NAME = "BearerAuth";

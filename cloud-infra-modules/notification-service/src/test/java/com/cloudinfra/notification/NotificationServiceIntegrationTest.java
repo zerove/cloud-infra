@@ -6,6 +6,7 @@ import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.NotificationTemplate;
@@ -112,6 +113,11 @@ public class NotificationServiceIntegrationTest {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 }
             };
+        }
+
+        @Bean
+        public InternalCallSecretProvider internalCallSecretProvider() {
+            return new InternalCallSecretProvider();
         }
 
         @Bean
