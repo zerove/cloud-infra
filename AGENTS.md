@@ -2,12 +2,28 @@
 
 本文件为 OpenCode 代理提供该仓库的快速上手指南、核心指令及架构上下文。
 
-> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin) + M6 路线图 6/6 全部完成 + M7-01/03 完成 (SkyWalking + WebSocket 鉴权/TLS), M7-02 gRPC 安全边界已交付
+> **当前状态**: v1.0.0 (2026-09-01, 已发布) + M7-01 SkyWalking / M7-03 WebSocket 真实落地; M6 中仅多租户 (9 个业务 Mapper) 真正被业务使用, 幂等/Outbox/编排/OpenAPI/Dashboard 均为 `⚪ 已实现未启用`
 > **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 全部关键能力经过运行时实测
-> **M6 里程碑**: M6-01/02/03/04/05/06 全部 closed (WorkflowEngine + 幂等 + Outbox + OpenAPI + 业务 Dashboard)
-> **M7 里程碑**: M7-01 SkyWalking 已开启, M7-03 WebSocket Phase A (Filter+Configurator 鉴权) + Phase B (TLS) 完成, M7-02 gRPC 原生框架 + 调用安全边界完成 (方法级权限待补)
+> **M6 里程碑**: 6 项能力代码完成, 但仅 M6-01 多租户有业务引用。其余 5 项业务零引用, 已降级为 `⚪`
+> **M7 里程碑**: M7-01 SkyWalking (agent 真实注入) + M7-03 WebSocket Phase A/B 完成; M7-02 gRPC 安全边界已交付但开关默认关闭; M7-04/05/06 已冻结
 > **完整交接**: [docs/HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) (v1.0.0 正式版)
-> **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-04-final.md`
+> **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-29.md`
+
+---
+
+## 🚫 框架能力准入原则 (2026-09-29 新增, 强制)
+
+本项目已出现约 4200 行“已实现且有自测, 但业务零引用”的框架代码。新增框架能力前必须先回答:
+
+1. **先有第二个真实用例, 再有抽象。** 只有一个用例时直接写具体代码。
+2. **提出来源必须是业务, 不是设想。** 说清“哪个现有业务场景现在就需要它”。
+3. **判定完成必须有业务模块引用 + 运行时证据。** 组件自身单元测试只证明它能自我运转,
+   **不得作为完成依据**。
+4. **抽象层数不超过必要**: 每个 `interface` 要么已有 2 个以上实现, 要么能说清 6 个月内
+   会出现第二个实现。
+5. **不为了“看起来完整”而补齐配套**: 没有使用方的聚合脚本、导出器、面板一律不建。
+
+违反上述任一条即视为过度设计。详见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
 
 ---
 
@@ -56,7 +72,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
 | `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
 | `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层，**所有 Controller 已补齐 @PreAuthorize** |
-| `cloud-infra-codegen` | 代码生成框架 (消除 RuoYi 手工 CRUD 样板) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块;支持 Flyway DDL 解析,无需 DB 连接 |
+| `cloud-infra-codegen` | 代码生成框架 (`⚪` 可选工具, 非路线图能力) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块; 仅 `sys_post` 一表验证过, **停止新增模板** |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
 ### 3. 核心业务流程
@@ -89,14 +105,14 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-09-29)
-- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, **809 tests, 0 fail** (2026-09-29 实测)
+- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, **825 tests, 0 fail** (2026-09-29 实测)
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
-- **代码生成**: `cloud-infra-codegen` 模块含 10+ 模板 (FreeMarker .ftl),支持 Maven 插件/CLI/编程式三种调用,基于 Flyway DDL 文件解析 (无需 DB 连接, commit 1359496)
+- **代码生成**: `cloud-infra-codegen` (`⚪` 可选工具) 含 10+ 模板, 支持 Maven 插件/CLI/编程式三种调用, 基于 Flyway DDL 解析。**不再投入**
 
 ## Agent skills
 

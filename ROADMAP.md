@@ -8,8 +8,13 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 ## 🚦 Status Legend
 - 🔴 **To Do**: Not yet started.
 - 🟡 **In Progress**: Implementation underway.
-- 🟢 **Completed**: Implemented and verified.
-- ⚪ **Planned**: Future consideration, not yet detailed.
+- 🟢 **Completed**: Implemented **and used by at least one business module**, with runtime evidence.
+- ⚪ **Built, Unused**: Code exists and is self-tested, but **no business module references it**. Not a delivered capability; do not build on top of it without first finding a real use case.
+- ⛔ **Frozen**: Deliberately paused. Do not add to it until the stated precondition is met.
+
+> **2026-09-29 完成判定标准修正**: 过去用“组件自身测试通过”作为完成依据, 导致
+> M6 中 4 项能力被标为 `🟢 Completed` 但业务零引用。现改为**必须有业务模块引用 + 运行时证据**。
+> 自建组件的单元测试只证明它能自我运转, 不证明它有价值。
 
 ---
 
@@ -48,8 +53,10 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [x] 🟢 **插件系统安全模型**（commit 7ac18f7 ADR-010 实施, dev 启用, prod 禁用）。
 
 ### 5. Code Generation & Business Alert (2026-09, v1.0.0 候选)
-**Goal:** 消除 RuoYi 手工 CRUD 样板 + 业务告警闭环.
-- [x] 🟢 **cloud-infra-codegen 模块** (commit b9a2a84..1359496): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接).
+**Goal:** ~~消除 RuoYi 手工 CRUD 样板~~ + 业务告警闭环。
+codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表验证过), 不再作为交付目标推进。
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接). 2464 行 + 26 项自测
+  - ⚪ **2026-09-29 降级为可选工具**: 目标“消除 RuoYi 手工 CRUD 样板”仅在 `sys_post` 一张表上验证过, **其余业务表均为手写**。判定为可选开发工具, **不再占用路线图名额、不再新增模板**。若未来真实表迁移需求出现, 再评估投入
 - [x] 🟢 **codegen 模板 PG 化** (commit 8b6b6de): MySQL → PostgreSQL 16 风格 (BIGSERIAL, COMMENT ON, IF NOT EXISTS) + 回归测试.
 - [x] 🟢 **VO @Schema + UpdateDTO @Size 255** (commit 0ef0005): Swagger 字段描述完整 + 校验合理.
 - [x] 🟢 **FlywayDdlParser 端到端验证** (commit 2ff8d50): 15 表自动解析, 智能识别 SMALLINT/VARCHAR(N)/UNIQUE/DEFAULT/@TableLogic.
@@ -100,28 +107,30 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 ### Milestone 5: v1.0.0 Production-Ready (2026-09, 已发布)
 *Focus: P0 修复 + codegen 价值验证 + 业务告警闭环.*
-- [x] 🟢 **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行)
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行) — 2026-09-29 降级为可选开发工具, 不再占路线图名额
 - [x] 🟢 **P0-3b 端到端 401 实测** (commit 5a82318): JWT blacklist 运行时验证
 - [x] 🟢 **codegen 灰度迁移 sys_post** (commit 0ccdf52): 验证 codegen 输出与手写代码语义一致
 - [x] 🟢 **M5-03 业务告警 AOP 化** (commit 8430811 + 2c88ea2): @BusinessMetric 注解 + 运行时 Counter 7.0 实测
 - [x] 🟢 **v1.0.0 tag** (tag at `e6b786d`, 远端可见, ahead=0, immutable)
 
-### Milestone 6: Multi-Tenant Isolation (2026-09, in progress)
+### Milestone 6: Multi-Tenant Isolation (2026-09, 已交付 + 未启用部分复核)
 *Focus: 业务 SQL 跨租户隔离, 零业务侵入接入.*
 - [x] 🟢 **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
 - [x] 🟢 **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加 @TenantFilter (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql tenant_id
 - [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
 - [x] 🟢 **M6-01 Phase D 端到端运行时验证** (commit 17ee31a): 容器起 PG/Redis, 跨租户查询隔离实测完成 (4 sys_post + 1 sys_user 全部 default 租户兼容, tenant-X 查询 0 行隔离)
-- [x] 🟢 **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + AuthController register 改 REPLAY + 17 单元测试 + 5 Testcontainers 集成测试
-- [x] 🟢 **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
-- [x] 🟢 **M6-04 Phase A 业务编排引擎基础** (commit 267fd77): WorkflowEngine (DAG 拓扑 + 并行层 + 重试 + 超时 + 失败传播) + WorkflowStep/RetryConfig/TimeoutConfig JSON record + 8 单元测试
-- [x] 🟢 **M6-04 Phase B Plugin 集成** (commit cab11fb): WorkflowStepHandler 接口 + WorkflowStepHandlerRegistry (启动扫描) + WorkflowEngineAutoConfiguration (@ConditionalOnBean) + handlerInvoker 委托 + 4 集成测试
-- [x] 🟢 **M6-04 Phase C Saga 补偿 + 变量传递** (commit 6d363c9): onFailure handler 字符串触发补偿 + setStepOutput 保存步骤输出 + WorkflowContext.getVariable 读取 + 3 测试
-- [x] 🟢 **M6-05 Phase A 统一 OpenAPI 配置** (commit 6e6a19e): @EnableOpenApi 注解 + OpenApiAutoConfiguration (Info/JWT Bearer/Server) + framework-web optional swagger 依赖 + 6 测试 (非破坏, 业务模块可选启用)
-- [x] 🟢 **M6-05 Phase B OpenApiExporter** (commit a44df82): 启动期 dump openapi.json (目标/模块名推断) + @ConditionalOnProperty 保护 + 3 次重试 + 5 单元测试 (默认路径/自定义/嵌套目录/序列化/默认模块名)
-- [x] 🟢 **M6-05 Phase C 聚合脚本** (commit d26d01e): build-openapi.sh 拉取/合并 5 模块 + 输出 openapi-unified.json + openapi-summary.md - **M6 路线图 6/6 全部完成 🎉**
-- [x] 🟢 **M6-06 业务告警 Dashboard** (commit 9ddd7d0): cloud-infra-business.json 6 panels (RED/USE 指标: 登录速率/失败率/上传失败/告警状态/吞吐量) - 补完 M6 路线图
-- [x] 🟢 **M7-01 SkyWalking 默认开启** (commit 937e3de): 6 Dockerfile 加 `ENV SW_AGENT_ENABLED=true` + compose.yaml 6 业务模块加 SW env + depends_on cloud-skywalking-oap (M7 路线图首项完成)
+- [x] ⚪ **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + AuthController register 改 REPLAY + 17 单元测试 + 5 Testcontainers 集成测试
+  - ⚪ **2026-09-29 复核**: 业务侧仅 `AuthController.register` 1 处使用, 其余为框架自测。机制本身是真实生产模式, 缺的是第二个用例
+- [x] ⚪ **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
+  - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (767 行)。Outbox 模式本身正确, 但无任何业务接入。需先找到真实的一致性敏感场景再启用
+- [x] ⚪ **M6-04 业务编排引擎** (commit 267fd77 + cab11fb + 6d363c9): WorkflowEngine (DAG 分层 + 并行 + 重试 + 步骤超时 + Saga 补偿) + WorkflowStepHandler SPI + 启动扫描注册
+  - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (764 行, 含 17 项自测)。Saga 编排有真实价值, 但引擎无使用方。保留代码, 暂停投入
+- [x] ⚪ **M6-05 统一 OpenAPI** (commit 6e6a19e + a44df82 + d26d01e): @EnableOpenApi + OpenApiExporter 启动期 dump + build-openapi.sh 聚合
+  - ⚪ **2026-09-29 复核**: **@EnableOpenApi 业务 0 处, OpenApiExporter 装配 0 处**。聚合脚本存在但无服务导出可供聚合
+- [x] ⚪ **M6-06 业务告警 Dashboard** (commit 9ddd7d0): cloud-infra-business.json 6 panels
+  - ⚪ **2026-09-29 复核**: 6 个 panel 中, 仅 `auth.login.attempts` / `file.upload.failures` 有对应 `@BusinessMetric` 产生点, 其余面板数据源缺失
+- [x] 🟢 **M7-01 SkyWalking 默认开启** (commit 937e3de): 6 Dockerfile `COPY --from=apache/skywalking-java-agent` + `ENTRYPOINT ["/app/agent-entrypoint.sh"]` 注入 `-javaagent` + compose 6 业务模块加 SW env + depends_on cloud-skywalking-oap
+  - ✅ **2026-09-29 复核**: agent 确实打进镜像且 entrypoint 生效, 非仅设环境变量
 - [x] 🟢 **M6-01 Phase D Dockerfile 路径修复** (commit 0f1e169, 验证 commit 66ec01a): 6 Dockerfile `COPY deploy/...` 路径 + compose build context `..` 修复, `./deploy/up.sh --full` 可成功 build 镜像
 - [x] 🟢 **M7-03 WebSocket 鉴权改造** (commits 6c20099 + 6c30458): Phase A Filter + Configurator 协同 (解决 tyrus 2.2 + jwaa 2.2 HandshakeResponse 缺失) + 7 测试; Phase B TLS 配置 (PKCS12 keystore + Nginx wss:// 终止 + 证书生成脚本); 文档 ARCHITECTURE.md §5
 - [ ] **M7-02 gRPC 支持** (issue 24, in progress)
@@ -130,7 +139,10 @@ This document serves as the master tracking list for the `cloud-infra` project, 
   - [x] ⚠️ **M7-02 Phase C**: LogNet optional + ConditionalOnClass 守护 (commit 774f10c): LogNet 3.0.1/5.2.0 基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突; 后改为原生实现 (commit 8bcbe63)
   - [x] 🟢 **M7-02 Phase D 调用安全边界**: 内部调用 HMAC 签名 + 调用方身份 + 租户上下文。`PlatformCaller`/`CallerContextBinder` (common) + `GrpcSecurityInterceptor`/`GrpcCallerContext` (framework-grpc) + `SpringSecurityCallerContextBinder` (framework-security 反向装配)。12 + 6 + 1 项测试, 含真实 TLS 网络验收
   - [ ] ⚠️ **M7-02 Phase E**: 方法级权限映射 + 数据范围过滤 + 第二业务模块客户端 + HTTP→gRPC 转换。当前 `hasPermi` 在 gRPC 通道内恒为 false, 写操作禁止放开
-- 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
+- ⛔ **未来 M7+ (CDC / 模板市场 / VS Code 插件) 已冻结** (2026-09-29)
+
+  冻结原因: 在 M6/M7 已有 4 项能力业务零引用的情况下, 继续新增功能会进一步扩大“建而不用”的存量。
+  解冻前提: M6 存量组件中至少一项从 `⚪ Built, Unused` 转为 `🟢 Completed` (即找到真实业务用例并接入), 且 M7-02 gRPC 完成第二业务模块验收。
 
 ### 2026-09-29 在途收尾与下一阶段
 
@@ -140,5 +152,5 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - gRPC 调用安全边界已交付：内部签名校验、调用方身份、租户上下文三道边界，经真实 TLS 网络调用验收。`hasPermi` 在 gRPC 通道内仍恒为 false，写操作未放开。
 - 通知直接 TLS 配置及真实组件握手测试已补齐（`b984269`），TLS 1.2/1.3、缺少身份头拒绝、心跳、推送及连接清理通过。反向代理、可信网关和生产容器链路尚未验收，M7-03 不应整体关闭。
 - **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
-- 上述前置验收完成后，执行 M7-07 性能基准更新，再推进 M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件。当前不将设计或组件测试标记为生产交付。
-- 质量基线：`mvn test` 809 项测试 0 失败（2026-09-29 实测）。
+- 上述前置验收完成后，执行 M7-07 性能基准更新。**M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件已冻结**（见上方“未来 M7+ 已冻结”）。当前不将设计或组件测试标记为生产交付。
+- 质量基线：`mvn test` 825 项测试 0 失败（2026-09-29 实测）。
