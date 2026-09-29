@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.sql.Connection;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -196,7 +197,7 @@ public class TenantSqlInterceptor implements InnerInterceptor {
      */
     private String appendWhereFragment(String sql, String fragment) {
         String trimmed = sql.trim();
-        String upper = trimmed.toUpperCase();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
 
         int whereIdx = upper.indexOf(" WHERE ");
         int groupIdx = upper.indexOf(" GROUP BY ");
