@@ -127,14 +127,18 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - [ ] **M7-02 gRPC 支持** (issue 24, in progress)
   - [x] 🟢 **M7-02 Phase A**: framework-grpc 模块基础设施 (commit 8ace1d8): EnableGrpcServer 注解 + CloudInfraGrpcProperties 配置 + GrpcServerAutoConfiguration + EchoService proto
   - [x] 🟢 **M7-02 Phase B**: EchoServiceImpl 业务逻辑 + 5 单元测试 (commit 3dc6649): Echo/EchoWithMetadata/Health RPC, count 安全上限, 5/5 测试通过
-  - [x] ⚠️ **M7-02 Phase C**: LogNet optional + ConditionalOnClass 守护 (commit 774f10c): LogNet 3.0.1/5.2.0 基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突; 业务模块需显式引入 LogNet 才能启用 gRPC server; 集成测试/E2E 待 LogNet 升级或替换为 grpc-spring 替代方案
+  - [x] ⚠️ **M7-02 Phase C**: LogNet optional + ConditionalOnClass 守护 (commit 774f10c): LogNet 3.0.1/5.2.0 基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突; 后改为原生实现 (commit 8bcbe63)
+  - [x] 🟢 **M7-02 Phase D 调用安全边界**: 内部调用 HMAC 签名 + 调用方身份 + 租户上下文。`PlatformCaller`/`CallerContextBinder` (common) + `GrpcSecurityInterceptor`/`GrpcCallerContext` (framework-grpc) + `SpringSecurityCallerContextBinder` (framework-security 反向装配)。12 + 6 + 1 项测试, 含真实 TLS 网络验收
+  - [ ] ⚠️ **M7-02 Phase E**: 方法级权限映射 + 数据范围过滤 + 第二业务模块客户端 + HTTP→gRPC 转换。当前 `hasPermi` 在 gRPC 通道内恒为 false, 写操作禁止放开
 - 未来 M7+: CDC / 模板市场 / VS Code 插件 (PRD M7)
 
-### 2026-09-18 在途收尾与下一阶段
+### 2026-09-29 在途收尾与下一阶段
 
 以下状态覆盖上方历史进度中的过时描述：
 
 - gRPC 原生生命周期与自动配置已完成（`8bcbe63`），已移除 LogNet 依赖。系统用户、部门适配层已接入（`0c8ba36`），仍为默认关闭的实验功能，不能生产开启。
+- gRPC 调用安全边界已交付：内部签名校验、调用方身份、租户上下文三道边界，经真实 TLS 网络调用验收。`hasPermi` 在 gRPC 通道内仍恒为 false，写操作未放开。
 - 通知直接 TLS 配置及真实组件握手测试已补齐（`b984269`），TLS 1.2/1.3、缺少身份头拒绝、心跳、推送及连接清理通过。反向代理、可信网关和生产容器链路尚未验收，M7-03 不应整体关闭。
-- **下一阶段优先完成 M7 验收缺口**：gRPC 调用身份、方法权限、租户隔离 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
+- **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
 - 上述前置验收完成后，执行 M7-07 性能基准更新，再推进 M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件。当前不将设计或组件测试标记为生产交付。
+- 质量基线：`mvn test` 809 项测试 0 失败（2026-09-29 实测）。

@@ -2,10 +2,10 @@
 
 本文件为 OpenCode 代理提供该仓库的快速上手指南、核心指令及架构上下文。
 
-> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin, 0 commit drift) + M6 路线图 6/6 全部完成 + M7-01/03 完成 (SkyWalking + WebSocket 鉴权/TLS), M7-02 gRPC kickoff 中
-> **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 101 tests pass, 全部关键能力经过运行时实测
+> **当前状态**: v1.0.0 (2026-09-01, 已发布, git tag on origin) + M6 路线图 6/6 全部完成 + M7-01/03 完成 (SkyWalking + WebSocket 鉴权/TLS), M7-02 gRPC 安全边界已交付
+> **M5 里程碑**: 9 个 P0/M5-01..07 issues 全部 closed, 全部关键能力经过运行时实测
 > **M6 里程碑**: M6-01/02/03/04/05/06 全部 closed (WorkflowEngine + 幂等 + Outbox + OpenAPI + 业务 Dashboard)
-> **M7 里程碑**: M7-01 SkyWalking 已开启, M7-03 WebSocket Phase A (Filter+Configurator 鉴权) + Phase B (TLS) 完成, M7-02 gRPC kickoff
+> **M7 里程碑**: M7-01 SkyWalking 已开启, M7-03 WebSocket Phase A (Filter+Configurator 鉴权) + Phase B (TLS) 完成, M7-02 gRPC 原生框架 + 调用安全边界完成 (方法级权限待补)
 > **完整交接**: [docs/HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) (v1.0.0 正式版)
 > **session 总结**: `.scratch/2026-q3-roadmap/SESSION-SUMMARY-2026-09-04-final.md`
 
@@ -88,9 +88,10 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 8.18, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
-### 4. 质量基线 (2026-08/09)
-- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, **101 tests, 0 fail** (2026-09-01 实测)
-- **安全**: 管理端点收敛 (9301/management)，异常脱敏，JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层)，文件魔数校验，P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
+### 4. 质量基线 (2026-09-29)
+- **构建**: `mvn clean verify -DskipITs=false -T 1` → BUILD SUCCESS, **809 tests, 0 fail** (2026-09-29 实测)
+- **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
+- **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
