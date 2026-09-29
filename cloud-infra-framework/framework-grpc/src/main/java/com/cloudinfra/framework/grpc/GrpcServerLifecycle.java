@@ -2,11 +2,13 @@ package com.cloudinfra.framework.grpc;
 
 import io.grpc.BindableService;
 import io.grpc.Server;
+import io.grpc.ServerInterceptor;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.SmartLifecycle;
 import org.jspecify.annotations.Nullable;
 
@@ -43,6 +45,7 @@ public class GrpcServerLifecycle implements SmartLifecycle, InitializingBean, Di
 
     private final CloudInfraGrpcProperties properties;
     private final List<BindableService> bindableServices;
+    private final List<ServerInterceptor> interceptors;
 
     private volatile Server server;
     private ExecutorService executor;
@@ -58,8 +61,16 @@ public class GrpcServerLifecycle implements SmartLifecycle, InitializingBean, Di
 
     public GrpcServerLifecycle(CloudInfraGrpcProperties properties,
                                 @Nullable List<BindableService> bindableServices) {
+        this(properties, bindableServices, null);
+    }
+
+    @Autowired
+    public GrpcServerLifecycle(CloudInfraGrpcProperties properties,
+                                @Nullable List<BindableService> bindableServices,
+                                @Nullable List<ServerInterceptor> interceptors) {
         this.properties = properties;
         this.bindableServices = bindableServices != null ? List.copyOf(bindableServices) : List.of();
+        this.interceptors = interceptors != null ? List.copyOf(interceptors) : List.of();
     }
 
     @Override
@@ -88,6 +99,10 @@ public class GrpcServerLifecycle implements SmartLifecycle, InitializingBean, Di
                 InProcessServerBuilder.forName(properties.getInProcessServerName())
                     .directExecutor(); // 进程内模式使用 direct executor
 
+            for (ServerInterceptor interceptor : interceptors) {
+                builder.intercept(interceptor);
+            }
+
             for (BindableService service : bindableServices) {
                 builder.addService(service);
             }
@@ -105,6 +120,10 @@ public class GrpcServerLifecycle implements SmartLifecycle, InitializingBean, Di
                 .maxConnectionIdle(properties.getMaxConnectionIdleNanos(), TimeUnit.NANOSECONDS)
                 .maxConnectionAge(properties.getMaxConnectionAgeNanos(), TimeUnit.NANOSECONDS)
                 .maxConnectionAgeGrace(properties.getMaxConnectionAgeGraceNanos(), TimeUnit.NANOSECONDS);
+
+            for (ServerInterceptor interceptor : interceptors) {
+                builder.intercept(interceptor);
+            }
 
             // SSL 配置
             if (properties.getSsl().isEnabled()) {

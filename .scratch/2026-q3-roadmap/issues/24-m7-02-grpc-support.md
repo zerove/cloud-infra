@@ -1,6 +1,6 @@
 # M7-02: gRPC 支持 (业务模块可选)
 
-Status: in progress (2026-09-18，原生框架完成，系统业务适配层实验性接入，完整验收尚未完成)
+Status: in progress (2026-09-29，调用安全边界已交付并经真实 TLS 验收，方法级权限与第二业务模块待完成)
 Priority: P1
 Owner: AI Agent
 Module: cloud-infra-framework/framework-grpc + 各业务模块
@@ -82,6 +82,13 @@ Depends: 无
 2. **集成测试**: gRPC 客户端/服务端 e2e
 3. **ADR-013**: gRPC 选型 + 性能对比
 
+### Phase D: 调用安全边界 (2026-09-29 已完成)
+
+1. **内部调用签名**: 复用 `InternalCallCrypto` HMAC, 与 HTTP 侧同一密钥与时间窗
+2. **调用方身份**: `PlatformCaller` + `GrpcCallerContext` + `CallerContextBinder` SPI
+3. **租户上下文**: 绑定 `TenantContext`, 使 MyBatis 租户拦截器在 gRPC 链路生效
+4. **Spring Security 桥接**: `framework-security` 反向装配, 业务层复用既有鉴权链路
+
 ## 关键设计
 
 ### 双协议模块 (Feign + gRPC 共存)
@@ -142,25 +149,65 @@ message UserResponse {
 
 ## 已知约束 (M8+ 议题)
 
+### 2026-09-29 Phase D: 调用安全边界（签名 + 身份 + 租户）
+
+**已交付**:
+
+- `cloud-infra-common`: `PlatformCaller`（协议无关调用方身份）+ `CallerContextBinder` SPI。
+  放在 common 是因为身份模型与传输协议无关，HTTP / gRPC 入口共用同一套下游鉴权逻辑。
+- `framework-grpc`: `GrpcSecurityInterceptor`（`ServerInterceptor`）+ `GrpcCallerContext`
+  （gRPC 原生 `Context`）+ `cloudinfra.grpc.security.*` 配置段。拦截器校验内部调用 HMAC 签名、
+  提取 `X-User-Id` / `X-User-Name` / `X-Tenant-Id`，绑定 `TenantContext` 并把身份写入
+  gRPC 原生上下文；`GrpcServerLifecycle` 新增 `ServerInterceptor` 链支持。
+- `framework-security`: `SpringSecurityCallerContextBinder` + `GrpcSecurityBridgeAutoConfiguration`，
+  通过 SPI 反向装配 `SecurityContextHolder`，使业务层可直接用既有 `SecurityUtils` / `TenantContext`。
+  framework-grpc 编译期不引用 spring-security，避免双向依赖。
+
+**验收证据**:
+
+- `GrpcSecurityInterceptorTest`（12 项，进程内真实调用链）：无签名 / 伪造签名 / 时间窗外 /
+  时间戳非法 / 缺租户 / 缺身份 / 非法 userId 全部 `UNAUTHENTICATED`；错误描述统一为
+  `Unauthenticated`，不区分失败原因；合法调用放行且身份/租户在业务执行期间可见；
+  `bind`/`clear` 计数相等，调用结束后无线程上下文残留；关闭开关时零校验零开销。
+- `SpringSecurityCallerContextBinderTest`（6 项）：`SecurityUtils.getUserId()` 可读到调用方；
+  `clear()` 后上下文为空；未引入 framework-grpc 时自动配置不装配多余 bean。
+- `SystemGrpcSecurityBoundaryTest`（1 项，**真实 TLS 网络调用** + 完整 Spring 条件装配）：
+  `CallerContextBinder` 实际装配为 Spring Security 实现；无签名 / 伪造签名 / 缺租户被拒；
+  合法签名 + 完整身份放行，且 `TenantContext` / `SecurityUtils` 在 `ISysUserService`
+  实现体内读到 `tenant-x` / `5L`；调用结束后上下文不残留。
+- 全量回归：`mvn test` 809 项测试 0 失败（新增 19 项）。
+
+**仍缺失（禁止生产开启的前提）**:
+
+- **方法级权限映射**：`hasPermi` 在 gRPC 通道内恒为 false（无权限来源），
+  写操作（create/update/delete）不得放开。需先接入权限提供者。
+- **数据范围过滤**：业务侧 `@DataScope` 依赖 `SecurityUtils.getDeptId()`，
+  gRPC 入口未提供 `deptId`，需扩展 `PlatformCaller` 或补齐身份拉取。
+- 第二业务模块客户端接入与跨服务网络调用。
+- HTTP → gRPC 协议转换。
+
 ### 2026-09-18 在途收尾与后续顺序
 
 - 原生框架提交：`8bcbe63`。系统适配层提交：`0c8ba36`，覆盖用户、部门协议及请求边界，默认关闭。
-- 系统适配层尚无调用身份、方法权限、租户上下文和数据范围保护，禁止生产开启。密码重置保持未实现。
+- 真实 TLS 传输层验收：`4d8a14a` 新增 `SystemGrpcNetworkTest`（`file:` 证书路径 + 真实 TCP/TLS）。
+- 系统适配层的调用身份、方法权限、租户上下文和数据范围保护已完成前两项（身份 + 租户），
+  详见上方 Phase D。密码重置保持未实现。
 - 本 issue 原标记 closed 不满足 PRD 的“两业务模块客户端/服务端跑通”条件，因此重新开放。
-- 下一步先完成安全边界设计及实现，再接入第二业务模块，验证真实网络调用、拒绝未认证请求、权限及跨租户隔离。
+- 下一步补方法级权限映射与数据范围，再接入第二业务模块，验证跨租户隔离与拒绝未授权调用。
 - HTTP 到 gRPC 转换及端到端验收仍待完成，不以 Echo 或模拟业务测试替代。
 - 第二业务模块验收前不继续扩大 CDC、模板市场等新功能范围。
 
 - **已解决**: LogNet 3.0.1/5.2.0 不兼容 Spring Boot 4 — 已移除 LogNet 依赖，改为原生实现
-- **已解决**: 集成测试 / gRPC 端到端 — 已新增 `GrpcServerLifecycleIntegrationTest` 验证完整流程
+- **已解决**: 集成测试 / gRPC 端到端 — `GrpcServerLifecycleIntegrationTest` + `SystemGrpcNetworkTest`（真实 TLS）
 - **已解决**: 业务模块需显式引入 LogNet 依赖 — 现无需第三方 starter，仅依赖 io.grpc:* 核心库
-- 后续 Phase D (Streaming RPC, grpc-gateway) 推迟到 M8+
+- **已解决**: `file:` 前缀证书路径不被识别 — `GrpcServerLifecycle.resolveResourceAsStream` 已支持
+- 后续 Phase E (Streaming RPC, grpc-gateway) 推迟到 M8+
 - 业务模块接入 gRPC 仍需显式引入 framework-grpc 依赖并添加 `@EnableGrpcServer` 注解
 
 ## 不在本 issue 范围
 
 - gRPC 性能压测 (留 benchmark)
-- Streaming RPC (Phase D 后, 高并发场景)
+- Streaming RPC (Phase E 后, 高并发场景)
 - gRPC-Web 浏览器 (M7 后)
 
 ## 关联

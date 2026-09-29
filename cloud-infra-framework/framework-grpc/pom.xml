@@ -67,6 +67,11 @@
         </dependency>
         <dependency>
             <groupId>com.cloudinfra</groupId>
+            <artifactId>cloud-infra-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.cloudinfra</groupId>
             <artifactId>framework-tracing</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -2,14 +2,35 @@
 
 ## 安全边界
 
-**鉴权协议尚未完成，禁止在生产环境开启这些业务端点。**
+**鉴权尚未完整，仍禁止在生产环境开启这些业务端点。**
 
 - `cloudinfra.system.grpc.enabled` 默认缺失即禁用。显式 `false` 同样不会注册用户、部门适配组件，也不会导入本模块的服务器配置。
 - `SystemApplication` 不再无条件添加 `@EnableGrpcServer`。
 - 仅隔离开发测试环境可设置 `cloudinfra.system.grpc.enabled=true`，框架服务器还须满足自身 `cloudinfra.grpc.enabled` 条件。网络、端口、证书和生命周期由 `framework-grpc` 管理。
-- 这个开关不是鉴权。现有网页接口的身份过滤器和权限注解不会自动保护 gRPC 方法，不得把“能调用”理解为“已获授权”。
+
+### 已完成：调用认证
+
+开启 `cloudinfra.grpc.security.enabled=true` 后，`framework-grpc` 的拦截器在业务代码执行前完成：
+
+| 边界 | 行为 | 失败结果 |
+| --- | --- | --- |
+| 内部调用签名 | 校验 `X-Internal-Call` / `-Timestamp` / `-Nonce` HMAC，与 HTTP 侧同一密钥和 5 分钟时间窗 | `UNAUTHENTICATED` |
+| 调用方身份 | 提取 `X-User-Id` / `X-User-Name` | `UNAUTHENTICATED` |
+| 租户上下文 | 提取 `X-Tenant-Id` 并绑定 `TenantContext` | `UNAUTHENTICATED` |
+
+错误描述统一为 `Unauthenticated`，不区分失败原因。开启且签名密钥缺失时服务拒绝启动。
+
+classpath 上有 `framework-security` 时自动装配 Spring Security 桥接，业务层可直接用既有
+`SecurityUtils.getUserId()` 读取调用方；也可用 `GrpcCallerContext.current()` 直接读 `PlatformCaller`。
+线程上下文仅在业务代码执行期间存在，调用结束后立即回收。
+
+### 仍未完成：方法级授权
+
+- **“能调用”不等于“已获授权”。** `hasPermi` 在 gRPC 通道内恒为 `false`（无权限来源），
+  因此 **写操作（create / update / delete）禁止放开**。
+- 数据范围过滤（`@DataScope`）依赖 `SecurityUtils.getDeptId()`，gRPC 入口未提供 `deptId`。
 - `ResetPassword` 暂不实现，固定返回 `UNIMPLEMENTED`，不调用业务密码修改方法。
-- P2 必须完成调用方身份校验、方法权限、租户与数据范围、传输安全及相关安全测试，才能评估生产开放。
+- 必须补齐方法级权限映射、数据范围过滤与相应安全测试，才能评估生产开放。
 
 ## 协议与行为
 
@@ -31,10 +52,15 @@
 ```bash
 mvn -pl cloud-infra-modules/system-module -am compile -DskipTests -q
 mvn -pl cloud-infra-modules/system-module -am test \
-  -Dtest=SystemGrpcAdapterTest,SystemGrpcDisabledTest,SysUserServiceImplTest,SysDeptServiceImplTest \
+  -Dtest=SystemGrpcAdapterTest,SystemGrpcDisabledTest,SystemGrpcNetworkTest,SystemGrpcSecurityBoundaryTest \
   -Dsurefire.failIfNoSpecifiedTests=false -DskipITs -Djacoco.skip=true
 ```
 
 测试覆盖组件默认/显式关闭和显式启用、分页及筛选边界、错误脱敏、创建生成主键、空值序列化、可选更新、未找到响应、删除输入、子树选择及密码重置未实现。
 
-这些是适配层与业务服务单元测试，使用模拟数据访问组件，不等同于数据库集成、网络端到端或生产鉴权验证。协议代码由 Maven 插件生成并参与真实模块编译。
+`SystemGrpcNetworkTest` 与 `SystemGrpcSecurityBoundaryTest` 走真实 TCP + TLS：
+前者验证传输层往返、错误映射与容器关闭后服务器停止；后者验证安全边界
+（无签名 / 伪造签名 / 缺租户被拒，合法签名放行，身份与租户在业务实现体内可见，
+调用结束后上下文不残留）。两者复用部署证书脚本，随机密码，不做任何密码弱化。
+
+这些测试使用模拟数据访问组件，不等同于数据库集成或生产鉴权验证。协议代码由 Maven 插件生成并参与真实模块编译。

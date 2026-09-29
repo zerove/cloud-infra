@@ -1,1 +1,2 @@
 com.cloudinfra.framework.security.config.FrameworkSecurityAutoConfiguration
+com.cloudinfra.framework.security.grpc.GrpcSecurityBridgeAutoConfiguration
