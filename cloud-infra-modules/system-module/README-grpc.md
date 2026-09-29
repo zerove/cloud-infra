@@ -20,14 +20,15 @@
 
 错误描述统一为 `Unauthenticated`，不区分失败原因。开启且签名密钥缺失时服务拒绝启动。
 
-classpath 上有 `framework-security` 时自动装配 Spring Security 桥接，业务层可直接用既有
-`SecurityUtils.getUserId()` 读取调用方；也可用 `GrpcCallerContext.current()` 直接读 `PlatformCaller`。
+业务层通过 `GrpcCallerContext.current()` 读取调用方身份（可能为 `null`），
+租户复用平台 `TenantContext`。**gRPC 通道不写入 Spring Security 上下文**：
+独立网络端口不经过网关过滤链，用 HTTP 侧机制反推 gRPC 身份会掩盖真实来源。
 线程上下文仅在业务代码执行期间存在，调用结束后立即回收。
 
 ### 仍未完成：方法级授权
 
-- **“能调用”不等于“已获授权”。** `hasPermi` 在 gRPC 通道内恒为 `false`（无权限来源），
-  因此 **写操作（create / update / delete）禁止放开**。
+- **“能调用”不等于“已获授权”。** `GrpcCaller` 未携带权限集合，
+  gRPC 通道内无法做方法级鉴权，因此 **写操作（create / update / delete）禁止放开**。
 - 数据范围过滤（`@DataScope`）依赖 `SecurityUtils.getDeptId()`，gRPC 入口未提供 `deptId`。
 - `ResetPassword` 暂不实现，固定返回 `UNIMPLEMENTED`，不调用业务密码修改方法。
 - 必须补齐方法级权限映射、数据范围过滤与相应安全测试，才能评估生产开放。

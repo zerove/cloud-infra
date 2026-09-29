@@ -1,7 +1,6 @@
 package com.cloudinfra.framework.grpc;
 
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
-import com.cloudinfra.common.core.security.CallerContextBinder;
 import io.grpc.BindableService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -52,19 +51,6 @@ public class GrpcServerAutoConfiguration {
     }
 
     /**
-     * 调用方身份向线程上下文的桥接。
-     *
-     * <p>缺省为 no-op (仅 gRPC 原生 {@code GrpcCallerContext} 生效);
-     * classpath 上有 spring-security 时, {@code framework-security} 会注册
-     * 填充 {@code SecurityContextHolder} 的实现覆盖本 bean。
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    public CallerContextBinder grpcCallerContextBinder() {
-        return new CallerContextBinder.Noop();
-    }
-
-    /**
      * gRPC 调用安全边界拦截器 (M7-02).
      *
      * <p>仅在 {@code cloudinfra.grpc.security.enabled=true} 时注册, 未开启的部署零开销、零行为变化。
@@ -74,8 +60,7 @@ public class GrpcServerAutoConfiguration {
     @ConditionalOnProperty(prefix = "cloudinfra.grpc.security", name = "enabled", havingValue = "true")
     public GrpcSecurityInterceptor grpcSecurityInterceptor(
             CloudInfraGrpcProperties properties,
-            ObjectProvider<InternalCallSecretProvider> secretProvider,
-            CallerContextBinder binder) {
+            ObjectProvider<InternalCallSecretProvider> secretProvider) {
         var security = properties.getSecurity();
         var provider = secretProvider.getIfAvailable();
         String secret = provider != null ? provider.getSecret() : null;
@@ -85,6 +70,6 @@ public class GrpcServerAutoConfiguration {
         }
         log.info("gRPC 安全边界已开启: requireInternalSign={}, requireTenant={}, requireUser={}",
             security.isRequireInternalSign(), security.isRequireTenant(), security.isRequireUser());
-        return new GrpcSecurityInterceptor(security, secret, binder);
+        return new GrpcSecurityInterceptor(security, secret);
     }
 }

@@ -55,16 +55,20 @@ cloudinfra:
 任一校验失败即以 `UNAUTHENTICATED` 关闭调用，错误描述统一为 `Unauthenticated`，
 不区分“缺签名”与“签名错误”，避免攻击者据此枚举。开启且密钥缺失时服务拒绝启动。
 
-业务层读取身份有两条路径：
+业务层读取身份与租户：
 
 ```java
-// 1. gRPC 原生上下文（无 spring-security 依赖）
-PlatformCaller caller = GrpcCallerContext.current();
+// 身份（gRPC 通道专属，不写入 Spring Security 上下文）
+GrpcCaller caller = GrpcCallerContext.current();   // 可能为 null
+Long userId = caller == null ? null : caller.userId();
 
-// 2. 既有 Spring Security 链路（classpath 上有 framework-security 时自动装配）
-Long userId = SecurityUtils.getUserId();
+// 租户（复用平台 TenantContext，使 MyBatis 租户拦截器生效）
 String tenant = TenantContext.getTenantIdOrDefault();
 ```
+
+**为何不桥接 Spring Security**：gRPC 独立网络端口不经过网关过滤链，用 HTTP 侧的
+`SecurityContextHolder` 反推 gRPC 身份会掩盖真实来源。gRPC 路径统一走
+`GrpcCallerContext`，身份来源单一且可追溯。
 
 线程上下文仅在业务代码执行期间存在，每个监听器回调后立即回收，不跨调用残留。
 
@@ -91,9 +95,13 @@ mvn -o -T 1 -pl cloud-infra-framework/framework-grpc -am verify \
 ## 当前边界
 
 本模块提供服务端传输、生命周期管理与**调用认证**（身份 + 租户上下文）。
-尚未完成：方法级权限映射（`hasPermi` 在 gRPC 通道内恒为 false，写操作不可放开）、
+尚未完成：方法级权限映射（`GrpcCaller` 未携带权限，`hasPermi` 在 gRPC 通道内不可用）、
 数据范围过滤的业务侧接入、第二业务模块客户端、HTTP→gRPC 协议转换、
 流式调用及性能基准。
 
-独立网络端口不会自动经过现有网关及其过滤器，`verify-internal-sign` 关闭时任何
+**当前判定为 `⚪ Built, Unused`**：业务仅 system-module 一个适配层，
+`cloudinfra.system.grpc.enabled` 默认关闭。详见
+`.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md` 决策 3。
+
+独立网络端口不会自动经过现有网关及其过滤器，`require-internal-sign` 关闭时任何
 持有网络可达性的一方都可直接调用。传输加密与内部签名不能替代方法级授权。
