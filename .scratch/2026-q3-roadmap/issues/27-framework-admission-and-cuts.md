@@ -113,6 +113,21 @@ Depends: 无
 消费者的 CAS 抢占成功/失败/非法消息/异常释放; 补扫的锁竞争、PENDING 重投、
 DISPATCHING 解卡重投、达上限放弃、单条失败不阻断、锁被他人接管时不误删。
 
+**端到端验收** (`NotificationDispatchReliabilityIT`, 8 项, 真实 PostgreSQL 16 +
+RabbitMQ 3.13 容器): 全部通过。覆盖单元测试覆盖不到的部分 ——
+枚举形参绑定到 `SMALLINT` 列、真实 SQL 的陈旧扫描、并发 CAS 互斥、
+消息真正落 Broker、崩溃恢复全链路。
+
+> **一处重要的方法论教训**: 该 IT 首轮曾报 `operator does not exist: smallint =
+> character varying` 与 `No enum constant NotificationStatus.0`, 看似发现生产级缺陷
+> （枚举形参绑定失败将导致每次 CAS 抢占都抛 SQL 错误）。**但这是假阳性** ——
+> 测试最初用原生 MyBatis, 而生产用 `MybatisSqlSessionFactoryBean` +
+> `MybatisConfiguration`, 后者为带 `@EnumValue` 的枚举注册了 `CompositeEnumTypeHandler`,
+> 绑定按 `code` 而非 `name()` 进行。改用生产同款栈后 6 项失败全部消失。
+>
+> 结论: **集成测试必须与生产使用同一持久层栈**。用简化替代栈得到的失败会误导修复方向,
+> 让人去改本来正确的生产代码。
+
 这一步本身印证了准入原则: 找到场景后仍需先问“是否已有更简单的解法”。
 
 ### 决策 3: gRPC 三层身份抽象 (345 行, 本轮新增) — ✅ 已执行选项 A
