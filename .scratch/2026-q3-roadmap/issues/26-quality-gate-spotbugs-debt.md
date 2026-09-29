@@ -26,7 +26,7 @@ Depends: 无
 |---|---|---|
 | `config/SecurityConfig.java` | `THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION` | 误报 (同 starter, Spring Security 固有签名) |
 | `domain/LoginUser.java` | `SE_NO_SERIALVERSIONID` | 可加 `serialVersionUID` 或移除 `Serializable` |
-| `domain/SecurityUser.java` | `EQ_DOESNT_OVERRIDE_EQUALS` | **需判断**: 实现 `UserDetails` 却未覆写 `equals`/`hashCode`, 若放入集合或做缓存键会出错 |
+| `domain/SecurityUser.java` | `EQ_DOESNT_OVERRIDE_EQUALS` | ✅ **已核实为误报** (2026-09-29): 父类 `org.springframework.security.core.userdetails.User` 已实现 `equals`/`hashCode` (按 `username`), `SecurityUser` 直接继承。SpotBugs 该规则不计入继承实现。另经全仓检索, `SecurityUser` 未被用作任何 Map/Set 键或缓存键, 无实际风险 |
 | `domain/SecurityUser.java` | `SE_NO_SERIALVERSIONID` | 同 LoginUser |
 | `service/SysLoginService.java:74` | `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` | 误报 (下一行即 `fullUser == null` 判空) |
 | `service/SysLoginService.java:48` | `URF_UNREAD_FIELD` passwordEncoder | **真实冗余**: 密码校验已委托 `authenticationManager`, 该字段只写不读 |

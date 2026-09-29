@@ -142,12 +142,15 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
   - `NotificationDispatchMapper`: 不加 `@TenantFilter` — 分发链路无租户上下文, 否则拦截器会把 SQL 改写为 `1=0` 致分发静默失效
   - 顺带移除 `NotificationChannel.send` 的 `throws Exception` (现有实现均以未受检异常表达失败)
   - 测试 11 项: 消费者 CAS 去重 / 异常释放; 补扫锁竞争 / 解卡重投 / 达上限放弃 / 单条失败不阻断 / 不误删他人锁
-- [ ] **M7-02 gRPC 支持** (issue 24, in progress)
+- [ ] ⛔ **M7-02 gRPC 支持** (issue 24) — **2026-09-29 冻结**
+  - 冻结依据 (issue 27 决策 3, 按准入原则自查): 仅 system-module 一个适配层, `cloudinfra.system.grpc.enabled` 默认关闭, **无第二业务模块客户端**; PRD 目标"两业务模块客户端/服务端跑通"至今未达成; 未出现明确的 gRPC 业务诉求
+  - 保留代码不删 (传输层 + 生命周期 + 安全边界本身可用且有测试), 但**暂停一切投入**: 不做方法级权限、不做数据范围、不接第二模块、不做 HTTP→gRPC 转换
+  - 解冻前提: 出现明确的 gRPC 使用方 (如移动端/IoT 客户端), 并能说清"哪个现有业务场景现在就需要它"
   - [x] 🟢 **M7-02 Phase A**: framework-grpc 模块基础设施 (commit 8ace1d8): EnableGrpcServer 注解 + CloudInfraGrpcProperties 配置 + GrpcServerAutoConfiguration + EchoService proto
   - [x] 🟢 **M7-02 Phase B**: EchoServiceImpl 业务逻辑 + 5 单元测试 (commit 3dc6649): Echo/EchoWithMetadata/Health RPC, count 安全上限, 5/5 测试通过
   - [x] ⚠️ **M7-02 Phase C**: LogNet optional + ConditionalOnClass 守护 (commit 774f10c): LogNet 3.0.1/5.2.0 基于 Spring Boot 3.x, 与 Spring Boot 4 EnvironmentPostProcessor 机制冲突; 后改为原生实现 (commit 8bcbe63)
-  - [x] 🟢 **M7-02 Phase D 调用安全边界**: 内部调用 HMAC 签名 + 调用方身份 + 租户上下文。`PlatformCaller`/`CallerContextBinder` (common) + `GrpcSecurityInterceptor`/`GrpcCallerContext` (framework-grpc) + `SpringSecurityCallerContextBinder` (framework-security 反向装配)。12 + 6 + 1 项测试, 含真实 TLS 网络验收
-  - [ ] ⚠️ **M7-02 Phase E**: 方法级权限映射 + 数据范围过滤 + 第二业务模块客户端 + HTTP→gRPC 转换。当前 `hasPermi` 在 gRPC 通道内恒为 false, 写操作禁止放开
+  - [x] 🟢 **M7-02 Phase D 调用安全边界** (commit 7be334b, 后简化于 8a6f785): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文。最终形态为**单层** — `GrpcSecurityInterceptor` + `GrpcCaller`/`GrpcCallerContext` (均在 framework-grpc), 拦截器只绑定 `TenantContext`, 不再桥接 Spring Security; 12 + 1 项测试, 含真实 TLS 网络验收
+  - [ ] ⛔ **M7-02 Phase E** (随整体冻结): 方法级权限映射 + 数据范围过滤 + 第二业务模块客户端 + HTTP→gRPC 转换。当前 `GrpcCaller` 不携带权限集合, 写操作禁止放开
 - ⛔ **未来 M7+ (CDC / 模板市场 / VS Code 插件) 已冻结** (2026-09-29)
 
   冻结原因: 在 M6/M7 已有 4 项能力业务零引用的情况下, 继续新增功能会进一步扩大“建而不用”的存量。
