@@ -130,7 +130,7 @@ public class OutboxEventDispatcher {
         }
         try {
             return objectMapper.readValue(payload, Object.class);
-        } catch (Exception e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             // 如果无法解析为 JSON，原样返回字符串
             return payload;
         }

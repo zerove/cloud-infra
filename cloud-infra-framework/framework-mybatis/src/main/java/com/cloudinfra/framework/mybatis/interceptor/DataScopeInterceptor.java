@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.StringJoiner;
 
 import org.apache.ibatis.executor.statement.StatementHandler;
@@ -118,10 +119,8 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
 
         StringJoiner orJoiner = new StringJoiner(" OR ");
-        List<Long> roleIds = new ArrayList<>();
 
         for (SysRole role : listRoles()) {
-            roleIds.add(role.getId());
             String condition = buildRoleCondition(role, dataScope);
             if (condition != null && !condition.isBlank()) {
                 orJoiner.add(condition);
@@ -208,7 +207,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
      */
     private String appendWhereFragment(String sql, String fragment) {
         String trimmed = sql.trim();
-        String upper = trimmed.toUpperCase();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
 
         int whereIdx = upper.indexOf(" WHERE ");
         int groupIdx = upper.indexOf(" GROUP BY ");

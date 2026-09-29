@@ -28,7 +28,7 @@ import java.util.Base64;
  *
  * 密钥通过 ENCRYPTION_KEY 环境变量或 cloud-infra.crypto.key 配置提供
  */
-public class EncryptedTypeHandler extends BaseTypeHandler<String> {
+public final class EncryptedTypeHandler extends BaseTypeHandler<String> {
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int IV_LENGTH = 12;      // GCM 推荐 12 字节 IV
@@ -125,7 +125,7 @@ public class EncryptedTypeHandler extends BaseTypeHandler<String> {
             return new String(plaintext, StandardCharsets.UTF_8);
 
         } catch (GeneralSecurityException | IllegalArgumentException e) {
-            throw new RuntimeException("字段解密失败", e);
+            throw new IllegalStateException("字段解密失败", e);
         }
     }
 }

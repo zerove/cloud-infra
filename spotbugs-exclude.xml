@@ -40,4 +40,27 @@
     <Match>
         <Class name="com.cloudinfra.framework.web.util.SpringContextHolder"/>
     </Match>
+    <!--
+      ActuatorSecurityAutoConfiguration 的 SecurityFilterChain bean 声明 throws Exception：
+      这是 Spring Security 官方 SecurityFilterChain 装配方法的固有签名
+      (HttpSecurity.build() 自身即声明 throws Exception), 收窄到具体类型需额外包一层
+      无信息量的 try/catch。
+    -->
+    <Match>
+        <And>
+            <Class name="com.cloudinfra.starter.config.ActuatorSecurityAutoConfiguration"/>
+            <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+        </And>
+    </Match>
+    <!--
+      OutboxEventRepository 的 SQL 用 Java 文本块 + formatted(TABLE) 组装。
+      文本块内是字面换行符而非 %n：SQL 语句必须与平台行分隔符无关，
+      改用 %n 会让同一份 SQL 在不同操作系统上产生不同字节。
+    -->
+    <Match>
+        <And>
+            <Class name="com.cloudinfra.framework.mybatis.outbox.OutboxEventRepository"/>
+            <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+        </And>
+    </Match>
 </FindBugsFilter>
