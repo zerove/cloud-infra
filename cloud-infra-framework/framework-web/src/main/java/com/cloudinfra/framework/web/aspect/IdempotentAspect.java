@@ -27,17 +27,24 @@ import java.util.HexFormat;
 /**
  * 幂等切面 (M6-02)
  *
- * 支持两种模式:
+ * 支持两种模式, 且对幂等键的要求不同:
  * <ul>
- *   <li>{@link Idempotent.Mode#REJECT} (默认): 二次调用抛异常 (防抖)</li>
- *   <li>{@link Idempotent.Mode#REPLAY}: 二次调用返回首次响应 (幂等重试)</li>
+ *   <li>{@link Idempotent.Mode#REJECT} (默认): 二次调用抛异常 (防抖)。键可自动生成 ——
+ *       防抖本就期望“短窗口内拒绝相同请求”</li>
+ *   <li>{@link Idempotent.Mode#REPLAY}: 二次调用返回首次响应 (幂等重试)。
+ *       <b>必须由客户端显式提供幂等键</b>, 否则直通不拦截</li>
  * </ul>
+ *
+ * <p><b>为何 REPLAY 拒绝自动生成的键</b>: 自动键为 {@code userId + URI + body 摘要},
+ * 无法区分“同一次请求的网络重试”与“用户隔一段时间再次提交相同内容”。后者会拿到
+ * 首次的旧响应并被误认为成功, 即“假成功”。这类语义错误比不做幂等更危险。
+ * 真正需要幂等保护的接口 (支付、下单) 其客户端本就能生成唯一键。</p>
  *
  * Key 解析优先级:
  * <ol>
  *   <li>{@link Idempotent#keyHeader()} 指定的请求头 (默认 {@code Idempotency-Key})</li>
  *   <li>{@code X-Request-Token} (向后兼容)</li>
- *   <li>自动生成: userId + URI + body digest</li>
+ *   <li>自动生成: userId + URI + body digest（仅 REJECT 模式可用）</li>
  * </ol>
  *
  * 限定到 controller 层避免对全 bean 做 AspectJ 签名解析拖慢启动.
@@ -80,18 +87,36 @@ public class IdempotentAspect {
         HttpServletRequest request = attributes.getRequest();
 
         // 2. 计算幂等 Key Hash
-        String rawKey = resolveKey(request, idempotent.keyHeader());
-        if (rawKey == null) {
+        ResolvedKey resolved = resolveKey(request, idempotent.keyHeader());
+        if (resolved == null) {
             // 无法生成 key, 直接放行 (避免误杀所有调用)
             return joinPoint.proceed();
         }
-        String keyHash = hash(rawKey);
 
-        // 3. 根据模式分发
-        if (idempotent.mode() == Idempotent.Mode.REJECT) {
-            return doReject(joinPoint, idempotent, keyHash);
+        // 3. REPLAY 必须由客户端显式提供幂等键。
+        // 自动生成的键 (userId + URI + body 摘要) 无法区分"同一次请求的网络重试"
+        // 与"用户隔一段时间再次提交相同内容": 后者会拿到首次的旧响应, 形成假成功。
+        // REJECT 模式不受影响 —— 防抖本就期望"短窗口内拒绝相同请求"。
+        if (idempotent.mode() == Idempotent.Mode.REPLAY && !resolved.clientSupplied()) {
+            log.debug("[IdempotentAspect] 客户端未提供幂等键, REPLAY 降级为直通: {}",
+                request.getRequestURI());
+            return joinPoint.proceed();
         }
-        return doReplay(joinPoint, idempotent, keyHash);
+
+        // 4. 根据模式分发
+        if (idempotent.mode() == Idempotent.Mode.REJECT) {
+            return doReject(joinPoint, idempotent, resolved.hash());
+        }
+        return doReplay(joinPoint, idempotent, resolved.hash());
+    }
+
+    /**
+     * 解析出的幂等键。
+     *
+     * @param hash            用于 Redis 的键摘要
+     * @param clientSupplied  是否由客户端显式提供幂等键 (而非自动生成)
+     */
+    private record ResolvedKey(String hash, boolean clientSupplied) {
     }
 
     // ========== REJECT 模式: 防抖 ==========
@@ -125,32 +150,35 @@ public class IdempotentAspect {
             throw new GlobalException("请求正在处理中，请稍后重试");
         }
 
-        // 3. 执行业务
-        Object result;
+        // 3. 执行业务并在成功后缓存响应。
+        //    用 try-finally 而非 catch: 业务失败时无论抛出什么 (含 Error) 都释放锁,
+        //    让客户端能调整参数后重试; 成功时锁由缓存响应消费, 不再释放。
+        boolean succeeded = false;
         try {
-            result = joinPoint.proceed();
-        } catch (Throwable ex) {
-            // 业务异常: 不缓存 (允许客户端调整参数后重试)
-            store.releaseLock(keyHash);
-            throw ex;
-        }
+            Object result = joinPoint.proceed();
+            succeeded = true;
 
-        // 4. 缓存响应 (仅当 storeResponse=true, 默认 true)
-        if (idempotent.storeResponse()) {
-            // 契约: 缓存与重放保持方法返回类型一致, 避免首次 Result<T>、重放 String
-            String json;
-            try {
-                json = objectMapper.writeValueAsString(result);
-            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                // 序列化失败则不缓存，保持与未开启幂等一致的重试行为
-                store.releaseLock(keyHash);
-                return result;
+            // 4. 缓存响应 (仅当 storeResponse=true, 默认 true)
+            if (idempotent.storeResponse()) {
+                // 契约: 缓存与重放保持方法返回类型一致, 避免首次 Result<T>、重放 String
+                String json;
+                try {
+                    json = objectMapper.writeValueAsString(result);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    // 序列化失败则不缓存，保持与未开启幂等一致的重试行为
+                    store.releaseLock(keyHash);
+                    return result;
+                }
+                store.storeResponse(keyHash,
+                    IdempotencyEntry.success(200, json),
+                    idempotent.expireSeconds());
             }
-            store.storeResponse(keyHash,
-                IdempotencyEntry.success(200, json),
-                idempotent.expireSeconds());
+            return result;
+        } finally {
+            if (!succeeded) {
+                store.releaseLock(keyHash);
+            }
         }
-        return result;
     }
 
     /**
@@ -193,7 +221,7 @@ public class IdempotentAspect {
 
     // ========== Key 解析 ==========
 
-    private String resolveKey(HttpServletRequest request, String keyHeader) {
+    private ResolvedKey resolveKey(HttpServletRequest request, String keyHeader) {
         // 优先级 1: Idempotency-Key 头
         String token = request.getHeader(keyHeader);
         if (token == null || token.isBlank()) {
@@ -201,18 +229,23 @@ public class IdempotentAspect {
             token = request.getHeader("X-Request-Token");
         }
         if (token != null && !token.isBlank()) {
-            // 防御性: token 长度限制 (避免 Redis key 超长)
-            if (token.length() > 200) {
-                log.warn("[IdempotentAspect] Idempotency-Key 过长 ({}), 拒绝", token.length());
+            // 防御性: 幂等键长度限制 (避免 Redis key 超长)
+            int suppliedLength = token.length();
+            if (suppliedLength > 200) {
+                // 只记录长度, 不记录键内容: 幂等键属客户端凭据, 不得入日志
+                log.warn("[IdempotentAspect] 幂等键长度 {} 超过上限 200, 拒绝", suppliedLength);
                 return null;
             }
-            return "idempotency:" + request.getRequestURI() + ":" + token.trim();
+            return new ResolvedKey(
+                hash("idempotency:" + request.getRequestURI() + ":" + token.trim()), true);
         }
         // 优先级 3: 自动生成 (userId + URI + body digest)
+        // 仅可用于 REJECT 防抖; REPLAY 会拒绝使用自动生成的键 (见 around)。
         Long userId = SecurityUtils.getUserId();
         String userPart = userId == null ? "anon" : String.valueOf(userId);
         String bodyDigest = digest(request);
-        return "idempotency:" + request.getRequestURI() + ":" + userPart + ":" + bodyDigest;
+        return new ResolvedKey(
+            hash("idempotency:" + request.getRequestURI() + ":" + userPart + ":" + bodyDigest), false);
     }
 
     /**

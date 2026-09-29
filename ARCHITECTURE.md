@@ -44,7 +44,10 @@
 **链路**: 客户端 → Controller (`@Idempotent`) → `IdempotentAspect` → `IdempotencyStore` → Redis (lock + status + response 三 key)
 
 - **双模式**: REJECT (默认, 防抖/拒绝二次) + REPLAY (返回首次结果, 网络重试/支付场景)
-- **Idempotency-Key 头**: RFC 草案风格 (兼容 X-Request-Token); 缺 key 时回退 `userId + URI + body digest`
+- **Idempotency-Key 头**: RFC 草案风格 (兼容 X-Request-Token)
+- **幂等键要求 (2026-09-29 收紧)**: REJECT 可在缺 key 时回退 `userId + URI + body digest`;
+  **REPLAY 必须由客户端显式提供 key**, 否则切面直通不拦截。自动键无法区分"网络重试"与
+  "用户重复提交相同内容", 后者会拿到首次旧响应形成假成功 (2026-09-29 issue 27 决策 4)
 - **Redis 三 key**:
   - `idempotency:{hash}:lock`     - SET NX EX 短锁 (30s), 防并发首次
   - `idempotency:{hash}:status`   - IN_FLIGHT / COMPLETED
