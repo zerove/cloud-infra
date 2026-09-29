@@ -1,6 +1,6 @@
 # 框架能力准入原则与存量削减决策
 
-Status: open
+Status: resolved (2026-09-29，四项决策全部执行完毕)
 Priority: P1
 Owner: AI Agent
 Module: 全仓库（框架能力准入规则）
