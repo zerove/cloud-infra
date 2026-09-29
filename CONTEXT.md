@@ -74,7 +74,16 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **架构影响**: 业务 Mapper 加类级注解即可启用多租户, 零业务侵入. interceptor 链顺序 Pagination → Tenant → DataScope, 串联而非覆盖.
 *   **测试矩阵**: common (14) + framework-mybatis (16) + system-module (77) + file-service (36) + notification-service (13) = 156 测试通过 (Phase A/B/C 合计 +9).
 
-## ✅ Recent Optimizations (2026-09) — M6-02 统一幂等框架
+## ⚠️ 使用状态复核 (2026-09-29)
+
+下列 M6-02/03/04/05 各段落描述的是**已实现的代码**, 不代表已交付能力。
+2026-09-29 按“业务模块引用数”复核后, 除 M6-01 多租户 (9 个 Mapper) 与
+M6-02 幂等 (仅 `AuthController.register` 1 处) 外, **业务引用均为 0**。
+
+各段的“测试矩阵: N 测试通过”只说明组件能自我运转, **不构成交付证据**。
+完整复核与削减决策见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
+
+## ⚪ Recent Optimizations (2026-09) — M6-02 统一幂等框架（业务引用 1 处）
 *   **双模式幂等注解** (commit 1945dd4): `@Idempotent.Mode` 加 REJECT (防抖, 默认) + REPLAY (返回首次结果, PRD 核心要求); `keyHeader` 默认 `Idempotency-Key` (RFC 草案, 兼容 X-Request-Token).
 *   **Redis JSON 响应缓存**: `IdempotencyEntry` POJO + `IdempotencyStore` 三 key 设计 (`lock`/`status`/`response`), IN_FLIGHT/COMPLETED 状态机, Redis 异常自动降级.
 *   **IdempotentAspect 重写**: `@Around` 包裹, REJECT 模式 SET NX EX 抛异常, REPLAY 模式读缓存命中即返回, 业务异常 releaseLock 不缓存.
@@ -82,36 +91,36 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **业务应用**: `AuthController.register` 改 REPLAY 模式 (24h TTL, 网络重试场景).
 *   **测试矩阵**: framework-web 单测 30 + 集成 5 = 35 (新增 22), 全模块合计 **218 测试通过**.
 
-## ✅ Recent Optimizations (2026-09) — M6-03 Outbox 框架化
+## ⚪ Recent Optimizations (2026-09) — M6-03 Outbox 框架化（业务引用 0 处）
 *   **@EnableOutbox 注解** (commit 7c5f8a3): 业务模块加一行 `@EnableOutbox` 即启用 Outbox, `@Import` 触发 `OutboxAutoConfiguration` 装配 `OutboxEventPublisher` Bean.
 *   **@PublishOutbox 注解 + AOP**: `PublishOutboxAspect` 用 `@Around` 拦截带注解的方法, SpEL 提取 aggregateId (`#root.userId` 模式), 事务提交后自动入 outbox_event 表. 业务异常不写入, 序列化失败不阻塞业务.
 *   **零业务侵入**: 兼容现有 `OutboxEventPublisher.publishTransactional()` 显式 API, 业务模块可选择注解驱动或显式调用.
 *   **测试**: `PublishOutboxAspectTest` 5 测试覆盖 (完整 publish + 默认值 + null 返回跳过 + 业务异常跳过 + 序列化失败跳过).
 *   **测试矩阵**: framework-mybatis 单测 21 (新增 5 Outbox Aspect), 全模块合计 **223 测试通过**.
 
-## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase A
+## ⚪ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase A（业务引用 0 处）
 *   **流程定义** (commit pending): `Workflow`/`WorkflowStep`/`RetryConfig`/`TimeoutConfig` record, Jackson 序列化友好, JSON 步骤定义 + DAG 依赖.
 *   **引擎核心**: `WorkflowEngine` 同层并行执行 + BFS 拓扑排序 (无环 DAG) + 步骤级重试 + 超时 + 全局超时 + 失败传播 (依赖步骤跳过).
 *   **配套**: `WorkflowContext` (trigger + variables) + `WorkflowResult` (success/outputs/errors/skipped/durationMs).
 *   **测试**: `WorkflowEngineTest` 8 测试覆盖 (单步骤 + DAG 顺序 + 重试配置 + 失败传播 + 循环依赖检测 + 步骤 id 唯一性 + 并行层 + 全局超时).
 *   **测试矩阵**: common 33 (新增 8), 全模块合计 **231 测试通过**.
 
-## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase B
+## ⚪ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase B（业务引用 0 处）
 *   **PluginStepHandler 集成** (commit pending): `WorkflowStepHandler` 接口 + `WorkflowStepHandlerRegistry` (启动自动扫描 @Component Bean, 按 "BeanName.methodName" 索引).
 *   **WorkflowEngine 注入 handlerInvoker**: `BiFunction<String, WorkflowContext, Object>` 委托, Phase A 用默认空实现, Phase B 接 Registry 自动查找.
 *   **Spring 集成**: `WorkflowEngineAutoConfiguration` (@ConditionalOnBean Registry) 注册 WorkflowEngine Bean, 业务模块用 `@Autowired WorkflowEngine` 即可.
 *   **测试**: `WorkflowStepHandlerIntegrationTest` 4 测试 (handler 真正调用 + 未注册异常 + 重试机制 + 输出保存).
 *   **测试矩阵**: framework-web 39 (新增 4 + 原 35), 全模块合计 **246 测试通过**.
 
-## ✅ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase C
+## ⚪ Recent Optimizations (2026-09) — M6-04 业务编排引擎 Phase C（业务引用 0 处）
 *   **变量传递** (commit pending): `WorkflowContext.setStepOutput(stepId, output)` 保存到 `variables["steps.{id}.output"]`, 后续步骤可通过 `ctx.getVariable(...)` 引用.
 *   **Saga 补偿**: `WorkflowStep.onFailure` handler 字符串 (如 "OrderPlugin.refund"), 步骤失败后 engine 自动调用 onFailure handler (独立 retry, 失败不阻断业务异常传播).
 *   **invokeHandler 增强**: 在 invoke 后自动保存 step output (Phase C 副作用, 兼容 Phase B 测试).
 *   **测试**: `WorkflowPhaseCTest` 3 测试 (step output 保存 + Saga 补偿 + 步骤链变量传递).
 *   **测试矩阵**: framework-web 33 单测 (新增 3 + 原 30), 全模块合计 **249 测试通过**.
-*   **M6-04 全部 3 阶段完成**: Phase A 引擎核心 (8) + Phase B Plugin 集成 (4) + Phase C Saga 补偿 (3) = 15 测试.
+*   **M6-04 全部 3 阶段代码完成, 但业务零引用**: Phase A 引擎核心 (8) + Phase B Plugin 集成 (4) + Phase C Saga 补偿 (3) = 15 测试, **无任何业务模块使用**。当前判定为 `⚪ 已实现未启用`
 
-## ✅ Recent Optimizations (2026-09) — M6-05 OpenAPI 自动生成 Phase A
+## ⚪ Recent Optimizations (2026-09) — M6-05 OpenAPI 自动生成 Phase A（业务引用 0 处）
 *   **@EnableOpenApi 注解** (commit pending): 业务模块加一行启用统一 OpenAPI 配置 (@Import 触发).
 *   **OpenApiAutoConfiguration**: 装配统一 Info (title 从 spring.application.name 推断 "Cloud-Infra Module") + JWT Bearer security scheme + 默认 server URL + Contact/License 元数据.
 *   **非破坏**: 业务模块未加注解时 springdoc 默认行为不变 (沿用 spring.application.name). 现有 system SwaggerConfig 不影响 (向后兼容).
@@ -119,7 +128,7 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 *   **测试**: OpenApiAutoConfigurationTest 6 测试 (title 推断 + auth 模块 + JWT Bearer + server URL + Contact/License + SecurityRequirement).
 *   **测试矩阵**: framework-web 39 单测 (新增 6 + 原 33), 全模块合计 **251 测试通过**.
 
-## ✅ Recent Optimizations (2026-09) — M6-06 业务告警 Dashboard
+## ⚪ Recent Optimizations (2026-09) — M6-06 业务告警 Dashboard（6 panel 仅 2 个指标有产生点）
 *   **business dashboard 新增** (commit pending): `deploy/monitoring/grafana/dashboards/cloud-infra-business.json` 6 panels 专用于 @BusinessMetric 业务指标.
 *   **panel 设计 (RED/USE 指标)**:
   1. 登录尝试速率 (按 success/failure 分组, timeseries)
