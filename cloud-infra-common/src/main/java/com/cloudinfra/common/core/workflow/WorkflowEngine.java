@@ -30,6 +30,18 @@ import java.util.function.BiFunction;
  * - Saga 补偿: onFailure handler (M6-04 Phase B 扩展)
  * - 并行执行: 无依赖关系的同级步骤并行
  *
+ * <p><b>⚠️ 实验性组件, 无业务使用方 (2026-09-29 标注)</b></p>
+ *
+ * <p>本引擎代码完成且自测通过, 但<strong>业务模块零引用</strong>。当前判定为
+ * {@code ⚪ Built, Unused} —— 不是已交付能力。</p>
+ *
+ * <p><b>在找到真实编排场景前, 不得基于它继续加功能</b> (如更多 handler 类型、
+ * 持久化编排定义、可视化编排)。若确实需要 Saga 编排, 应先写出真实的业务用例,
+ * 再判断本引擎是否适配, 而不是先扩引擎再找场景。</p>
+ *
+ * <p>处置决策见 {@code .scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md}
+ * 决策 1 (选项 A: 保留、标记实验、暂停投入)。</p>
+ *
  * 设计原则:
  * - 同步 API (execute), 内部异步执行
  * - 步骤结果保存在 context.results, 后续步骤可通过 ${steps.prev.output} 引用 (M6-04 暂简化, Phase B 加)
@@ -123,9 +135,11 @@ public class WorkflowEngine {
                             return;
                         }
                         executeStep(step, context, stepOutputs);
-                    } catch (Throwable t) {
-                        stepErrors.put(step.id(), t);
-                        log.error("[WorkflowEngine] 步骤失败: id={}, err={}", step.id(), t.getMessage());
+                    } catch (RuntimeException e) {
+                        // handler 契约: 业务失败以 RuntimeException 表达。Error (OOM/StackOverflow)
+                        // 反映 JVM 状态已不可信, 必须上抛而非记为"步骤失败"后继续调度
+                        stepErrors.put(step.id(), e);
+                        log.error("[WorkflowEngine] 步骤失败: id={}, err={}", step.id(), e.getMessage());
                     }
                 }, executor);
                 futures.add(future);
@@ -187,10 +201,11 @@ public class WorkflowEngine {
                 log.info("[WorkflowEngine] 步骤成功: id={}, attempt={}, duration={}ms",
                     step.id(), attempt, duration);
                 return;
-            } catch (Throwable t) {
-                lastError = t;
+            } catch (RuntimeException e) {
+                // 只重试业务级失败; Error 重试只会放大故障
+                lastError = e;
                 log.warn("[WorkflowEngine] 步骤失败: id={}, attempt={}/{}, err={}",
-                    step.id(), attempt, maxAttempts, t.getMessage());
+                    step.id(), attempt, maxAttempts, e.getMessage());
                 if (attempt < maxAttempts) {
                     sleepBackoff(step.retry());
                 }
@@ -208,7 +223,7 @@ public class WorkflowEngine {
                 );
                 invokeHandler(compStep, context, outputs);
                 log.info("[WorkflowEngine] 补偿成功: onFailure={}", step.onFailure());
-            } catch (Throwable compError) {
+            } catch (RuntimeException compError) {
                 log.error("[WorkflowEngine] 补偿失败: onFailure={}, err={}", step.onFailure(), compError.getMessage());
             }
         }
