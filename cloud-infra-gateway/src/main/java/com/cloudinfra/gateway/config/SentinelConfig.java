@@ -14,7 +14,6 @@ import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRuleManager;
 import com.alibaba.csp.sentinel.slots.system.SystemRule;
 import com.alibaba.csp.sentinel.slots.system.SystemRuleManager;
 import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;
-import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.fastjson2.JSON;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -70,7 +69,6 @@ public class SentinelConfig implements SmartInitializingSingleton {
      * 新建 gRPC 连接（无共享池），5 个数据源串行建连曾是启动期 ~35s 的主因；
      * 改为单例 ConfigService 后仅一次建连，后续数据源复用。
      */
-    private volatile ConfigService sharedConfigService;
 
     /** 限流规则数据源（非懒加载 bean） */
     private final ObjectProvider<ReadableDataSource<String, List<FlowRule>>> flowRuleDataSource;
@@ -159,13 +157,14 @@ public class SentinelConfig implements SmartInitializingSingleton {
                     // 丢弃重复连接，复用主实例（Nacos ConfigService 线程安全）
                     try {
                         ((com.alibaba.nacos.api.config.ConfigService) current).shutDown();
-                    } catch (Exception ignore) {
-                        // 冗余连接关闭失败不影响主流程
+                    } catch (com.alibaba.nacos.api.exception.NacosException | RuntimeException ignore) {
+                        // 冗余连接关闭失败不影响主流程, 但需留痕便于排查连接泄漏
+                        log.debug("关闭 Sentinel 冗余 Nacos 连接失败", ignore);
                     }
                     field.set(source, primary);
                 }
             }
-        } catch (Exception e) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
             throw new IllegalStateException("Sentinel 数据源 ConfigService 共享化失败", e);
         } finally {
             if (field != null) {

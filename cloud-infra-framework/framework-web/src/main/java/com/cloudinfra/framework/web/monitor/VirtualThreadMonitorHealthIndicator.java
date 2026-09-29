@@ -9,7 +9,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 
 @Component
-public class VirtualThreadMonitorHealthIndicator implements HealthIndicator {
+public final class VirtualThreadMonitorHealthIndicator implements HealthIndicator {
 
     private final VirtualThreadPinnedMonitor pinnedMonitor;
 

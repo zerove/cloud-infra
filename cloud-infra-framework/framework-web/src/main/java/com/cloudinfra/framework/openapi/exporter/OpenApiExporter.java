@@ -96,7 +96,11 @@ public class OpenApiExporter {
     void export() throws java.io.IOException {
         String moduleName = env.getProperty("spring.application.name", "cloud-infra-module");
         Path targetPath = Paths.get(exportPath, moduleName + ".json");
-        Files.createDirectories(targetPath.getParent());
+        // exportPath 为空字符串时 parent 为 null, 判空后再建目录
+        Path parent = targetPath.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
         String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(openApi);
         Files.writeString(targetPath, json);
         log.info("[OpenApiExporter] 导出 OpenAPI: path={}, size={} bytes",

@@ -20,6 +20,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
 
@@ -229,7 +230,8 @@ public class IdempotentAspect {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(body.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash).substring(0, 16);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
+            // JDK 必提供 SHA-256, 走到此处说明运行时被裁剪, 降级为固定摘要
             return "unknown";
         }
     }
@@ -239,7 +241,8 @@ public class IdempotentAspect {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest).substring(0, 32);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
+            // JDK 必提供 SHA-256, 走到此处说明运行时被裁剪, 降级为弱摘要
             return Integer.toHexString(input.hashCode());
         }
     }

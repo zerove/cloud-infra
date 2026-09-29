@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
-    <!-- 排除 gRPC 生成代码 -->
+    <!--
+      排除 protobuf 生成的 gRPC 代码。
+      生成的消息类是刻意不可变且实现 Serializable 的单例, 因此 MS_EXPOSE_REP 与
+      SING_SINGLETON_IMPLEMENTS_SERIALIZABLE 属于误报。
+      注意: com.cloudinfra.system.grpc 包同时含手写适配层, 整包排除比“仅生成类”更宽;
+      该包内的手写代码为薄适配层 (仅委托 service), 由 ArchUnit 与 14 项单元测试 +
+      真实 TLS/安全边界验收测试覆盖。
+    -->
     <Match>
-        <Package name="~com\.cloudinfra\.api\.system\.grpc.*"/>
+        <Or>
+            <Package name="~com\.cloudinfra\.grpc\.lib.*"/>
+            <Package name="~com\.cloudinfra\.system\.grpc.*"/>
+        </Or>
     </Match>
     <!-- 排除测试代码 -->
     <Match>
@@ -15,5 +25,19 @@
     <!-- 允许记录已知可忽略异常的空 catch（需有注释） -->
     <Match>
         <Bug pattern="DE_MIGHT_IGNORE"/>
+    </Match>
+    <!--
+      AspectJ 切点: private 方法仅由 @Pointcut 注解引用, 由 AspectJ 织入器调用,
+      静态分析看不到这条引用, 属误报。
+    -->
+    <Match>
+        <Or>
+            <Bug pattern="UPM_UNCALLED_PRIVATE_METHOD"/>
+            <Class name="~.*Aspect$"/>
+        </Or>
+    </Match>
+    <!-- SpringContextHolder 是 Spring 官方推荐的应用上下文持有模式, 写静态字段即其设计 -->
+    <Match>
+        <Class name="com.cloudinfra.framework.web.util.SpringContextHolder"/>
     </Match>
 </FindBugsFilter>

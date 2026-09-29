@@ -110,7 +110,7 @@ public class NacosConfigDumpEndpoint {
                 sb.append(String.format("%02x", b));
             }
             return sb.toString();
-        } catch (Exception e) {
+        } catch (java.security.NoSuchAlgorithmException e) {
             return "md5-error";
         }
     }

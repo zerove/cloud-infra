@@ -31,7 +31,7 @@ import java.util.Optional;
  * - 注册表启动自动发现, 无需显式注册
  */
 @Component
-public class WorkflowStepHandlerRegistry {
+public final class WorkflowStepHandlerRegistry {
 
     private final Map<String, WorkflowStepHandler> handlers = new HashMap<>();
 

@@ -42,7 +42,7 @@ public class VirtualThreadPinnedMonitor {
                         durationNanos / 1_000_000.0, event.getThread("eventThread").getJavaName());
                 });
                 es.start();
-            } catch (Exception e) {
+            } catch (java.io.IOException | RuntimeException e) {
                 if (running.get()) {
                     log.error("Failed to start JFR event stream for pinning detection", e);
                 }
