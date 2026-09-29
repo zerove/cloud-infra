@@ -58,29 +58,60 @@ Depends: 无
 - **选项 B**: 移出主仓到独立仓库, 主仓只保留接口
 - **选项 C**: 删除。等真实需求出现时再写（YAGNI 的彻底版）
 
-### 决策 2: Outbox (767 行) — ⚠️ 选项 A 需修正后才能执行
+### 决策 2: Outbox (767 行) — ✅ 已执行（不接入框架，改为通知行自身充当发件箱）
 
 **已找到真实场景**: `notification-service` 的通知分发。
 
-当前实现: 通知主记录在事务中入库 → `afterCommit` 回调 → `dispatchExecutor` 异步发往
-email/sms/websocket → 失败仅记 `notification_log` 的 FAIL。
+原实现: 通知主记录在事务中入库 → `afterCommit` 回调 → `dispatchExecutor` 内存线程池异步
+发往 email/sms/websocket → 渠道失败仅记 `notification_log` 的 FAIL。
 
 确认真实缺口:
 1. **进程崩溃丢失**: 事务已提交但分发任务未执行时崩溃, 通知永久丢失且无痕迹
 2. **失败无重试**: 渠道失败只记日志, 无重试、无死信、无告警
+3. **状态不可辨**: 通知行的 `status` 语义是"用户是否已读", 无法表达"是否已投递到渠道",
+   因此补扫无法区分"从未分发"与"已分发但未读"
 
-**但不应直接接入 Outbox 框架**。核查发现项目已有成熟的 RabbitMQ 重试 + DLQ 基础设施
-(`deploy/config/*.yaml` 中 `max-attempts: 3` + `republish-to-dlq`, 已有 `RuleConsumer` /
-`TelemetryConsumer` 在用)。因此:
+**⚠️ 实施过程中纠正的一处误判**: 本 issue 初稿称"项目已有成熟的 RabbitMQ 重试 + DLQ
+基础设施 (`max-attempts: 3` + `republish-to-dlq`)"。核查后确认**该判断不成立**:
 
-| 需求 | 现有能力是否已覆盖 | 应采用的方案 |
-|---|---|---|
-| 渠道发送失败重试 | **是** (MQ max-attempts + DLQ) | 通知分发改走 MQ, 失败自动重试 |
-| 进程崩溃导致丢失 | 否 | `notification` 表自身加状态 + 定时补扫超时 PENDING 记录 |
+- `deploy/config/gateway.yaml` / `system-module.yaml` 中的 `max-attempts: 3` 属
+  **Resilience4j** 的 HTTP 调用重试, 与 Spring AMQP 监听器无关
+- `deploy/k8s/notification/values.yaml` 的 `dlq-name: user.events.dlq` +
+  `republish-to-dlq: true` 属 **Spring Cloud Stream** 的 `user-events-in-0` 绑定,
+  与原生 `@RabbitListener` 是两套机制
+- `deploy/config/notification-service.yaml` (compose/Nacos 路径) **没有**任何监听器级
+  重试或 DLQ 配置; 既有的 `RuleConsumer` (原生 `@RabbitListener`) 同样没有
 
-即两个需求都有**更轻的既有方案**, Outbox 独立表 + 投递器 + AOP 注解那一整套 767 行
-对这两个需求的增益有限。**结论**: 不接入 Outbox 框架, 继续标记 `⚪` 暂停投入;
-待真实场景按上述轻量方案实现后, 再回头评估是否仍需要该框架。
+即: 原生 `@RabbitListener` 场景下项目**并无**可复用的 MQ 重试/DLQ。这不改变结论,
+但改变了理由 —— 两个需求都需新做, 而 `sys_notification` 自身加状态列 + 补扫任务
+已能同时覆盖, 无需再引入独立发件箱表 + 投递器 + AOP 注解。
+
+**已实施的方案** (`sys_notification` 自身充当发件箱):
+
+| 需求 | 覆盖方式 |
+|---|---|
+| 进程崩溃导致丢失 | `dispatch_status=PENDING` 的行 + `NotificationDispatchRecoveryTask` 每分钟补扫重投 |
+| 消费者中途崩溃 | 补扫同时纳入 `DISPATCHING` 陈旧行, 先 CAS 退回 PENDING 再重投 |
+| 渠道失败重试 | 分发器全渠道失败时退回 PENDING, 由补扫重投; 达 3 次上限置 FAILED 转人工 |
+| MQ 投递本身失败 | 通知行仍在库中且为 PENDING, 补扫继续重投, 不影响业务请求 |
+| 状态可辨 | 新增 `dispatch_status` 与 `status` 正交, 补扫据此筛选 |
+
+- MQ 在此的作用是**解耦与持久化** (消息落 Broker, 进程重启不丢), 而非重试。
+- 消费者用 `claimDispatch` 做 CAS 抢占, 保证 MQ 重投与补扫重投命中同一条记录时只有一个执行。
+- 多副本由 Redis SET NX EX 分布式锁保证同一时刻仅一个实例扫描, 与既有
+  `NotificationScheduler` 同一策略。
+- 顺带移除 `NotificationChannel.send` 的 `throws Exception`: 现有实现均以未受检异常
+  表达失败, 该声明只会迫使调用方写无信息量的 `catch (Exception)`。
+
+**实施中发现并规避的一个静默失效风险**: 分发链路 (MQ 消费者 / 补扫) 运行在**没有租户
+上下文**的线程上, 若沿用带 `@TenantFilter` 的 `NotificationMapper`, 租户拦截器会把 SQL
+改写为 `1=0`, 导致所有 CAS 与查询静默失效。因此新增 `NotificationDispatchMapper`
+(不加 `@TenantFilter`, 全部操作以通知主键为唯一入口), 与既有 `ScheduledNotificationMapper`
+采取同一策略。
+
+**新增测试 11 项** (`NotificationDispatchRecoveryTest` + `NotificationServiceImplTest`):
+消费者的 CAS 抢占成功/失败/非法消息/异常释放; 补扫的锁竞争、PENDING 重投、
+DISPATCHING 解卡重投、达上限放弃、单条失败不阻断、锁被他人接管时不误删。
 
 这一步本身印证了准入原则: 找到场景后仍需先问“是否已有更简单的解法”。
 

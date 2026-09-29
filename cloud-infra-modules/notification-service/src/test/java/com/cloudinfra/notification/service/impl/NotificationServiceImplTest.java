@@ -1,5 +1,6 @@
 package com.cloudinfra.notification.service.impl;
 
+import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.exception.BusinessException;
@@ -13,7 +14,6 @@ import com.cloudinfra.notification.mapper.NotificationLogMapper;
 import com.cloudinfra.notification.mapper.NotificationMapper;
 import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
-import com.cloudinfra.notification.service.ChannelFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.service.NotificationRouter;
@@ -21,14 +21,16 @@ import com.cloudinfra.notification.service.channel.NotificationChannel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,10 +46,10 @@ class NotificationServiceImplTest {
     @Mock private NotificationLogMapper logMapper;
     @Mock private NotificationTemplateMapper templateMapper;
     @Mock private NotificationRouter notificationRouter;
-    @Mock private ChannelFactory channelFactory;
     @Mock private ScheduledNotificationMapper scheduleMapper;
     @Mock private NotificationQuotaService quotaService;
     @Mock private ObjectMapper objectMapper;
+    @Mock private RabbitTemplate rabbitTemplate;
 
     private NotificationServiceImpl notificationService;
 
@@ -55,8 +57,8 @@ class NotificationServiceImplTest {
     void setUp() {
         notificationService = new NotificationServiceImpl(
             notificationMapper, logMapper, templateMapper,
-            notificationRouter, channelFactory, scheduleMapper, quotaService, objectMapper,
-            Executors.newVirtualThreadPerTaskExecutor()
+            notificationRouter, scheduleMapper, quotaService, objectMapper,
+            rabbitTemplate
         );
     }
 
@@ -169,19 +171,15 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void sendNotification_allChannelsFail_shouldKeepUnread() throws Exception {
-        // given
+    void sendNotification_shouldPersistAsPendingThenPublishToQueue() throws Exception {
+        // given: 通知落库后应为 PENDING, 并投递到 MQ 等待消费者分发
+        // (原先是"入库 → 内存线程池直接发渠道", 进程崩溃即丢失; 见 issue 27 决策 2)
         NotificationSendRequest request = new NotificationSendRequest(
-            1L, "Fail", "Test", NotificationType.SMS,
-            List.of("sms"), null, null, null
+            1L, "Hello", "World", NotificationType.EMAIL,
+            List.of("email"), null, null, null
         );
 
-        NotificationChannel smsChannel = mock(NotificationChannel.class);
-        lenient().when(smsChannel.getChannelCode()).thenReturn("sms");
-        lenient().doThrow(new RuntimeException("SMS provider down"))
-            .when(smsChannel).send(anyLong(), anyString(), anyString());
-
-        given(notificationRouter.route(request)).willReturn(List.of(smsChannel));
+        given(notificationRouter.route(request)).willReturn(List.of());
         given(notificationMapper.insert(any(Notification.class))).will(invocation -> {
             Notification n = invocation.getArgument(0);
             n.setId(102L);
@@ -192,7 +190,36 @@ class NotificationServiceImplTest {
         notificationService.sendNotification(request);
 
         // then
-        then(quotaService).should().checkQuota(1L);
+        ArgumentCaptor<Notification> persisted = ArgumentCaptor.forClass(Notification.class);
+        then(notificationMapper).should().insert(persisted.capture());
+        assertThat(persisted.getValue().getDispatchStatus()).isEqualTo(DispatchStatus.PENDING);
+        assertThat(persisted.getValue().getDispatchAttempts()).isZero();
+
+        then(rabbitTemplate).should()
+            .convertAndSend("notification.dispatch.queue", "102");
+    }
+
+    @Test
+    void sendNotification_whenBrokerUnreachable_shouldNotFailRequest() throws Exception {
+        // given: MQ 不可达时业务仍应成功 —— 通知行留在库中且为 PENDING, 补扫任务会重投
+        NotificationSendRequest request = new NotificationSendRequest(
+            1L, "Hello", "World", NotificationType.EMAIL,
+            List.of("email"), null, null, null
+        );
+
+        given(notificationRouter.route(request)).willReturn(List.of());
+        given(notificationMapper.insert(any(Notification.class))).will(invocation -> {
+            Notification n = invocation.getArgument(0);
+            n.setId(103L);
+            return 1;
+        });
+        doThrow(new AmqpException("broker down"))
+            .when(rabbitTemplate).convertAndSend(
+                eq("notification.dispatch.queue"), any(Object.class));
+
+        // when / then: 不抛异常
+        notificationService.sendNotification(request);
+
         then(notificationMapper).should().insert(any(Notification.class));
     }
 

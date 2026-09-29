@@ -25,10 +25,14 @@ public interface NotificationChannel {
 
     /**
      * 发送通知内容
+     *
+     * <p>投递失败时抛 {@link RuntimeException}。不使用 {@code throws Exception}:
+     * 现有实现均以未受检异常表达失败, 声明受检异常只会迫使调用方写无信息量的
+     * {@code catch (Exception)}, 并掩盖真正的失败类型。</p>
+     *
      * @param userId 接收者ID
      * @param title 通知标题
      * @param content 通知内容
-     * @throws Exception 发送失败抛出异常
      */
-    void send(Long userId, String title, String content) throws Exception;
+    void send(Long userId, String title, String content);
 }

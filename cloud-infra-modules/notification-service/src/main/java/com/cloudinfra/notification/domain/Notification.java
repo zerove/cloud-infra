@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import lombok.Data;
@@ -13,6 +14,13 @@ import java.time.LocalDateTime;
 /**
  * 通知实体类
  * 存储系统发送给用户的通知信息
+ *
+ * <p><b>本表同时充当发件箱记录</b> (issue 27 决策 2): {@link #dispatchStatus} 标记渠道
+ * 分发进度, 使进程在"事务提交后、MQ 投递前"崩溃时, 补扫任务能重新投递该通知。
+ * 详见 {@code NotificationDispatchRecoveryTask}。
+ *
+ * <p>{@link #status} 与 {@link #dispatchStatus} 正交: 前者表示用户是否已读,
+ * 后者表示是否已投递到渠道。
  */
 @Data
 @TableName("sys_notification")
@@ -24,12 +32,22 @@ public class Notification {
     private String title;
     private String content;
     private NotificationStatus status;
+
+    /** 渠道分发状态 (与 status 正交) */
+    private DispatchStatus dispatchStatus;
+
+    /** 已尝试分发次数, 补扫达上限后置 FAILED */
+    private Integer dispatchAttempts;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     private LocalDateTime readTime;
 
     /**
      * 创建新通知 (领域工厂方法)
+     *
+     * <p>分发状态初始化为 {@link DispatchStatus#PENDING}: 只要行存在于库中且仍是
+     * PENDING, 补扫任务就会保证它最终被投递。
      */
     public static Notification create(Long userId, NotificationType type, String title, String content) {
         Notification n = new Notification();
@@ -38,6 +56,8 @@ public class Notification {
         n.setTitle(title);
         n.setContent(content);
         n.setStatus(NotificationStatus.UNREAD);
+        n.setDispatchStatus(DispatchStatus.PENDING);
+        n.setDispatchAttempts(0);
         return n;
     }
 
@@ -62,6 +82,10 @@ public class Notification {
     public void setContent(String content) { this.content = content; }
     public NotificationStatus getStatus() { return status; }
     public void setStatus(NotificationStatus status) { this.status = status; }
+    public DispatchStatus getDispatchStatus() { return dispatchStatus; }
+    public void setDispatchStatus(DispatchStatus dispatchStatus) { this.dispatchStatus = dispatchStatus; }
+    public Integer getDispatchAttempts() { return dispatchAttempts; }
+    public void setDispatchAttempts(Integer dispatchAttempts) { this.dispatchAttempts = dispatchAttempts; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getReadTime() { return readTime; }
