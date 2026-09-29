@@ -58,34 +58,69 @@ Depends: 无
 - **选项 B**: 移出主仓到独立仓库, 主仓只保留接口
 - **选项 C**: 删除。等真实需求出现时再写（YAGNI 的彻底版）
 
-### 决策 2: Outbox (767 行)
+### 决策 2: Outbox (767 行) — ⚠️ 选项 A 需修正后才能执行
 
-- **选项 A (建议)**: 找一个**真实的一致性敏感场景**接入。例如"文件上传成功但元数据写入失败"
-  这类当前靠补偿或人工处理的路径。先有场景, 再决定保留引擎还是改用更轻的方案
-- **选项 B**: 搁置并标记实验
-- **选项 C**: 删除。若最终选择轻量方案（如本地消息表 + 定时扫描）, 当前 AOP 实现需重写
+**已找到真实场景**: `notification-service` 的通知分发。
 
-### 决策 3: gRPC 三层身份抽象 (345 行, 本轮新增)
+当前实现: 通知主记录在事务中入库 → `afterCommit` 回调 → `dispatchExecutor` 异步发往
+email/sms/websocket → 失败仅记 `notification_log` 的 FAIL。
 
-本轮为**默认关闭**的 gRPC 开关新增了 `PlatformCaller` + `CallerContextBinder` SPI +
-`GrpcCallerContext` 三层抽象, 跨 3 个模块。
+确认真实缺口:
+1. **进程崩溃丢失**: 事务已提交但分发任务未执行时崩溃, 通知永久丢失且无痕迹
+2. **失败无重试**: 渠道失败只记日志, 无重试、无死信、无告警
 
-- **选项 A (建议)**: 简化为**单层** — 拦截器内直接绑定 `TenantContext`, 身份用一个
-  `GrpcCaller` record 承载。去掉 `CallerContextBinder` SPI。
-  代价：`framework-security` 需直接依赖 `framework-grpc`（或反向）。省约 130 行 + 1 个模块间耦合
-- **选项 B**: 维持现状。理由是 HTTP 侧未来也要复用同一套 SPI
-- **选项 C**: 先问更根本的问题 — M7-02 gRPC 是否应该有。在"第二业务模块客户端"需求
-  出现前, 连拦截器本身都可能不需要
+**但不应直接接入 Outbox 框架**。核查发现项目已有成熟的 RabbitMQ 重试 + DLQ 基础设施
+(`deploy/config/*.yaml` 中 `max-attempts: 3` + `republish-to-dlq`, 已有 `RuleConsumer` /
+`TelemetryConsumer` 在用)。因此:
 
-### 决策 4: `IdempotencyStore` 的使用面
+| 需求 | 现有能力是否已覆盖 | 应采用的方案 |
+|---|---|---|
+| 渠道发送失败重试 | **是** (MQ max-attempts + DLQ) | 通知分发改走 MQ, 失败自动重试 |
+| 进程崩溃导致丢失 | 否 | `notification` 表自身加状态 + 定时补扫超时 PENDING 记录 |
+
+即两个需求都有**更轻的既有方案**, Outbox 独立表 + 投递器 + AOP 注解那一整套 767 行
+对这两个需求的增益有限。**结论**: 不接入 Outbox 框架, 继续标记 `⚪` 暂停投入;
+待真实场景按上述轻量方案实现后, 再回头评估是否仍需要该框架。
+
+这一步本身印证了准入原则: 找到场景后仍需先问“是否已有更简单的解法”。
+
+### 决策 3: gRPC 三层身份抽象 (345 行, 本轮新增) — ✅ 已执行选项 A
+
+**结论**: 简化为单层。
+
+已实施:
+- 删除 `cloud-infra-common` 的 `CallerContextBinder` SPI 与 `PlatformCaller`
+- `GrpcCaller` 下沉到 `framework-grpc` 与 `GrpcCallerContext` 配对
+- 拦截器只绑定 `TenantContext`, 不再桥接 Spring Security
+- 删除 `framework-security` 的 `grpc/` 整个包 (2 类) 及其自动配置注册,
+  **framework-security 不再需要感知 framework-grpc 的存在**
+- 测试从 19 项减为 13 项 (删除 6 项桥接测试)
+
+**关键理由**: gRPC 独立网络端口不经过网关过滤链, 用 HTTP 侧的 `SecurityContextHolder`
+反推 gRPC 身份会掩盖真实来源。gRPC 路径统一走 `GrpcCallerContext`, 身份来源单一可追溯。
+
+**代价**: gRPC 通道内不能用 `SecurityUtils.getUserId()`, 需用
+`GrpcCallerContext.current().userId()`。由于该通道仅 system-module 使用且默认关闭,
+代价可接受; 且方法级权限本就未实现 (见 M7-02 Phase E), 短期不受影响。
+
+### 决策 4: `IdempotencyStore` 的使用面 — 待确认
 
 当前仅 `AuthController.register` 1 处使用。需确认是"机制过度设计"还是"推广不足"。
+未在本轮处理。
+
+## 本轮纠正的记录错误
+
+此前 session 报告的“825 项测试 0 失败”**是错的**: 统计脚本把 Maven 控制台的模块汇总行
+与单测试类行一并累加, 造成重复计数。`mvn -o clean` 后按 surefire XML 精确统计,
+真实数字为 **408 项 (0 失败, 1 跳过)**。相关文档已全部改正, 并在 `AGENTS.md`
+基线处注明“统计以 surefire XML 为准, 勿用控制台汇总行累加”。
 
 ## 验收标准
 
-1. 上述 4 项决策有明确结论并记录在本文档
-2. 执行删除/重构后: `mvn -o test` 0 失败, `mvn -o checkstyle:check` 0 违规
-3. ROADMAP 中不存在"标为 `🟢 Completed` 但业务零引用"的条目
+1. ✅ 决策 1 (选项 A)、决策 3 (选项 A) 已实施, `mvn -o test` + `checkstyle:check` 通过
+2. ✅ 决策 2 已找到真实场景, 并得出“不需要接入 Outbox 框架”的修正结论
+3. ⬜ 决策 4 待确认
+4. ✅ ROADMAP 中不存在“标为 `🟢 Completed` 但业务零引用”的条目
 
 ## 关联
 

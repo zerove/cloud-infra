@@ -2,12 +2,10 @@ package com.cloudinfra.system.grpc;
 
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
-import com.cloudinfra.common.core.security.CallerContextBinder;
 import com.cloudinfra.common.core.tenant.TenantContext;
-import com.cloudinfra.common.util.SecurityUtils;
+import com.cloudinfra.framework.grpc.GrpcCallerContext;
 import com.cloudinfra.framework.grpc.GrpcServerLifecycle;
 import com.cloudinfra.framework.grpc.GrpcSecurityInterceptor;
-import com.cloudinfra.framework.security.grpc.SpringSecurityCallerContextBinder;
 import com.cloudinfra.system.domain.SysUser;
 import com.cloudinfra.system.service.ISysDeptService;
 import com.cloudinfra.system.service.ISysUserService;
@@ -51,9 +49,8 @@ import static org.mockito.Mockito.when;
  * <p>真实 TLS 网络调用 + 完整 Spring 条件装配:
  * <ul>
  *   <li>缺内部签名 / 缺租户 / 缺身份 一律 {@code UNAUTHENTICATED}, 且错误描述不区分原因</li>
- *   <li>合法签名 + 完整身份时放行, 业务层经既有 {@code SecurityUtils} 读到调用方</li>
+ *   <li>合法签名 + 完整身份时放行, 业务层经 {@code GrpcCallerContext} 读到调用方</li>
  *   <li>租户上下文绑定到 {@code TenantContext}, 调用结束后不残留</li>
- *   <li>{@code CallerContextBinder} 实际装配为 Spring Security 实现 (非 no-op)</li>
  * </ul>
  */
 class SystemGrpcSecurityBoundaryTest {
@@ -85,9 +82,11 @@ class SystemGrpcSecurityBoundaryTest {
         alice.setStatus(0);
         alice.setDeptId(7L);
         when(userService.selectUserById(5L)).thenAnswer(invocation -> {
-            // 业务代码运行在 gRPC 线程上, 此处即安全边界生效的现场
+            // 业务代码运行在 gRPC 线程上, 此处即安全边界生效的现场。
+            // 身份走 gRPC 自己的上下文 (GrpcCallerContext), 不依赖 HTTP 侧的 SecurityUtils
             tenantSeenByService.set(TenantContext.getTenantId().orElse(null));
-            userSeenByService.set(SecurityUtils.getUserId());
+            var caller = GrpcCallerContext.current();
+            userSeenByService.set(caller == null ? null : caller.userId());
             return alice;
         });
 
@@ -111,14 +110,11 @@ class SystemGrpcSecurityBoundaryTest {
             .withBean(InternalCallSecretProvider.class, () -> secretProvider)
             .withUserConfiguration(SysUserGrpcService.class, SysDeptGrpcService.class, SystemGrpcConfiguration.class)
             .withConfiguration(AutoConfigurations.of(
-                com.cloudinfra.framework.security.grpc.GrpcSecurityBridgeAutoConfiguration.class,
                 com.cloudinfra.framework.grpc.GrpcServerAutoConfiguration.class))
             .run(context -> {
                 assertThat(context).hasNotFailed();
 
-                // 桥接实现必须是 Spring Security 版本, 否则业务层拿不到身份
-                assertThat(context.getBean(CallerContextBinder.class))
-                    .isInstanceOf(SpringSecurityCallerContextBinder.class);
+                // 安全边界拦截器必须被装配
                 assertThat(context.getBean(GrpcSecurityInterceptor.class)).isNotNull();
 
                 Server server = context.getBean(GrpcServerLifecycle.class).getServer();
@@ -162,7 +158,7 @@ class SystemGrpcSecurityBoundaryTest {
 
                 // 5. 调用结束后线程上下文不残留
                 assertThat(TenantContext.hasTenant()).isFalse();
-                assertThat(SecurityUtils.getUserId()).isNull();
+                assertThat(GrpcCallerContext.current()).isNull();
             });
     }
 

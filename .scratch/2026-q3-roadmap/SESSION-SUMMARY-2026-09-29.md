@@ -49,16 +49,15 @@ gRPC 独立网络端口不经过网关过滤链, 此前仅有 TLS 传输加密�
 
 线程上下文仅在业务代码执行期间存在 (每个监听器回调成对绑定/清理), 不跨调用残留。
 
-**测试 19 项**:
+**测试 13 项** (2026-09-29 简化后: 去掉 Spring Security 桥接, 身份统一走 `GrpcCallerContext`):
 - `GrpcSecurityInterceptorTest` (12) — 进程内真实调用链: 7 类拒绝场景 + 放行 + 无残留 + 关闭开关零开销
-- `SpringSecurityCallerContextBinderTest` (6) — 桥接行为 + 自动配置条件
 - `SystemGrpcSecurityBoundaryTest` (1) — **真实 TCP+TLS** + 完整 Spring 条件装配
 
 ### 2.2 质量门清零
 
 | 门禁 | 起始 | 现状 |
 |---|---|---|
-| `mvn test` | 编译失败 | **825 项 0 失败** |
+| `mvn test` | 编译失败 | **408 项 0 失败** (surefire XML 统计) |
 | `mvn checkstyle:check` | 35+ 违规 | **全 21 模块 0 违规** |
 | `mvn spotbugs:check` | 数十项 | 12 个模块 0, 剩 5 个业务模块 (issue 26) |
 
@@ -121,7 +120,9 @@ gRPC 独立网络端口不经过网关过滤链, 此前仅有 TLS 传输加密�
 ## 6. 验证记录
 
 ```
-mvn -o test              → BUILD SUCCESS, 825 tests, 0 failures
+mvn -o test              → BUILD SUCCESS, 408 tests, 0 failures, 1 skipped
+                           (以 surefire XML 统计为准; 早期记录的 "825" 是控制台汇总行
+                            重复计数所致, 已纠正)
 mvn -o checkstyle:check  → BUILD SUCCESS (全 21 模块 0 违规)
 bash tools/check-doc-versions.sh → 全部版本一致
 ```

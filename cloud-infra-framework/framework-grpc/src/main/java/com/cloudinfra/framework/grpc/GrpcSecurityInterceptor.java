@@ -1,8 +1,6 @@
 package com.cloudinfra.framework.grpc;
 
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
-import com.cloudinfra.common.core.security.CallerContextBinder;
-import com.cloudinfra.common.core.security.PlatformCaller;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import io.grpc.Context;
 import io.grpc.Contexts;
@@ -60,14 +58,11 @@ public class GrpcSecurityInterceptor implements ServerInterceptor {
 
     private final CloudInfraGrpcProperties.Security security;
     private final String internalCallSecret;
-    private final CallerContextBinder binder;
 
     public GrpcSecurityInterceptor(CloudInfraGrpcProperties.Security security,
-                                   @Nullable String internalCallSecret,
-                                   CallerContextBinder binder) {
+                                   @Nullable String internalCallSecret) {
         this.security = security;
         this.internalCallSecret = internalCallSecret;
-        this.binder = binder;
     }
 
     @Override
@@ -97,7 +92,7 @@ public class GrpcSecurityInterceptor implements ServerInterceptor {
         }
 
         String username = trimmed(headers.get(METADATA_USER_NAME));
-        PlatformCaller caller = new PlatformCaller(userId, username, tenantId, "grpc:" + method);
+        GrpcCaller caller = new GrpcCaller(userId, username, tenantId, method);
 
         Context context = Context.current().withValue(GrpcCallerContext.key(), caller);
         ServerCall.Listener<ReqT> delegate =
@@ -165,9 +160,9 @@ public class GrpcSecurityInterceptor implements ServerInterceptor {
     private final class CallerBindingListener<ReqT>
             extends SimpleForwardingServerCallListener<ReqT> {
 
-        private final PlatformCaller caller;
+        private final GrpcCaller caller;
 
-        private CallerBindingListener(ServerCall.Listener<ReqT> delegate, PlatformCaller caller) {
+        private CallerBindingListener(ServerCall.Listener<ReqT> delegate, GrpcCaller caller) {
             super(delegate);
             this.caller = caller;
         }
@@ -199,14 +194,12 @@ public class GrpcSecurityInterceptor implements ServerInterceptor {
 
         /** 线程上下文仅在业务代码执行期间存在, 回调结束立即回收, 避免跨请求泄漏。 */
         private void withCaller(Runnable action) {
-            binder.bind(caller);
             if (caller.tenantId() != null) {
                 TenantContext.setTenantId(caller.tenantId());
             }
             try {
                 action.run();
             } finally {
-                binder.clear();
                 TenantContext.clear();
             }
         }

@@ -1,8 +1,6 @@
 package com.cloudinfra.framework.grpc;
 
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
-import com.cloudinfra.common.core.security.CallerContextBinder;
-import com.cloudinfra.common.core.security.PlatformCaller;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import com.cloudinfra.grpc.lib.EchoRequest;
 import com.cloudinfra.grpc.lib.EchoResponse;
@@ -44,12 +42,9 @@ class GrpcSecurityInterceptorTest {
     private final Deque<ManagedChannel> channels = new ArrayDeque<>();
     private final Deque<Server> servers = new ArrayDeque<>();
 
-    private RecordingBinder binder;
-
     @BeforeEach
     void setUp() {
         TenantContext.clear();
-        binder = new RecordingBinder();
     }
 
     @AfterEach
@@ -59,7 +54,6 @@ class GrpcSecurityInterceptorTest {
         channels.clear();
         servers.clear();
         TenantContext.clear();
-        binder.clear();
     }
 
     // ========== 拒绝路径 ==========
@@ -146,8 +140,8 @@ class GrpcSecurityInterceptorTest {
         assertThat(service.seenCaller.userId()).isEqualTo(42L);
         assertThat(service.seenCaller.username()).isEqualTo("alice");
         assertThat(service.seenCaller.tenantId()).isEqualTo("tenant-x");
-        assertThat(service.seenCaller.entrypoint())
-            .isEqualTo("grpc:cloudinfra.grpc.EchoService/Echo");
+        assertThat(service.seenCaller.fullMethodName())
+            .isEqualTo("cloudinfra.grpc.EchoService/Echo");
         assertThat(service.seenTenant).isEqualTo("tenant-x");
     }
 
@@ -162,8 +156,6 @@ class GrpcSecurityInterceptorTest {
 
         assertThat(service.seenTenant).isEqualTo("tenant-x");
         assertThat(TenantContext.hasTenant()).isFalse();
-        assertThat(binder.bindCount).isPositive();
-        assertThat(binder.clearCount).isEqualTo(binder.bindCount);
         assertThat(GrpcCallerContext.current()).isNull();
     }
 
@@ -221,7 +213,7 @@ class GrpcSecurityInterceptorTest {
         String name = "security-test-" + UUID.randomUUID();
         Server server = InProcessServerBuilder.forName(name)
             .directExecutor()
-            .intercept(new GrpcSecurityInterceptor(security, SECRET, binder))
+            .intercept(new GrpcSecurityInterceptor(security, SECRET))
             .addService(service)
             .build()
             .start();
@@ -258,25 +250,9 @@ class GrpcSecurityInterceptorTest {
         return Metadata.Key.of(header.toLowerCase(Locale.ROOT), Metadata.ASCII_STRING_MARSHALLER);
     }
 
-    /** 记录 bind/clear 调用, 验证线程上下文成对出现且不跨调用残留。 */
-    private static final class RecordingBinder implements CallerContextBinder {
-        private int bindCount;
-        private int clearCount;
-
-        @Override
-        public void bind(PlatformCaller caller) {
-            bindCount++;
-        }
-
-        @Override
-        public void clear() {
-            clearCount++;
-        }
-    }
-
     /** 捕获业务执行期间可见的调用方身份与租户上下文。 */
     private static final class CapturingEchoService extends EchoServiceGrpc.EchoServiceImplBase {
-        private PlatformCaller seenCaller;
+        private GrpcCaller seenCaller;
         private String seenTenant;
 
         @Override
