@@ -130,7 +130,9 @@ public class SysLoginService {
 
     private static String readFixedCaptchaCode() {
         String env = System.getenv("AUTH_CAPTCHA_FIXED_CODE");
-        if (env != null && !env.isEmpty()) return env;
+        if (env != null && !env.isEmpty()) {
+            return env;
+        }
         return System.getProperty("auth.captcha.fixed-code", "");
     }
 

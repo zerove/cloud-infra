@@ -74,7 +74,8 @@ public class EnhancedDistributedLock implements DistributedLock {
             
             if (!acquired) {
                 meterRegistry.counter("lock.acquire.failed", "key", sanitizeKey(lockKey)).increment();
-                throw new RuntimeException("Could not acquire lock for key: " + lockKey + " within " + waitTime + "s");
+                throw new IllegalStateException(
+                    "Could not acquire lock for key: " + lockKey + " within " + waitTime + "s");
             }
             
             meterRegistry.counter("lock.acquire.success", "key", sanitizeKey(lockKey)).increment();
@@ -89,7 +90,7 @@ public class EnhancedDistributedLock implements DistributedLock {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             meterRegistry.counter("lock.acquire.interrupted", "key", sanitizeKey(lockKey)).increment();
-            throw new RuntimeException("Interrupted while acquiring lock", e);
+            throw new IllegalStateException("Interrupted while acquiring lock", e);
         } catch (Exception e) {
             meterRegistry.counter("lock.acquire.error", "key", sanitizeKey(lockKey)).increment();
             throw e;
@@ -236,7 +237,8 @@ public class EnhancedDistributedLock implements DistributedLock {
                         meterRegistry.counter("lock.redis.recovered").increment();
                     }
                 } catch (Exception ex) {
-                    // 忽略，保持不可用状态
+                    // 探测失败保持不可用状态, 下一轮重试; 但必须留痕, 否则 Redis 长期不可达无法定位
+                    log.debug("Redis 可用性探测失败, 保持不可用状态", ex);
                 }
             });
         }

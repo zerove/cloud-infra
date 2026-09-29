@@ -1,6 +1,5 @@
 package com.cloudinfra.framework.workflow;
 
-import com.cloudinfra.common.core.workflow.WorkflowContext;
 import com.cloudinfra.common.core.workflow.WorkflowEngine;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;

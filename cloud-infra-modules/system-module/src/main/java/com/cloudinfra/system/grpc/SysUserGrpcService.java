@@ -13,7 +13,17 @@ import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
 
-import static com.cloudinfra.system.grpc.GrpcAdapterSupport.*;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.filterDeptId;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.found;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.id;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.number;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.pageNum;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.pageSize;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.require;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.respond;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.status;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.text;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.validate;
 
 /** 实验性适配层。鉴权尚未完成，默认禁用，禁止生产开启。 */
 @Component
@@ -34,7 +44,9 @@ public class SysUserGrpcService extends SysUserServiceGrpc.SysUserServiceImplBas
             Page<SysUser> page = new Page<>(pageNum(request.getPageNum()), pageSize(request.getPageSize()));
             SysUser query = new SysUser();
             query.setUsername(request.getUsername().isEmpty() ? null : request.getUsername());
-            if (!request.getStatus().isEmpty()) query.setStatus(status(request.getStatus()));
+            if (!request.getStatus().isEmpty()) {
+                query.setStatus(status(request.getStatus()));
+            }
             query.setDeptId(filterDeptId(request.getDeptId()));
             var result = userService.selectUserList(page, query);
             return ListUsersResponse.newBuilder()
@@ -55,9 +67,15 @@ public class SysUserGrpcService extends SysUserServiceGrpc.SysUserServiceImplBas
             dto.setEmail(request.getEmail());
             dto.setPhoneNumber(request.getPhone());
             require(request.getDeptId() >= 0, "dept_id must not be negative");
-            if (request.getDeptId() > 0) dto.setDeptId(request.getDeptId());
-            if (request.getRoleIdsCount() == 1) dto.setRoleId(id(request.getRoleIds(0)));
-            if (request.getPostIdsCount() == 1) dto.setPostId(id(request.getPostIds(0)));
+            if (request.getDeptId() > 0) {
+                dto.setDeptId(request.getDeptId());
+            }
+            if (request.getRoleIdsCount() == 1) {
+                dto.setRoleId(id(request.getRoleIds(0)));
+            }
+            if (request.getPostIdsCount() == 1) {
+                dto.setPostId(id(request.getPostIds(0)));
+            }
             validate(validator, dto);
             Long createdId = userService.createUserReturningId(dto);
             return toUserResponse(found(userService.selectUserById(found(createdId))));
@@ -71,15 +89,31 @@ public class SysUserGrpcService extends SysUserServiceGrpc.SysUserServiceImplBas
             require(request.getRoleIdsCount() <= 1 && request.getPostIdsCount() <= 1, "Only one role and one post are supported");
             SysUserUpdateDTO dto = new SysUserUpdateDTO();
             dto.setUserId(id(request.getUserId()));
-            if (request.hasNickname()) dto.setNickName(request.getNickname());
-            if (request.hasEmail()) dto.setEmail(request.getEmail());
-            if (request.hasPhone()) dto.setPhoneNumber(request.getPhone());
-            if (request.hasStatus()) dto.setStatus(status(request.getStatus()));
-            if (request.hasDeptId()) dto.setDeptId(id(request.getDeptId()));
-            if (request.getRoleIdsCount() == 1) dto.setRoleId(id(request.getRoleIds(0)));
-            if (request.getPostIdsCount() == 1) dto.setPostId(id(request.getPostIds(0)));
+            if (request.hasNickname()) {
+                dto.setNickName(request.getNickname());
+            }
+            if (request.hasEmail()) {
+                dto.setEmail(request.getEmail());
+            }
+            if (request.hasPhone()) {
+                dto.setPhoneNumber(request.getPhone());
+            }
+            if (request.hasStatus()) {
+                dto.setStatus(status(request.getStatus()));
+            }
+            if (request.hasDeptId()) {
+                dto.setDeptId(id(request.getDeptId()));
+            }
+            if (request.getRoleIdsCount() == 1) {
+                dto.setRoleId(id(request.getRoleIds(0)));
+            }
+            if (request.getPostIdsCount() == 1) {
+                dto.setPostId(id(request.getPostIds(0)));
+            }
             validate(validator, dto);
-            if (userService.updateUser(dto) == 0) return toUserResponse(found(null));
+            if (userService.updateUser(dto) == 0) {
+                return toUserResponse(found(null));
+            }
             return toUserResponse(found(userService.selectUserById(request.getUserId())));
         });
     }
@@ -101,8 +135,12 @@ public class SysUserGrpcService extends SysUserServiceGrpc.SysUserServiceImplBas
             .setNickname(text(user.getNickName())).setEmail(text(user.getEmail()))
             .setPhone(text(user.getPhoneNumber())).setStatus(user.getStatus() == null ? "" : user.getStatus().toString())
             .setDeptId(number(user.getDeptId()));
-        if (user.getCreateTime() != null) builder.setCreateTime(user.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        if (user.getUpdateTime() != null) builder.setUpdateTime(user.getUpdateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        if (user.getCreateTime() != null) {
+            builder.setCreateTime(user.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        }
+        if (user.getUpdateTime() != null) {
+            builder.setUpdateTime(user.getUpdateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        }
         return builder.build();
     }
 }

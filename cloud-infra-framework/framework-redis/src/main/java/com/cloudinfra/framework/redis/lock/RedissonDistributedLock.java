@@ -26,10 +26,10 @@ public class RedissonDistributedLock implements DistributedLock {
                     lock.unlock();
                 }
             }
-            throw new RuntimeException("Could not acquire lock for key: " + lockKey);
+            throw new IllegalStateException("Could not acquire lock for key: " + lockKey);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while acquiring lock", e);
+            throw new IllegalStateException("Interrupted while acquiring lock", e);
         }
     }
 

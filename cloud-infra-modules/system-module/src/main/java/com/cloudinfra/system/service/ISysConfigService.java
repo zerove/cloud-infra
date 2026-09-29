@@ -2,7 +2,6 @@ package com.cloudinfra.system.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.system.domain.SysConfig;
-import java.util.List;
 
 public interface ISysConfigService {
     IPage<SysConfig> selectConfigList(SysConfig query, long pageNum, long pageSize);

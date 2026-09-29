@@ -6,7 +6,10 @@ import freemarker.template.Template;
 import freemarker.template.TemplateException;
 import freemarker.template.TemplateExceptionHandler;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,7 +36,7 @@ public class TemplateEngine {
         try {
             configuration.setDirectoryForTemplateLoading(new File(templateDir));
         } catch (IOException e) {
-            throw new RuntimeException("无法加载模板目录: " + templateDir, e);
+            throw new IllegalStateException("无法加载模板目录: " + templateDir, e);
         }
         return this;
     }
@@ -60,7 +63,7 @@ public class TemplateEngine {
             template.process(dataModel, writer);
             return writer.toString();
         } catch (IOException | TemplateException e) {
-            throw new RuntimeException("渲染模板失败: " + templateName, e);
+            throw new IllegalStateException("渲染模板失败: " + templateName, e);
         }
     }
 
@@ -76,7 +79,11 @@ public class TemplateEngine {
             return;
         }
 
-        Files.createDirectories(output.getParent());
+        // 相对文件名 (如 "out.txt") 的 parent 为 null, 此时无需建目录
+        Path parent = output.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
 
         String content = renderToString(templateName, dataModel);
 

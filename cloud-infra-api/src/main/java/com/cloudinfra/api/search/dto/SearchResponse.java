@@ -3,7 +3,6 @@ package com.cloudinfra.api.search.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -13,7 +12,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class SearchResponse<T> implements Serializable {
+public class SearchResponse<T> {
 
     /**
      * 数据列表

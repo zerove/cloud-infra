@@ -154,9 +154,13 @@ public class FileValidator {
 
     private void validateMagicBytes(MultipartFile file, String extension) {
         String magicKey = EXT_TO_MAGIC_KEY.get(extension.toLowerCase());
-        if (magicKey == null) return;
+        if (magicKey == null) {
+            return;
+        }
         byte[] expectedMagic = MAGIC_BYTES.get(magicKey);
-        if (expectedMagic == null) return; // txt 等无魔数
+        if (expectedMagic == null) {
+            return; // txt 等无魔数
+        }
 
         try (InputStream is = file.getInputStream()) {
             byte[] header = new byte[expectedMagic.length];

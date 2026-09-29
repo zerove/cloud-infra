@@ -138,6 +138,8 @@ public class GenerateCodeMojo extends AbstractMojo {
                 try {
                     ((AutoCloseable) dataSource).close();
                 } catch (Exception ignored) {
+                    // 关闭数据源失败不掩盖真正的生成结果
+                    getLog().debug("关闭代码生成数据源失败", ignored);
                 }
             }
         }

@@ -15,7 +15,16 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
 
-import static com.cloudinfra.system.grpc.GrpcAdapterSupport.*;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.found;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.id;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.number;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.pageNum;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.pageSize;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.require;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.respond;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.status;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.text;
+import static com.cloudinfra.system.grpc.GrpcAdapterSupport.validate;
 
 /** 实验性适配层。鉴权尚未完成，默认禁用，禁止生产开启。 */
 @Component
@@ -35,8 +44,12 @@ public class SysDeptGrpcService extends SysDeptServiceGrpc.SysDeptServiceImplBas
         respond(observer, () -> {
             Page<SysDept> page = new Page<>(pageNum(request.getPageNum()), pageSize(request.getPageSize()));
             SysDept query = new SysDept();
-            if (!request.getDeptName().isEmpty()) query.setDeptName(request.getDeptName());
-            if (!request.getStatus().isEmpty()) query.setStatus(status(request.getStatus()).toString());
+            if (!request.getDeptName().isEmpty()) {
+                query.setDeptName(request.getDeptName());
+            }
+            if (!request.getStatus().isEmpty()) {
+                query.setStatus(status(request.getStatus()).toString());
+            }
             var result = deptService.selectDeptList(page, query);
             return ListDeptsResponse.newBuilder()
                 .addAllRecords(result.getRecords().stream().map(this::toDeptResponse).toList())
@@ -79,12 +92,22 @@ public class SysDeptGrpcService extends SysDeptServiceGrpc.SysDeptServiceImplBas
                 require(request.getOrderNum() >= 0, "order_num must not be negative");
                 dto.setOrderNum(request.getOrderNum());
             }
-            if (request.hasLeader()) dto.setLeader(request.getLeader());
-            if (request.hasPhone()) dto.setPhone(request.getPhone());
-            if (request.hasEmail()) dto.setEmail(request.getEmail());
-            if (request.hasStatus()) dto.setStatus(status(request.getStatus()).toString());
+            if (request.hasLeader()) {
+                dto.setLeader(request.getLeader());
+            }
+            if (request.hasPhone()) {
+                dto.setPhone(request.getPhone());
+            }
+            if (request.hasEmail()) {
+                dto.setEmail(request.getEmail());
+            }
+            if (request.hasStatus()) {
+                dto.setStatus(status(request.getStatus()).toString());
+            }
             validate(validator, dto);
-            if (!deptService.updateDept(dto)) return toDeptResponse(found(null));
+            if (!deptService.updateDept(dto)) {
+                return toDeptResponse(found(null));
+            }
             return toDeptResponse(found(deptService.getById(request.getDeptId())));
         });
     }
@@ -103,17 +126,23 @@ public class SysDeptGrpcService extends SysDeptServiceGrpc.SysDeptServiceImplBas
         respond(observer, () -> {
             require(request.getRootId() >= 0, "root_id must not be negative");
             List<SysDept> tree = deptService.buildDeptTree(List.of());
-            if (request.getRootId() > 0) tree = List.of(found(findRoot(tree, request.getRootId())));
+            if (request.getRootId() > 0) {
+                tree = List.of(found(findRoot(tree, request.getRootId())));
+            }
             return DeptTreeResponse.newBuilder().addAllNodes(tree.stream().map(this::toDeptResponseWithChildren).toList()).build();
         });
     }
 
     private SysDept findRoot(List<SysDept> nodes, long rootId) {
         for (SysDept node : nodes) {
-            if (Objects.equals(node.getDeptId(), rootId)) return node;
+            if (Objects.equals(node.getDeptId(), rootId)) {
+                return node;
+            }
             if (node.getChildren() != null) {
                 SysDept foundNode = findRoot(node.getChildren(), rootId);
-                if (foundNode != null) return foundNode;
+                if (foundNode != null) {
+                    return foundNode;
+                }
             }
         }
         return null;
@@ -131,7 +160,9 @@ public class SysDeptGrpcService extends SysDeptServiceGrpc.SysDeptServiceImplBas
 
     private DeptResponse toDeptResponseWithChildren(SysDept dept) {
         DeptResponse.Builder builder = toDeptResponse(dept).toBuilder();
-        if (dept.getChildren() != null) builder.addAllChildren(dept.getChildren().stream().map(this::toDeptResponseWithChildren).toList());
+        if (dept.getChildren() != null) {
+            builder.addAllChildren(dept.getChildren().stream().map(this::toDeptResponseWithChildren).toList());
+        }
         return builder.build();
     }
 }

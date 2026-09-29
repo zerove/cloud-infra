@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -180,5 +181,52 @@ class WorkflowEngineTest {
 
         WorkflowResult result = engine.execute(workflow, new WorkflowContext(Map.of()));
         assertThat(result.success()).isTrue();  // Phase A 简化下不实际超时
+    }
+
+    // ========== 场景 9: 步骤级超时 ==========
+
+    @Test
+    @DisplayName("步骤级超时: handler 超出预算时该步骤判失败, 不记为成功")
+    void stepTimeoutBudgetIsEnforced() {
+        // 步骤预算 50ms, handler 睡 400ms: 必须判失败而不是静默成功
+        var slowEngine = new WorkflowEngine(
+            Executors.newSingleThreadExecutor(),
+            (handler, ctx) -> {
+                try {
+                    Thread.sleep(400);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return Map.of("handler", handler);
+            });
+        try {
+            WorkflowStep step = new WorkflowStep("slow", "plugin", List.of(), "X.slow", Map.of(),
+                null, new WorkflowStep.TimeoutConfig(50, "ms"), null);
+            Workflow workflow = new Workflow("step-timeout-wf", "1.0", List.of(step), null, 30);
+
+            WorkflowResult result = slowEngine.execute(workflow, new WorkflowContext(Map.of()));
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.stepOutputs()).doesNotContainKey("slow");
+            assertThat(result.errors()).containsKey("slow");
+            assertThat(result.errors().get("slow"))
+                .hasCauseInstanceOf(WorkflowEngine.StepTimeoutException.class);
+        } finally {
+            slowEngine.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("步骤级超时: 未配置 timeout 时沿用 60s 缺省预算, 正常步骤不受影响")
+    void stepWithoutTimeoutUsesDefaultBudget() {
+        WorkflowStep step = new WorkflowStep("fast", "plugin", List.of(), "X.fast", Map.of(),
+            null, null, null);
+        Workflow workflow = new Workflow("default-budget-wf", "1.0", List.of(step), null, 30);
+
+        WorkflowResult result = engine.execute(workflow, new WorkflowContext(Map.of()));
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.stepOutputs()).containsKey("fast");
     }
 }
