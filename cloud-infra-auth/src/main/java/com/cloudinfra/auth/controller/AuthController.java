@@ -2,7 +2,6 @@ package com.cloudinfra.auth.controller;
 
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.SysLoginService;
-import com.cloudinfra.common.core.annotation.Idempotent;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.enums.ResultCode;
@@ -43,7 +42,11 @@ public class AuthController {
 
     @Operation(summary = "注册")
     @PostMapping("/register")
-    @Idempotent(mode = Idempotent.Mode.REPLAY, expireSeconds = 86400, keyHeader = "Idempotency-Key")
+    // 2026-09-29 移除 @Idempotent(REPLAY):
+    //   1) username 已有数据库 UNIQUE 约束 (V1__init_schema.sql) 提供真实去重;
+    //   2) 全仓核实无任何客户端发送 Idempotency-Key, REPLAY 实际从未命中;
+    //   3) 原先靠自动键 (anon + URI + body 摘要) 生效, 会让"用户重复提交相同注册信息"
+    //      拿到首次的旧响应, 形成假成功。详见 issue 27 决策 4。
     public Result<Void> register(@RequestBody LoginUser registerUser, HttpServletRequest request) {
         if (!PasswordValidator.isValid(registerUser.getPassword())) {
             return Result.fail(

@@ -197,6 +197,38 @@ class IdempotentAspectTest {
         verify(pjp, never()).proceed();
     }
 
+    @Test
+    @DisplayName("REPLAY: 客户端未提供幂等键 → 直通, 不读缓存不加锁不写缓存")
+    void shouldPassThroughWhenReplayKeyNotClientSupplied() throws Throwable {
+        // 不添加 Idempotency-Key / X-Request-Token 头
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.proceed()).thenReturn("ok");
+
+        Object result = aspect.around(pjp, idempotentReplay());
+
+        assertThat(result).isEqualTo("ok");
+        verify(pjp, times(1)).proceed();
+        // 关键断言: 不得触碰任何幂等存储, 否则会把"无幂等键"误当成"同一次请求的重试"
+        verify(store, never()).read(anyString());
+        verify(store, never()).tryAcquire(anyString(), anyInt());
+        verify(store, never()).storeResponse(anyString(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("REPLAY: X-Request-Token 亦视为客户端提供的键")
+    void shouldTreatLegacyHeaderAsClientSupplied() throws Throwable {
+        request.addHeader("X-Request-Token", "legacy-token");
+        when(store.read(anyString())).thenReturn(null);
+        when(store.tryAcquire(anyString(), anyInt())).thenReturn(true);
+        ProceedingJoinPoint pjp = mock(ProceedingJoinPoint.class);
+        when(pjp.proceed()).thenReturn("{\"token\":\"abc\"}");
+
+        Object result = aspect.around(pjp, idempotentReplay());
+
+        assertThat(result).isEqualTo("{\"token\":\"abc\"}");
+        verify(store).read(anyString());
+    }
+
     // ========== Key 解析 ==========
 
     @Test

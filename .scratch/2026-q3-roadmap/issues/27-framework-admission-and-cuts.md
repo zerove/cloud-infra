@@ -103,24 +103,57 @@ email/sms/websocket → 失败仅记 `notification_log` 的 FAIL。
 `GrpcCallerContext.current().userId()`。由于该通道仅 system-module 使用且默认关闭,
 代价可接受; 且方法级权限本就未实现 (见 M7-02 Phase E), 短期不受影响。
 
-### 决策 4: `IdempotencyStore` 的使用面 — 待确认
+### 决策 4: `IdempotencyStore` 的使用面 — ✅ 已执行（解释 B）
 
-当前仅 `AuthController.register` 1 处使用。需确认是"机制过度设计"还是"推广不足"。
-未在本轮处理。
+**排查**: 全仓搜索 `Idempotency-Key` / `X-Request-Token`, 结果只出现在框架自身、单元测试与文档中。
+仓库内无前端代码（无 `package.json`）, e2e 脚本也不调用 `/auth/register`。
+**结论: 没有任何生产客户端发送幂等键**, 唯一使用点的 REPLAY 实际从未按预期生效。
+
+**发现的问题**: 切面在缺 key 时回退到自动键 `userId + URI + body 摘要`, 而注册接口
+用户尚未登录, `userId` 为 null 退化成 `anon`, 键形如
+`idempotency:/auth/auth/register:anon:<body摘要>`。这意味着**同一注册请求体在 TTL (24h) 内
+会被 REPLAY 成首次的旧响应**。用户重复提交相同注册信息时得到的是"成功", 而非
+"用户名已存在" —— 这是**假成功**, 比不做幂等更危险。
+
+同时该接口的 `username` 已有数据库 UNIQUE 约束 (`V1__init_schema.sql:12`) 提供真实去重,
+幂等层在此并未带来额外保障。
+
+**已实施**:
+1. **框架语义收紧**: `REPLAY` 模式必须由客户端显式提供幂等键 (`Idempotency-Key` 或
+   `X-Request-Token`), 否则切面直通不拦截。自动生成的键仅可用于 `REJECT` 防抖 ——
+   防抖本就期望"短窗口内拒绝相同请求", 语义正确。理由与注解/切面/架构文档已同步。
+2. **移除 `AuthController.register` 上的 `@Idempotent`**: 框架收紧后它已永不生效,
+   保留即死代码; 且数据库唯一约束已在做真正的去重。
+3. **顺带修复 ADG 报告的两处真实问题**:
+   - `catch (Throwable)` 会吞掉 `OutOfMemoryError` 等 Error; 重构为 `try-finally` +
+     成功标志位, 无需捕获任何异常, 且业务失败时 (含 Error) 都能释放锁
+   - 日志中引用 `token` 变量被判为可能记录敏感数据; 改为只记录长度
+
+**保留框架本身**: 幂等是真实生产模式, 支付/下单类接口确需 REPLAY。收紧后语义正确,
+等有真实客户端接入时可直接启用。当前判定为 `⚪ Built, Unused` (业务引用 0)。
+
+**新增测试 2 项**: REPLAY 无客户端键时直通且不触碰任何存储; `X-Request-Token`
+视为客户端提供的键。
 
 ## 本轮纠正的记录错误
 
 此前 session 报告的“825 项测试 0 失败”**是错的**: 统计脚本把 Maven 控制台的模块汇总行
 与单测试类行一并累加, 造成重复计数。`mvn -o clean` 后按 surefire XML 精确统计,
-真实数字为 **408 项 (0 失败, 1 跳过)**。相关文档已全部改正, 并在 `AGENTS.md`
+真实数字为 **410 项 (0 失败, 1 跳过)**。相关文档已全部改正, 并在 `AGENTS.md`
 基线处注明“统计以 surefire XML 为准, 勿用控制台汇总行累加”。
 
 ## 验收标准
 
-1. ✅ 决策 1 (选项 A)、决策 3 (选项 A) 已实施, `mvn -o test` + `checkstyle:check` 通过
+1. ✅ 决策 1 (选项 A) 已实施: 编排引擎标记实验 + 修复 `catch Throwable` 吞 Error
 2. ✅ 决策 2 已找到真实场景, 并得出“不需要接入 Outbox 框架”的修正结论
-3. ⬜ 决策 4 待确认
-4. ✅ ROADMAP 中不存在“标为 `🟢 Completed` 但业务零引用”的条目
+3. ✅ 决策 3 (选项 A) 已实施: gRPC 身份抽象单层化, 去掉 SPI
+4. ✅ 决策 4 已排查并实施: 框架语义收紧 + 移除失效注解
+5. ✅ ROADMAP 中不存在“标为 `🟢 Completed` 但业务零引用”的条目
+6. ✅ `mvn -o test` 0 失败, `mvn -o checkstyle:check` 0 违规
+
+**四项决策全部完成**。四个零业务引用的组件（编排引擎 764 行、Outbox 767 行、
+幂等 500 行、codegen 2464 行）现在都有明确标记与处置结论, 且准入原则已写入 AGENTS.md
+作为后续 agent 的强制约束。
 
 ## 关联
 
