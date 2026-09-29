@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.annotation.Log;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.common.core.event.LogEvent;
 import java.time.LocalDateTime;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * 操作日志记录处理
  */
+@Slf4j
 @Aspect
 @Component
 public class LogAspect {
@@ -90,8 +92,9 @@ public class LogAspect {
 
             // 发布事件，异步保存
             eventPublisher.publishEvent(new LogEvent(operLog));
-        } catch (Exception exp) {
-            // 记录日志异常
+        } catch (RuntimeException exp) {
+            // 操作日志失败不能影响业务响应, 但必须留痕, 否则日志丢失无法定位
+            log.warn("记录操作日志失败", exp);
         }
     }
 }

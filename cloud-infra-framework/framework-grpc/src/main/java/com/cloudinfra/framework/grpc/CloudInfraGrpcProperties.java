@@ -117,7 +117,7 @@ public class CloudInfraGrpcProperties {
         if (value == null || value.isEmpty()) {
             return 0;
         }
-        String v = value.trim().toLowerCase();
+        String v = value.trim().toLowerCase(java.util.Locale.ROOT);
         if (v.endsWith("ns")) {
             return Long.parseLong(v.substring(0, v.length() - 2));
         }

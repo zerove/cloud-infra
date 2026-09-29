@@ -87,7 +87,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<Result<?>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException e) {
-        log.warn("Data integrity violation: {}", e.getRootCause() != null ? e.getRootCause().getMessage() : e.getMessage());
+        Throwable rootCause = e.getRootCause();
+        log.warn("Data integrity violation: {}", rootCause != null ? rootCause.getMessage() : e.getMessage());
         return new ResponseEntity<>(
             Result.fail(ErrorCode.DATA_CONFLICT.getCode(), "数据冲突，可能违反唯一约束或外键约束"), 
             HttpStatus.CONFLICT

@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * OpenAPI 自动配置 (M6-05)
@@ -79,6 +80,6 @@ public class OpenApiAutoConfiguration {
             return appName;
         }
         String suffix = appName.substring(dash + 1);
-        return suffix.substring(0, 1).toUpperCase() + suffix.substring(1);
+        return suffix.substring(0, 1).toUpperCase(Locale.ROOT) + suffix.substring(1);
     }
 }

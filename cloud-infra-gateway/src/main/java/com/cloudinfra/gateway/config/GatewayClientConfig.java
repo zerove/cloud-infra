@@ -79,7 +79,7 @@ public class GatewayClientConfig {
                 })
                 .defaultStatusHandler(status -> status.is4xxClientError() || status.is5xxServerError(),
                         (request, response) -> {
-                            throw new RuntimeException("HTTP error: " + response.getStatusCode());
+                            throw new IllegalStateException("HTTP error: " + response.getStatusCode());
                         });
     }
 }

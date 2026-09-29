@@ -60,9 +60,12 @@ public class StandardResponseAdvice implements ResponseBodyAdvice<Object> {
         // 处理 String 类型的返回值：通过 Jackson 序列化为 JSON 字符串
         // 同时覆盖 Content-Type 头，确保客户端按 JSON 解析
         if (body instanceof String) {
+            // MethodParameter 在部分上下文 (如容器级返回值) 下没有 containingClass/method
+            Class<?> declaringType = returnType.getContainingClass();
+            java.lang.reflect.Method handlerMethod = returnType.getMethod();
             log.debug("Wrapping String response in Result for {}.{}",
-                    returnType.getContainingClass().getSimpleName(),
-                    returnType.getMethod() != null ? returnType.getMethod().getName() : "unknown");
+                    declaringType != null ? declaringType.getSimpleName() : "unknown",
+                    handlerMethod != null ? handlerMethod.getName() : "unknown");
             response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
             try {
                 return objectMapper.writeValueAsString(Result.success(body));
