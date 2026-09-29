@@ -13,6 +13,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -55,6 +56,7 @@ public class IdempotentAspect {
         this(redisTemplate, store, new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
     }
 
+    @Autowired
     public IdempotentAspect(RedisTemplate<String, Object> redisTemplate,
                             IdempotencyStore store,
                             com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
