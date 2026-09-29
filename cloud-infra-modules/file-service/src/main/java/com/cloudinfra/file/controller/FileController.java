@@ -20,13 +20,9 @@ import io.minio.errors.XmlParserException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,7 +37,6 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.security.NoSuchAlgorithmException;
 import java.security.InvalidKeyException;
 import java.util.HashMap;
@@ -79,7 +74,10 @@ public class FileController {
             @RequestParam("filename") String filename,
             @RequestParam("contentType") String contentType,
             @RequestParam(value = "size", required = false) Long size,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId)
+            throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
+            NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
+            InternalException {
         Long userId = resolveUserId(requestUserId);
         fileValidator.validate(filename, contentType, size);
 
@@ -116,7 +114,10 @@ public class FileController {
     @GetMapping("/presign-download/{fileId}")
     public Result<Map<String, String>> presignDownload(
             @PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId)
+            throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
+            NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
+            InternalException {
         Long userId = resolveUserId(requestUserId);
 
         // 查表获取 objectKey + 权限校验 (复用现有 download 逻辑)
@@ -160,7 +161,10 @@ public class FileController {
             @RequestParam("contentType") String contentType,
             @RequestParam("totalSize") Long totalSize,
             @RequestParam("partCount") int partCount,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws ServerException, InsufficientDataException, ErrorResponseException, IOException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId)
+            throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
+            NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
+            InternalException {
         if (partCount < 1 || partCount > 1000) {
             return Result.fail(400, "分片数必须在 1-1000 之间");
         }

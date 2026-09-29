@@ -16,6 +16,16 @@
         <property name="eachLine" value="false"/>
     </module>
 
+    <!--
+      放行 Spring Cloud Gateway 的 vendored 覆写类：
+      该文件整份复制自上游 org.springframework.cloud.gateway，保留原始制表符缩进
+      以便与上游 diff、便于后续升级替换。业务代码仍一律禁止 Tab。
+    -->
+    <module name="SuppressionSingleFilter">
+        <property name="files" value="GatewayMvcRuntimeHintsProcessor\.java$"/>
+        <property name="checks" value="FileTabCharacter"/>
+    </module>
+
     <!-- 行长度上限（宽松，为现有长行保留空间） -->
     <module name="LineLength">
         <property name="max" value="200"/>

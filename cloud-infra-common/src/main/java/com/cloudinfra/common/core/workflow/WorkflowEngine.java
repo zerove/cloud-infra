@@ -8,8 +8,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -18,7 +18,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /**
  * 业务编排引擎 (M6-04)
@@ -49,6 +48,9 @@ import java.util.function.Function;
 public class WorkflowEngine {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
+
+    /** 步骤级超时缺省预算: 未配置 WorkflowStep.timeout 时使用。 */
+    private static final long DEFAULT_STEP_TIMEOUT_MS = 60_000L;
 
     private final ExecutorService executor;
     private final BiFunction<String, WorkflowContext, Object> handlerInvoker;
@@ -86,10 +88,7 @@ public class WorkflowEngine {
         log.info("[WorkflowEngine] 开始执行 workflow: name={}, version={}, steps={}",
             workflow.name(), workflow.version(), workflow.steps().size());
 
-        // 1. 拓扑排序 (DAG)
-        List<WorkflowStep> ordered = topologicalSort(workflow.steps());
-
-        // 2. 按顺序执行 (同层并行)
+        // 1. 按依赖分层执行 (同层并行); computeLevels 同时完成环依赖校验
         Map<String, Object> stepOutputs = new LinkedHashMap<>();
         Map<String, Throwable> stepErrors = new LinkedHashMap<>();
         Set<String> skipped = new HashSet<>();
@@ -171,14 +170,20 @@ public class WorkflowEngine {
         int maxAttempts = step.retry() != null ? step.retry().max() : 1;
         long timeoutMs = step.timeout() != null
             ? parseDuration(step.timeout().duration(), step.timeout().unit())
-            : 60_000L;
+            : DEFAULT_STEP_TIMEOUT_MS;
 
         Throwable lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 Object result = invokeHandler(step, context, outputs);
+                // 步骤级超时校验: handler 同步执行, 无法安全中断, 因此在返回后核对耗时。
+                // 超预算即视为本次尝试失败, 交由重试策略处理, 且绝不记为成功。
+                long elapsed = System.currentTimeMillis() - stepStart;
+                if (elapsed > timeoutMs) {
+                    throw new StepTimeoutException(step.id(), timeoutMs, elapsed);
+                }
                 outputs.put(step.id(), result);
-                long duration = System.currentTimeMillis() - stepStart;
+                long duration = elapsed;
                 log.info("[WorkflowEngine] 步骤成功: id={}, attempt={}, duration={}ms",
                     step.id(), attempt, duration);
                 return;
@@ -195,21 +200,28 @@ public class WorkflowEngine {
         if (step.onFailure() != null) {
             log.info("[WorkflowEngine] 步骤 {} 失败, 触发 onFailure 补偿", step.id());
             try {
-                // onFailure 是补偿 handler 字符串 (如 "OrderPlugin.refund")
-                var originalHandler = step.handler();
+                // onFailure 是补偿 handler 字符串 (如 "OrderPlugin.refund"),
+                // 构造一个只承载该 handler 的补偿步骤, 复用同一套 handlerInvoker 入口。
                 var compStep = new WorkflowStep(
                     step.id() + "-compensation", "plugin", List.of(),
                     step.onFailure(), Map.of(), null, null, null
                 );
-                // 临时替换 handler 字符串, invokeHandler 会调用 handlerInvoker
-                // handlerInvoker 负责调用对应方法
                 invokeHandler(compStep, context, outputs);
                 log.info("[WorkflowEngine] 补偿成功: onFailure={}", step.onFailure());
             } catch (Throwable compError) {
                 log.error("[WorkflowEngine] 补偿失败: onFailure={}, err={}", step.onFailure(), compError.getMessage());
             }
         }
-        throw new RuntimeException("步骤 " + step.id() + " 重试 " + maxAttempts + " 次均失败", lastError);
+        throw new WorkflowExecutionException(step.id(), maxAttempts, lastError);
+    }
+
+    /** 步骤级超时信号: 不含敏感信息, 仅标识步骤与预算。 */
+    static final class StepTimeoutException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        StepTimeoutException(String stepId, long budgetMs, long elapsedMs) {
+            super("步骤 " + stepId + " 超过超时预算 " + budgetMs + "ms (实际 " + elapsedMs + "ms)");
+        }
     }
 
     /**
@@ -221,23 +233,6 @@ public class WorkflowEngine {
         // Phase C: 保存步骤输出供后续步骤引用
         context.setStepOutput(step.id(), result);
         return result;
-    }
-
-    /**
-     * Phase C: Saga 补偿 - 调用 handler.compensate(). 通过 ApplicationContext 查 handler 实例.
-     */
-    private void executeCompensation(WorkflowStep step, WorkflowContext context, Throwable cause,
-                                     BiFunction<String, WorkflowContext, Object> compensateInvoker) {
-        if (compensateInvoker == null) {
-            log.warn("[WorkflowEngine] 步骤 {} 失败, 但无 handlerLookup 配置, 无法补偿", step.id());
-            return;
-        }
-        try {
-            log.info("[WorkflowEngine] 执行补偿: stepId={}", step.id());
-            compensateInvoker.apply(step.handler(), context);
-        } catch (Throwable t) {
-            log.error("[WorkflowEngine] 补偿失败: stepId={}, err={}", step.id(), t.getMessage());
-        }
     }
 
     /**
@@ -285,16 +280,6 @@ public class WorkflowEngine {
         return level;
     }
 
-    /**
-     * 拓扑排序 (返回按依赖顺序的步骤列表).
-     */
-    private List<WorkflowStep> topologicalSort(List<WorkflowStep> steps) {
-        Map<String, Integer> level = computeLevels(steps);
-        return steps.stream()
-            .sorted((a, b) -> level.get(a.id()) - level.get(b.id()))
-            .toList();
-    }
-
     private void sleepBackoff(WorkflowStep.RetryConfig retry) {
         if (retry == null) {
             return;
@@ -308,7 +293,7 @@ public class WorkflowEngine {
     }
 
     private long parseDuration(long duration, String unit) {
-        return switch (unit == null ? "s" : unit.toLowerCase()) {
+        return switch (unit == null ? "s" : unit.toLowerCase(Locale.ROOT)) {
             case "ms" -> duration;
             case "s" -> duration * 1000L;
             case "m" -> duration * 60_000L;

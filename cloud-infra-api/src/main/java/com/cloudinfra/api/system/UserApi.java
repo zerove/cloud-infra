@@ -1,6 +1,5 @@
 package com.cloudinfra.api.system;
 
-import com.cloudinfra.api.system.UserApi;
 import com.cloudinfra.api.system.fallback.UserApiFallbackFactory;
 import com.cloudinfra.api.system.dto.UserDTO;
 import com.cloudinfra.common.core.domain.Result;

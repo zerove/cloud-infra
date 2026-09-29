@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -123,24 +124,26 @@ public class FlywayDdlParser {
 
         for (String def : columnDefs) {
             def = def.trim();
-            if (def.isEmpty() || def.toUpperCase().startsWith("PRIMARY KEY")
-                || def.toUpperCase().startsWith("UNIQUE ")
-                || def.toUpperCase().startsWith("CONSTRAINT ")
-                || def.toUpperCase().startsWith("FOREIGN KEY")
-                || def.toUpperCase().startsWith("INDEX ")
-                || def.toUpperCase().startsWith("KEY ")) {
+            if (def.isEmpty() || def.toUpperCase(Locale.ROOT).startsWith("PRIMARY KEY")
+                || def.toUpperCase(Locale.ROOT).startsWith("UNIQUE ")
+                || def.toUpperCase(Locale.ROOT).startsWith("CONSTRAINT ")
+                || def.toUpperCase(Locale.ROOT).startsWith("FOREIGN KEY")
+                || def.toUpperCase(Locale.ROOT).startsWith("INDEX ")
+                || def.toUpperCase(Locale.ROOT).startsWith("KEY ")) {
                 continue;
             }
 
             FieldModel field = parseColumn(def);
-            if (field == null) continue;
+            if (field == null) {
+                continue;
+            }
 
             // 查找列注释
             String commentKey = tableName + "." + field.getColumnName();
             field.setComment(columnComments.getOrDefault(commentKey, field.getColumnName()));
 
             // 主键检测
-            if (def.toUpperCase().contains("PRIMARY KEY")) {
+            if (def.toUpperCase(Locale.ROOT).contains("PRIMARY KEY")) {
                 field.setPrimaryKey(true);
                 field.setNotNull(true);
                 field.setIdType(com.baomidou.mybatisplus.annotation.IdType.AUTO);
@@ -175,11 +178,13 @@ public class FlywayDdlParser {
 
         // 解析类型
         field.setJavaType(mapJdbcType(jdbcType));
-        field.setNotNull(constraints.toUpperCase().contains("NOT NULL"));
+        field.setNotNull(constraints.toUpperCase(Locale.ROOT).contains("NOT NULL"));
 
         // 解析长度
         Integer length = extractLength(jdbcType);
-        if (length != null) field.setLength(length);
+        if (length != null) {
+            field.setLength(length);
+        }
 
         return field;
     }
@@ -199,19 +204,11 @@ public class FlywayDdlParser {
     private void recognizeAuditField(FieldModel field) {
         String name = field.getPropertyName();
         switch (name) {
-            case "createBy" -> {
+            case "createBy", "createTime" -> {
                 field.setFill(true);
                 field.setFillStrategy("insert");
             }
-            case "createTime" -> {
-                field.setFill(true);
-                field.setFillStrategy("insert");
-            }
-            case "updateBy" -> {
-                field.setFill(true);
-                field.setFillStrategy("insert_update");
-            }
-            case "updateTime" -> {
+            case "updateBy", "updateTime" -> {
                 field.setFill(true);
                 field.setFillStrategy("insert_update");
             }
@@ -223,9 +220,11 @@ public class FlywayDdlParser {
     }
 
     private String mapJdbcType(String jdbc) {
-        if (jdbc == null) return "java.lang.String";
+        if (jdbc == null) {
+            return "java.lang.String";
+        }
         // 移除括号内的参数 + 转为大写
-        String baseType = jdbc.replaceAll("\\(.*?\\)", "").trim().toUpperCase();
+        String baseType = jdbc.replaceAll("\\(.*?\\)", "").trim().toUpperCase(Locale.ROOT);
         // 多关键字类型处理: DOUBLE PRECISION
         if (baseType.contains(" ")) {
             baseType = baseType.split("\\s+")[0];
@@ -253,7 +252,7 @@ public class FlywayDdlParser {
         Map<String, String> map = new HashMap<>();
         Matcher m = COMMENT_TABLE_PATTERN.matcher(sql);
         while (m.find()) {
-            map.put(m.group(1).toLowerCase(), m.group(2));
+            map.put(m.group(1).toLowerCase(Locale.ROOT), m.group(2));
         }
         return map;
     }
@@ -262,7 +261,7 @@ public class FlywayDdlParser {
         Map<String, String> map = new HashMap<>();
         Matcher m = COMMENT_COLUMN_PATTERN.matcher(sql);
         while (m.find()) {
-            String key = m.group(1).toLowerCase() + "." + m.group(2).toLowerCase();
+            String key = m.group(1).toLowerCase(Locale.ROOT) + "." + m.group(2).toLowerCase(Locale.ROOT);
             map.put(key, m.group(3));
         }
         return map;
@@ -276,9 +275,11 @@ public class FlywayDdlParser {
         int depth = 0;
         StringBuilder current = new StringBuilder();
         for (char c : body.toCharArray()) {
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
-            else if (c == ',' && depth == 0) {
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+            } else if (c == ',' && depth == 0) {
                 result.add(current.toString());
                 current.setLength(0);
                 continue;
@@ -292,19 +293,25 @@ public class FlywayDdlParser {
     }
 
     private String toCamelCase(String snake, boolean upperFirst) {
-        if (snake == null || snake.isEmpty()) return snake;
+        if (snake == null || snake.isEmpty()) {
+            return snake;
+        }
         String[] parts = snake.split("_");
         StringBuilder sb = new StringBuilder();
         boolean first = true;
         for (String p : parts) {
-            if (p.isEmpty()) continue;
+            if (p.isEmpty()) {
+                continue;
+            }
             if (first) {
                 sb.append(upperFirst ? Character.toUpperCase(p.charAt(0)) : Character.toLowerCase(p.charAt(0)));
                 first = false;
             } else {
                 sb.append(Character.toUpperCase(p.charAt(0)));
             }
-            if (p.length() > 1) sb.append(p.substring(1).toLowerCase());
+            if (p.length() > 1) {
+                sb.append(p.substring(1).toLowerCase(Locale.ROOT));
+            }
         }
         return sb.toString();
     }

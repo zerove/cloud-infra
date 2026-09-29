@@ -1,6 +1,5 @@
 package com.cloudinfra.api.file;
 
-import com.cloudinfra.api.file.FileApi;
 import com.cloudinfra.api.file.fallback.FileApiFallbackFactory;
 import com.cloudinfra.api.file.dto.FileInfoResponse;
 import com.cloudinfra.api.file.dto.FileMetadataVO;

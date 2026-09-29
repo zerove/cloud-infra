@@ -3,7 +3,6 @@ package com.cloudinfra.search.config;
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;

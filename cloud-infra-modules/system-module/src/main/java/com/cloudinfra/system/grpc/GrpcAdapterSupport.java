@@ -36,7 +36,9 @@ final class GrpcAdapterSupport {
     }
 
     static void require(boolean valid, String message) {
-        if (!valid) throw new RequestFailure(Status.INVALID_ARGUMENT.withDescription(message));
+        if (!valid) {
+            throw new RequestFailure(Status.INVALID_ARGUMENT.withDescription(message));
+        }
     }
 
     static void validate(Validator validator, Object dto) {
@@ -64,7 +66,9 @@ final class GrpcAdapterSupport {
     }
 
     static Long filterDeptId(String value) {
-        if (value.isEmpty()) return null;
+        if (value.isEmpty()) {
+            return null;
+        }
         try {
             return id(Long.parseLong(value));
         } catch (NumberFormatException failure) {
@@ -73,7 +77,9 @@ final class GrpcAdapterSupport {
     }
 
     static <T> T found(T value) {
-        if (value == null) throw new RequestFailure(Status.NOT_FOUND.withDescription("Resource not found"));
+        if (value == null) {
+            throw new RequestFailure(Status.NOT_FOUND.withDescription("Resource not found"));
+        }
         return value;
     }
 

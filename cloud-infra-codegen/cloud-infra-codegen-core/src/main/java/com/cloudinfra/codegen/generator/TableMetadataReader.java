@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 从数据库读取表结构元数据
@@ -166,11 +167,11 @@ public class TableMetadataReader {
         if (parts.length == 0) {
             return columnName;
         }
-        StringBuilder sb = new StringBuilder(parts[0].toLowerCase());
+        StringBuilder sb = new StringBuilder(parts[0].toLowerCase(Locale.ROOT));
         for (int i = 1; i < parts.length; i++) {
             if (!parts[i].isEmpty()) {
                 sb.append(Character.toUpperCase(parts[i].charAt(0)))
-                  .append(parts[i].substring(1).toLowerCase());
+                  .append(parts[i].substring(1).toLowerCase(Locale.ROOT));
             }
         }
         return sb.toString();
@@ -180,16 +181,17 @@ public class TableMetadataReader {
      * 数据库类型到 Java 类型的映射
      */
     private String mapJdbcToJava(String jdbcType) {
-        if (jdbcType == null) return String.class.getName();
-        return switch (jdbcType.toUpperCase()) {
+        if (jdbcType == null) {
+            return String.class.getName();
+        }
+        return switch (jdbcType.toUpperCase(Locale.ROOT)) {
             case "INT", "INTEGER", "INT4" -> Integer.class.getName();
             case "BIGINT", "INT8" -> Long.class.getName();
             case "SMALLINT", "INT2" -> Short.class.getName();
-            case "TINYINT", "INT1" -> Boolean.class.getName();
+            case "TINYINT", "INT1", "BOOLEAN" -> Boolean.class.getName();
             case "DECIMAL", "NUMERIC" -> java.math.BigDecimal.class.getName();
             case "FLOAT", "REAL" -> Float.class.getName();
             case "DOUBLE", "FLOAT8" -> Double.class.getName();
-            case "BOOLEAN" -> Boolean.class.getName();
             case "DATE" -> java.time.LocalDate.class.getName();
             case "TIME" -> java.time.LocalTime.class.getName();
             case "TIMESTAMP", "DATETIME", "TIMESTAMPTZ" -> java.time.LocalDateTime.class.getName();
@@ -211,7 +213,7 @@ public class TableMetadataReader {
             for (String part : parts) {
                 if (!part.isEmpty()) {
                     sb.append(Character.toUpperCase(part.charAt(0)))
-                      .append(part.substring(1).toLowerCase());
+                      .append(part.substring(1).toLowerCase(Locale.ROOT));
                 }
             }
             className = sb.toString();
@@ -224,7 +226,9 @@ public class TableMetadataReader {
     }
 
     private String toLowerCamel(String name) {
-        if (name == null || name.isEmpty()) return name;
+        if (name == null || name.isEmpty()) {
+            return name;
+        }
         return Character.toLowerCase(name.charAt(0)) + name.substring(1);
     }
 }

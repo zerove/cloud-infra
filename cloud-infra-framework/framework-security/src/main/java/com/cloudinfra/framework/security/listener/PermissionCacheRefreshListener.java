@@ -81,7 +81,7 @@ public class PermissionCacheRefreshListener implements MessageListener,
         try {
             String body = new String(message.getBody(), StandardCharsets.UTF_8);
             log.debug("收到权限刷新消息: {}", body);
-            if (body == null || body.isBlank()) {
+            if (body.isBlank()) {
                 return;
             }
             if (body.startsWith(PermissionRefreshProtocol.USER_PREFIX)) {

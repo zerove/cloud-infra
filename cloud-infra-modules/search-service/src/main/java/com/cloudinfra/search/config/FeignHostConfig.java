@@ -2,13 +2,10 @@ package com.cloudinfra.search.config;
 
 import feign.Client;
 import feign.Request;
-import feign.Response;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-import java.io.IOException;
-import java.net.URI;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;

@@ -18,8 +18,6 @@ import java.util.concurrent.Executors;
 @AutoConfiguration
 public class TracingAutoConfiguration {
 
-    private final MDCContextTaskDecorator mdcDecorator = new MDCContextTaskDecorator();
-
     @AutoConfiguration
     @ConditionalOnProperty(prefix = "spring.threads.virtual", name = "enabled", havingValue = "true", matchIfMissing = true)
     static class VirtualThreadExecutorConfiguration {

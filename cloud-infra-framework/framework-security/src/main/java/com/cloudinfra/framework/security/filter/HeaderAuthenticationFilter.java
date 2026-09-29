@@ -16,7 +16,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
-import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.framework.security.cache.PermissionLocalCache;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.util.JwtUtils;

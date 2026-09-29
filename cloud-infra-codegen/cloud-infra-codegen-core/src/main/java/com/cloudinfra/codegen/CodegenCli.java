@@ -8,6 +8,7 @@ import com.cloudinfra.codegen.util.DataSourceFactory;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
@@ -27,7 +28,8 @@ public class CodegenCli {
         System.out.println("=== Cloud-Infra 代码生成工具 v1.0.0 ===");
         System.out.println("自动生成 Entity/Mapper/Service/Controller/DTO/VO/Converter");
 
-        try (Scanner scanner = new Scanner(System.in)) {
+        // 固定 UTF-8, 不跟随平台默认编码, 避免非 UTF-8 locale 下输入被乱码解析
+        try (Scanner scanner = new Scanner(System.in, StandardCharsets.UTF_8)) {
             // 1. 读取数据库配置
             System.out.print("\n[1/6] 请输入数据库 URL (默认: jdbc:postgresql://localhost:5432/cloud_infra): ");
             String dbUrl = scanner.nextLine().trim();

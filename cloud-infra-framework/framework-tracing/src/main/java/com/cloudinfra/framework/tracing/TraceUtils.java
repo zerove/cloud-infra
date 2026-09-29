@@ -15,13 +15,15 @@ import java.util.Optional;
  * Tracer 为可选依赖: 未配置追踪后端时使用 NOOP 实现, 不影响应用启动
  */
 @Component
-public class TraceUtils {
+public final class TraceUtils {
 
     private static final Logger log = LoggerFactory.getLogger(TraceUtils.class);
     private final Tracer tracer;
 
     public TraceUtils(ObjectProvider<Tracer> tracerProvider) {
-        this.tracer = tracerProvider.getIfAvailable(() -> Tracer.NOOP);
+        // 不在构造期调用可能抛异常的 supplier, 避免对象半初始化
+        Tracer resolved = tracerProvider.getIfAvailable();
+        this.tracer = resolved != null ? resolved : Tracer.NOOP;
     }
 
     /**

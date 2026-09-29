@@ -4,8 +4,8 @@ import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
-import org.springframework.beans.factory.annotation.Value;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -40,8 +40,8 @@ public class SystemSecurityConfig {
     private final AuthenticationEntryPointImpl authenticationEntryPoint;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    private com.cloudinfra.common.core.crypto.InternalCallSecretProvider secretProvider;
+    @Autowired
+    private InternalCallSecretProvider secretProvider;
     // A3 关键修复: 之前用 field 缓存 secret, lambda capture this.field 引用,
     // field 初始化 vs filterChain @Bean 调用顺序问题导致 null 值, 验签失败.
     // 改用 secretProvider.getSecret() 实时调, 保证用最新值.

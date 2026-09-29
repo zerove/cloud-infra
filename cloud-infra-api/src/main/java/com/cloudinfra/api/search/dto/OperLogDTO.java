@@ -1,14 +1,13 @@
 package com.cloudinfra.api.search.dto;
 
 import lombok.Data;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
  * 操作日志 DTO
  */
 @Data
-public class OperLogDTO implements Serializable {
+public class OperLogDTO {
     /** 操作日志 ID */
     private Long operId;
     /** 操作标题 */

@@ -5,9 +5,6 @@ import jakarta.websocket.server.HandshakeRequest;
 import jakarta.websocket.server.ServerEndpointConfig;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
-import java.util.Map;
-
 /**
  * WebSocket 握手鉴权 Configurator (JSR-356 标准做法).
  *
