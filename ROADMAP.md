@@ -122,6 +122,7 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 - [x] ⚪ **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + 17 单元测试 + 5 Testcontainers 集成测试
   - ⚪ **2026-09-29 复核与治理**: 唯一使用点 `AuthController.register` 已移除注解。排查确认全仓无任何客户端发送 `Idempotency-Key`, 且原自动键 (`anon + URI + body 摘要`) 会在 24h 内把"用户重复提交"重放成"成功"（假成功）。框架语义已收紧：**REPLAY 必须客户端显式提供键**，自动键仅可用于 REJECT 防抖。详见 issue 27 决策 4
 - [x] ⚪ **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
+  - ⚪ **2026-09-29 决策**: 找到真实场景 (notification-service 分发) 后, **不接入本框架**, 继续暂停投入。改由通知表自身加 `dispatch_status` + 定时补扫承担, 详见下方 M7-08 与 issue 27 决策 2
   - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (767 行)。Outbox 模式本身正确, 但无任何业务接入。需先找到真实的一致性敏感场景再启用
 - [x] ⚪ **M6-04 业务编排引擎** (commit 267fd77 + cab11fb + 6d363c9): WorkflowEngine (DAG 分层 + 并行 + 重试 + 步骤超时 + Saga 补偿) + WorkflowStepHandler SPI + 启动扫描注册
   - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (764 行, 含 17 项自测)。Saga 编排有真实价值, 但引擎无使用方。保留代码, 暂停投入
@@ -133,6 +134,14 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
   - ✅ **2026-09-29 复核**: agent 确实打进镜像且 entrypoint 生效, 非仅设环境变量
 - [x] 🟢 **M6-01 Phase D Dockerfile 路径修复** (commit 0f1e169, 验证 commit 66ec01a): 6 Dockerfile `COPY deploy/...` 路径 + compose build context `..` 修复, `./deploy/up.sh --full` 可成功 build 镜像
 - [x] 🟢 **M7-03 WebSocket 鉴权改造** (commits 6c20099 + 6c30458): Phase A Filter + Configurator 协同 (解决 tyrus 2.2 + jwaa 2.2 HandshakeResponse 缺失) + 7 测试; Phase B TLS 配置 (PKCS12 keystore + Nginx wss:// 终止 + 证书生成脚本); 文档 ARCHITECTURE.md §5
+- [x] 🟢 **M7-08 通知分发可靠性** (issue 27 决策 2, 2026-09-29): 修复分发进程崩溃即永久丢失、渠道失败无重试、状态无法区分"从未分发"与"已分发但未读"三个真实缺陷
+  - `sys_notification` 自身充当发件箱: 新增 `dispatch_status` (PENDING/DISPATCHING/DISPATCHED/FAILED) + `dispatch_attempts`, 与既有 `status` (是否已读) 正交; 存量行保守置 DISPATCHED 避免重投打扰用户
+  - 分发改走 `notification.dispatch.queue`: 事务提交后投递 MQ (落 Broker, 进程重启不丢), 替代原先的内存线程池直发
+  - `NotificationDispatchConsumer`: CAS 抢占 (`PENDING → DISPATCHING`) 保证 MQ 重投与补扫重投命中同一行时只有一个执行
+  - `NotificationDispatchRecoveryTask`: 每分钟补扫 `PENDING`/`DISPATCHING` 陈旧行, 解卡后重投; 达 3 次上限置 FAILED 转人工; Redis 分布式锁保证多副本只扫一次
+  - `NotificationDispatchMapper`: 不加 `@TenantFilter` — 分发链路无租户上下文, 否则拦截器会把 SQL 改写为 `1=0` 致分发静默失效
+  - 顺带移除 `NotificationChannel.send` 的 `throws Exception` (现有实现均以未受检异常表达失败)
+  - 测试 11 项: 消费者 CAS 去重 / 异常释放; 补扫锁竞争 / 解卡重投 / 达上限放弃 / 单条失败不阻断 / 不误删他人锁
 - [ ] **M7-02 gRPC 支持** (issue 24, in progress)
   - [x] 🟢 **M7-02 Phase A**: framework-grpc 模块基础设施 (commit 8ace1d8): EnableGrpcServer 注解 + CloudInfraGrpcProperties 配置 + GrpcServerAutoConfiguration + EchoService proto
   - [x] 🟢 **M7-02 Phase B**: EchoServiceImpl 业务逻辑 + 5 单元测试 (commit 3dc6649): Echo/EchoWithMetadata/Health RPC, count 安全上限, 5/5 测试通过
@@ -153,4 +162,4 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 - 通知直接 TLS 配置及真实组件握手测试已补齐（`b984269`），TLS 1.2/1.3、缺少身份头拒绝、心跳、推送及连接清理通过。反向代理、可信网关和生产容器链路尚未验收，M7-03 不应整体关闭。
 - **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
 - 上述前置验收完成后，执行 M7-07 性能基准更新。**M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件已冻结**（见上方“未来 M7+ 已冻结”）。当前不将设计或组件测试标记为生产交付。
-- 质量基线：`mvn -o test` 410 项测试 0 失败（2026-09-29 clean 后实测, 以 surefire XML 为准）。
+- 质量基线：`mvn -o test` 422 项测试 0 失败（2026-09-29 clean 后实测, 以 surefire XML 为准）。

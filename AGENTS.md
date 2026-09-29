@@ -105,7 +105,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-09-29)
-- **构建**: `mvn -o test` → BUILD SUCCESS, **410 tests, 0 fail, 1 skipped** (2026-09-29 clean 后实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)
+- **构建**: `mvn -o test` → BUILD SUCCESS, **422 tests, 0 fail, 1 skipped** (2026-09-29 clean 后实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)

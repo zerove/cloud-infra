@@ -18,11 +18,18 @@ CREATE TABLE IF NOT EXISTS sys_notification (
     content TEXT NOT NULL,
     status SMALLINT NOT NULL DEFAULT 0,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    read_time TIMESTAMP
+    read_time TIMESTAMP,
+    -- 分发状态: 0=待分发 1=分发中 2=已分发 3=分发失败
+    -- 使本行自身充当发件箱记录, 支撑进程崩溃后的补扫重投
+    dispatch_status SMALLINT NOT NULL DEFAULT 0,
+    dispatch_attempts SMALLINT NOT NULL DEFAULT 0
 );
 
 -- 索引：用户+状态，用于快速查询未读通知
 CREATE INDEX IF NOT EXISTS idx_notification_user_status ON sys_notification(user_id, status);
+
+-- 索引：补扫待分发通知（dispatch_status + create_time 联合，按状态过滤后按时间取陈旧记录）
+CREATE INDEX IF NOT EXISTS idx_notification_dispatch ON sys_notification(dispatch_status, create_time);
 
 -- 渠道发送日志表
 CREATE TABLE IF NOT EXISTS sys_notification_log (

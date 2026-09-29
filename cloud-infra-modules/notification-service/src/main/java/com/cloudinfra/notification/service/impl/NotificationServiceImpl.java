@@ -2,7 +2,9 @@ package com.cloudinfra.notification.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import static com.cloudinfra.notification.ws.NotificationWebSocketHandler.pushToUser;
+import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
+import com.cloudinfra.notification.config.RabbitMQConfig;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.NotificationTemplate;
@@ -12,16 +14,16 @@ import com.cloudinfra.notification.mapper.NotificationLogMapper;
 import com.cloudinfra.notification.mapper.NotificationMapper;
 import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
-import com.cloudinfra.notification.service.ChannelFactory;
 import com.cloudinfra.notification.service.INotificationService;
 import com.cloudinfra.notification.service.NotificationRouter;
 import com.cloudinfra.notification.service.NotificationQuotaService;
-import com.cloudinfra.notification.service.channel.NotificationChannel;
 import com.cloudinfra.notification.util.TemplateProcessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -30,8 +32,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.Collections;
 import java.util.Map;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -43,11 +43,10 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationLogMapper logMapper;
     private final NotificationTemplateMapper templateMapper;
     private final NotificationRouter notificationRouter;
-    private final ChannelFactory channelFactory;
     private final ScheduledNotificationMapper scheduleMapper;
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
-    private final ExecutorService dispatchExecutor;
+    private final RabbitTemplate rabbitTemplate;
 
 
     @Override
@@ -88,20 +87,25 @@ public class NotificationServiceImpl implements INotificationService {
             finalContent = request.content();
         }
 
-        // 5. 智能路由：计算最终触达渠道
-        List<NotificationChannel> targetChannels = notificationRouter.route(request);
+        // 5. 智能路由：校验并计算最终触达渠道
+        //    路由结果在消费者侧按通知记录重新计算, 此处仅做配额/偏好校验以尽早失败
+        notificationRouter.route(request);
 
-        // 6. 持久化通知主记录 (状态: UNREAD - 待处理)
+        // 6. 持久化通知主记录
+        //    dispatch_status=PENDING: 本行同时充当发件箱记录。事务提交后由 MQ 投递;
+        //    若进程在提交后、投递前崩溃, 补扫任务会发现此行并重投, 通知不会静默丢失。
         Notification notification = new Notification();
         notification.setUserId(request.userId());
         notification.setTitle(finalTitle);
         notification.setContent(finalContent);
         notification.setType(request.type());
         notification.setStatus(NotificationStatus.UNREAD);
+        notification.setDispatchStatus(DispatchStatus.PENDING);
+        notification.setDispatchAttempts(0);
         notificationMapper.insert(notification);
 
-        // 7. 事务提交后分发渠道（避免长事务持有 DB 连接）
-        registerDispatchAfterCommit(notification, targetChannels);
+        // 7. 事务提交后投递到 MQ (渠道发送由消费者完成, 失败走 MQ 重试 + DLQ)
+        registerDispatchAfterCommit(notification);
 
         // 8. WebSocket 实时推送 (事务提交后, 用户即时收到通知)
         registerWebSocketPushAfterCommit(notification);
@@ -124,88 +128,43 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     /**
-     * 事务提交后分发渠道
+     * 事务提交后把通知投递到 MQ (issue 27 决策 2)
      *
-     * 通过 TransactionSynchronization 保证渠道发送（IO 密集、失败重试）在
-     * 主记录持久化事务提交之后执行，避免长事务持有数据库连接、渠道失败回滚 DB。
+     * <p>不在此处直接发送渠道: 内存线程池在事务提交与实际投递之间的崩溃窗口会让通知
+     * 永久丢失。改为投递到 MQ 后, 消息落在 Broker 上, 进程重启不丢。</p>
+     *
+     * <p><b>失败重投不依赖 MQ 重试</b> (本项目未配置原生监听器级重试/DLQ), 而是由
+     * {@code NotificationDispatchRecoveryTask} 依据 {@code dispatch_status} 承担。
+     * 即使此处 MQ 投递本身失败 (Broker 不可达), 通知行仍留在库中且为 PENDING,
+     * 补扫任务会重新投递。</p>
      */
-    private void registerDispatchAfterCommit(Notification notification, List<NotificationChannel> targetChannels) {
+    private void registerDispatchAfterCommit(Notification notification) {
+        Runnable publish = () -> publishToQueue(notification.getId());
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        dispatchChannels(notification, targetChannels);
+                        publish.run();
                     }
                 }
             );
         } else {
-            // 无事务上下文（如 MQ 回调中的非事务路径）：直接分发
-            dispatchChannels(notification, targetChannels);
+            // 无事务上下文（如 MQ 回调中的非事务路径）：直接投递
+            publish.run();
         }
     }
 
-    /**
-     * 并发分发到各渠道（非事务，独立记录渠道日志）
-     * 异步执行，不阻塞调用线程：分发完成后更新通知状态。
-     */
-    private void dispatchChannels(Notification notification, List<NotificationChannel> targetChannels) {
-        log.info("[VT-Dispatch] 提交分发任务: notificationId={}, channels={}",
-            notification.getId(),
-            targetChannels.stream().map(NotificationChannel::getChannelCode).collect(Collectors.toList()));
-        dispatchExecutor.execute(() -> {
-            try {
-                List<CompletableFuture<Boolean>> futures = targetChannels.stream()
-                    .map(channel -> CompletableFuture.supplyAsync(() -> {
-                        long startTime = System.currentTimeMillis();
-                        String code = channel.getChannelCode();
-                        try {
-                            channel.send(notification.getUserId(), notification.getTitle(), notification.getContent());
-                            saveLog(notification.getId(), code, "SUCCESS", null, System.currentTimeMillis() - startTime);
-                            log.info("[VT-Worker] 渠道 {} 发送成功 -> 用户: {}", code, notification.getUserId());
-                            return true;
-                        } catch (Exception e) {
-                            saveLog(notification.getId(), code, "FAIL", e.getMessage(), System.currentTimeMillis() - startTime);
-                            log.error("[VT-Worker] 渠道 {} 发送失败: {}", code, e.getMessage());
-                            return false;
-                        }
-                    }, dispatchExecutor))
-                    .collect(Collectors.toList());
-
-                // 使用 thenCompose 避免阻塞 join，改为异步组合
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenRun(() -> {
-                        try {
-                            boolean anySuccess = futures.stream()
-                                .map(CompletableFuture::join) // 此时已经完成，join 不会阻塞
-                                .anyMatch(Boolean::booleanValue);
-                            NotificationStatus newStatus = anySuccess ? NotificationStatus.SENT : NotificationStatus.UNREAD;
-                            if (newStatus != notification.getStatus()) {
-                                Notification update = new Notification();
-                                update.setId(notification.getId());
-                                update.setStatus(newStatus);
-                                notificationMapper.updateById(update);
-                                log.info("[VT-Dispatch] 通知状态更新: id={}, from={}, to={}",
-                                    notification.getId(), notification.getStatus(), newStatus);
-                            }
-                        } catch (Exception e) {
-                            log.error("[VT-Dispatch] 状态更新异常: notificationId={}", notification.getId(), e);
-                        }
-                    });
-            } catch (Exception e) {
-                log.error("[VT-Dispatch] 分发任务异常: notificationId={}", notification.getId(), e);
-            }
-        });
-    }
-
-    private void saveLog(Long notificationId, String channelCode, String status, String error, long duration) {
-        NotificationLog logEntry = new NotificationLog();
-        logEntry.setNotificationId(notificationId);
-        logEntry.setChannelCode(channelCode);
-        logEntry.setStatus(status);
-        logEntry.setErrorMessage(error);
-        logEntry.setDuration(duration);
-        logMapper.insert(logEntry);
+    private void publishToQueue(Long notificationId) {
+        try {
+            rabbitTemplate.convertAndSend(
+                RabbitMQConfig.NOTIFICATION_DISPATCH_QUEUE, String.valueOf(notificationId));
+            log.debug("[Dispatch-Publish] 已投递到 MQ: notificationId={}", notificationId);
+        } catch (AmqpException brokerFailure) {
+            // 不阻断业务: 通知行已在库中且仍是 PENDING, 补扫任务会重投
+            log.error("[Dispatch-Publish] MQ 投递失败, 交由补扫重投: notificationId={}", notificationId,
+                brokerFailure);
+        }
     }
 
     @Override
