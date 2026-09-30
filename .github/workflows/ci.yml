@@ -9,7 +9,11 @@ on:
 env:
   MAVEN_OPTS: "-Xmx2G -Xms512m"
   JAVA_VERSION: "25"
-  GRAALVM_VERSION: "25.0.1"
+  # 不钉死具体 GraalVM 版本号（2026-09-30 事故）:
+  # 旧写法 GRAALVM_VERSION=25.0.1 会让 action 去拉 graalvm-ce-java25-linux-amd64-25.0.1,
+  # 该资产已被上游回收 -> "Failed to download" -> 全部 job 在 setup 阶段 17 秒内红,
+  # CI 自 2026-09-05 起从未真正跑到编译与测试。改为 distribution 由 action 动态解析。
+  GRAALVM_DISTRIBUTION: "graalvm-community"
 
 jobs:
   test:
@@ -20,11 +24,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (GraalVM)
+      - name: Set up JDK 25 (GraalVM Community)
         uses: graalvm/setup-graalvm@v1
         with:
-          version: ${{ env.GRAALVM_VERSION }}
           java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.GRAALVM_DISTRIBUTION }}
           components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,11 +73,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (GraalVM)
+      - name: Set up JDK 25 (GraalVM Community)
         uses: graalvm/setup-graalvm@v1
         with:
-          version: ${{ env.GRAALVM_VERSION }}
           java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.GRAALVM_DISTRIBUTION }}
 
       - name: Cache Maven packages
         uses: actions/cache@v4
@@ -104,11 +108,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (GraalVM)
+      - name: Set up JDK 25 (GraalVM Community)
         uses: graalvm/setup-graalvm@v1
         with:
-          version: ${{ env.GRAALVM_VERSION }}
           java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.GRAALVM_DISTRIBUTION }}
           components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 

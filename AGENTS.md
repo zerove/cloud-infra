@@ -58,8 +58,13 @@
 2. **触发证据**: 有测试验证"触发条件成立 → 代码真的执行", 而非直接调用目标方法。
 3. **端到端证据**: 真实进程/容器跑通一次 (或明确标注"尚无", 记 ⚠️ 而非 🟢)。
 
-**`skipITs=true` 之类的开关会制造检测盲区**: P0 级的"auth 启动失败"就是被它掩盖的。
-新增需要跨进程/容器验证的能力时, 必须同步给出该能力在默认构建里的验证路径。
+**CI 红灯会制造检测盲区**: P0 级的"auth 启动失败"正是被它掩盖的 ——
+`ci.yml` 配了 IT 步骤, 但 `GRAALVM_VERSION=25.0.1` 指向的下载资产已被上游回收,
+三个 job 在 `setup-java` 阶段 17 秒内红, **master 最近 12 次 CI Pipeline 全部 failure**
+(最早一次 2026-09-05 08:14, 与该缺陷引入同日)。叠加本地 `skipITs=true`,
+结果是**自缺陷引入起没有任何一处真正编译或测试过代码**, 持续 25 天。
+新增需要跨进程/容器验证的能力时, 必须同步给出该能力在默认构建里的验证路径,
+并在 CI 恢复绿之前**手工跑一次并把结果写进交付记录**。
 
 详见 `ROADMAP.md` “运行时有效性审计” 与 issue 29。
 
@@ -164,7 +169,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 
 ### 4. 质量基线 (2026-09-29)
 - **构建**: `mvn -o test` → BUILD SUCCESS, **474 tests, 0 fail, 1 skipped** (2026-09-30 实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
-- **集成测试**: `skipITs` 默认 `true`, `mvn -o verify -DskipITs=false` 才执行。这是**检测盲区**, P0 级的"auth 启动失败"就是被它掩盖的; 需要运行时证据的能力必须手工跑一次并记录
+- **集成测试**: 两道闸门都曾失效（2026-09-30 实测）—— ① 本地 `mvn test` 因 `skipITs=true` 跑不到 IT; ② `ci.yml` **有** IT 步骤, 但 `GRAALVM_VERSION` 钉死的版本资产已被上游回收, 三个 job 在 `setup-java` 阶段 17 秒内红, **master 最近 12 次 CI Pipeline 全部 failure** (最早 2026-09-05 08:14)。因此 CI 自引入缺陷当天起从未真正编译或测试过任何代码。需要运行时证据的能力必须本地手工跑一次并记录: `mvn -o verify -pl <module> -DskipITs=false -Dit.test=<Class>`
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30)
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开

@@ -97,7 +97,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 | 优先级 | 项 | 说明 |
 | :--- | :--- | :--- |
 | P0 | 多租户三选一 | 决策项, 见上 |
-| P0 | **让集成测试真的跑** | `skipITs` 默认 `true` 是本次最大检测盲区, P0-2 就被它掩盖。CI 加 `-DskipITs=false` 的夜间/发布前 job, 或给每个服务加"启动冒烟"测试进单元测试阶段 |
+| P0 | **让 CI 真的跑起来** | `ci.yml` 配了 IT 步骤, 但 `GRAALVM_VERSION=25.0.1` 指向的资产已被上游回收, 三个 job 在 `setup-java` 阶段 17 秒内红 —— **master 最近 12 次 CI Pipeline 全部 failure** (最早 2026-09-05 08:14, 与 P0-2 缺陷引入同日)。叠加本地 `skipITs=true`, 导致 25 天内没有任何一处真正编译或测试过代码。已改为 `distribution: graalvm-community` 由 action 动态解析, 待推送后确认转绿 |
 | P1 | 存量 `🟢` 逐条复核 | 每条列出"运行时证据"一栏, 填不出可复现观测的降级。纯审计, 不改代码 |
 | P1 | 守护推广 | `ControllerAuthorizationTest` 扩到 notification/search/file/auth; opt-in 守护模式推广到其余框架组件 |
 
