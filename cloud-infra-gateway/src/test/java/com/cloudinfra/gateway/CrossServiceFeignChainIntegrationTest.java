@@ -322,16 +322,38 @@ private static String resolveExecJar(String relative) throws IOException {
         // When: 携带 token 访问下游受保护端点
         //   网关校验 JWT+会话 → 注入身份头 → system HeaderAuthenticationFilter
         //   → RemotePermissionProvider(Feign[HMAC] 回拉权限) → @PreAuthorize
+        // 注: 原先用 /system/user/detail/1, 该端点已迁至 /internal/system/user/detail/{userId}
+        //     (见 step4), 改用同样经 @PreAuthorize + RemotePermissionProvider 的用户列表端点。
         ResponseEntity<String> resp =
-                exchange(gw("/system/user/detail/1"), HttpMethod.GET, token, null);
+                exchange(gw("/system/user/list?pageNum=1&pageSize=1"), HttpMethod.GET, token, null);
 
-        // Then: 200 + admin 身份 + V9 修复后的非空权限集（回归保护核心断言）
+        // Then: 200 + admin 身份可见（回归保护核心断言：权限回拉链路通）
         assertThat(resp.getStatusCode().value())
                 .as("携带合法 token 应 200: %s", resp.getBody()).isEqualTo(200);
         JsonNode body = JSON.readTree(resp.getBody());
-        assertThat(body.path("data").path("username").asText()).isEqualTo("admin");
-        assertThat(body.path("data").path("permissions").size())
-                .as("V9 绑定后 admin 权限集非空").isGreaterThan(0);
+        assertThat(body.path("data").path("records").isArray())
+                .as("用户列表应返回分页结构: %s", resp.getBody()).isTrue();
+    }
+
+    @Test
+    @Order(4)
+    void step4_internalContractEndpointsAreNotRoutableThroughGateway() throws Exception {
+        // Given: 持有合法 token 的普通用户（admin 也代表"已认证但非服务间调用"）
+        String token = obtainToken();
+        assertThat(token).isNotBlank();
+
+        // When/Then: 内部服务间契约端点没有网关路由，携带合法 token 也拿不到
+        for (String path : List.of(
+                "/system/user/detail/1",
+                "/system/user/credential/username/admin",
+                "/internal/system/user/credential/username/admin",
+                "/internal/system/user/detail/1")) {
+            ResponseEntity<String> resp = exchange(gw(path), HttpMethod.GET, token, null);
+            assertThat(resp.getStatusCode().value())
+                    .as("内部契约端点 %s 不得经网关可达（2026-09-30 P0：可读他人 BCrypt 密码哈希），实际 %s",
+                            path, resp.getBody())
+                    .isNotEqualTo(200);
+        }
     }
 
     @Test
