@@ -7,7 +7,6 @@ import lombok.Getter;
  * 用于处理可预见的业务逻辑错误
  */
 @Getter
-@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class BusinessException extends BaseException {
     public BusinessException(Integer code, String errorCode, String message) {
         super(code, errorCode, message);

@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 /**
  * 资源冲突异常 (409 Conflict)
  */
-@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class ConflictException extends BaseException {
     public ConflictException(ErrorCode errorCode) {
         super(errorCode);

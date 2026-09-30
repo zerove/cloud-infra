@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 /**
  * 参数非法异常 (400 Bad Request)
  */
-@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class InvalidParameterException extends BaseException {
     public InvalidParameterException(ErrorCode errorCode) {
         super(errorCode);
