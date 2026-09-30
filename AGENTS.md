@@ -163,7 +163,8 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-09-29)
-- **构建**: `mvn -o test` → BUILD SUCCESS, **429 tests, 0 fail, 1 skipped** (2026-09-30 实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)
+- **构建**: `mvn -o test` → BUILD SUCCESS, **474 tests, 0 fail, 1 skipped** (2026-09-30 实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
+- **集成测试**: `skipITs` 默认 `true`, `mvn -o verify -DskipITs=false` 才执行。这是**检测盲区**, P0 级的"auth 启动失败"就是被它掩盖的; 需要运行时证据的能力必须手工跑一次并记录
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30)
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
