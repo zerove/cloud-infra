@@ -65,6 +65,20 @@ jobs:
             **/target/failsafe-reports/
           retention-days: 7
 
+      - name: Upload quality reports
+        # 本地与 CI 的静态分析结论曾长期不一致 (本地 ~/.m2 残留 + pmd 增量缓存),
+        # 把报告本身作为产物上传, 才能在下一次红灯时直接读到违规清单而不是猜。
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            **/target/pmd.xml
+            **/target/checkstyle-result.xml
+            **/target/spotbugsXml.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
   quality-gate:
     name: Quality Gates (Checkstyle, SpotBugs, PMD)
     runs-on: ubuntu-latest
@@ -105,6 +119,21 @@ jobs:
         # 守护 framework/common/api/modules 分层, 防止架构腐化.
         # 详见 ArchitectureTest.java (5 rules). 任一违反即拦截 PR.
         run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -DfailIfNoTests=false --batch-mode
+
+      - name: Upload quality reports
+        # 本地与 CI 的静态分析结论曾长期不一致 (本地 ~/.m2 残留历史 SNAPSHOT +
+        # maven-pmd-plugin 的增量缓存), 把报告本身作为产物上传, 下一次红灯时
+        # 就能直接读到违规清单, 而不是靠猜。
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            **/target/pmd.xml
+            **/target/checkstyle-result.xml
+            **/target/spotbugsXml.xml
+          retention-days: 7
+          if-no-files-found: ignore
 
   native-build:
     name: Native Image Build (Gateway + Auth)
