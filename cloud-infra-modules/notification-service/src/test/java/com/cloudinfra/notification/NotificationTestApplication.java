@@ -43,8 +43,17 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
             // 其 stringRedisTemplate 在容器启动前取映射端口而抛 IllegalStateException,
             // 最终污染所有复用本测试应用的测试上下文。
             // file-service 侧已有同问题的 FileServiceContextExcludeFilter, 此处用同一思路。
+            //
+            // 2026-09-30 收紧: 原正则 com\.cloudinfra\.notification\..*\..*\$.* 要求中间还有
+            // 一个包分隔符, 因此漏掉了包根下的 NotificationRecoveryMultiReplicaIT$..., 同时
+            // 又会连带排除与 IT 无关的嵌套类。改为只匹配 "以 IT 结尾的测试类的嵌套类":
+            //   * NotificationRecoveryMultiReplicaIT$MultiReplicaTestApplication  命中
+            //   * WebSocketIdentityTrustIT$WsTestConfiguration                    命中
+            //   * NotificationServiceIntegrationTest$TestSecurityConfig          不命中
+            //     —— 但它带 @TestConfiguration, 本就由 Spring Boot 的 TypeExcludeFilter 排除,
+            //        无需本正则兜底。
             @ComponentScan.Filter(type = FilterType.REGEX,
-                    pattern = "com\\.cloudinfra\\.notification\\..*\\..*\\$.*"),
+                    pattern = "com\\.cloudinfra\\.notification\\..*IT\\$.*"),
             @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
                     classes = NotificationSecurityConfig.class)
         })
