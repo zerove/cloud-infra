@@ -58,7 +58,9 @@ class NotificationServiceImplTest {
         notificationService = new NotificationServiceImpl(
             notificationMapper, logMapper, templateMapper,
             notificationRouter, scheduleMapper, quotaService, objectMapper,
-            rabbitTemplate
+            rabbitTemplate,
+            // 同步执行器: 投递在 afterCommit 中立即完成, 保持单测确定性
+            new org.springframework.core.task.support.TaskExecutorAdapter(Runnable::run)
         );
     }
 

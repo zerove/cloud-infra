@@ -22,9 +22,11 @@ import org.springframework.data.redis.core.ValueOperations;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -62,7 +64,9 @@ class NotificationDispatchRecoveryTest {
     void setUp() {
         consumer = new NotificationDispatchConsumer(dispatchMapper, dispatcher);
         recoveryTask = new NotificationDispatchRecoveryTask(
-            dispatchMapper, rabbitTemplate, redisTemplate, dispatcher);
+            dispatchMapper, rabbitTemplate, redisTemplate, dispatcher,
+            // 同步执行器: 补扫投递并行化后在此退化为串行, 保持单测确定性
+            new org.springframework.core.task.support.TaskExecutorAdapter(Runnable::run));
         given(redisTemplate.opsForValue()).willReturn(valueOps);
     }
 
@@ -233,6 +237,40 @@ class NotificationDispatchRecoveryTest {
             recoveryTask.recoverStaleDispatches();
 
             verify(redisTemplate, never()).delete(anyString());
+        }
+
+        /**
+         * 回归守护 (2026-09-30 修复的缺陷)。
+         *
+         * <p>必须用<b>真实异步执行器</b>: 本类的 {@code recoveryTask} 用的是
+         * {@code TaskExecutorAdapter(Runnable::run)}, 即投递在扫描线程上同步执行,
+         * 异常会被循环内的 {@code catch (RuntimeException)} 接住 —— 那样测不出异步路径的问题。
+         *
+         * <p>原实现的 {@code publishToQueue} 只 catch {@code AmqpException}。投递并行化后,
+         * 序列化错误等非 Amqp 的 {@link RuntimeException} 发生在异步线程, 主线程的 catch
+         * 接不住, {@code allOf(...).join()} 会抛 {@code CompletionException} 冲出整个批次:
+         * 补扫统计丢失, 且同批次后续通知不再被处理。</p>
+         */
+        @Test
+        @DisplayName("异步投递抛非 Amqp 异常时不冲出批次, 同批后续通知仍被重投")
+        void doesNotPropagateNonAmqpFailureFromAsyncPublish() {
+            recoveryTask = new NotificationDispatchRecoveryTask(
+                dispatchMapper, rabbitTemplate, redisTemplate, dispatcher,
+                new org.springframework.core.task.support.TaskExecutorAdapter(
+                    Executors.newVirtualThreadPerTaskExecutor()));
+            givenLockAcquired();
+            given(dispatchMapper.findStaleUndispatched(any(LocalDateTime.class), anyInt()))
+                .willReturn(List.of(stale(4L, DispatchStatus.PENDING, 0), stale(5L, DispatchStatus.PENDING, 0)));
+            given(dispatcher.exhausted(any())).willReturn(false);
+            doThrow(new IllegalStateException("serializer broken"))
+                .when(rabbitTemplate).convertAndSend("notification.dispatch.queue", "4");
+
+            assertThatCode(() -> recoveryTask.recoverStaleDispatches())
+                .as("异步线程抛出的异常不得冲出补扫批次")
+                .doesNotThrowAnyException();
+
+            // 关键: 第一条失败未中断整批, 第二条照常重投
+            verify(rabbitTemplate).convertAndSend("notification.dispatch.queue", "5");
         }
     }
 

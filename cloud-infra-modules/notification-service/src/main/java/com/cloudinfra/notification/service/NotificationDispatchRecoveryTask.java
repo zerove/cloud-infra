@@ -6,16 +6,19 @@ import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.mapper.NotificationDispatchMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 通知分发补扫任务 (issue 27 决策 2)
@@ -59,6 +62,7 @@ public class NotificationDispatchRecoveryTask {
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate redisTemplate;
     private final NotificationDispatcher dispatcher;
+    private final AsyncTaskExecutor taskExecutor;
 
     /**
      * 每分钟扫描一次陈旧且未完成分发的通知并重投。
@@ -90,8 +94,14 @@ public class NotificationDispatchRecoveryTask {
         }
         log.warn("[Dispatch-Recovery] 发现 {} 条未完成分发的陈旧通知, 开始重投", stale.size());
 
-        int republished = 0;
         int abandoned = 0;
+        // 2026-09-30: 投递改为在异步执行器上并行执行。
+        // 原实现串行同步投递, broker 不可达时每条都要阻塞到连接超时 (实测可达 30s),
+        // 单批 100 条足以卡住整个扫描 (锁 TTL 仅 60s), 使本任务作为"兜底"的承诺落空。
+        // 这里用 allOf().join() 等全部完成后才返回, 因此多副本扫描锁的语义保持不变;
+        // 重复投递由消费者的 CAS 抢占与幂等键吸收 (本任务本就是至少一次语义)。
+        List<CompletableFuture<Void>> inFlight = new ArrayList<>(stale.size());
+        AtomicInteger republished = new AtomicInteger();
         for (Notification notification : stale) {
             Long id = notification.getId();
             try {
@@ -108,25 +118,41 @@ public class NotificationDispatchRecoveryTask {
                     dispatchMapper.releaseDispatchClaim(id);
                 }
 
-                publishToQueue(id);
-                republished++;
+                inFlight.add(CompletableFuture.runAsync(
+                    () -> { if (publishToQueue(id)) { republished.incrementAndGet(); } }, taskExecutor));
             } catch (RuntimeException recoveryFailure) {
                 log.error("[Dispatch-Recovery] 重投失败: id={}", id, recoveryFailure);
             }
         }
-        if (republished > 0 || abandoned > 0) {
-            log.info("[Dispatch-Recovery] 补扫完成: 重投={}, 放弃={}", republished, abandoned);
+        CompletableFuture.allOf(inFlight.toArray(CompletableFuture[]::new)).join();
+
+        if (republished.get() > 0 || abandoned > 0) {
+            log.info("[Dispatch-Recovery] 补扫完成: 重投={}, 放弃={}", republished.get(), abandoned);
         }
     }
 
-    private void publishToQueue(Long notificationId) {
+    /**
+     * 投递一条通知到 MQ, 返回是否真的投递成功。
+     *
+     * <p><b>必须吞掉全部 {@link RuntimeException} (2026-09-30 修复)</b>:
+     * 本方法在异步线程上执行, 异常一旦外泄, {@code allOf(...).join()} 会抛
+     * {@link java.util.concurrent.CompletionException} 冲出整个扫描批次 —— 主线程那个
+     * {@code catch (RuntimeException recoveryFailure)} 接不住异步线程的异常, 于是补扫统计丢失、
+     * {@code @Scheduled} 记 error, 且本批次后续条目不再处理。
+     * 原先只 catch {@code AmqpException}, 序列化错误、配置错误等一律漏网。</p>
+     *
+     * <p>投递失败时行仍是 PENDING, 下一轮补扫会再次尝试, 此处只需如实记日志。</p>
+     */
+    private boolean publishToQueue(Long notificationId) {
         try {
             rabbitTemplate.convertAndSend(
                 RabbitMQConfig.NOTIFICATION_DISPATCH_QUEUE, String.valueOf(notificationId));
-        } catch (AmqpException brokerFailure) {
+            return true;
+        } catch (RuntimeException brokerFailure) {
             // Broker 不可达: 行仍是 PENDING, 下一轮补扫会再次尝试
             log.error("[Dispatch-Recovery] MQ 投递失败, 下一轮补扫重试: id={}", notificationId,
                 brokerFailure);
+            return false;
         }
     }
 }

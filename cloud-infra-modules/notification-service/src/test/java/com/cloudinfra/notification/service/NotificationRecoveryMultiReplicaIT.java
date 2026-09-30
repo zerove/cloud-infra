@@ -180,9 +180,11 @@ class NotificationRecoveryMultiReplicaIT {
             java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
 
         replicaA = new NotificationDispatchRecoveryTask(
-            mapper, rabbitTemplate, redisTemplate, dispatcher);
+            mapper, rabbitTemplate, redisTemplate, dispatcher,
+            new org.springframework.core.task.support.TaskExecutorAdapter(Runnable::run));
         replicaB = new NotificationDispatchRecoveryTask(
-            mapper, rabbitTemplate, redisTemplate, dispatcher);
+            mapper, rabbitTemplate, redisTemplate, dispatcher,
+            new org.springframework.core.task.support.TaskExecutorAdapter(Runnable::run));
     }
 
     @Test

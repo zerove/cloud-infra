@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS sys_notification (
     -- 分发状态: 0=待分发 1=分发中 2=已分发 3=分发失败
     -- 使本行自身充当发件箱记录, 支撑进程崩溃后的补扫重投
     dispatch_status SMALLINT NOT NULL DEFAULT 0,
-    dispatch_attempts SMALLINT NOT NULL DEFAULT 0
+    dispatch_attempts SMALLINT NOT NULL DEFAULT 0,
+    -- 调用方请求的目标渠道 (逗号分隔的 channel_code, 如 'email,sms')。
+    -- 分发在消费者侧异步执行, 原请求不可得, 故在此持久化以免分发器重算时丢失。
+    channels VARCHAR(255)
 );
 
 -- 索引：用户+状态，用于快速查询未读通知

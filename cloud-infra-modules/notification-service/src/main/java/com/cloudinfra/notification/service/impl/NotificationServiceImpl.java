@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -47,6 +48,8 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
+    /** 异步投递执行器 (Spring Boot 自动配置的虚拟线程 {@code applicationTaskExecutor})。 */
+    private final AsyncTaskExecutor taskExecutor;
 
 
     @Override
@@ -102,6 +105,9 @@ public class NotificationServiceImpl implements INotificationService {
         notification.setStatus(NotificationStatus.UNREAD);
         notification.setDispatchStatus(DispatchStatus.PENDING);
         notification.setDispatchAttempts(0);
+        // 持久化请求的目标渠道: 分发发生在 MQ 消费端, 届时原始请求已不可得。
+        // 丢失它会使分发器回落到"所有可用渠道", 导致请求 email 却同时发 sms + websocket。
+        notification.setChannels(encodeChannels(request.channels()));
         notificationMapper.insert(notification);
 
         // 7. 事务提交后投递到 MQ (渠道发送由消费者完成, 失败走 MQ 重试 + DLQ)
@@ -109,6 +115,19 @@ public class NotificationServiceImpl implements INotificationService {
 
         // 8. WebSocket 实时推送 (事务提交后, 用户即时收到通知)
         registerWebSocketPushAfterCommit(notification);
+    }
+
+    /** 渠道编码为逗号分隔字符串入库; null/空表示由分发器按偏好路由决定 */
+    private String encodeChannels(List<String> channels) {
+        if (channels == null || channels.isEmpty()) {
+            return null;
+        }
+        List<String> cleaned = channels.stream()
+            .filter(c -> c != null && !c.isBlank())
+            .map(String::trim)
+            .distinct()
+            .toList();
+        return cleaned.isEmpty() ? null : String.join(",", cleaned);
     }
 
     private void scheduleNotification(NotificationSendRequest request) {
@@ -133,6 +152,15 @@ public class NotificationServiceImpl implements INotificationService {
      * <p>不在此处直接发送渠道: 内存线程池在事务提交与实际投递之间的崩溃窗口会让通知
      * 永久丢失。改为投递到 MQ 后, 消息落在 Broker 上, 进程重启不丢。</p>
      *
+     * <p><b>投递本身也必须离开请求线程 (2026-09-30 修复)</b>: {@code convertAndSend}
+     * 在 broker 不可达时会阻塞到连接超时, 而这段代码运行在 {@code afterCommit} 中 ——
+     * 即请求线程上。于是 MQ 抖动会拖住已提交事务的用户请求直至超时, 并占用 Tomcat 工作线程;
+     * {@code catch (AmqpException)} 挡不住这种阻塞, 它发生在异常抛出之前。
+     * 交由异步执行器后请求立即返回。</p>
+     *
+     * <p><b>异步化不损失可靠性</b>: 通知行已带 {@code dispatch_status=PENDING}, 崩溃或投递
+     * 失败时 {@code NotificationDispatchRecoveryTask} 会扫描陈旧未完成的行并重投。</p>
+     *
      * <p><b>失败重投不依赖 MQ 重试</b> (本项目未配置原生监听器级重试/DLQ), 而是由
      * {@code NotificationDispatchRecoveryTask} 依据 {@code dispatch_status} 承担。
      * 即使此处 MQ 投递本身失败 (Broker 不可达), 通知行仍留在库中且为 PENDING,
@@ -145,13 +173,13 @@ public class NotificationServiceImpl implements INotificationService {
                 new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        publish.run();
+                        taskExecutor.execute(publish);
                     }
                 }
             );
         } else {
-            // 无事务上下文（如 MQ 回调中的非事务路径）：直接投递
-            publish.run();
+            // 无事务上下文（如 MQ 回调中的非事务路径）：同样不占用调用线程
+            taskExecutor.execute(publish);
         }
     }
 
@@ -161,7 +189,7 @@ public class NotificationServiceImpl implements INotificationService {
                 RabbitMQConfig.NOTIFICATION_DISPATCH_QUEUE, String.valueOf(notificationId));
             log.debug("[Dispatch-Publish] 已投递到 MQ: notificationId={}", notificationId);
         } catch (AmqpException brokerFailure) {
-            // 不阻断业务: 通知行已在库中且仍是 PENDING, 补扫任务会重投
+            // 不阻断调用方 (已是异步线程): 通知行已在库中且仍是 PENDING, 补扫任务会重投
             log.error("[Dispatch-Publish] MQ 投递失败, 交由补扫重投: notificationId={}", notificationId,
                 brokerFailure);
         }

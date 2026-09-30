@@ -1,0 +1,33 @@
+# WebSocket 隔离测试专用配置（2026-09-30 补齐）
+#
+# 为什么需要: WebSocketIntegrationTest 与 WebSocketIdentityTrustIT 都用
+# SpringApplicationBuilder 以 `--spring.config.location=optional:classpath:/websocket-isolated-test.yml`
+# 启动最小上下文, 但该文件一直不存在。`optional:` 让缺失不报错, 后果是上下文里没有任何
+# PropertySource, 也没有 PropertySourcesPlaceholderConfigurer (这两个测试只
+# @ImportAutoConfiguration 选了 SSL/Tomcat/Dispatcher 三个自动配置)。
+# 于是 WebSocketAuthFilter 上的
+#   @Value("${cloud-infra.security.verify-internal-sign:false}")
+# 不会被解析, 字面量 "${cloud-infra.security.verify-internal-sign:false}" 被直接注入到
+# boolean 字段 -> TypeMismatchException -> 整个 Web 容器起不来。
+#
+# 这里显式给出该开关的真实取值, 而不是依赖 @Value 的默认值 —— 默认值只在占位符能被解析时
+# 才生效, 而这正是本文件要补上的前提。
+
+cloud-infra:
+  security:
+    # 两个测试都不验证内部签名链路 (IdentityTrustIT 会用 System.setProperty 覆盖为 true,
+    # 系统属性优先级高于本文件), 这里给出可解析的字面量即可。
+    verify-internal-sign: false
+
+# 【不要在此写 internal-call.secret】(2026-09-30 修正)
+# 本文件此前写过 cloud-infra.internal-call.secret, 并注释说"缺失时验签恒为 false"。
+# 两处都是错的:
+#   1. 该键对本服务的密钥持有者 InternalCallSecretProvider 完全无效 ——
+#      InternalCallCrypto.resolveSecret() 只读 System.getenv("INTERNAL_CALL_SECRET")
+#      和 System.getProperty("cloud-infra.internal-call.secret"), 不查 Spring Environment,
+#      所以 PropertySource 里配什么都不影响它。放着只会误导后来人以为改这里能生效。
+#   2. 密钥"缺失"时并非验签恒为 false —— resolveSecret() 最后回落到内置默认值
+#      "cloud-infra-internal-dev-secret"。也就是说测试当时是悄悄拿开发默认密钥在跑。
+# 真要让测试用指定密钥, 必须走 System.setProperty("cloud-infra.internal-call.secret", ...)
+# 或设置环境变量 INTERNAL_CALL_SECRET, 而这两者都是进程级的, 会污染同 JVM 内其它测试。
+# 本模块的 WS 测试不需要特定密钥 (验签开关为 false 时不参与验签), 故此处一律不配置。
