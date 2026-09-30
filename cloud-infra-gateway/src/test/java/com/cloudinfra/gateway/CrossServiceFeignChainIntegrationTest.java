@@ -357,6 +357,28 @@ private static String resolveExecJar(String relative) throws IOException {
     }
 
     @Test
+    @Order(5)
+    void step5_newlyProtectedReadEndpointsAreReachableByAdmin() throws Exception {
+        // Given: 2026-09-30 审计发现三个端点"认证即可读"，已补 @PreAuthorize + V16 权限种子。
+        // 本步验证新权限链路真的通：V16 把权限授予 role_id=1(admin)，
+        // 且 @ss.hasPermi 经 RemotePermissionProvider(Feign[HMAC]) 能取回该权限。
+        // 任何一环断掉（迁移未执行 / 权限串写错 / 缓存未刷新）这里都会 403。
+        String token = obtainToken();
+        assertThat(token).isNotBlank();
+
+        for (String path : List.of(
+                "/system/permission/list?pageNum=1&pageSize=1",
+                "/system/rbac/user/1/permissions",
+                "/system/resource-mapping/effective-nodes?resourceId=r1&resourceType=asset")) {
+            ResponseEntity<String> resp = exchange(gw(path), HttpMethod.GET, token, null);
+            assertThat(resp.getStatusCode().value())
+                    .as("admin 应能访问新加固端点 %s（V16 权限 + @PreAuthorize 链路），实际: %s",
+                            path, resp.getBody())
+                    .isEqualTo(200);
+        }
+    }
+
+    @Test
     @Order(3)
     void step3_logoutInvalidatesSession_gatewayRejectsSubsequentRequests() throws Exception {
         String token = obtainToken();

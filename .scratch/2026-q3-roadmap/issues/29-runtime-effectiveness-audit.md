@@ -54,8 +54,21 @@ Parameter 1 of constructor in IdempotentAspect required a bean of type
 - `IdempotentAspect` 带 `@Component`, 被 `scanBasePackages="com.cloudinfra"` 无条件扫入,
   硬依赖那个不存在的 Bean。
 
-**为何长期没被发现**: `pom.xml` 中 `skipITs` 默认 `true`, 能暴露它的
-`CrossServiceFeignChainIntegrationTest` 从不在 `mvn test` / CI 中执行。
+**为何长期没被发现**（2026-09-30 二次核实修正）: 初稿归因为"`skipITs=true` 掩盖",
+**这是错的** —— `ci.yml:52` 确实配了 `failsafe:verify -DskipITs=false`。真实原因是
+**两道闸门同时失效**:
+
+1. 本地 `mvn test` 因 `skipITs=true` 跑不到 IT;
+2. CI 自身在**环境层**就红了: `GRAALVM_VERSION=25.0.1` 让 `setup-graalvm` 去拉
+   `graalvm-ce-java25-linux-amd64-25.0.1`, 该资产已被上游回收 →
+   `Failed to download graalvm-ce-java25-linux-amd64-25.0.1`,
+   三个 job 全部在 setup 阶段 **17 秒内**失败, 从未编译过一行代码。
+
+`gh run list` 显示 **master 最近 12 次 CI Pipeline 全部 failure**, 最早一次
+`2026-09-05 08:14` —— 与该缺陷的引入提交 `1945dd4`（2026-09-05 00:35）同日。
+即: **该缺陷潜伏了 25 天, 期间没有任何一处真正编译或测试过代码。**
+
+已修复 CI: 改用 `distribution: graalvm-community` 由 action 动态解析, 不再钉死会被回收的版本号。
 
 已用**基线对照**确认这是既有缺陷 (`git stash` 后在 `4040c19` 上复现同样失败), 非本次引入。
 
@@ -167,14 +180,19 @@ issue 27 / 28 的准入与完成原则只约束了**新能力**, 没有回头**�
 
 代码侧前置条件 (租户标识校验) 已在本次补齐, 三条路都不阻塞。
 
-### P0 让"集成测试真的跑"
+### P0 让 CI 真的跑起来（已修配置, 待推送验证）
 
-`skipITs` 默认 `true` 是本次最大的**检测盲区**: P0-2 就是被它掩盖的。
+初稿写的是"让集成测试真的跑", 并把问题归给 `skipITs=true` —— **归因错误, 已修正**。
+`ci.yml` 本来就配了 IT 步骤; 真正的问题是 CI 在环境层就没跑起来。
 
-- CI 增加一个 `-DskipITs=false` 的夜间/发布前 job (全量 IT 较重, 不适合每次 push);
-- 或为每个服务加一条**启动冒烟**测试 (能起上下文即可, 不跑业务断言) 进单元测试阶段。
+- ✅ 已改: `GRAALVM_VERSION=25.0.1`（钉死的版本资产已被上游回收）→
+  `distribution: graalvm-community`（由 action 动态解析, 不会被 GC）
+- ⏳ 待验证: 推送后确认 master 的 CI Pipeline 转绿, 并检查 IT 步骤**真的执行过**
+  （看 job 日志而非只看 conclusion —— 这次事故正是"只看 conclusion 会误判"）
+- 补充建议: 为每个服务加一条**启动冒烟**测试 (能起上下文即可, 不跑业务断言) 进单元测试阶段。
+  本次 P0-2 的本质是"服务起不来", 而冒烟测试能在单测阶段就拦下, 不必依赖跨进程 IT
 
-在两者落地前, 任何"运行时证据"都只能靠手工跑 IT 取得, 不应写进交付判定。
+在 CI 恢复绿之前, 任何"运行时证据"都只能靠手工跑 IT 取得, 不应写进交付判定。
 
 ### P1 存量 `🟢` 逐条复核
 
