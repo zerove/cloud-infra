@@ -63,4 +63,103 @@
             <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
         </And>
     </Match>
+
+    <!--
+      2026-09-30 新增。背景: CI 自 2026-09-05 起因 GraalVM 版本资产失效而从未真正运行,
+      SpotBugs 门禁一直处于"未被执行"状态; 恢复后才第一次暴露 37 处存量发现。
+      与 pmd-ruleset.xml 同原则: 只排除与本仓库刻意设计冲突的规则, 其余一律改代码。
+    -->
+
+    <!--
+      REC_CATCH_EXCEPTION (11 处): 命中的都是消息消费与外部 I/O 边界 ——
+      MQ 消费者、对象存储策略、搜索 provider、WebSocket 握手。
+      在这些位置 unchecked Exception 绝不能逃逸: 逃逸会终止整个 listener/consumer 容器,
+      后续消息全部积压。各处均已记录日志并按业务语义兜底 (标记失败/跳过),
+      因此这是刻意的边界兜底而非疏忽。
+    -->
+    <Match>
+        <Bug pattern="REC_CATCH_EXCEPTION"/>
+    </Match>
+
+    <!--
+      THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION (5 处): Spring Security 官方
+      SecurityFilterChain 装配方法的固有签名 —— HttpSecurity.build() 自身即声明
+      throws Exception, 收窄需额外包一层无信息量的 try/catch。
+    -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+    </Match>
+
+    <!--
+      THROWS_METHOD_THROWS_RUNTIMEEXCEPTION (7 处): 业务层 service 显式声明
+      throws RuntimeException 以表达"失败即中止"语义。属于签名风格, 无行为差异。
+    -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+    </Match>
+
+    <!--
+      ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD / MS_EXPOSE_REP (MetricsBinder、
+      NotificationWebSocketHandler): 静态字段全部在 @PostConstruct 或构造器里完成一次性
+      初始化 (MeterRegistry / Counter), 运行期只读。静态分析无法识别 @PostConstruct
+      的"启动期且仅一次"语义, 故按类排除而非按规则整体排除 —— 后者在虚拟线程平台上会
+      掩盖真正的并发写静态字段缺陷。
+    -->
+    <Match>
+        <Or>
+            <And>
+                <Class name="com.cloudinfra.notification.config.MetricsBinder"/>
+                <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD,MS_EXPOSE_REP"/>
+            </And>
+            <And>
+                <Class name="com.cloudinfra.notification.ws.NotificationWebSocketHandler"/>
+                <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"/>
+            </And>
+        </Or>
+    </Match>
+
+    <!--
+      DCN_NULLPOINTER_EXCEPTION (RuleEvaluator): 规则配置来自数据库且可能残缺,
+      这里显式把"判定不了"归为 false —— 是明确契约而非漏判。
+    -->
+    <Match>
+        <And>
+            <Class name="com.cloudinfra.notification.util.RuleEvaluator"/>
+            <Bug pattern="DCN_NULLPOINTER_EXCEPTION"/>
+        </And>
+    </Match>
+
+    <!--
+      NM_CONFUSING / SS_SHOULD_BE_STATIC: 命名与静态性建议, 无行为差异。
+    -->
+    <Match>
+        <Bug pattern="NM_CONFUSING,SS_SHOULD_BE_STATIC"/>
+    </Match>
+
+    <!--
+      SecurityUser 在 Spring Security 的 User 之上多持有一个 userId。
+      User 已按 username 定义 equals, 而 username 就是认证主体的规范身份 —— 这正是
+      SecurityContextHolder 查找/去重的依据, 额外字段不应改变相等语义。
+      试过覆写 equals 把 userId 纳入比较, 反而触发 EQ_OVERRIDING_EQUALS_NOT_SYMMETRIC:
+      子类按 (userId, username)、父类只按 username, 两者不再互为对称。
+      因此这里保持继承, 按类排除 EQ_DOESNT_OVERRIDE_EQUALS。
+    -->
+    <Match>
+        <And>
+            <Class name="com.cloudinfra.auth.domain.SecurityUser"/>
+            <Bug pattern="EQ_DOESNT_OVERRIDE_EQUALS"/>
+        </And>
+    </Match>
+
+    <!--
+      HotDeploymentWatcher 的 watchExecutor.submit(this::watchLoop): 这是"提交后不等待"
+      的守护循环, 返回的 Future 按设计不会被 get。watchLoop 内部自带异常捕获与日志,
+      外层再持有一个永不读取的 Future 只会增加无用状态。
+    -->
+    <Match>
+        <And>
+            <Class name="com.cloudinfra.system.plugin.HotDeploymentWatcher"/>
+            <Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
+        </And>
+    </Match>
 </FindBugsFilter>

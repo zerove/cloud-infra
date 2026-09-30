@@ -14,7 +14,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,22 +29,19 @@ public class SysLoginService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final UserApi userApi;
     private final UserService userService;
-    private final PasswordEncoder passwordEncoder;
 
     public SysLoginService(
         AuthTokenService authTokenService,
         AuthenticationManager authenticationManager,
         RedisTemplate<String, Object> redisTemplate,
         UserApi userApi,
-        UserService userService,
-        PasswordEncoder passwordEncoder
+        UserService userService
     ) {
         this.authTokenService = authTokenService;
         this.authenticationManager = authenticationManager;
         this.redisTemplate = redisTemplate;
         this.userApi = userApi;
         this.userService = userService;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @BusinessMetric(
@@ -71,7 +67,12 @@ public class SysLoginService {
             );
 
             // 4. 从认证结果提取用户身份，重新加载完整用户信息（含权限）
+            //    principal 理论上非空, 但认证器可被替换/扩展, 这里显式防御:
+            //    缺 principal 属于"认证没真正通过", 应回 401 而不是抛 NPE 变 500。
             SecurityUser principal = (SecurityUser) authentication.getPrincipal();
+            if (principal == null || principal.getUserId() == null) {
+                throw new AuthBusinessException(AuthExceptionCode.LOGIN_FAILED);
+            }
             LoginUser fullUser = userService.getUserById(principal.getUserId());
             if (fullUser == null) {
                 throw new AuthBusinessException(AuthExceptionCode.LOGIN_FAILED);

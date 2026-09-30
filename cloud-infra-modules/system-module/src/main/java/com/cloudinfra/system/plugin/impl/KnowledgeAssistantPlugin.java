@@ -3,7 +3,6 @@ package com.cloudinfra.system.plugin.impl;
 import com.cloudinfra.framework.plugin.IServicePlugin;
 import com.cloudinfra.framework.plugin.PluginContext;
 import com.cloudinfra.framework.plugin.PluginMetadata;
-import com.cloudinfra.api.search.SearchApi;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
@@ -15,7 +14,6 @@ import java.util.Map;
 @Slf4j
 public class KnowledgeAssistantPlugin implements IServicePlugin {
 
-    private SearchApi searchApi;
 
     @Override
     public PluginMetadata getMetadata() {
@@ -31,9 +29,6 @@ public class KnowledgeAssistantPlugin implements IServicePlugin {
     @Override
     public void onEnable(PluginContext context) {
         log.info("联邦知识助手启动中...");
-        
-        // 注入底座的统一搜索能力
-        this.searchApi = context.getService(SearchApi.class);
         
         // 注册 AI 问答服务
         context.registerService("ai.assistant.chat", (AiChatService) query -> {
