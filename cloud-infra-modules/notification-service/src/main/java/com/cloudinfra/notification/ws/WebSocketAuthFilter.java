@@ -1,11 +1,15 @@
 package com.cloudinfra.notification.ws;
 
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +45,13 @@ import java.util.Map;
  *   <li>校验失败 → 直接返回 401, 拒绝升级握手</li>
  * </ol>
  *
+ * <p><b>身份来源校验 (2026-09-29 补齐)</b>: 原实现只校验 {@code X-User-Id} 是否存在,
+ * 不校验其是否真由网关注入。实测 (WebSocketIdentityTrustIT) 确认: 任何能直连本服务端口的
+ * 一方, 仅凭 {@code X-User-Id: <任意 ID>} 即可冒充该用户订阅其实时通知。
+ * 现与 HTTP 侧对齐 —— 网关 SecurityFilter 会为所有经其转发的请求注入
+ * {@link InternalCallCrypto} 签名, 此处在 {@code verify-internal-sign=true} 时要求验签通过。
+ * 开关默认 false 以兼容存量部署; 生产应置 true。</p>
+ *
  * <p>本 Filter 仅作用于 WebSocket 握手请求 (匹配 WS_PATH 前缀), 不影响其他 HTTP 端点.</p>
  */
 @Slf4j
@@ -55,6 +66,17 @@ public class WebSocketAuthFilter extends OncePerRequestFilter {
     public static final String WS_PATH_PREFIX = "/notification/ws";
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /**
+     * 是否要求内部调用签名。与 HTTP 侧 {@code HeaderAuthenticationFilter}
+     * 使用同一开关名, 两处行为一致。默认 false 兼容存量部署; 生产应置 true。
+     */
+    @Value("${cloud-infra.security.verify-internal-sign:false}")
+    private boolean verifyInternalSign;
+
+    /** 可选注入: 单元测试以无参构造创建本 Filter, 此时无密钥提供者。 */
+    @Autowired(required = false)
+    private InternalCallSecretProvider secretProvider;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -72,6 +94,13 @@ public class WebSocketAuthFilter extends OncePerRequestFilter {
         if (upgrade == null || !"websocket".equalsIgnoreCase(upgrade)) {
             // 非握手请求 (例如浏览器探测 / 静态资源) 直接放行
             chain.doFilter(request, response);
+            return;
+        }
+
+        if (!isTrustedGatewayRequest(request)) {
+            log.warn("WebSocket 握手拒绝: 内部调用签名无效, remoteAddr={}",
+                request.getRemoteAddr());
+            writeUnauthorized(response, "internal call signature invalid");
             return;
         }
 
@@ -96,8 +125,35 @@ public class WebSocketAuthFilter extends OncePerRequestFilter {
             session.setAttribute(AUTH_TENANT_ID_KEY, tenantId);
         }
 
-        log.debug("WebSocket 握手鉴权通过: userId={}, tenantId={}", userId, tenantId);
+        log.debug("WebSocket 握手鉴权通过: userId={}, tenantId={}, 验签={}",
+            userId, tenantId, verifyInternalSign);
         chain.doFilter(request, response);
+    }
+
+    /**
+     * 判断请求是否来自可信网关。
+     *
+     * <p>关闭验签时恒为可信 (兼容存量直连调试); 开启时要求
+     * {@code X-Internal-Call} / {@code -Timestamp} / {@code -Nonce} 三头签名有效。
+     * 密钥缺失时 {@link InternalCallCrypto#verify} 返回 false, 即缺配置时默认拒绝而非放行。
+     */
+    private boolean isTrustedGatewayRequest(HttpServletRequest request) {
+        if (!verifyInternalSign) {
+            return true;
+        }
+        String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
+        String timestampHeader = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
+        String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
+        if (sign == null || timestampHeader == null || nonce == null) {
+            return false;
+        }
+        String secret = secretProvider != null ? secretProvider.getSecret() : null;
+        try {
+            return InternalCallCrypto.verify(
+                secret, sign, Long.parseLong(timestampHeader), nonce);
+        } catch (NumberFormatException malformed) {
+            return false;
+        }
     }
 
     private static void writeUnauthorized(HttpServletResponse response, String message) throws IOException {

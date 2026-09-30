@@ -153,10 +153,12 @@ public void onPing(Session session, ByteBuffer message) {
 - [x] Phase C 组件集成测试：2026-09-18 通知模块 20 项通过。真实 TLS 1.2/1.3 握手、缺头 401、心跳、推送、连接清理、证书拒绝覆盖和无效密码。
 - [ ] 生产入口验收：可信网关身份校验、浏览器升级、完整安全过滤链、容器证书挂载和管理健康检查。不能用隔离组件测试替代。
 
-## ⚠️ 2026-09-29 验收前置发现: WebSocket 身份信任模型缺口（已实证）
+## ✅ 2026-09-29 已修复: WebSocket 身份信任模型与 HTTP 侧对齐
 
-在准备"可信网关身份校验"验收项时，先用真实 TLS 端点实测了当前信任模型
-（`WebSocketIdentityTrustIT`，2 项，全部通过 —— 记录的是**当前行为**）：
+### 修复前的实测证据
+
+用真实 TLS 端点 + 真实 WebSocket 客户端实测当前信任模型
+（`WebSocketIdentityTrustIT`，记录的是**修复前**行为）：
 
 | 场景 | 实测结果 |
 |---|---|
@@ -168,30 +170,49 @@ public void onPing(Session session, ByteBuffer message) {
 `HeaderAuthenticationFilter.isTrustedInternalRequest`）会用 `InternalCallCrypto` 校验
 HMAC 签名。两处信任模型不一致。
 
-**潜在后果**：任何能直连 notification-service 端口的一方，仅需发送
-`X-User-Id: <任意 ID>` 即可冒充该用户，订阅其实时通知（`pushToUser` 按 userId 推送）。
+核实后发现这不是设计选择而是**实现遗漏**：网关 `SecurityFilter` 早已为所有经其转发的
+请求注入签名（其注释写明“下游统一验签通过才信任身份头，内网直连无有效签名即被拒”），
+`/notification/**` 路由也覆盖 WS 路径 —— 只是 notification 侧没有接上验签。
 
-**是否构成实际风险取决于该端口的网络暴露面**（已逐项核实）：
+### 暴露面（已逐项核实）
 
-| 部署方式 | 暴露面 | 可利用性 |
+| 部署方式 | 暴露面 | 修复前可利用性 |
 |---|---|---|
 | `deploy/compose.yaml` | `ports: "8084:8084"` + 管理端口 `9305:9301` 映射宿主机 | **宿主机网络内可直接利用** |
 | `deploy/k8s/notification/values.yaml` | `type: ClusterIP` | 仅集群内可达，取决于集群内网络策略 |
 
-即：**compose 环境下该缺口可直接利用**；K8s 环境下取决于集群内是否存在其他可直连
-该 Service 的工作负载。这是本 issue 生产入口验收未覆盖的部分。
+即：**compose 环境下该缺口可直接利用**。
 
-**两个候选方案（需决策，本轮未擅自实施）**：
+### 修复内容
 
-| 方案 | 内容 | 代价 |
-|---|---|---|
-| A. 网络层隔离 | 端口不对外暴露，仅网关可达；把"仅对网关开放"作为部署前提写入文档与 compose | 不改代码，但依赖运维纪律，需验证 compose 的端口暴露配置 |
-| B. 与 HTTP 对齐 | `WebSocketAuthFilter` 复用 `InternalCallCrypto` 校验签名（可用同一 `cloud-infra.security.verify-internal-sign` 开关），由网关注入时签名 | 需确认网关 WS 转发路径会带上签名头；浏览器仍走网关不受影响 |
+`WebSocketAuthFilter` 复用 `InternalCallCrypto` 校验签名，受同一开关
+`cloud-infra.security.verify-internal-sign` 控制（与 HTTP 侧同名同语义），默认
+`false` 兼容存量部署，生产应置 `true`：
 
-**建议**：先做 A 的暴露面核查（成本低，直接回答"是否可被利用"），再决定是否需要 B。
-本 issue 剩余验收项（浏览器升级、容器证书挂载、管理健康检查）均需完整 compose 栈，
-而 `deploy/compose.yaml` **当前没有 nginx 服务**（`deploy/nginx/notification-wss.conf`
-无对应容器），即该链路尚未搭建。搭建属于"新建"而非"验收"，应单独评估。
+- 密钥经 `InternalCallSecretProvider` 获取（可选注入，缺配置时**默认拒绝**而非放行）
+- 时间戳非法、签名缺失、超出 5 分钟时间窗 一律拒于握手前
+- 不新增任何配置概念，与 HTTP 侧共用同一密钥与开关
+
+### 测试
+
+- 单元测试 `WebSocketAuthFilterTest` 新增 7 项（5 → 12）：有效签名放行、无签名拒绝、
+  伪造密钥拒绝、超窗拒绝、时间戳非法拒绝、缺密钥提供者 fail-closed、验签默认关闭兼容存量
+- 集成测试 `WebSocketIdentityTrustIT` 已**翻转为断言修复后行为**（记录当前行为 → 验证期望行为）：
+  伪造 `X-User-Id` 无签名被拒于握手前；网关注入的有效签名可正常建连；缺 `X-User-Id` 仍被拒
+
+### 部署注意
+
+开启此开关后，**直连 notification-service 的 WebSocket 客户端将全部被拒**
+（无签名），必须经网关访问。存量直连调试场景需保持 `verify-internal-sign=false`。
+
+## 剩余验收项（需搭建 nginx 服务，属"新建"而非"验收"）
+
+浏览器升级、容器证书挂载、管理健康检查三项均需完整 compose 栈，而
+`deploy/compose.yaml` **当前没有 nginx 服务**（`deploy/nginx/notification-wss.conf`
+无对应容器），即该链路尚未搭建。直连 TLS 路径已存在并文档化
+（`application-prod.yml` + `compose.notification-tls.yaml` + `deploy/ssl/notification/`），
+nginx 是可选的第二条路径。是否搭建应先回答“这个 WebSocket 端点的用户侧消费者是谁”
+（仓库内无前端代码），再单独评估。
 
 ## 不在本 issue 范围
 

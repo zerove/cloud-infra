@@ -1,6 +1,9 @@
 package com.cloudinfra.notification.ws;
 
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.notification.config.WebSocketConfig;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,6 +12,7 @@ import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -26,40 +30,59 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
- * WebSocket 身份信任边界实测 (M7-03 生产入口验收前置)
+ * WebSocket 身份信任边界集成验证 (M7-03 生产入口验收前置)
  *
- * <p>以真实 TLS 端点 + 真实 WebSocket 客户端, 实证 {@link WebSocketAuthFilter} 的
- * 信任模型, 为 "可信网关身份校验" 验收提供事实依据。</p>
+ * <p>以真实 TLS 端点 + 真实 WebSocket 客户端, 验证 {@link WebSocketAuthFilter}
+ * 的信任模型与 HTTP 侧对齐。</p>
  *
- * <p><b>实测结论</b>: 该 Filter 只校验 {@code X-User-Id} 是否<b>存在</b>,
- * 不校验其是否真由网关注入。而 HTTP 侧的对应机制
+ * <p><b>2026-09-29 修复前</b>: 该 Filter 只校验 {@code X-User-Id} 是否<b>存在</b>,
+ * 实测确认携带任意 {@code X-User-Id: 999999} 且无任何签名即可建立连接
+ * —— 任何能直连本服务端口的一方都能冒充该用户。而 HTTP 侧的对应机制
  * ({@code SystemSecurityConfig.internalCallMatcher} 与
  * {@code HeaderAuthenticationFilter.isTrustedInternalRequest}) 会用
- * {@code InternalCallCrypto} 校验 HMAC 签名 —— 两处信任模型不一致。</p>
+ * {@code InternalCallCrypto} 校验 HMAC 签名, 两处信任模型不一致。</p>
  *
- * <p><b>潜在后果</b>: 任何能直连 notification-service 端口的一方, 仅需发送
- * {@code X-User-Id: <任意 ID>} 即可冒充该用户, 订阅其实时通知
- * ({@code pushToUser} 按 userId 推送)。是否构成实际风险取决于该端口是否仅对
- * 网关开放 (网络层隔离), 而这正是 M7-03 生产入口验收尚未验证的部分。</p>
- *
- * <p>本 IT 记录<b>当前行为</b>而非理想行为: 修复落地后应把
- * {@code anySuppliedUserIdIsAcceptedWithoutSignature} 翻转为断言拒绝。</p>
+ * <p><b>2026-09-29 修复后</b>: 开启 {@code cloud-infra.security.verify-internal-sign} 时,
+ * 无签名/伪造签名一律拒于握手前; 网关注入的有效签名方可建立连接。
+ * 本 IT 断言的是<b>修复后的期望行为</b>。</p>
  */
 class WebSocketIdentityTrustIT {
+
+    private static final String SECRET = "ws-it-internal-secret";
 
     @TempDir
     Path temporary;
 
+    /**
+     * 清理本 IT 设置的系统属性 —— 否则会污染同一 JVM 内后续 IT
+     * (如 {@code WebSocketIntegrationTest} 不发签名, 会被误拒)。
+     */
+    @AfterEach
+    void clearSystemProperties() {
+        System.clearProperty("cloud-infra.security.verify-internal-sign");
+        System.clearProperty("cloud-infra.internal-call.secret");
+    }
+
     @Configuration(proxyBeanMethods = false)
     @ImportAutoConfiguration({SslAutoConfiguration.class, TomcatServletWebServerAutoConfiguration.class,
-            org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration.class})
+            org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration.class,
+            // @Value 占位符解析所需: WebSocketAuthFilter 的 verify-internal-sign 依赖它
+            org.springframework.boot.autoconfigure.context
+                .PropertyPlaceholderAutoConfiguration.class})
     @Import({WebSocketConfig.class, WebSocketAuthFilter.class, NotificationWebSocketHandler.class})
     static class WsTestConfiguration {
+
+        @Bean
+        InternalCallSecretProvider internalCallSecretProvider() {
+            InternalCallSecretProvider provider = new InternalCallSecretProvider();
+            provider.init();
+            return provider;
+        }
     }
 
     @Test
-    @DisplayName("现状实测: 任意 X-User-Id 均被接受 —— 头只验存在不验来源")
-    void anySuppliedUserIdIsAcceptedWithoutSignature() throws Exception {
+    @DisplayName("修复后: 无签名的伪造 X-User-Id 被拒于握手前")
+    void forgedUserIdWithoutSignatureIsRejected() throws Exception {
         String password = UUID.randomUUID().toString();
         Path store = generateCertificate(password);
         SSLContext ssl = trustContext();
@@ -69,13 +92,43 @@ class WebSocketIdentityTrustIT {
                      .connectTimeout(Duration.ofSeconds(5)).build()) {
 
             int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
-            // 模拟"绕过网关直连"的攻击者: 编造他人 userId, 不带任何网关签名
             URI endpoint = URI.create("wss://localhost:" + port + "/notification/ws");
 
-            // 当前行为: 只要 X-User-Id 存在即放行 —— 这就是信任模型缺口
-            WebSocket socket = client.newWebSocketBuilder()
-                .header("X-User-Id", "999999")
-                .buildAsync(endpoint, new NoopListener())
+            // 攻击者: 绕过网关直连, 编造他人 userId, 不带任何网关签名
+            ExecutionException rejected = org.junit.jupiter.api.Assertions.assertThrows(
+                ExecutionException.class,
+                () -> client.newWebSocketBuilder()
+                    .header("X-User-Id", "999999")
+                    .buildAsync(endpoint, new NoopListener()).get(10, TimeUnit.SECONDS));
+            org.junit.jupiter.api.Assertions.assertInstanceOf(
+                java.net.http.WebSocketHandshakeException.class, rejected.getCause());
+        }
+    }
+
+    @Test
+    @DisplayName("修复后: 网关注入的有效签名可正常建立连接")
+    void validGatewaySignatureIsAccepted() throws Exception {
+        String password = UUID.randomUUID().toString();
+        Path store = generateCertificate(password);
+        SSLContext ssl = trustContext();
+
+        try (var context = startServer(password, store);
+             HttpClient client = HttpClient.newBuilder().sslContext(ssl)
+                     .connectTimeout(Duration.ofSeconds(5)).build()) {
+
+            int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
+            URI endpoint = URI.create("wss://localhost:" + port + "/notification/ws");
+
+            long timestamp = System.currentTimeMillis();
+            String nonce = "it-nonce-" + timestamp;
+            var builder = client.newWebSocketBuilder()
+                .header("X-User-Id", "1001")
+                .header(InternalCallCrypto.HEADER_SIGN,
+                    InternalCallCrypto.sign(SECRET, timestamp, nonce))
+                .header(InternalCallCrypto.HEADER_TIMESTAMP, String.valueOf(timestamp))
+                .header(InternalCallCrypto.HEADER_NONCE, nonce);
+
+            WebSocket socket = builder.buildAsync(endpoint, new NoopListener())
                 .get(10, TimeUnit.SECONDS);
             // 必须主动断开: 连接保持打开时 context.close() 会一直等待, 导致测试挂起
             socket.abort();
@@ -83,7 +136,7 @@ class WebSocketIdentityTrustIT {
     }
 
     @Test
-    @DisplayName("现状实测: 缺少 X-User-Id 时被拒 (已实现的部分)")
+    @DisplayName("修复后: 缺少 X-User-Id 时被拒 (已实现的行为未回归)")
     void missingUserIdIsRejected() throws Exception {
         String password = UUID.randomUUID().toString();
         Path store = generateCertificate(password);
@@ -150,6 +203,9 @@ class WebSocketIdentityTrustIT {
      */
     private static org.springframework.context.ConfigurableApplicationContext startServer(
             String password, Path store) {
+        // 验签开启: 该 IT 断言的是"修复后"的期望行为
+        System.setProperty("cloud-infra.security.verify-internal-sign", "true");
+        System.setProperty("cloud-infra.internal-call.secret", SECRET);
         return new SpringApplicationBuilder(WsTestConfiguration.class).run(
             "--spring.config.location=optional:classpath:/websocket-isolated-test.yml",
             "--spring.cloud.nacos.config.import-check.enabled=false",
