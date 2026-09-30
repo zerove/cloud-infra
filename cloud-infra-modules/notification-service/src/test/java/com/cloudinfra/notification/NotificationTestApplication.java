@@ -37,6 +37,14 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
         excludeFilters = {
             @ComponentScan.Filter(type = FilterType.REGEX,
                     pattern = "com\\.cloudinfra\\.notification\\.NotificationApplication"),
+            // 排除 IT 内部声明的嵌套装配类 (形如 XxxIT$MultiReplicaTestApplication)。
+            // 它们是普通 @Configuration, 落在扫描范围内就会被当成生产 Bean 注册:
+            // 其 dataSource 与 DataSourceAutoConfiguration 冲突 (BeanDefinitionOverrideException),
+            // 其 stringRedisTemplate 在容器启动前取映射端口而抛 IllegalStateException,
+            // 最终污染所有复用本测试应用的测试上下文。
+            // file-service 侧已有同问题的 FileServiceContextExcludeFilter, 此处用同一思路。
+            @ComponentScan.Filter(type = FilterType.REGEX,
+                    pattern = "com\\.cloudinfra\\.notification\\..*\\..*\\$.*"),
             @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
                     classes = NotificationSecurityConfig.class)
         })

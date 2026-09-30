@@ -71,8 +71,15 @@ public interface NotificationDispatchMapper extends BaseMapper<Notification> {
     List<Notification> findStaleUndispatched(@Param("staleBefore") LocalDateTime staleBefore,
                                             @Param("limit") int limit);
 
-    /** 查询单条通知的分发状态与尝试次数, 供补扫判定是否已达上限。 */
+    /**
+     * 查询单条通知的分发状态与尝试次数, 供补扫判定是否已达上限。
+     *
+     * <p><b>{@code channels} 必须显式列出 (2026-09-30 修复)</b>: 本方法是分发侧
+     * 还原目标渠道的唯一入口, 漏列会让 {@code NotificationDispatcher} 拿到 null 而回落到
+     * "所有可用渠道", 造成请求 email 却实际发出 email + sms + websocket 的过度发送。
+     * 新增 {@code Notification} 字段时必须同步此处 —— 这里是本 Mapper 唯一手写列清单。</p>
+     */
     @Select("SELECT id, user_id, type, title, content, status, dispatch_status, "
-        + "dispatch_attempts, create_time, read_time FROM sys_notification WHERE id = #{id}")
+        + "dispatch_attempts, channels, create_time, read_time FROM sys_notification WHERE id = #{id}")
     Notification findById(@Param("id") Long id);
 }

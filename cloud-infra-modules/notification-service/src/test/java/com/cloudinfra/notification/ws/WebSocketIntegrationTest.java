@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -47,7 +48,12 @@ class WebSocketIntegrationTest {
 
     @Configuration(proxyBeanMethods = false)
     @ImportAutoConfiguration({SslAutoConfiguration.class, TomcatServletWebServerAutoConfiguration.class,
-            org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration.class})
+            org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration.class,
+            // 本测试用 @ImportAutoConfiguration 显式圈定自动配置清单, 不含占位符解析器,
+            // 于是 @Value("${...:默认值}") 不会被解析 —— 默认值只在能解析时生效,
+            // 字面量会被直接注入 boolean 字段并抛 TypeMismatchException。
+            // PropertyPlaceholderAutoConfiguration 提供 PropertySourcesPlaceholderConfigurer。
+            PropertyPlaceholderAutoConfiguration.class})
     @Import({WebSocketConfig.class, WebSocketAuthFilter.class, NotificationWebSocketHandler.class})
     static class WebSocketTestConfiguration { }
 

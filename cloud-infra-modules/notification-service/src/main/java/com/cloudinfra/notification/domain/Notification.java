@@ -39,6 +39,15 @@ public class Notification {
     /** 已尝试分发次数, 补扫达上限后置 FAILED */
     private Integer dispatchAttempts;
 
+    /**
+     * 调用方请求的目标渠道 (逗号分隔的 channel_code, 如 {@code email,sms})。
+     *
+     * <p>分发发生在 MQ 消费端, 原始 {@code NotificationSendRequest} 早已不可得,
+     * 故此处持久化请求的渠道, 供 {@code NotificationDispatcher} 精确还原。
+     * 为空表示历史数据 (该列加入前写入), 此时分发器回落到按类型匹配全部可用渠道。</p>
+     */
+    private String channels;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     private LocalDateTime readTime;

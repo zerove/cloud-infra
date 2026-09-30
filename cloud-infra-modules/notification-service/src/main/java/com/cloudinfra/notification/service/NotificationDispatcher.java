@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -82,23 +83,42 @@ public class NotificationDispatcher {
     }
 
     /**
-     * 依据通知的渠道偏好重新计算目标渠道。
+     * 依据通知记录还原目标渠道。
      *
-     * <p>渠道路由需要原始的 {@code NotificationSendRequest}; 补扫重投时原请求已不可得,
-     * 故用通知记录中的类型/内容重建一个等价请求, 走同一套路由逻辑。</p>
+     * <p>渠道路由需要原始的 {@code NotificationSendRequest}; 分发在 MQ 消费端异步执行,
+     * 补扫重投时更早已不可得, 故用通知记录中的字段重建一个等价请求。</p>
+     *
+     * <p><b>渠道必须取自 {@code channels} 列 (2026-09-30 修复)</b>: 原实现恒传 {@code null},
+     * 而 {@code NotificationRouter} 在渠道为空时会回落到"所有可用渠道" ——
+     * 于是调用方明确要求 {@code channels=["email"]} 时, 用户会额外收到短信与
+     * WebSocket 推送 (实测一次通知落 3 条 SUCCESS 日志), 属过度发送。</p>
+     *
+     * <p>{@code channels} 为空表示该通知写于本列加入之前 (历史数据), 此时保持原有的
+     * 按偏好路由行为, 不做改变。</p>
      */
     private List<NotificationChannel> resolveChannels(Notification notification) {
+        List<String> requested = decodeChannels(notification.getChannels());
         NotificationSendRequest request = new NotificationSendRequest(
             notification.getUserId(),
             notification.getTitle(),
             notification.getContent(),
             notification.getType(),
-            null,   // 渠道选择交由偏好路由决定
+            requested,  // 还原调用方请求的渠道; 为空则交由偏好路由决定
             null,   // 模板已在入库前渲染完成
             Map.of(),
             null    // 不再调度
         );
         return notificationRouter.route(request);
+    }
+
+    private List<String> decodeChannels(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return null;
+        }
+        return Arrays.stream(stored.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
     }
 
     private boolean sendToChannel(Notification notification, NotificationChannel channel) {
