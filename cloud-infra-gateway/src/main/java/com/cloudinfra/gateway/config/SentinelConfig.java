@@ -139,6 +139,10 @@ public class SentinelConfig implements SmartInitializingSingleton {
      * 首个调用者正常创建（真实 gRPC 建连），后续实例的 configService 字段
      * 被反射替换为该实例后其自身新建的连接即刻被丢弃（可 GC）。
      */
+    // 反射读取 Sentinel 内部持有的 ConfigService 字段, 用于把多个 DataSource 的 Nacos 连接收敛成一个
+    // (ConfigService 线程安全, 每个 DataSource 各建一个会重复长连接)。这是对三方库内部结构的
+    // 有意依赖, 升级 Sentinel 时需重新核对字段名。
+    @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
     private static void shareConfigServiceAcross(ReadableDataSource<?, ?>... sources) {
         java.lang.reflect.Field field = null;
         try {

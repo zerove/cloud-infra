@@ -133,6 +133,8 @@ public class TenantSqlInterceptor implements InnerInterceptor {
     /**
      * 在 Mapper 接口 (含继承链) 上查找 @TenantFilter 注解
      */
+    // 探测 Mapper 对应的注解类是否存在, "不存在"是预期结果 (如动态代理), 空 catch 是刻意为之
+    @SuppressWarnings("PMD.EmptyCatchBlock")
     private TenantFilter findTenantFilterAnnotation(String className, String methodName) {
         try {
             Class<?> clazz = Class.forName(className);

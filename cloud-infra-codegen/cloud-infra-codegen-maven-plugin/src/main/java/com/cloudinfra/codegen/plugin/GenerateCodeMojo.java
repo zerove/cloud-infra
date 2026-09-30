@@ -74,6 +74,10 @@ public class GenerateCodeMojo extends AbstractMojo {
     private boolean skipIfExists;
 
     @Override
+    // dataSource 是 PGSimpleDataSource —— 不持有连接池、也不实现 AutoCloseable,
+    // 无可关闭; 真正的连接由 TableMetadataReader 内的 try-with-resources 管理。
+    // 因此 UseTryWithResources 在此是误报。
+    @SuppressWarnings("PMD.UseTryWithResources")
     public void execute() throws MojoExecutionException, MojoFailureException {
         if (url == null || url.isEmpty()) {
             throw new MojoFailureException("必须提供数据库 URL (codegen.url)");

@@ -24,10 +24,10 @@ public class PermissionService {
         
         Collection<?> authorities = auth.getAuthorities();
         // 检查通配符或超级管理员角色
-        return authorities.stream().anyMatch(a -> 
-            a.toString().equals(ALL_PERMISSION) || 
-            a.toString().equals(SUPER_ADMIN) || 
-            a.toString().equals(permission));
+        return authorities.stream().anyMatch(a ->
+            ALL_PERMISSION.equals(a.toString()) ||
+            SUPER_ADMIN.equals(a.toString()) ||
+            permission.equals(a.toString()));
     }
 
     /**

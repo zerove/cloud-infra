@@ -88,6 +88,8 @@ public class RemotePermissionProvider implements IPermissionProvider {
      * 不抛此异常会导致业务层 30 分钟持续 401 (缓存期间不重试)。
      */
     public static class PermissionFetchException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public PermissionFetchException(String msg) { super(msg); }
         public PermissionFetchException(String msg, Throwable cause) { super(msg, cause); }
     }

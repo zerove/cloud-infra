@@ -172,7 +172,7 @@ public class GrpcServerLifecycle implements SmartLifecycle, InitializingBean, Di
     private java.io.InputStream resolveResourceAsStream(String path) {
         if (path.startsWith("classpath:")) {
             String classpathPath = path.substring("classpath:".length());
-            return this.getClass().getClassLoader().getResourceAsStream(classpathPath);
+            return Thread.currentThread().getContextClassLoader().getResourceAsStream(classpathPath);
         } else if (path.startsWith("file:")) {
             try {
                 return new java.io.FileInputStream(path.substring("file:".length()));

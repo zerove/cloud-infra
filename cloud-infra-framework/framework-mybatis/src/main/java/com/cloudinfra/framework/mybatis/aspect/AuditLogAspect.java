@@ -77,7 +77,6 @@ public class AuditLogAspect {
         logInfo.put("action", auditLog.action());
         logInfo.put("userId", userId != null ? userId : "system");
         logInfo.put("username", username != null ? username : "system");
-        sameParams(logInfo, params);
         logInfo.put("params", params);
         logInfo.put("status", status);
         logInfo.put("errorMessage", errorMsg);
@@ -86,7 +85,4 @@ public class AuditLogAspect {
         logInfo.put("createTime", endTime);
     }
 
-    private void sameParams(Map<String, Object> logInfo, String params) {
-        // 预留参数清洗逻辑，例如脱敏
-    }
 }
