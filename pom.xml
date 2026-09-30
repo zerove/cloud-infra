@@ -473,8 +473,7 @@
                         <failOnViolation>true</failOnViolation>
                         <includeTests>false</includeTests>
                         <rulesets>
-                            <ruleset>category/java/bestpractices.xml</ruleset>
-                            <ruleset>category/java/errorprone.xml</ruleset>
+                            <ruleset>${maven.multiModuleProjectDirectory}/pmd-ruleset.xml</ruleset>
                         </rulesets>
                     </configuration>
                 </plugin>

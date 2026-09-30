@@ -147,7 +147,9 @@ public class GatewayMvcRuntimeHintsProcessor implements BeanFactoryInitializatio
 			}
 			catch (NoClassDefFoundError | ClassNotFoundException exception) {
 				if (LOG.isDebugEnabled()) {
-					LOG.debug(exception);
+					// 传 throwable 本身才能打出堆栈; 只传 message 只会得到一行 toString
+					// (此处是 commons-logging 的 Log, 只有 (Object, Throwable) 重载)
+					LOG.debug("跳过加载失败的类: " + component.getBeanClassName(), exception);
 				}
 			}
 		}
@@ -176,7 +178,9 @@ public class GatewayMvcRuntimeHintsProcessor implements BeanFactoryInitializatio
 		Set<String> conditionClasses = beansConditionalOnClasses.getOrDefault(clazz.getName(), Collections.emptySet());
 		for (String conditionClass : conditionClasses) {
 			try {
-				GatewayMvcRuntimeHintsProcessor.class.getClassLoader().loadClass(conditionClass);
+				// 用 TCCL: 本类覆盖了 Spring 的同名类, 在容器/插件化场景下
+				// 业务类未必对本类的 ClassLoader 可见
+				Thread.currentThread().getContextClassLoader().loadClass(conditionClass);
 			}
 			catch (ClassNotFoundException e) {
 				return false;

@@ -32,13 +32,16 @@ public class OutboxEvent {
     private final String bindingName;
 
     /** 状态: PENDING / DISPATCHED / FAILED */
-    private final String status;
+    @Builder.Default
+    private final String status = "PENDING";
 
     /** 投递尝试次数 */
-    private final Integer retryCount;
+    @Builder.Default
+    private final Integer retryCount = 0;
 
     /** 创建时间 */
-    private final LocalDateTime createdAt;
+    @Builder.Default
+    private final LocalDateTime createdAt = LocalDateTime.now();
 
     /** 最后投递时间 */
     private final LocalDateTime dispatchedAt;
@@ -51,16 +54,4 @@ public class OutboxEvent {
 
     /** 幂等键（消费端去重） */
     private final String idempotencyKey;
-
-    public static OutboxEventBuilder builder() {
-        return new OutboxEventBuilder()
-            .status("PENDING")
-            .retryCount(0);
-    }
-
-    public static class OutboxEventBuilder {
-        private String status = "PENDING";
-        private Integer retryCount = 0;
-        private LocalDateTime createdAt = LocalDateTime.now();
-    }
 }

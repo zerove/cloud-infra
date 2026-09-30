@@ -93,9 +93,9 @@ public class CodegenCli {
             } else {
                 String[] tableNames = tableNamesInput.split(",");
                 for (String tableName : tableNames) {
-                    tableName = tableName.trim();
-                    if (!tableName.isEmpty()) {
-                        TableModel table = reader.readTable(tableName);
+                    String trimmed = tableName.trim();
+                    if (!trimmed.isEmpty()) {
+                        TableModel table = reader.readTable(trimmed);
                         generator.generate(table);
                     }
                 }

@@ -189,7 +189,7 @@ public class WorkflowEngine {
         Throwable lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                Object result = invokeHandler(step, context, outputs);
+                Object result = invokeHandler(step, context);
                 // 步骤级超时校验: handler 同步执行, 无法安全中断, 因此在返回后核对耗时。
                 // 超预算即视为本次尝试失败, 交由重试策略处理, 且绝不记为成功。
                 long elapsed = System.currentTimeMillis() - stepStart;
@@ -221,7 +221,7 @@ public class WorkflowEngine {
                     step.id() + "-compensation", "plugin", List.of(),
                     step.onFailure(), Map.of(), null, null, null
                 );
-                invokeHandler(compStep, context, outputs);
+                invokeHandler(compStep, context);
                 log.info("[WorkflowEngine] 补偿成功: onFailure={}", step.onFailure());
             } catch (RuntimeException compError) {
                 log.error("[WorkflowEngine] 补偿失败: onFailure={}, err={}", step.onFailure(), compError.getMessage());
@@ -243,7 +243,7 @@ public class WorkflowEngine {
      * 调用处理器. 通过 handlerInvoker 委托 (Phase A/B 统一入口).
      * Phase C: 在执行后保存步骤输出到 context.variables (key="steps.{id}.output").
      */
-    private Object invokeHandler(WorkflowStep step, WorkflowContext context, Map<String, Object> outputs) {
+    private Object invokeHandler(WorkflowStep step, WorkflowContext context) {
         Object result = handlerInvoker.apply(step.handler(), context);
         // Phase C: 保存步骤输出供后续步骤引用
         context.setStepOutput(step.id(), result);

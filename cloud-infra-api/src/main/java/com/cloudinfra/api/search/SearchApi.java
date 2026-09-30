@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 /**
  * 搜索服务 API 客户端，增加熔断降级策略
  */
+@FunctionalInterface
 @FeignClient(name = "search-service", fallbackFactory = SearchApiFallbackFactory.class)
 public interface SearchApi {
 

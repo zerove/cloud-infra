@@ -66,6 +66,9 @@ public final class TraceUtils {
      * @param name Span 名称
      * @param runnable 执行逻辑
      */
+    // ws 变量在 try-with-resources 中"不使用"是刻意的: 持有 SpanInScope 本身就是
+    // 把 span 设为线程当前作用域的唯一手段, 释放由 close() 完成。
+    @SuppressWarnings("PMD.UnusedLocalVariable")
     public <T> T createCustomSpan(String name, java.util.function.Supplier<T> runnable) {
         Span newSpan = tracer.nextSpan().name(name).start();
         try (Tracer.SpanInScope ws = tracer.withSpan(newSpan)) {

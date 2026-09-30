@@ -213,7 +213,8 @@ public class IdempotentAspect {
             return objectMapper.readValue(cached.getBody(), objectMapper.constructType(returnType));
         } catch (com.fasterxml.jackson.core.JacksonException e) {
             log.warn("[IdempotentAspect] 重放反序列化失败, 拒绝错误重放");
-            throw new GlobalException("幂等缓存不可用，请稍后重试");
+            // 带上 cause: 缓存体损坏是需要排查的真实故障, 丢掉堆栈等于让它无从追查
+            throw new GlobalException("幂等缓存不可用，请稍后重试", e);
         }
     }
 

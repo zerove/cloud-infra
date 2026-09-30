@@ -82,7 +82,7 @@ public class AuthEvaluator {
         if (path.contains("*") || path.endsWith("/")) {
             String prefix = path.replace("*", "");
             prefixWhiteList.add(prefix);
-            if (prefix.length() <= PREFIX_WARN_THRESHOLD && !prefix.equals("/")) {
+            if (prefix.length() <= PREFIX_WARN_THRESHOLD && !"/".equals(prefix)) {
                 log.warn("白名单前缀 '{}' 过短（长度 {}），可能导致大范围路径绕过鉴权，建议使用精确路径或更长前缀",
                     path, prefix.length());
             }

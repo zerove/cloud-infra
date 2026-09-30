@@ -16,6 +16,8 @@ import org.springframework.util.ClassUtils;
 public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
 
     @Override
+    // 探测某个类是否存在时 "不存在" 是预期结果, 空 catch 是刻意为之
+    @SuppressWarnings("PMD.EmptyCatchBlock")
     public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
         // 注册通用 Result 模型
         hints.reflection().registerType(com.cloudinfra.common.core.domain.Result.class,
@@ -32,7 +34,7 @@ public class CloudInfraRuntimeHints implements RuntimeHintsRegistrar {
                 MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
                 MemberCategory.INVOKE_DECLARED_METHODS);
         } catch (ClassNotFoundException e) {
-            // Ignore if not present
+            // 类不存在是预期结果 (例如该类被裁剪掉了), 不是异常, 记日志反而是噪音
         }
     }
 }

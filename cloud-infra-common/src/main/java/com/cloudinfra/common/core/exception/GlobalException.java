@@ -20,6 +20,19 @@ public class GlobalException extends RuntimeException implements Serializable {
         this.msg = msg;
     }
 
+    /**
+     * 带原始异常的业务异常。
+     *
+     * <p>用于"业务上要转成友好提示, 但技术上需要留痕"的场景 (如缓存体反序列化失败)。
+     * 此前只有不带 cause 的构造器, 调用方要么丢失堆栈, 要么退化成 RuntimeException 绕过
+     * 统一错误码 —— 两者都比留一个 cause 更糟。</p>
+     */
+    public GlobalException(String msg, Throwable cause) {
+        super(msg, cause);
+        this.code = ResultCode.BUSINESS_ERROR.getCode();
+        this.msg = msg;
+    }
+
     public GlobalException(Integer code, String msg) {
         super(msg);
         this.code = code;

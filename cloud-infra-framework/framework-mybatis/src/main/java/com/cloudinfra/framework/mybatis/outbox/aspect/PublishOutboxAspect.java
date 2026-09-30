@@ -60,7 +60,7 @@ public class PublishOutboxAspect {
 
         try {
             String eventType = resolveEventType(joinPoint, publishOutbox);
-            String aggregateType = resolveAggregateType(joinPoint, result, publishOutbox);
+            String aggregateType = resolveAggregateType(result, publishOutbox);
             String aggregateId = resolveAggregateId(joinPoint, result, publishOutbox);
 
             // 在事务内 publish (commit 后才入 outbox_event 表)
@@ -89,7 +89,7 @@ public class PublishOutboxAspect {
         return joinPoint.getSignature().getName();
     }
 
-    private String resolveAggregateType(ProceedingJoinPoint joinPoint, Object result, PublishOutbox annotation) {
+    private String resolveAggregateType(Object result, PublishOutbox annotation) {
         if (!annotation.aggregateType().isEmpty()) {
             return annotation.aggregateType();
         }

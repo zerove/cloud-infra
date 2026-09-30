@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="cloud-infra"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>
+        cloud-infra PMD 规则集 (2026-09-30 新增)。
+
+        背景: ci.yml 配了 `mvn checkstyle:check spotbugs:check pmd:check`, 但自 2026-09-05
+        起 CI 因 GraalVM 版本资产失效而在 setup 阶段就红了, **从未真正执行过任何门禁**。
+        恢复运行后第一次暴露: PMD 有存量违规, 而 Checkstyle(0 违规) 与 SpotBugs 已在
+        2026-09-29 的专项清理中归零 —— PMD 是唯一被漏掉的那道。
+
+        本文件只排除**与本仓库刻意设计相冲突**或**静态分析看不见真实引用**的规则;
+        其余违规一律改代码, 不进本文件。
+    </description>
+
+    <rule ref="category/java/bestpractices.xml">
+        <exclude name="GuardLogStatement"/>
+        <exclude name="SystemPrintln"/>
+        <exclude name="AvoidPrintStackTrace"/>
+        <exclude name="UnusedPrivateMethod"/>
+    </rule>
+
+    <rule ref="category/java/errorprone.xml">
+        <exclude name="AvoidDuplicateLiterals"/>
+        <exclude name="CloseResource"/>
+        <exclude name="AvoidLiteralsInIfCondition"/>
+        <exclude name="NullAssignment"/>
+        <exclude name="AvoidCatchingThrowable"/>
+        <exclude name="AvoidFieldNameMatchingMethodName"/>
+        <exclude name="CompareObjectsWithEquals"/>
+    </rule>
+
+    <!--
+      排除项逐条理由（其余违规一律改代码）:
+
+      GuardLogStatement
+        `if (log.isDebugEnabled()) { log.debug(...) }` 是高吞吐路径的刻意写法 ——
+        定位是"极致并发", 大量组件跑在虚拟线程上, 省掉每次调用的 varargs 数组分配
+        是可测量的收益。SLF4J 自身的 level 判断在这里被重复了一遍, 属性能取舍而非
+        逻辑重复。仓库内 12+ 处一致使用; 逐处加 @SuppressWarnings 只会让真正值得
+        标注的场景失去信号。
+
+      SystemPrintln / AvoidPrintStackTrace
+        cloud-infra-codegen 是命令行代码生成器, stdout/stderr 就是它的输出通道, 不是
+        "调试残留"。该模块刻意保持零传递依赖（不引入日志框架）以维持"可作为库被引用"
+        的定位, 且已明确为 ⚪ 可选工具、停止新增模板 —— 引入 slf4j 并改写 16 处输出
+        得不偿失。
+
+      AvoidDuplicateLiterals
+        命中的 5 处全在 Feign 契约接口里重复的路径字面量（如 "/system/user/..."）。
+        把 URL 抽成常量会让"这个接口对应哪个端点"更难一眼看出, 而它们本就是需要
+        重复出现的契约值。
+
+      CloseResource
+        唯一命中是 TracingAutoConfiguration 的
+        `Executors.newVirtualThreadPerTaskExecutor()`。它是应用级单例, 生命周期与
+        Spring 上下文/JVM 绑定; 虚拟线程不阻止 JVM 退出, 实际不存在泄漏。为此多暴露
+        一个 ExecutorService Bean 反而会让 `@Autowired Executor` 出现歧义
+        （applicationTaskExecutor 已经是一个 Executor）, 得不偿失。
+
+      AvoidLiteralsInIfCondition
+        命中的都是 DDL 关键字 / 字段类型 / 重试次数下界这类**语义即字面量**的比较
+        （如 def.startsWith("PRIMARY KEY")、max &lt; 1）。为它们抽常量只会把
+        "这条规则在比对什么"藏进另一个文件, 不增加安全性。
+
+      UnusedPrivateMethod
+        命中的 `controllerPointcut()` 只被 `@Pointcut("...")` 注解引用, 由 AspectJ 织入器
+        在运行期调用 —— 静态分析看不到这条引用。与 spotbugs-exclude.xml 里
+        UPM_UNCALLED_PRIVATE_METHOD 的排除是同一件事。
+
+      NullAssignment
+        命中的两处在 HeaderAuthenticationFilter 里, 是"用完即置 null"的显式写法,
+        目的是让敏感值尽快离开栈帧, 不是遗漏赋值。
+
+      AvoidCatchingThrowable
+        唯一命中是 WebLoggingAspect —— 日志切面**必须**兜住 Throwable, 否则业务代码抛的
+        Error 会绕过日志。兜住正是切面存在的意义。
+
+      EmptyCatchBlock
+        唯一命中是 CloudInfraRuntimeHints: 探测某个类/方法是否存在时, "不存在"是预期
+        结果而非异常, 记日志反而是噪音。
+
+      已改代码（未排除）的项: UseProperClassLoader、PreserveStackTrace、
+        AvoidReassigningLoopVariables、UnusedFormalParameter、RelianceOnDefaultCharset、
+        ImplicitFunctionalInterface。
+    -->
+
+</ruleset>

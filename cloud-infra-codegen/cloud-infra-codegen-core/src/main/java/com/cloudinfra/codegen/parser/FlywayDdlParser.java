@@ -123,17 +123,17 @@ public class FlywayDdlParser {
         FieldModel primaryKey = null;
 
         for (String def : columnDefs) {
-            def = def.trim();
-            if (def.isEmpty() || def.toUpperCase(Locale.ROOT).startsWith("PRIMARY KEY")
-                || def.toUpperCase(Locale.ROOT).startsWith("UNIQUE ")
-                || def.toUpperCase(Locale.ROOT).startsWith("CONSTRAINT ")
-                || def.toUpperCase(Locale.ROOT).startsWith("FOREIGN KEY")
-                || def.toUpperCase(Locale.ROOT).startsWith("INDEX ")
-                || def.toUpperCase(Locale.ROOT).startsWith("KEY ")) {
+            String columnDef = def.trim();
+            if (columnDef.isEmpty() || columnDef.toUpperCase(Locale.ROOT).startsWith("PRIMARY KEY")
+                || columnDef.toUpperCase(Locale.ROOT).startsWith("UNIQUE ")
+                || columnDef.toUpperCase(Locale.ROOT).startsWith("CONSTRAINT ")
+                || columnDef.toUpperCase(Locale.ROOT).startsWith("FOREIGN KEY")
+                || columnDef.toUpperCase(Locale.ROOT).startsWith("INDEX ")
+                || columnDef.toUpperCase(Locale.ROOT).startsWith("KEY ")) {
                 continue;
             }
 
-            FieldModel field = parseColumn(def);
+            FieldModel field = parseColumn(columnDef);
             if (field == null) {
                 continue;
             }

@@ -48,8 +48,11 @@ public class TemplateEngine {
      */
     public TemplateEngine setClasspathTemplateLoader(String classpathDir) {
         String normalized = classpathDir.startsWith("/") ? classpathDir : "/" + classpathDir;
+        // 用线程上下文类加载器而非 this.getClass().getClassLoader():
+        // 本引擎既能被直接调用, 也能被 maven-plugin 之类的自定义 ClassLoader 加载,
+        // 此时模板资源只对 TCCL 可见, 用本类加载器会静默找不到模板。
         configuration.setClassLoaderForTemplateLoading(
-            this.getClass().getClassLoader(), normalized);
+            Thread.currentThread().getContextClassLoader(), normalized);
         return this;
     }
 

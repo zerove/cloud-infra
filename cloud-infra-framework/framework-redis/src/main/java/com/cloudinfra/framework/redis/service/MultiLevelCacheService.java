@@ -43,7 +43,7 @@ public class MultiLevelCacheService {
      */
     public <T> Optional<T> get(String cacheName, String key, Class<T> clazz) {
         // 1. 尝试 L1 缓存
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         Object l1Value = l1Cache.getIfPresent(key);
         if (l1Value != null) {
             log.debug("L1 缓存命中: {}:{}", cacheName, key);
@@ -69,7 +69,7 @@ public class MultiLevelCacheService {
      */
     public void put(String cacheName, String key, Object value, Duration ttl) {
         // 写入 L1
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         l1Cache.put(key, value);
 
         // 写入 L2 (Redis)
@@ -91,7 +91,7 @@ public class MultiLevelCacheService {
      */
     public void evict(String cacheName, String key) {
         // 删除 L1
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         l1Cache.invalidate(key);
 
         // 删除 L2
@@ -105,7 +105,7 @@ public class MultiLevelCacheService {
      * 批量删除
      */
     public void evictAll(String cacheName, Iterable<String> keys) {
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         for (String key : keys) {
             l1Cache.invalidate(key);
             String redisKey = buildRedisKey(cacheName, key);
@@ -117,7 +117,7 @@ public class MultiLevelCacheService {
      * 清空指定缓存区域
      */
     public void clear(String cacheName) {
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         l1Cache.invalidateAll();
 
         // Redis 使用 SCAN 删除（避免 KEYS 阻塞）
@@ -126,7 +126,9 @@ public class MultiLevelCacheService {
         redisTemplate.execute((org.springframework.data.redis.connection.RedisConnection connection) -> {
             try (var cursor = connection.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).build())) {
                 while (cursor.hasNext()) {
-                    keys.add(new String(cursor.next()));
+                    // Redis 键是字节流, 必须显式指定 UTF-8:
+                    // 用平台默认字符集会让同一份数据在不同 OS 上解出不同的键名。
+                    keys.add(new String(cursor.next(), java.nio.charset.StandardCharsets.UTF_8));
                 }
             }
             return null;
@@ -140,7 +142,7 @@ public class MultiLevelCacheService {
      * 获取缓存统计信息
      */
     public CacheStats getStats(String cacheName) {
-        Cache<String, Object> l1Cache = getOrCreateL1Cache(cacheName);
+        Cache<String, Object> l1Cache = getOrCreateL1Cache();
         var stats = l1Cache.stats();
         return new CacheStats(
             cacheName,
@@ -155,8 +157,9 @@ public class MultiLevelCacheService {
     /**
      * 获取或创建 L1 缓存实例
      */
-    private Cache<String, Object> getOrCreateL1Cache(String cacheName) {
-        // 这里简化处理，实际可根据 cacheName 返回不同配置的缓存
+    private Cache<String, Object> getOrCreateL1Cache() {
+        // 当前所有 cacheName 共用同一个本地缓存实例 (单节点本地缓存无隔离需求);
+        // 若将来需要按 cacheName 隔离, 再把 cacheName 作为入参接回来。
         return defaultL1Cache;
     }
 
