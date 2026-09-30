@@ -2,6 +2,7 @@ package com.cloudinfra.common.core.tenant;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * 租户上下文
@@ -10,10 +11,30 @@ import java.util.UUID;
  */
 public final class TenantContext {
 
+    /**
+     * 合法租户 ID 格式。
+     *
+     * <p><b>为什么必须校验</b>: 租户 ID 来自客户端可控的 {@code X-Tenant-Id} 头,
+     * 最终由 {@code TenantSqlInterceptor} 以字符串拼接方式写入 {@code WHERE tenant_id = '<id>'}。
+     * 拼接本身靠这个字符集挡住注入, 但历史实现里拦截器对非法值是<b>抛异常</b>而非忽略,
+     * 等于一个未校验的请求头就能把查询打成 500。长度上界同时防止超长值进入 SQL 与日志。</p>
+     *
+     * <p>格式: 1-64 位 {@code [a-zA-Z0-9_-]}, 覆盖 UUID、{@code default}、
+     * {@code generateTenantId()} 生成的 {@code tenant-xxxxxxxx} 形态。</p>
+     */
+    public static final Pattern TENANT_ID_PATTERN = Pattern.compile("[a-zA-Z0-9_-]{1,64}");
+
     private static final ThreadLocal<String> TENANT_ID = new ThreadLocal<>();
     private static final ThreadLocal<String> TRACE_TENANT = new ThreadLocal<>();
 
     private TenantContext() {
+    }
+
+    /**
+     * 判断租户 ID 是否符合 {@link #TENANT_ID_PATTERN}
+     */
+    public static boolean isValidTenantId(String tenantId) {
+        return tenantId != null && TENANT_ID_PATTERN.matcher(tenantId).matches();
     }
 
     /**

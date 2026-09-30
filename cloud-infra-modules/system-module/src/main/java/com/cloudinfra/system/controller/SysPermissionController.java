@@ -22,6 +22,7 @@ public class SysPermissionController {
 
     private final ISysPermissionService sysPermissionService;
 
+    @PreAuthorize("@ss.hasPermi('system:permission:list')")
     @GetMapping("/list")
     public IPage<SysPermissionEntity> list(
             @RequestParam(defaultValue = "1") long pageNum,

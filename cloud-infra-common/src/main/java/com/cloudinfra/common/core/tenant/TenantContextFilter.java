@@ -44,9 +44,20 @@ public class TenantContextFilter extends OncePerRequestFilter implements Ordered
         }
 
         if (tenantId != null && !tenantId.isBlank()) {
-            TenantContext.setTenantId(tenantId.trim());
+            String normalized = tenantId.trim();
+            // 租户 ID 最终会被拼接进 WHERE 子句, 必须在入口挡住非法值:
+            // 否则 TenantSqlInterceptor 会抛 IllegalArgumentException, 一个畸形请求头即可打成 500。
+            if (!TenantContext.isValidTenantId(normalized)) {
+                log.warn("拒绝非法租户标识: uri={} len={}", request.getRequestURI(), normalized.length());
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write(
+                    "{\"success\":false,\"message\":\"Invalid " + TENANT_HEADER + " header\"}");
+                return;
+            }
+            TenantContext.setTenantId(normalized);
             if (log.isDebugEnabled()) {
-                log.debug("请求租户: {} uri: {}", tenantId, request.getRequestURI());
+                log.debug("请求租户: {} uri: {}", normalized, request.getRequestURI());
             }
         } else if (requireTenant) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);

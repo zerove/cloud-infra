@@ -38,6 +38,7 @@ public class RBACController {
     }
 
     @AuditLog(module = "RBAC", action = "GET_USER_PERMS")
+    @PreAuthorize("@ss.hasPermi('system:rbac:query')")
     @GetMapping("/user/{userId}/permissions")
     public List<String> getUserPermissions(@PathVariable Long userId) {
         return rbacService.getUserPermissions(userId);
