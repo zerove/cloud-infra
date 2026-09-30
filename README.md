@@ -4,10 +4,17 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-101%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-45%2F45-success)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-429%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
+
+> ⚠️ **进度口径说明** (2026-09-30): 徽章中的 `ROADMAP 1/6` 按项目级完成定义统计,
+> 即**被真实业务使用的能力数**。若按传统“条目打勾”口径计, M6/M7 看起来接近全绿 ——
+> 但那些条目的代码并无业务引用。**组件自测通过不等于交付。**
+> 详见 [ROADMAP.md](ROADMAP.md) “按被使用标准重算”。
 
 **v1.0.0 关键变更** (相对 v1.0.0-rc1):
-- ✅ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)
+- ⚪ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)
+  - **2026-09-30 修正**: 该项已降级为 `⚪` 可选开发工具。声称的“消除 RuoYi 手工 CRUD 样板”仅在 `sys_post`
+  **一张表**上验证过, 其余业务表均为手写。未达成“已交付”标准, 详见 ROADMAP 重算章节
 - ✅ **P0-3b JWT blacklist 端到端 401 实测通过** (HTTP 401 + Redis blacklist TTL 24h)
 - ✅ **Caffeine ClassLoader 死锁修复**: cloud-system 内存 768m→2g + `--enable-native-access=ALL-UNNAMED`
 - ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
@@ -55,7 +62,7 @@ mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
     - `search-service`: 基于 Elasticsearch 的高性能搜索。
 - **`cloud-infra-api`**: 共享 DTO 和 Feign 客户端，确保服务间通信的类型安全。
 - **`cloud-infra-common`**: 基础工具类和通用基类。
-- **`cloud-infra-codegen`** (新!): 代码生成框架。`core` 含 10+ FreeMarker 模板 + FlywayDdlParser, `maven-plugin` 子模块 JDK 17 编译, 集成到构建流程, 消除 RuoYi 风格手工 CRUD 样板.
+- **`cloud-infra-codegen`**: 代码生成工具 (`⚪` 可选, 非已交付能力)。含 `core` (JDK 17 编译) + `maven-plugin` 子模块; 仅 `sys_post` 一表验证过, 停止新增模板
 
 ## 📈 可观测性
 
