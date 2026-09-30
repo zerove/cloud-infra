@@ -184,9 +184,10 @@ public class TenantSqlInterceptor implements InnerInterceptor {
     }
 
     private String buildTenantCondition(String column, String tenantId) {
-        // 防御性校验: tenantId 仅含 [a-zA-Z0-9-_] (UUID + prefix-xxxx 格式)
-        if (!tenantId.matches("[a-zA-Z0-9\\-_]+")) {
-            throw new IllegalArgumentException("非法 tenantId: " + tenantId);
+        // 防御性校验: 字符集与长度上界由 TenantContext.TENANT_ID_PATTERN 统一定义。
+        // 入口 TenantContextFilter 已拦一道, 这里是最后防线 (内部调用可绕过 Filter)。
+        if (!TenantContext.isValidTenantId(tenantId)) {
+            throw new IllegalArgumentException("非法 tenantId");
         }
         return column + " = '" + tenantId + "'";
     }

@@ -26,6 +26,7 @@ public class ResourceMappingController {
     /**
      * 获取资源的有效访问节点集合 (包含拓扑展开后的结果)
      */
+    @PreAuthorize("@ss.hasPermi('system:resource:query')")
     @GetMapping("/effective-nodes")
     public Set<Long> getEffectiveNodes(
             @RequestParam String resourceId,

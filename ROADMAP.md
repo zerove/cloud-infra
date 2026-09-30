@@ -11,6 +11,7 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 - 🟢 **Completed**: Implemented **and used by at least one business module**, with runtime evidence.
 - ⚪ **Built, Unused**: Code exists and is self-tested, but **no business module references it**. Not a delivered capability; do not build on top of it without first finding a real use case.
 - ⛔ **Frozen**: Deliberately paused. Do not add to it until the stated precondition is met.
+- ⚠️ **Fixed, Unverified**: 2026-09-30 审计发现"标记为已交付、实际未运行/无效", 已修复并加守护测试, 但**尚无运行时证据**证明修好之后不报错。不得按 🟢 计入完成数。
 
 > **2026-09-29 完成判定标准修正**: 过去用“组件自身测试通过”作为完成依据, 导致
 > M6 中 4 项能力被标为 `🟢 Completed` 但业务零引用。现改为**必须有业务模块引用 + 运行时证据**。
@@ -55,6 +56,55 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 ---
 
+## 🔬 运行时有效性审计 (2026-09-30, 最高优先级)
+
+上一节修正的是**标记与口径**。本节回答更前置的问题: **被标为已交付的能力, 真的在运行吗?**
+
+答案: **四处不成立**。实证手段 = 反射扫描 + 真实容器集成测试 + 基线对照 (`git stash` 后重跑)。
+完整证据见 issue 29。
+
+| # | 缺陷 | 此前标记 | 真实状态 |
+| :--- | :--- | :--- | :--- |
+| P0-1 | 任意已认证用户可经网关 `GET /system/user/credential/username/{name}` 读他人 **BCrypt 密码哈希**。网关为每个转发请求都注入合法内部签名, 而规则是"签名有效即 permitAll" | `UserApi` javadoc 声称"受内部签名保护" | 保护形同虚设 + matcher 失效开放 |
+| P0-2 | **auth 服务启动即失败**: `IdempotencyStore` 的自动配置类从未登记进 `AutoConfiguration.imports`, 而 `IdempotentAspect` 带 `@Component` 被无条件扫入 | 🟢 幂等框架 ⚪/组件自测通过 | 服务起不来。`skipITs=true` 掩盖了它 |
+| P0-3 | 全仓无 `@EnableScheduling` → **4 个 `@Scheduled` 任务从未执行过一次** | 🟢 M7-08 崩溃恢复兜底 / 🟢 DLQ 重试 / 🟢 健康巡检告警 | 无报错无日志地静默不执行 |
+| P1-1 | Outbox 四个组件带 stereotype, opt-in 的 `@ConditionalOnProperty` 形同虚设, 反致 `search-service` 被迫配一个**并不生效**的规避开关 | ⚪ | opt-in 失效 |
+
+**共同根因: "能力存在"被当成了"能力在运行"。** 11 项补扫测试全绿, 因为它们用 mock
+直接调用方法, 绕过了调度触发环节 —— 正是"组件单元测试不是完成依据"的教科书案例。
+
+已全部修复, 每个修复配结构性 + 运行时双重守护 (`mvn test` 每次执行, 不依赖容器):
+`SchedulingEnabledTest` ×6、`OutboxOptInTest` ×4、`IdempotentOptInTest` ×3、
+`InternalEndpointExposureTest` ×4、`ControllerAuthorizationTest` ×2、`TenantIdValidationTest` ×22。
+其中调度修复做了**负向对照** (去掉注解后测试如期失败)。
+
+### ⚠️ 唯一标 🟢 的多租户, 在任何部署配置中都未启用
+
+`cloud-infra.tenant.enabled` 默认 `false`, `deploy/config/*.yaml` **无一处开启**。
+因此 `TenantContextFilter` 不注册 → `TenantContext` 恒空 → 拦截器每次走"无租户则放行"分支 →
+9 个 `@TenantFilter` Mapper、V14 的 9 张表 `tenant_id`、网关 `propagateTenantHeader`
+**在部署态全部无效**。M6-01 的"被使用"仅在显式开启开关的测试环境成立。
+
+且**不能只翻开关**: 网关原样透传客户端的 `X-Tenant-Id`, 租户身份由客户端断言。
+代码注释自己承认"后续 M7+ 可从 JWT claim 提取 tenantId 实现自动绑定"。
+
+**三选一 (需人工决策)**: ① 开 + 租户身份绑到认证主体; ② 开 + 显式接受"客户端自选租户"
+(仅演示环境, 须写进文档); ③ 降级为 `⚪`, 达成率变为 0/6 但数字是真的。
+代码侧前置条件 (租户标识入口校验 + 长度上界) 已在本次补齐, 三条路都不阻塞。
+
+### 后续计划 (issue 29)
+
+| 优先级 | 项 | 说明 |
+| :--- | :--- | :--- |
+| P0 | 多租户三选一 | 决策项, 见上 |
+| P0 | **让集成测试真的跑** | `skipITs` 默认 `true` 是本次最大检测盲区, P0-2 就被它掩盖。CI 加 `-DskipITs=false` 的夜间/发布前 job, 或给每个服务加"启动冒烟"测试进单元测试阶段 |
+| P1 | 存量 `🟢` 逐条复核 | 每条列出"运行时证据"一栏, 填不出可复现观测的降级。纯审计, 不改代码 |
+| P1 | 守护推广 | `ControllerAuthorizationTest` 扩到 notification/search/file/auth; opt-in 守护模式推广到其余框架组件 |
+
+**维持冻结**: M6-03 Outbox、M6-04 编排引擎、M6-05 OpenAPI、M7-02 gRPC、M7-04/05/06 —— 不投入, 不删代码。
+
+---
+
 ## 🔭 Strategic Themes
 
 ### 1. Observability & Management (Standardization)
@@ -66,7 +116,9 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 ### 2. Reliability & Event-Driven Architecture
 **Goal:** Improve system resilience and decouple service interactions.
-- [x] 🟢 **TxMessage Retry Refactor**: Transition `TxMessageRetryTask` to use `StreamBridge` for asynchronous dispatch. → *See `plans/2026-05-08-tx-message-retry-refactor-plan.md`*
+- [x] ⚠️ **TxMessage Retry Refactor**: Transition `TxMessageRetryTask` to use `StreamBridge` for asynchronous dispatch. → *See `plans/2026-05-08-tx-message-retry-refactor-plan.md`*
+  - **2026-09-30 审计更正**: 该任务的 `@Scheduled(fixedDelay=60000)` **从未执行过一次** —— 全仓缺 `@EnableScheduling`。
+    已在 issue 29 修复并加 `SchedulingEnabledTest` 守护, 但**尚无运行时证据**证明它跑起来后不报错, 标记由 🟢 降为 ⚠️。
 - [x] 🟢 **Dead Letter Queue (DLQ) Implementation**: Standardize error handling for failed stream messages.
 - [x] 🟢 **Distributed Tracing Integration**: Full end-to-end trace verification for cross-module calls.
 - [x] 🟢 **Outbox 并发派发行锁**（R1 已完成, commit 5887c85 原子性 + 多实例派发）。
@@ -152,15 +204,24 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 
 ### Milestone 6: Multi-Tenant Isolation (2026-09, 已交付 + 未启用部分复核)
 *Focus: 业务 SQL 跨租户隔离, 零业务侵入接入.*
-- [x] 🟢 **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
+- [x] ⚠️ **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
+  - **2026-09-30 审计更正**: `cloud-infra.tenant.enabled` 默认 `false` 且 `deploy/config/*.yaml` **无一处开启**。
+    部署态下 `TenantContextFilter` 不注册 → `TenantContext` 恒空 → 拦截器每次走"无租户则放行"分支 →
+    9 个 `@TenantFilter` Mapper、V14 的 9 张表 `tenant_id`、网关 `propagateTenantHeader` 全部无效。
+    即"被业务使用"仅在显式开启开关的测试环境成立, 且**租户身份由客户端断言** (网关原样透传 `X-Tenant-Id`)。
+    标记由 🟢 降为 ⚠️, 处置方案见"后续计划"。另已补 `X-Tenant-Id` 入口校验与长度上界
+    (此前只 trim, 而拦截器对非法值抛异常 —— 开启后一个畸形请求头即可打成 500)
 - [x] 🟢 **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加 @TenantFilter (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql tenant_id
 - [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
 - [x] 🟢 **M6-01 Phase D 端到端运行时验证** (commit 17ee31a): 容器起 PG/Redis, 跨租户查询隔离实测完成 (4 sys_post + 1 sys_user 全部 default 租户兼容, tenant-X 查询 0 行隔离)
 - [x] ⚪ **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + 17 单元测试 + 5 Testcontainers 集成测试
+  - **2026-09-30 审计发现并修复的启动级缺陷**: `IdempotencyStore` 的自动配置类从未登记进 `AutoConfiguration.imports` (永远不创建), 而 `IdempotentAspect` 带 `@Component` 被 `scanBasePackages="com.cloudinfra"` 无条件扫入并硬依赖它 → **auth 服务启动即失败**。已基线对照确认是既有缺陷。修复: store 与切面一并收归 starter 的 `IdempotentAutoConfiguration`, 由 `cloud-infra.idempotent.enabled=true` 统一开关; 删除从未生效的 framework-web 配置类; 加 `IdempotentOptInTest` 守护
+  - **为何长期没被发现**: `pom.xml` 的 `skipITs` 默认 `true`, 能暴露它的跨服务链路集成测试从不在 `mvn test` / CI 中执行
   - ⚪ **2026-09-29 复核与治理**: 唯一使用点 `AuthController.register` 已移除注解。排查确认全仓无任何客户端发送 `Idempotency-Key`, 且原自动键 (`anon + URI + body 摘要`) 会在 24h 内把"用户重复提交"重放成"成功"（假成功）。框架语义已收紧：**REPLAY 必须客户端显式提供键**，自动键仅可用于 REJECT 防抖。详见 issue 27 决策 4
 - [x] ⚪ **M6-03 Outbox 框架化** (commit 7c5f8a3): @EnableOutbox 注解 + OutboxAutoConfiguration + @PublishOutbox 注解 + AOP (SpEL aggregateId, 事务提交后入表) + 5 单元测试
   - ⚪ **2026-09-29 决策**: 找到真实场景 (notification-service 分发) 后, **不接入本框架**, 继续暂停投入。改由通知表自身加 `dispatch_status` + 定时补扫承担, 详见下方 M7-08 与 issue 27 决策 2
   - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (767 行)。Outbox 模式本身正确, 但无任何业务接入。需先找到真实的一致性敏感场景再启用
+  - **2026-09-30 审计发现 opt-in 实际失效**: 四个组件都带 stereotype, 被 `scanBasePackages="com.cloudinfra"` 无条件装配进 5 个服务, `@ConditionalOnProperty` 形同虚设 (`OutboxEventPublisher` 上"显式声明避免依赖 @Service 扫描"的注释与代码事实相反)。后果: `search-service.yaml` 被迫长期保留一个**并不生效**的规避开关 (只管 `@Scheduled` 派发循环, 管不到 Bean 装配)。已修复: 去掉全部 stereotype, 只由 `OutboxAutoConfiguration` 注册并登记进 `AutoConfiguration.imports`; 删除失效开关与 `PlatformStarterProperties.Outbox` (50 行死配置); 加 `OutboxOptInTest` 守护
 - [x] ⚪ **M6-04 业务编排引擎** (commit 267fd77 + cab11fb + 6d363c9): WorkflowEngine (DAG 分层 + 并行 + 重试 + 步骤超时 + Saga 补偿) + WorkflowStepHandler SPI + 启动扫描注册
   - ⚪ **2026-09-29 复核**: **业务模块 0 引用** (764 行, 含 17 项自测)。Saga 编排有真实价值, 但引擎无使用方。保留代码, 暂停投入
 - [x] ⚪ **M6-05 统一 OpenAPI** (commit 6e6a19e + a44df82 + d26d01e): @EnableOpenApi + OpenApiExporter 启动期 dump + build-openapi.sh 聚合
@@ -171,7 +232,12 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
   - ✅ **2026-09-29 复核**: agent 确实打进镜像且 entrypoint 生效, 非仅设环境变量
 - [x] 🟢 **M6-01 Phase D Dockerfile 路径修复** (commit 0f1e169, 验证 commit 66ec01a): 6 Dockerfile `COPY deploy/...` 路径 + compose build context `..` 修复, `./deploy/up.sh --full` 可成功 build 镜像
 - [x] 🟢 **M7-03 WebSocket 鉴权改造** (commits 6c20099 + 6c30458): Phase A Filter + Configurator 协同 (解决 tyrus 2.2 + jwaa 2.2 HandshakeResponse 缺失) + 7 测试; Phase B TLS 配置 (PKCS12 keystore + Nginx wss:// 终止 + 证书生成脚本); 文档 ARCHITECTURE.md §5
-- [x] 🟢 **M7-08 通知分发可靠性** (issue 27 决策 2, 2026-09-29): 修复分发进程崩溃即永久丢失、渠道失败无重试、状态无法区分"从未分发"与"已分发但未读"三个真实缺陷
+- [x] ⚠️ **M7-08 通知分发可靠性** (issue 27 决策 2, 2026-09-29): 修复分发进程崩溃即永久丢失、渠道失败无重试、状态无法区分"从未分发"与"已分发但未读"三个真实缺陷
+  - **2026-09-30 审计更正**: 该修复的兜底一环 `NotificationDispatchRecoveryTask` 是 `@Scheduled(cron="0 * * * * *")`,
+    而全仓缺 `@EnableScheduling` —— **补扫从未执行过一次**。也就是说"崩溃后 DISPATCHING 行永久滞留"这一原缺陷
+    换了个形式仍在。已在 issue 29 修复并加 `SchedulingEnabledTest` 守护;
+    尚无运行时证据证明它跑起来后不报错, 标记由 🟢 降为 ⚠️。
+    (11 项相关测试全绿是因为用 mock 直接调方法, 绕过了调度触发环节)
   - `sys_notification` 自身充当发件箱: 新增 `dispatch_status` (PENDING/DISPATCHING/DISPATCHED/FAILED) + `dispatch_attempts`, 与既有 `status` (是否已读) 正交; 存量行保守置 DISPATCHED 避免重投打扰用户
   - 分发改走 `notification.dispatch.queue`: 事务提交后投递 MQ (落 Broker, 进程重启不丢), 替代原先的内存线程池直发
   - `NotificationDispatchConsumer`: CAS 抢占 (`PENDING → DISPATCHING`) 保证 MQ 重投与补扫重投命中同一行时只有一个执行
