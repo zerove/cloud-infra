@@ -15,7 +15,6 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
@@ -33,7 +32,6 @@ import java.lang.reflect.Method;
  * 非破坏: 业务模块未启用 Outbox 时, 切面不装载.
  */
 @Aspect
-@Component
 public class PublishOutboxAspect {
 
     private static final Logger log = LoggerFactory.getLogger(PublishOutboxAspect.class);

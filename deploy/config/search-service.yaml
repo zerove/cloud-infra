@@ -37,11 +37,6 @@ spring:
     import:
       - optional:nacos:actuator-config.yaml
 
-# 禁用 Outbox 功能（避免 StreamBridge 依赖问题）
-cloud-infra:
-  outbox:
-    enabled: false
-
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:

@@ -3,15 +3,16 @@ package com.cloudinfra.framework.mybatis.outbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Outbox 事件发布器
  * 业务事务内调用，事务提交后自动写入 Outbox 表
  * 使用 TransactionSynchronization 确保事务边界正确
+ *
+ * <p>刻意<b>不</b>加 {@code @Service}: 见 {@link OutboxEventRepository} 同名说明。
+ * 本类只能由 {@link OutboxAutoConfiguration} 注册。</p>
  */
-@Service
 public class OutboxEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxEventPublisher.class);

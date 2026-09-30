@@ -2,7 +2,6 @@ package com.cloudinfra.framework.mybatis.outbox;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -11,8 +10,11 @@ import java.util.List;
 /**
  * Outbox 事件存储
  * 基于 JDBC 的轻量实现，业务事务内写入保证一致性
+ *
+ * <p>刻意<b>不</b>加 {@code @Repository}: 业务应用普遍用
+ * {@code scanBasePackages="com.cloudinfra"} 扫描, 一旦带上 stereotype 就会被无条件
+ * 装配进每个服务, 使 opt-in 失效。本类只能由 {@link OutboxAutoConfiguration} 注册。</p>
  */
-@Repository
 public class OutboxEventRepository {
 
     private final JdbcTemplate jdbcTemplate;
@@ -127,7 +129,9 @@ public class OutboxEventRepository {
      */
     public boolean existsByIdempotencyKey(String idempotencyKey) {
         Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM " + TABLE + " WHERE idempotency_key = ?",
+            """
+            SELECT COUNT(*) FROM %s WHERE idempotency_key = ?
+            """.formatted(TABLE),
             Integer.class, idempotencyKey
         );
         return count != null && count > 0;
