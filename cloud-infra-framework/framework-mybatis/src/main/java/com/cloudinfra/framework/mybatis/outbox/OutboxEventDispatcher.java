@@ -3,11 +3,9 @@ package com.cloudinfra.framework.mybatis.outbox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,11 +20,10 @@ import java.util.concurrent.CompletableFuture;
  * 定时轮询待投递事件，通过 Spring Cloud Stream 投递到消息队列
  * 保证至少一次投递，消费端通过幂等键去重
  *
- * <p>仅在 classpath 存在 {@link StreamBridge} 时注册,
- * 网关等排除 spring-cloud-stream 的应用不会因此启动失败。</p>
+ * <p>本类不带 stereotype, 由 {@link OutboxAutoConfiguration} 在
+ * {@code cloud-infra.outbox.enabled=true} 时注册; 其中派发 Bean 额外要求
+ * classpath 存在 {@link StreamBridge}, 排除 spring-cloud-stream 的应用不会因此启动失败。</p>
  */
-@Service
-@ConditionalOnClass(StreamBridge.class)
 public class OutboxEventDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxEventDispatcher.class);

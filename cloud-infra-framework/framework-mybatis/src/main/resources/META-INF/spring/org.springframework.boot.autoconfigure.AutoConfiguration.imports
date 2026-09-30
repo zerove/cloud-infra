@@ -1,3 +1,4 @@
 com.cloudinfra.framework.mybatis.config.MybatisPlusConfig
 com.cloudinfra.framework.mybatis.config.MybatisPlusPlatformAutoConfiguration
 com.cloudinfra.framework.mybatis.config.AuditLogDefaultAutoConfiguration
+com.cloudinfra.framework.mybatis.outbox.OutboxAutoConfiguration
