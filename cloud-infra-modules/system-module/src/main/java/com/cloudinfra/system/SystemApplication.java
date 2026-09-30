@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import org.springframework.context.annotation.Import;
@@ -15,6 +16,10 @@ import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 @EnableDiscoveryClient
 @org.springframework.cloud.openfeign.EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableTransactionManagement
+// HealthWatcher(5min 健康巡检) 与 TxMessageRetryTask(60s 事务消息重投) 依赖 @Scheduled。
+// 缺少本注解时 ScheduledAnnotationBeanPostProcessor 不会注册, 上述任务静默不执行 ——
+// 组件自测全绿但线上从未跑过一次。守护见 SchedulingEnabledTest。
+@EnableScheduling
 @SpringBootApplication
 // 全量扫描 com.cloudinfra (含 framework/common 组件), 但排除 starter 包:
 // starter 配置类走 AutoConfiguration.imports 延迟导入,
