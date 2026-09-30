@@ -8,6 +8,8 @@ import lombok.Getter;
  */
 @Getter
 public class BusinessException extends BaseException {
+    private static final long serialVersionUID = 1L;
+
     public BusinessException(Integer code, String errorCode, String message) {
         super(code, errorCode, message);
     }

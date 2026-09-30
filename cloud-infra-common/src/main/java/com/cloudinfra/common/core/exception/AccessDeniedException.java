@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
  * 权限不足异常 (403 Forbidden)
  */
 public class AccessDeniedException extends BaseException {
+    private static final long serialVersionUID = 1L;
+
     public AccessDeniedException(ErrorCode errorCode) {
         super(errorCode);
     }

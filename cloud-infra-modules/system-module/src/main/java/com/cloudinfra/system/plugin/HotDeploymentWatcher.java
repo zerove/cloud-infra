@@ -42,8 +42,12 @@ public class HotDeploymentWatcher {
         // 确保插件目录存在
         File dir = new File(pluginsDir);
         if (!dir.exists()) {
-            dir.mkdirs();
-            log.info("创建插件目录: {}", pluginsDir);
+            // mkdirs() 的返回值必须看: 失败(如无权限/路径被文件占用)会让后续所有插件加载静默失败
+            if (dir.mkdirs()) {
+                log.info("创建插件目录: {}", pluginsDir);
+            } else {
+                log.warn("创建插件目录失败, 插件热部署将不可用: {}", pluginsDir);
+            }
         }
 
         // 启动监听线程

@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
  * 参数非法异常 (400 Bad Request)
  */
 public class InvalidParameterException extends BaseException {
+    private static final long serialVersionUID = 1L;
+
     public InvalidParameterException(ErrorCode errorCode) {
         super(errorCode);
     }
