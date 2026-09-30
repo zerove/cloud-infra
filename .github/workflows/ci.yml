@@ -87,6 +87,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Install reactor artifacts (module SNAPSHOT deps must be resolvable)
+        # checkstyle/spotbugs/pmd 都是按模块执行的, 每个模块都要解析自己的依赖,
+        # 其中包含同 reactor 的 SNAPSHOT (如 codegen-core -> codegen-maven-plugin)。
+        # 本 job 不跑 package/install, 干净 runner 上这些构件根本不存在 ->
+        # "Could not find artifact com.cloudinfra:cloud-infra-codegen-core:jar:1.0.0-SNAPSHOT"。
+        # 本地不报错是因为 ~/.m2 里残留着历史 install 的 SNAPSHOT, 属于典型的"本地绿 CI 红"。
+        run: mvn install -DskipTests -DskipITs -Dcheckstyle.skip=true -Dspotbugs.skip=true --batch-mode
+
       - name: Run quality checks
         run: mvn checkstyle:check spotbugs:check pmd:check --batch-mode
 
