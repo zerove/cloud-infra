@@ -12,6 +12,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_permission")
 public class SysPermissionEntity extends SysPermission {
+    private static final long serialVersionUID = 1L;
     @TableId(type = IdType.AUTO)
     private Long id;
     

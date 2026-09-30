@@ -65,6 +65,9 @@ final class GrpcAdapterSupport {
         return Integer.valueOf(value);
     }
 
+    // 刻意不把 NumberFormatException 作为 cause 传给 gRPC: 内部异常会连同堆栈进入
+    // Status 的 description, 属于把实现细节暴露给调用方; 这里只给稳定的契约级描述。
+    @SuppressWarnings("PMD.PreserveStackTrace")
     static Long filterDeptId(String value) {
         if (value.isEmpty()) {
             return null;
@@ -86,7 +89,12 @@ final class GrpcAdapterSupport {
     static String text(String value) { return value == null ? "" : value; }
     static long number(Long value) { return value == null ? 0 : value; }
 
+    // Status 不是 Serializable, 但本异常只在进程内被拦截器转换成 gRPC 状态后丢弃,
+    // 从不跨进程序列化, 因此字段不可序列化不构成风险。
+    @SuppressWarnings("PMD.NonSerializableClass")
     private static final class RequestFailure extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         private final Status status;
         private RequestFailure(Status status) { this.status = status; }
     }

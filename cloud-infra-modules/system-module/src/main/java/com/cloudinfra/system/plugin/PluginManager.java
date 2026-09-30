@@ -74,7 +74,10 @@ public class PluginManager {
 
         try {
             URL[] urls = { jarFile.toURI().toURL() };
-            URLClassLoader classLoader = new URLClassLoader(urls, this.getClass().getClassLoader());
+            // 父加载器用 TCCL: 插件需要能看到宿主应用经自定义加载器引入的类,
+            // 用本类的 ClassLoader 会导致 NoClassDefFoundError
+            URLClassLoader classLoader = new URLClassLoader(urls,
+                    Thread.currentThread().getContextClassLoader());
 
             Properties props = new Properties();
             try (InputStream is = classLoader.getResourceAsStream("plugin.properties")) {

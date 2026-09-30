@@ -62,7 +62,4 @@ public class HealthWatcher {
         }
     }
 
-    private void triggerAlert(String title, String content) {
-        // 此方法已由 serviceTicketService 取代
-    }
 }

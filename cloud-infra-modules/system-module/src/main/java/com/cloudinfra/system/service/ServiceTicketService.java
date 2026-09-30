@@ -39,7 +39,7 @@ public class ServiceTicketService {
 
         // 1. 初始化工单
         ServiceTicket ticket = new ServiceTicket();
-        ticket.setTicketNo("TKT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        ticket.setTicketNo("TKT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(java.util.Locale.ROOT));
         ticket.setTitle(title);
         ticket.setContent(content);
         ticket.setPriority(priority);

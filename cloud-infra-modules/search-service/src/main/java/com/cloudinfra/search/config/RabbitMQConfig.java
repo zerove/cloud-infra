@@ -14,6 +14,9 @@ public class RabbitMQConfig {
     @Bean
     public BeanPostProcessor connectionFactoryLazyInitializer() {
         return new BeanPostProcessor() {
+            // Spring AMQP 的 CachingConnectionFactory 没有关闭自动重连的公开开关, 只能反射改;
+            // 失败时保留容器默认值而不是阻断启动, 因此这里的 setAccessible 是刻意的。
+            @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
             @Override
             public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
                 if (bean instanceof CachingConnectionFactory ccf) {

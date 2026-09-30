@@ -73,7 +73,7 @@ public class FilePermissionService {
     }
 
     private int levelRank(String level) {
-        return switch (level == null ? "" : level.toUpperCase()) {
+        return switch (level == null ? "" : level.toUpperCase(java.util.Locale.ROOT)) {
             case "READ" -> 1;
             case "WRITE" -> 2;
             case "OWNER" -> 3;

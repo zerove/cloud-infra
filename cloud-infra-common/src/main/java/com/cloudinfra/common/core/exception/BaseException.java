@@ -19,6 +19,19 @@ public abstract class BaseException extends RuntimeException implements Serializ
         this.errorCode = errorCode;
     }
 
+    /**
+     * 带原始异常的构造器。
+     *
+     * <p>业务异常由底层异常转换而来时 (如反序列化失败、调用失败), 此前只能丢掉 cause ——
+     * 结果是"用户看到友好提示, 排查时没有任何线索"。加上这条路径后, 调用方可以在转成
+     * 业务错误的同时保留完整堆栈。</p>
+     */
+    public BaseException(Integer code, String errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+        this.errorCode = errorCode;
+    }
+
     public BaseException(ErrorCode errorCode, String message) {
         this(errorCode.getCode(), errorCode.name(), message);
     }

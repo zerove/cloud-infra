@@ -37,7 +37,8 @@ public class AiController {
             java.lang.reflect.Method method = assistant.getClass().getInterfaces()[0].getMethod("chat", String.class);
             return (String) method.invoke(assistant, query);
         } catch (Exception e) {
-            throw new SystemException("AI 响应异常: " + e.getMessage());
+            // 带上 cause: 反射调用失败的原因(签名不匹配/实现缺失)才是排查所需, 只留 message 等于丢失
+            throw new SystemException("AI 响应异常: " + e.getMessage(), e);
         }
     }
 }

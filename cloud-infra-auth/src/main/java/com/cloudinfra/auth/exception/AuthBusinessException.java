@@ -3,8 +3,16 @@ package com.cloudinfra.auth.exception;
 import com.cloudinfra.common.core.exception.BaseException;
 
 public class AuthBusinessException extends BaseException {
+    private static final long serialVersionUID = 1L;
     public AuthBusinessException(AuthExceptionCode code) {
         super(code.getCode(), code.name(), code.getMsg());
+    }
+
+    /**
+     * 带原始异常的认证异常：对外仍是统一的 TOKEN_INVALID 提示, 对内保留可追查的堆栈。
+     */
+    public AuthBusinessException(AuthExceptionCode code, Throwable cause) {
+        super(code.getCode(), code.name(), code.getMsg(), cause);
     }
 
     /**

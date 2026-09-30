@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.exception.BaseException;
 import com.cloudinfra.common.core.exception.SystemExceptionCode;
 
 public class SystemBusinessException extends BaseException {
+    private static final long serialVersionUID = 1L;
     public SystemBusinessException(SystemExceptionCode code) {
         super((int) code.getCode(), code.name(), code.getMessage());
     }

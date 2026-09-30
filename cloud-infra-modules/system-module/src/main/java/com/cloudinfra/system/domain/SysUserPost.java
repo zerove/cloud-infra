@@ -11,6 +11,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 public class SysUserPost implements Serializable {
+    private static final long serialVersionUID = 1L;
     private Long userId;
     private Long postId;
 }

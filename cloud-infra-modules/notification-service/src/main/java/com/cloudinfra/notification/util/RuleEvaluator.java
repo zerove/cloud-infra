@@ -16,6 +16,9 @@ public class RuleEvaluator {
      * @param currentValue 当前实时指标值
      * @return 是否触发
      */
+    // 规则配置来自数据库且可能残缺: 把"判定不了"归为 false 是明确契约, 用 catch(NPE) 兜住
+    // 比逐层 Optional 化更贴近现有代码形态; 因此这里的 NPE 捕获是刻意的。
+    @SuppressWarnings("PMD.AvoidCatchingNPE")
     public static boolean evaluate(NotificationRule rule, Double currentValue) {
         if (rule == null || currentValue == null) {
             return false;
