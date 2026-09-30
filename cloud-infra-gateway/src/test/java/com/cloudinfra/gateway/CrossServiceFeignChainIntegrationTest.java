@@ -93,7 +93,17 @@ class CrossServiceFeignChainIntegrationTest {
         return rt;
     }
 
-    private static final String INTERNAL_CALL_VALUE = "cloud-infra-internal-dev-secret";
+    /**
+     * 子进程使用的内部调用签名凭据。
+     *
+     * <p>2026-09-30 (issue 30): {@code InternalCallCrypto} 已移除内置默认值。
+     * 本测试此前硬编码的正是那个已删除的默认值 —— 继续写死等于把弱凭据留在仓库里,
+     * 且与根 pom 注入的测试凭据不一致会导致签名不匹配。此处改为读取系统属性,
+     * 由 surefire 的 {@code test.internal-call.secret} 注入; 保留字面量 fallback 仅供
+     * 在 IDE 中不经 Maven 直接运行时使用。</p>
+     */
+    private static final String INTERNAL_CALL_VALUE = System.getProperty(
+        "cloud-infra.internal-call.secret", "test-only-not-a-real-credential");
 
     /** 下游两个服务的端口（进程启动后回填） */
     static int systemPort;

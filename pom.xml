@@ -21,6 +21,15 @@
 
         <revision>1.0.0-SNAPSHOT</revision>
 
+        <!--
+          测试专用的内部调用签名凭据 (2026-09-30, issue 30)
+
+          InternalCallCrypto.resolveSecret() 已移除内置默认值, 缺失即抛异常使服务启动失败。
+          测试环境不持有任何真实凭据, 由 surefire / failsafe 在各自进程内统一注入下面这个值。
+          它只在测试 JVM 内有效, 不是任何运行环境的凭据。
+        -->
+        <test.internal-call.secret>test-only-not-a-real-credential</test.internal-call.secret>
+
         <spring-boot.version>4.1.0</spring-boot.version>
         <spring-cloud.version>2025.1.3</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
@@ -371,6 +380,9 @@
                         -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar
                         -XX:+EnableDynamicAgentLoading
                     </argLine>
+                    <systemPropertyVariables>
+                        <cloud-infra.internal-call.secret>${test.internal-call.secret}</cloud-infra.internal-call.secret>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
@@ -395,6 +407,9 @@
                         -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar
                         -XX:+EnableDynamicAgentLoading
                     </argLine>
+                    <systemPropertyVariables>
+                        <cloud-infra.internal-call.secret>${test.internal-call.secret}</cloud-infra.internal-call.secret>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
