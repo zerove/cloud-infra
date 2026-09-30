@@ -69,7 +69,7 @@ public class FileValidator {
         }
 
         String extension = getExtension(safeFilename);
-        if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
+        if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase(java.util.Locale.ROOT))) {
             throw new IllegalArgumentException("不支持的文件扩展名: " + extension);
         }
 
@@ -97,7 +97,7 @@ public class FileValidator {
         }
         // 按扩展名校验 (复用 ALLOWED_EXTENSIONS)
         if (!filename.isBlank() && filename.contains(".")) {
-            String ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+            String ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT);
             if (!ALLOWED_EXTENSIONS.contains(ext)) {
                 throw new IllegalArgumentException("不支持的文件扩展名: " + ext);
             }
@@ -121,7 +121,7 @@ public class FileValidator {
         name = name.trim().replaceAll("^[.\\s]+|[.\\s]+$", "");
         // Windows 保留名检查
         String baseName = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : name;
-        if (WINDOWS_RESERVED.contains(baseName.toUpperCase())) {
+        if (WINDOWS_RESERVED.contains(baseName.toUpperCase(java.util.Locale.ROOT))) {
             name = "_" + name;
         }
         // 长度限制
@@ -138,22 +138,22 @@ public class FileValidator {
     }
 
     private boolean isContentTypeAllowed(String contentType, String extension) {
-        return switch (extension.toLowerCase()) {
-            case "jpg", "jpeg" -> contentType.equals("image/jpeg");
-            case "png" -> contentType.equals("image/png");
-            case "gif" -> contentType.equals("image/gif");
-            case "pdf" -> contentType.equals("application/pdf");
-            case "doc" -> contentType.equals("application/msword");
-            case "docx" -> contentType.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-            case "txt" -> contentType.equals("text/plain");
-            case "zip" -> contentType.equals("application/zip");
-            case "rar" -> contentType.equals("application/x-rar-compressed");
+        return switch (extension.toLowerCase(java.util.Locale.ROOT)) {
+            case "jpg", "jpeg" -> "image/jpeg".equals(contentType);
+            case "png" -> "image/png".equals(contentType);
+            case "gif" -> "image/gif".equals(contentType);
+            case "pdf" -> "application/pdf".equals(contentType);
+            case "doc" -> "application/msword".equals(contentType);
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(contentType);
+            case "txt" -> "text/plain".equals(contentType);
+            case "zip" -> "application/zip".equals(contentType);
+            case "rar" -> "application/x-rar-compressed".equals(contentType);
             default -> false;
         };
     }
 
     private void validateMagicBytes(MultipartFile file, String extension) {
-        String magicKey = EXT_TO_MAGIC_KEY.get(extension.toLowerCase());
+        String magicKey = EXT_TO_MAGIC_KEY.get(extension.toLowerCase(java.util.Locale.ROOT));
         if (magicKey == null) {
             return;
         }

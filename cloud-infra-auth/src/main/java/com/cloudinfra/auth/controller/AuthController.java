@@ -60,6 +60,8 @@ public class AuthController {
     /**
      * 解析真实客户端 IP（透传 X-Forwarded-For，回退 RemoteAddr）
      */
+    // request 为 null 只发生在容器外直接调用/测试场景; 回落到回环地址是明确的降级约定
+    @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
     private String resolveClientIp(HttpServletRequest request) {
         if (request == null) {
             return "127.0.0.1";

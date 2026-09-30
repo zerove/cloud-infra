@@ -56,7 +56,8 @@ public class TelemetryConsumer {
             doc.setId(UUID.randomUUID().toString());
             doc.setDeviceId(deviceId);
             doc.setTimestamp(LocalDateTime.now());
-            doc.setRawPayload(new String(payload));
+            // MQ 消息体是 UTF-8 字节, 必须显式指定, 否则平台默认字符集会让内容变形
+            doc.setRawPayload(new String(payload, java.nio.charset.StandardCharsets.UTF_8));
             doc.setMetrics(metrics);
 
             // 3. 持久化到 ES

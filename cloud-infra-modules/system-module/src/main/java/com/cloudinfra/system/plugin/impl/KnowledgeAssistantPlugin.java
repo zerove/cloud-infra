@@ -76,6 +76,7 @@ public class KnowledgeAssistantPlugin implements IServicePlugin {
     /**
      * 定义 AI 问答服务接口
      */
+    @FunctionalInterface
     public interface AiChatService {
         String chat(String query);
     }

@@ -268,6 +268,7 @@ public class FileServiceImpl implements IFileService {
         }
     }
 
+    @Override
     public IPage<FileMetadataVO> searchFiles(String keyword, long pageNum, long pageSize) {
         Page<FileMetadata> page = new Page<>(pageNum, pageSize);
         IPage<FileMetadata> resultPage = metadataMapper.selectPage(page,

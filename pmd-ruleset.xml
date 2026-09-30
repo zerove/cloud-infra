@@ -21,12 +21,15 @@
         <exclude name="SystemPrintln"/>
         <exclude name="AvoidPrintStackTrace"/>
         <exclude name="UnusedPrivateMethod"/>
+        <exclude name="UseVarargs"/>
+        <exclude name="UnusedFormalParameter"/>
     </rule>
 
     <rule ref="category/java/errorprone.xml">
         <exclude name="AvoidDuplicateLiterals"/>
         <exclude name="CloseResource"/>
         <exclude name="AvoidLiteralsInIfCondition"/>
+        <exclude name="ReplaceJavaUtilDate"/>
         <exclude name="NullAssignment"/>
         <exclude name="AvoidCatchingThrowable"/>
         <exclude name="AvoidFieldNameMatchingMethodName"/>
@@ -70,6 +73,20 @@
         命中的 `controllerPointcut()` 只被 `@Pointcut("...")` 注解引用, 由 AspectJ 织入器
         在运行期调用 —— 静态分析看不到这条引用。与 spotbugs-exclude.xml 里
         UPM_UNCALLED_PRIVATE_METHOD 的排除是同一件事。
+
+      UseVarargs
+        命中的全是批量删除接口 (deleteXByIds(Long[] ids))。数组由 Controller 的
+        `@PathVariable Long[] ids` 从 URL 路径绑定而来, 改成可变参数会让"这是一个从
+        路径绑定的批量参数"这件事变得不明显, 且要连带改接口 + 实现 + 控制器 + 测试。
+
+      UnusedFormalParameter
+        命中的都是接口实现里为满足契约必须保留的形参 (SysLoginService / SysDeptServiceImpl)。
+        实现可以不用, 签名不能改 —— 否则要么违反接口, 要么污染接口。
+
+      ReplaceJavaUtilDate
+        命中的 4 处是实体字段 (SysAuditLog / FileMetadata) 上的 java.util.Date。
+        改成 java.time 会同时改变 MyBatis 类型映射与 JSON 序列化格式, 对客户端是破坏性变更,
+        需要单独的迁移任务而不是 lint 修复时顺手改。**这是有意保留的技术债, 不是误报。**
 
       NullAssignment
         命中的两处在 HeaderAuthenticationFilter 里, 是"用完即置 null"的显式写法,

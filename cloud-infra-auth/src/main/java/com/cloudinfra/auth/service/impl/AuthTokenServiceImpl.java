@@ -91,7 +91,7 @@ public class AuthTokenServiceImpl implements AuthTokenService {
         } catch (NumberFormatException e) {
             // 脏数据：删除无效 refresh token
             redisService.delete(refreshKey);
-            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID, e);
         }
         LoginUser loginUser = userService.getUserById(userId);
 
@@ -126,7 +126,7 @@ public class AuthTokenServiceImpl implements AuthTokenService {
             throw e;
         } catch (Exception e) {
             // Token 无法解析：记录日志而非静默吞掉，便于问题排查
-            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID);
+            throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID, e);
         }
     }
 }

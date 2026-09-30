@@ -40,7 +40,7 @@ public class MediaAiTaggingPlugin implements IServicePlugin {
             
             // 模拟 AI 分析逻辑
             List<String> tags = new ArrayList<>();
-            String title = resource.title().toLowerCase();
+            String title = resource.title().toLowerCase(java.util.Locale.ROOT);
             
             if (title.contains("nature") || title.contains("forest")) {
                 tags.add("自然");
@@ -75,6 +75,7 @@ public class MediaAiTaggingPlugin implements IServicePlugin {
     /**
      * 定义插件提供的服务接口
      */
+    @FunctionalInterface
     public interface AiTagger {
         List<String> generateTags(MediaResource resource);
     }

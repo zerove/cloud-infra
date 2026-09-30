@@ -8,6 +8,7 @@ import com.cloudinfra.api.search.dto.OperLogDTO;
  * 搜索服务接口
  * 提供对操作日志等数据的全文搜索功能
  */
+@FunctionalInterface
 public interface SearchService {
     /**
      * 分页搜索操作日志
