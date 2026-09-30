@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 /**
  * 权限不足异常 (403 Forbidden)
  */
-@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class AccessDeniedException extends BaseException {
     public AccessDeniedException(ErrorCode errorCode) {
         super(errorCode);

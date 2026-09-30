@@ -5,7 +5,6 @@ import org.springframework.http.HttpStatus;
 /**
  * 资源未找到异常 (404 Not Found)
  */
-@SuppressWarnings("PMD.MissingSerialVersionUID")
 public class ResourceNotFoundException extends BaseException {
     public ResourceNotFoundException(ErrorCode errorCode) {
         super(errorCode);
