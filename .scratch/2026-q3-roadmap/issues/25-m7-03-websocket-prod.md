@@ -153,6 +153,46 @@ public void onPing(Session session, ByteBuffer message) {
 - [x] Phase C 组件集成测试：2026-09-18 通知模块 20 项通过。真实 TLS 1.2/1.3 握手、缺头 401、心跳、推送、连接清理、证书拒绝覆盖和无效密码。
 - [ ] 生产入口验收：可信网关身份校验、浏览器升级、完整安全过滤链、容器证书挂载和管理健康检查。不能用隔离组件测试替代。
 
+## ⚠️ 2026-09-29 验收前置发现: WebSocket 身份信任模型缺口（已实证）
+
+在准备"可信网关身份校验"验收项时，先用真实 TLS 端点实测了当前信任模型
+（`WebSocketIdentityTrustIT`，2 项，全部通过 —— 记录的是**当前行为**）：
+
+| 场景 | 实测结果 |
+|---|---|
+| 不带 `X-User-Id` | 被拒（`WebSocketHandshakeException`） ✅ 已实现 |
+| 携带任意 `X-User-Id: 999999`、**无任何网关签名** | **连接成功** ❌ 缺口 |
+
+**问题**：`WebSocketAuthFilter` 只校验 `X-User-Id` 是否**存在**，不校验其是否真由
+网关注入。而 HTTP 侧的对应机制（`SystemSecurityConfig.internalCallMatcher` 与
+`HeaderAuthenticationFilter.isTrustedInternalRequest`）会用 `InternalCallCrypto` 校验
+HMAC 签名。两处信任模型不一致。
+
+**潜在后果**：任何能直连 notification-service 端口的一方，仅需发送
+`X-User-Id: <任意 ID>` 即可冒充该用户，订阅其实时通知（`pushToUser` 按 userId 推送）。
+
+**是否构成实际风险取决于该端口的网络暴露面**（已逐项核实）：
+
+| 部署方式 | 暴露面 | 可利用性 |
+|---|---|---|
+| `deploy/compose.yaml` | `ports: "8084:8084"` + 管理端口 `9305:9301` 映射宿主机 | **宿主机网络内可直接利用** |
+| `deploy/k8s/notification/values.yaml` | `type: ClusterIP` | 仅集群内可达，取决于集群内网络策略 |
+
+即：**compose 环境下该缺口可直接利用**；K8s 环境下取决于集群内是否存在其他可直连
+该 Service 的工作负载。这是本 issue 生产入口验收未覆盖的部分。
+
+**两个候选方案（需决策，本轮未擅自实施）**：
+
+| 方案 | 内容 | 代价 |
+|---|---|---|
+| A. 网络层隔离 | 端口不对外暴露，仅网关可达；把"仅对网关开放"作为部署前提写入文档与 compose | 不改代码，但依赖运维纪律，需验证 compose 的端口暴露配置 |
+| B. 与 HTTP 对齐 | `WebSocketAuthFilter` 复用 `InternalCallCrypto` 校验签名（可用同一 `cloud-infra.security.verify-internal-sign` 开关），由网关注入时签名 | 需确认网关 WS 转发路径会带上签名头；浏览器仍走网关不受影响 |
+
+**建议**：先做 A 的暴露面核查（成本低，直接回答"是否可被利用"），再决定是否需要 B。
+本 issue 剩余验收项（浏览器升级、容器证书挂载、管理健康检查）均需完整 compose 栈，
+而 `deploy/compose.yaml` **当前没有 nginx 服务**（`deploy/nginx/notification-wss.conf`
+无对应容器），即该链路尚未搭建。搭建属于"新建"而非"验收"，应单独评估。
+
 ## 不在本 issue 范围
 
 - WS 集群扩展 (Redis pub/sub, 留 M7+)
