@@ -8,6 +8,7 @@ import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -28,8 +29,15 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
  * 直连场景（绕过网关）：HeaderAuthenticationFilter 在无 Header 时放行，
  * 由各 Controller 的 @PreAuthorize 兜底（SecurityContext 为空时拒绝）。
  *
- * 内部 Feign 契约端点：仅当请求携带基于共享密钥的 HMAC 签名（含时间戳/随机数）
- * 且签名有效时才放行，防止外部伪造内部调用标识。
+ * 内部 Feign 契约端点（{@code /internal/**}）：仅当请求携带基于共享密钥的 HMAC 签名
+ * （含时间戳/随机数）且签名有效时才放行。两条约束缺一不可：
+ * <ol>
+ *   <li><b>路径不在网关路由表内</b> —— 网关会给每个转发请求都注入合法签名，
+ *       所以"签名有效"本身并不能区分内部调用与终端用户请求；</li>
+ *   <li><b>鉴权单点决策、不允许落空</b> —— 此前用 RequestMatcher 组合，
+ *       签名无效时 matcher 返回 false，请求会落到 {@code anyRequest().authenticated()}
+ *       而不是被拒，等于对任意已认证用户开放。</li>
+ * </ol>
  */
 @Configuration
 @EnableWebSecurity
@@ -79,17 +87,10 @@ public class SystemSecurityConfig {
                         "/management/info",
                         "/management/prometheus"
                     ).permitAll()
-                    // 内部 Feign 契约端点：仅允许签名有效的内部调用
-                    .requestMatchers(internalCallMatcher(
-                        "/system/user/{userId}",
-                        "/system/user/username/{username}",
-                        "/system/user/permissions/{userId}",
-                        "/system/user/detail/{userId}",
-                        "/system/user/credential/{userId}",
-                        "/system/user/credential/username/{username}",
-                        "/system/user/register",
-                        "/system/service/**"
-                    )).permitAll()
+                    // 内部 Feign 契约端点：单点决策，签名无效即拒绝（不回落到 authenticated）
+                    .requestMatchers("/internal/**")
+                        .access((authentication, context) -> new AuthorizationDecision(
+                            internalCallMatcher("/internal/**").matches(context.getRequest())))
                     .anyRequest().authenticated()
             )
             .addFilterBefore(headerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
