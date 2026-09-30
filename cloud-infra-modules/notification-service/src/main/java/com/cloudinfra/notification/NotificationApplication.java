@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import org.springframework.context.annotation.ComponentScan;
@@ -18,6 +19,10 @@ import com.cloudinfra.framework.security.config.PasswordEncoderConfig;
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.cloudinfra.api")
 @EnableAsync
+// NotificationScheduler 与 NotificationDispatchRecoveryTask 均为 @Scheduled 任务。
+// 缺少本注解时补扫兜底从不触发, 崩溃滞留的 DISPATCHING 行会永久卡住 ——
+// 守护见 SchedulingEnabledTest。
+@EnableScheduling
 @EnableTransactionManagement
 @SpringBootApplication
 // 全量扫描 com.cloudinfra (含 framework/common 组件), 排除 starter 包避免重复注册
