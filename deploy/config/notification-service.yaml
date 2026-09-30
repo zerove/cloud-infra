@@ -18,6 +18,15 @@ spring:
     # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
     lazy-initialization: false
     allow-bean-definition-overriding: true
+  task:
+    scheduling:
+      # Spring Boot 默认 pool.size=1, 即全模块共用一个调度线程。
+      # 通知补扫任务的扫描会 join() 等待整批 MQ 投递完成, broker 不可达时
+      # 单条可阻塞到连接超时, 补扫一旦卡住会连带拖住本模块所有其他
+      # @Scheduled 任务。给两个线程让它们互不阻塞。
+      pool:
+        size: 2
+      thread-name-prefix: notif-sched-
   datasource:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:postgres}

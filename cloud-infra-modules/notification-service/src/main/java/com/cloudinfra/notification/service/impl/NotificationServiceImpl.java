@@ -117,7 +117,20 @@ public class NotificationServiceImpl implements INotificationService {
         registerWebSocketPushAfterCommit(notification);
     }
 
-    /** 渠道编码为逗号分隔字符串入库; null/空表示由分发器按偏好路由决定 */
+    /**
+     * {@code channels} 列的宽度, 与 {@code schema.sql} 及 Flyway V17 中的 {@code VARCHAR(255)} 对齐。
+     */
+    private static final int MAX_CHANNELS_LENGTH = 255;
+
+    /**
+     * 渠道编码为逗号分隔字符串入库; null/空表示由分发器按偏好路由决定。
+     *
+     * <p><b>超长时明确拒绝而不是截断 (2026-09-30 修复)</b>: 截断会把
+     * {@code "email,sms,websocket"} 变成 {@code "email,sms,web"}, 消费端
+     * {@code decodeChannels} 解析出并不存在的 {@code web}, {@code NotificationRouter}
+     * 找不到该渠道便将其过滤, 结果是<b>用户一条通知都收不到</b>且无任何报错。
+     * 静默丢通知比明确报错危险得多, 故超长即抛异常让调用方看见。</p>
+     */
     private String encodeChannels(List<String> channels) {
         if (channels == null || channels.isEmpty()) {
             return null;
@@ -127,7 +140,16 @@ public class NotificationServiceImpl implements INotificationService {
             .map(String::trim)
             .distinct()
             .toList();
-        return cleaned.isEmpty() ? null : String.join(",", cleaned);
+        if (cleaned.isEmpty()) {
+            return null;
+        }
+        String encoded = String.join(",", cleaned);
+        if (encoded.length() > MAX_CHANNELS_LENGTH) {
+            throw new IllegalArgumentException(
+                "渠道集合编码后长度 " + encoded.length() + " 超过列宽 " + MAX_CHANNELS_LENGTH
+                    + ", 拒绝入库以免截断导致渠道丢失: " + cleaned);
+        }
+        return encoded;
     }
 
     private void scheduleNotification(NotificationSendRequest request) {
