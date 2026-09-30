@@ -97,7 +97,9 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 | 优先级 | 项 | 说明 |
 | :--- | :--- | :--- |
 | P0 | 多租户三选一 | 决策项, 见上 |
-| P0 | **让 CI 真的跑起来** | `ci.yml` 配了 IT 步骤, 但 `GRAALVM_VERSION=25.0.1` 指向的资产已被上游回收, 三个 job 在 `setup-java` 阶段 17 秒内红 —— **master 最近 12 次 CI Pipeline 全部 failure** (最早 2026-09-05 08:14, 与 P0-2 缺陷引入同日)。叠加本地 `skipITs=true`, 导致 25 天内没有任何一处真正编译或测试过代码。已改为 `distribution: graalvm-community` 由 action 动态解析, 待推送后确认转绿 |
+| P0 | **让 CI 真的跑起来** | ✅ 已修。根因: `GRAALVM_VERSION=25.0.1` 指向的资产被上游回收 → 三个 job 在 `setup-java` 阶段 17 秒内红, **master 连续 12 次 CI Pipeline 全 failure** (最早 2026-09-05 08:14, 与 P0-2 缺陷引入同日)。改为 `distribution: graalvm-community` 动态解析后, CI 实测从 17 秒失败变为正常运行 8 分钟以上 |
+| P0 | **清掉通知服务集成测试** | CI 恢复后暴露的既有测试夹具缺陷 (本地同样复现): ① `NotificationRecoveryMultiReplicaIT$MultiReplicaTestApplication` 的 `dataSource` Bean 与自动配置冲突 (`BeanDefinitionOverrideException`); ② 容器启动前取端口 (`Mapped port can only be obtained after the container is started`); ③ `cloud-infra.security.verify-internal-sign` 占位符未解析却被当 boolean 转换 (`TypeMismatchException`) |
+| P1 | **门禁验证必须先 clean** | `maven-pmd-plugin` 是增量的: `target/pmd.xml` 比源文件新时直接复用旧报告。本地一度出现"PMD 0 违规"而 CI 报 6 处的假通过, 用 `git clone` 纯净副本才复现。**任何门禁结论都必须基于 `mvn clean` 后的运行** |
 | P1 | 存量 `🟢` 逐条复核 | 每条列出"运行时证据"一栏, 填不出可复现观测的降级。纯审计, 不改代码 |
 | P1 | 守护推广 | `ControllerAuthorizationTest` 扩到 notification/search/file/auth; opt-in 守护模式推广到其余框架组件 |
 
