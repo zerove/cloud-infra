@@ -28,14 +28,59 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 | 能力 | 代码量 | 业务引用 | 判定 |
 |---|---|---|---|
-| M6-01 多租户 | ~400 行 | **10 文件** (9 Mapper + 网关 `X-Tenant-Id`) | 🟢 |
+| M6-01 多租户 | ~400 行 | **10 文件** (9 Mapper + 网关 `X-Tenant-Id`) | 🟢 (2026-10-01 升级, 见下) |
 | M6-02 幂等框架 | ~500 行 | **0** (唯一引用已移除, 仅存注释) | ⚪ |
 | M6-03 Outbox | 767 行 | **0** | ⚪ |
 | M6-04 编排引擎 | 764 行 | **0** | ⚪ |
 | M6-05 OpenAPI | ~300 行 | **0** | ⚪ |
 | M7-02 gRPC | 345 行 | 1 (仅 system-module, 默认关闭) | ⚪ |
 
-**达成率 1/6。**
+**达成率 1/6**（M6-01 于 2026-10-01 从"部署态无效"转为真正生效，见下节）。
+
+### ✅ M6-01 于 2026-10-01 从 ⚠️ 升为 🟢
+
+ROADMAP 此前挂着一条“需人工决策”的三选一（开+绑主体 / 开+接受客户端自选 / 降级为 ⚪）。
+**本次选了第一条并实施完毕**（commit `adefc3b`）。之所以不降级：降级只是把问题记成账，
+而绑定主体能让 9 个 Mapper 与 V14 的 9 张表真正获得隔离。
+
+改造前的三个真实问题（后两个此前未被记录）：
+
+1. **开关从未打开** —— `cloud-infra.tenant.enabled` 默认 false 且 `deploy/config` 无一处开启
+2. **租户身份由客户端自选** —— 网关原样透传 `X-Tenant-Id`，任意已认证用户改一个头即可读他租户数据
+3. **下游对租户头不验签**（新发现）—— `TenantContextFilter` order `-110` **先于**
+   `HeaderAuthenticationFilter` 执行，而后者才对 `X-User-Id` 验签。身份验签了、租户却是敞开的：
+   绕过网关直连业务服务即可指定任意租户
+
+现在的链路：`sys_user.tenant_id` → `UserCredentialDTO` → `LoginUser` → JWT `tenantId` claim
+→ 网关 `AuthEvaluator` 读 claim → `Identity` → 注入 `X-Tenant-Id` → 下游验签后才建 `TenantContext`
+→ `TenantSqlInterceptor` 追加 `WHERE tenant_id = ?`。
+
+`deploy/config/{system-module,file-service,notification-service}.yaml` 已开启
+（`search-service` 无 `@TenantFilter` Mapper 也无 `tenant_id` 列，开启属假启用，不开）。
+
+**证据**：`TenantIsolationEndToEndIT` 用真实 PostgreSQL 容器跑通 4 项端到端（跨租户互不可见 /
+无签名 403 且读不到数据 / 错签名 403 / 无租户头内部调用放行），并做了**负向对照**
+（把验签条件改成 `&& false`，3 项单测如期失败）。单测基线 477 → 489 项。
+
+### ⚠️ 已知边界：内部链路无租户上下文（有意为之）
+
+Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此不带租户头，
+按设计短路放行（不加租户过滤）。这是为了让这些链路继续工作，**不是隔离的兜底**。
+
+**为什么现在开启是安全的**（逐条核实，非推测）：
+
+| 链路 | 触及的 Mapper | 带 `@TenantFilter`？ | 结果 |
+| :--- | :--- | :--- | :--- |
+| `NotificationDispatchRecoveryTask` (`@Scheduled`) | `NotificationDispatchMapper` | 否（**刻意不加**，见类 javadoc） | 不改写 SQL，正常 |
+| `NotificationScheduler` (`@Scheduled`) | `ScheduledNotificationMapper` | 否 | 不改写 SQL，正常 |
+| `NotificationDispatchConsumer` (MQ) | `NotificationDispatchMapper` | 否 | 不改写 SQL，正常 |
+| auth 登录 / 刷新令牌 (Feign) | `SysUserMapper` | **是** | 无租户 → 短路放行 → 按 username 全局查。V1 的 `username NOT NULL UNIQUE` 恰好保证同一时刻只有一个匹配 |
+
+即：**每一条无租户上下文的链路，要么不碰租户注解，要么碰了但因短路放行而行为不变**。
+用户请求链路则全部由网关注入并经下游验签后才建立租户上下文。
+
+**未来若引入跨租户异步场景**，需为消息体补 `tenantId` 并在消费端回填 `TenantContext`（`finally` 清理）。
+该项尚未实现，且**在出现第一个跨租户异步用例前不应先做**（见准入原则）。
 
 代码构成对照: 框架/网关/认证层 **13843 行** vs 业务模块 **12138 行** ——
 “为业务服务的骨架”自身已厚过它服务的 4 个业务服务。
@@ -80,6 +125,10 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 ### ⚠️ 唯一标 🟢 的多租户, 在任何部署配置中都未启用
 
+> **✅ 本节已于 2026-10-01 处置完毕**（commit `adefc3b`）。下文保留为决策依据的存档，
+> 结论是走了"开 + 租户身份绑到认证主体"这条，而非原文列的③降级。
+> 当前状态见上方「M6-01 于 2026-10-01 从 ⚠️ 升为 🟢」。
+
 `cloud-infra.tenant.enabled` 默认 `false`, `deploy/config/*.yaml` **无一处开启**。
 因此 `TenantContextFilter` 不注册 → `TenantContext` 恒空 → 拦截器每次走"无租户则放行"分支 →
 9 个 `@TenantFilter` Mapper、V14 的 9 张表 `tenant_id`、网关 `propagateTenantHeader`
@@ -96,14 +145,15 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 
 | 优先级 | 项 | 说明 |
 | :--- | :--- | :--- |
-| P0 | 多租户三选一 | 决策项, 见上 |
-| P0 | **让 CI 真的跑起来** | ✅ 已修。根因: `GRAALVM_VERSION=25.0.1` 指向的资产被上游回收 → 三个 job 在 `setup-java` 阶段 17 秒内红, **master 连续 12 次 CI Pipeline 全 failure** (最早 2026-09-05 08:14, 与 P0-2 缺陷引入同日)。改为 `distribution: graalvm-community` 动态解析后, CI 实测从 17 秒失败变为正常运行 8 分钟以上 |
-| P0 | **清掉通知服务集成测试** | CI 恢复后暴露的既有测试夹具缺陷 (本地同样复现): ① `NotificationRecoveryMultiReplicaIT$MultiReplicaTestApplication` 的 `dataSource` Bean 与自动配置冲突 (`BeanDefinitionOverrideException`); ② 容器启动前取端口 (`Mapped port can only be obtained after the container is started`); ③ `cloud-infra.security.verify-internal-sign` 占位符未解析却被当 boolean 转换 (`TypeMismatchException`) |
+| P0 | ~~多租户三选一~~ | ✅ **已处置 2026-10-01** (commit `adefc3b`)。选了「开 + 租户身份绑到认证主体」，并顺带修掉两处越权路径。详见上方「M6-01 于 2026-10-01 从 ⚠️ 升为 🟢」 |
+| P0 | **让 CI 真的跑起来** | ❌ **阻塞在账号计费，非代码问题**。`gh run view 36697715625` 的 annotation 原文: "The job was not started because recent account payments have failed or your spending limit needs to be increased." 需人工在 GitHub `Settings → Billing & plans` 处理。不要再改 `ci.yml` |
+| P0 | **内部链路补租户上下文** | MQ 消费 / `@Scheduled` / Feign 内部调用当前无租户上下文，读写 9 张租户表时能看到全部租户的行。这是为兼容内部链路而刻意保留的边界，不是隔离的兜底。**出现跨租户异步场景前必须先补**：消息体带 `tenantId` → 消费端回填 `TenantContext` → `finally` 清理 |
+| P1 | **登录接口的租户语义** | 登录按 username 查用户发生在签发令牌之前，此时无租户上下文（`sys_user` 带 `@TenantFilter`，登录查询会短路放行）。多租户下这意味着 username 必须**全局唯一**（V1 的 `username NOT NULL UNIQUE` 恰好保证了）。若将来允许同名用户分属不同租户，登录接口需先确定租户再查 |
 | P1 | **门禁验证必须先构建再跑** | 两种相反的静默假通过: ① `maven-pmd-plugin` 是增量的, `target/pmd.xml` 比源文件新时直接复用旧报告; ② **SpotBugs 需要已编译字节码, 没有 `target/classes` 时一条都不报**。因此正确顺序是 `mvn install -DskipTests -DskipITs` 之后再跑 `checkstyle/spotbugs/pmd`, 且用 `git clone` 出的纯净副本验证 —— 本地 `~/.m2` 残留的历史 SNAPSHOT 与 target 缓存都会制造"本地绿、CI 红" |
 | P1 | **静态分析规则的结论会随类型解析翻转** | 同一批 6 个异常类: 有 `target/classes` 时 PMD 报 `MissingSerialVersionUID`, 没有时同一行报 `UnnecessaryWarningSuppression`。靠 `@SuppressWarnings` 压制会让正确性取决于 PMD 能否解析类型层级 —— 必须补真实字段。**推论: 不要用"门禁没报"替代"代码是对的"** |
-| P1 | **CI 侧诊断受阻** | 该仓库的 Actions 日志 blob 与 artifact 均取不到 (`BlobNotFound`, artifacts `total_count=0`), 红灯原因只能靠本地复现 CI 步骤序列来定位 |
+| P1 | **`catch (Exception)` 该不该收窄，取决于它是哪种边界** | 本次两处都触发 ADG 门禁，但语义相反: `AuthEvaluator` 是**安全判定**边界（必须 fail-closed 成 401），`AuthTokenServiceImpl.delToken` 是**错误规范化**边界（必须宽，否则漏掉的异常变 500）。收窄前先判断边界类型，不能一律照门禁改 |
+| P1 | 守护推广 | `ControllerAuthorizationTest` 扩到 search/file/auth; opt-in 守护模式推广到其余框架组件 |
 | P1 | 存量 `🟢` 逐条复核 | 每条列出"运行时证据"一栏, 填不出可复现观测的降级。纯审计, 不改代码 |
-| P1 | 守护推广 | `ControllerAuthorizationTest` 扩到 notification/search/file/auth; opt-in 守护模式推广到其余框架组件 |
 
 **维持冻结**: M6-03 Outbox、M6-04 编排引擎、M6-05 OpenAPI、M7-02 gRPC、M7-04/05/06 —— 不投入, 不删代码。
 
@@ -208,15 +258,20 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 
 ### Milestone 6: Multi-Tenant Isolation (2026-09, 已交付 + 未启用部分复核)
 *Focus: 业务 SQL 跨租户隔离, 零业务侵入接入.*
-- [x] ⚠️ **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
-  - **2026-09-30 审计更正**: `cloud-infra.tenant.enabled` 默认 `false` 且 `deploy/config/*.yaml` **无一处开启**。
-    部署态下 `TenantContextFilter` 不注册 → `TenantContext` 恒空 → 拦截器每次走"无租户则放行"分支 →
-    9 个 `@TenantFilter` Mapper、V14 的 9 张表 `tenant_id`、网关 `propagateTenantHeader` 全部无效。
-    即"被业务使用"仅在显式开启开关的测试环境成立, 且**租户身份由客户端断言** (网关原样透传 `X-Tenant-Id`)。
-    标记由 🟢 降为 ⚠️, 处置方案见"后续计划"。另已补 `X-Tenant-Id` 入口校验与长度上界
-    (此前只 trim, 而拦截器对非法值抛异常 —— 开启后一个畸形请求头即可打成 500)
+- [x] 🟢 **M6-01 Phase A 基础设施** (commit db90f52): V14 schema (9 表 tenant_id + 11 索引) + @TenantFilter 注解 + TenantSqlInterceptor + 12 单元测试
+  - **✅ 2026-10-01 全链路打通并开启部署态** (commit `adefc3b`): 租户身份绑定到认证主体
+    （sys_user.tenant_id → JWT `tenantId` claim → 网关注入 → 下游验签），
+    修复了「租户身份可由客户端自选」与「下游不验签即信任租户头」两处越权路径。
+    `deploy/config` 三个业务服务已开启。证据见「按被使用标准重算」一节。
+  - **存档**: `cloud-infra.tenant.enabled` 曾默认 `false` 且 `deploy/config/*.yaml` 无一处开启，
+    导致部署态下 `TenantContextFilter` 不注册、`TenantContext` 恒空、
+    9 个 `@TenantFilter` Mapper 与 V14 的 `tenant_id` 列全部无效。
+    同时网关原样透传客户端 `X-Tenant-Id`（租户身份由客户端断言），
+    且下游 `TenantContextFilter` 先于 `HeaderAuthenticationFilter` 执行、不验签。
 - [x] 🟢 **M6-01 Phase B 业务回填** (commit 1698a7e): 9 个核心 Mapper 加 @TenantFilter (SysPost/User/Dept/Role/Menu/Permission/File/Notification/Preference) + file-service schema.sql tenant_id
-- [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): SecurityFilter.propagateTenantHeader 透传 X-Tenant-Id + TenantContextFilterTest 9 端到端测试
+- [x] 🟢 **M6-01 Phase C Gateway 集成** (commit 846258c): 网关传递租户上下文 + TenantContextFilterTest
+  - **2026-10-01 语义变更** (commit `adefc3b`): `propagateTenantHeader` 不再透传客户端的
+    `X-Tenant-Id`，改为注入 JWT `tenantId` claim 中的租户。原实现等于让调用方自选租户。
 - [x] 🟢 **M6-01 Phase D 端到端运行时验证** (commit 17ee31a): 容器起 PG/Redis, 跨租户查询隔离实测完成 (4 sys_post + 1 sys_user 全部 default 租户兼容, tenant-X 查询 0 行隔离)
 - [x] ⚪ **M6-02 统一幂等框架** (commit 1945dd4): @Idempotent 双模式 (REJECT/REPLAY) + Idempotency-Key RFC 头 + IdempotencyStore (Redis JSON 缓存) + IdempotentAspect 重写 + 17 单元测试 + 5 Testcontainers 集成测试
   - **2026-09-30 审计发现并修复的启动级缺陷**: `IdempotencyStore` 的自动配置类从未登记进 `AutoConfiguration.imports` (永远不创建), 而 `IdempotentAspect` 带 `@Component` 被 `scanBasePackages="com.cloudinfra"` 无条件扫入并硬依赖它 → **auth 服务启动即失败**。已基线对照确认是既有缺陷。修复: store 与切面一并收归 starter 的 `IdempotentAutoConfiguration`, 由 `cloud-infra.idempotent.enabled=true` 统一开关; 删除从未生效的 framework-web 配置类; 加 `IdempotentOptInTest` 守护

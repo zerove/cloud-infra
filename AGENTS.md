@@ -74,12 +74,65 @@
 `The job was not started because recent account payments have failed or your spending
 limit needs to be increased` —— **账号计费/额度问题**, 任何代码改动都修不了,
 需人工在 GitHub `Settings → Billing & plans` 处理。
-
-因此: **不要再去改 `ci.yml`** (它已是好的)。计费恢复后, 待处理的是它跑出来的真实失败 ——
-2026-09-30 07:44 那次运行已报出 notification / file / gateway / search 四个模块的 IT 失败
-(见 issue 30 与 `gh run view 36685440678 --log-failed`)。
+2026-10-01 复核仍在同一状态 (`gh run view 36697715625`), **不要再改 `ci.yml`**。
 
 详见 `ROADMAP.md` “运行时有效性审计” 与 issue 29。
+
+---
+
+## 🔒 第四课: 信任边界必须逐跳检查 (2026-10-01 新增, 强制)
+
+**背景**: 修多租户“部署态无效”时（commit `adefc3b`），除已知的“开关没开”外，
+**又查出两处此前无人记录的越权路径**。两者都不是“代码写错了”，而是**信任边界画在了错误的位置**。
+
+### 教训 1: 修复信任链时, 要检查链上的每一跳, 不是最显眼的那一跳
+
+多租户的真实链路里, 网关侧看到的是“身份验签了, 就该信任租户”, 但下游是两条独立的过滤器:
+
+| 过滤器 | order | 对 `X-User-Id` | 对 `X-Tenant-Id` |
+| :--- | :--- | :--- | :--- |
+| `TenantContextFilter` | **-110** | 不读 | **无条件信任** |
+| `HeaderAuthenticationFilter` | 默认 | **验签** | 不读 |
+
+于是身份验签了、租户是敞开的: 绕过网关直连业务服务, 指定任意 `X-Tenant-Id` 即可读他租户数据。
+**只要一个系统有多个同类“信任型”头, 每个都必须单独确认验签**——
+因为“先执行的那个过滤器”往往正是没设防的那个。
+
+**开工前必答**: 这个新信任的头, 和已有被保护的头, 是**同一套校验**吗?
+不是的话, 为什么不是?
+
+### 教训 2: `catch (Exception)` 能不能收窄, 取决于它是**哪种边界**
+
+本次两处都触发 ADG 门禁 `Catching generic Exception hides specific errors`, 但语义**相反**:
+
+| 位置 | 边界类型 | 正确做法 | 收窄的后果 |
+| :--- | :--- | :--- | :--- |
+| `AuthEvaluator.evaluate` | **安全判定** | 保留宽捕获 → fail-closed 成 401 | 内部缺陷(NPE)逃出去变 500, 把“拒绝”伪装成“服务故障” |
+| `AuthTokenServiceImpl.delToken` | **错误规范化** | 保留宽捕获 → 包成 `TOKEN_INVALID` | 漏掉的异常变 500, 违反既有契约(`AuthTokenServiceTest` 捕获) |
+
+**不要一律照门禁改。** 先问: 这个 catch 的目的是“拒绝”还是“归一化”?
+前者宽捕获是安全属性, 后者宽捕获是契约属性。门禁只能看到语法, 看不到意图——
+在注释里写清理由, 是让下一个人 (和下一次的自己) 免于误改的唯一办法。
+
+### 教训 3: 守护测试的有效性, 只有负向对照能证明
+
+新增 12 项单测 + 4 项端到端 IT 之后, **把验签条件改成 `if (... && false)`, 3 项单测如期失败**。
+没做这一步的话, 无法区分“测试真的在守护”与“测试恰好通过”——本次历史上已出现过
+11 项补扫测试全绿而缺陷仍在的案例 (第三条硬规则)。
+
+**新交付一项能力的最低验证动作**: 改坏它, 确认守护会红, 改回来, 确认会绿。
+
+### 证据分级（本次实践后的补充）
+
+| 级别 | 手段 | 能证明什么 |
+| :--- | :--- | :--- |
+| L1 结构性 | 读源码 / 反射扫描 / 自动配置登记 | 机制存在 |
+| L2 触发性 | 守护测试断言装配与默认值 | 条件成立时代码会执行 |
+| L3 端到端 | **真实容器**跑完整链路 | 运行时确实按预期工作 |
+| L2.5 负向对照 | 改坏 → 断言守护变红 | 守护本身有效 |
+
+`TenantIsolationEndToEndIT` 是本项目第一个 L3 多租户证据: 真实 PostgreSQL 容器 +
+真实 `TenantSqlInterceptor` + 真实过滤器, 而非 mock 直调方法。
 
 ---
 
@@ -97,9 +150,10 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 
 违反上述任一条即视为过度设计。详见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
 
-> **当前存量提醒** (2026-09-30): 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
-> 幂等 500 + codegen 2464)。保留但暂停投入。其中 Outbox 已构成业务负担 ——
-> `deploy/config/search-service.yaml:40` 需配 `cloud-infra.outbox.enabled: false` 才能启动。
+> **当前存量提醒** (2026-10-01 更新): 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
+> 幂等 500 + codegen 2464)。保留但暂停投入。
+> **Outbox 的业务负担已于 issue 29 解除**: opt-in 失效已修,
+> `deploy/config/search-service.yaml` 里那个“并不生效”的规避开关与对应死配置已删除。
 
 ---
 
@@ -147,7 +201,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-starter` | 引导与自动配置组件 | 负责框架能力的自动装配 (租户、平台属性) |
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
 | `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
-| `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层。**鉴权覆盖由 `ControllerAuthorizationTest` 守护** (2026-09-30 审计发现 3 个端点"认证即可读", 已修; 非 `/internal/` 端点必须有 `@PreAuthorize`, 例外清单必须保持最小) |
+| `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层。**鉴权覆盖由 `ControllerAuthorizationTest` 守护** (2026-09-30 审计发现 3 个端点"认证即可读", 已修; 非 `/internal/` 端点必须有 `@PreAuthorize`, 例外清单必须保持最小)。**多租户已在部署态开启** (`deploy/config` 三个服务), 租户来自 JWT claim 而非客户端请求头, 详见下方“第四课” |
 | `cloud-infra-codegen` | 代码生成框架 (`⚪` 可选工具, 非路线图能力) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块; 仅 `sys_post` 一表验证过, **停止新增模板** |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
