@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -454,12 +455,50 @@ private static String resolveExecJar(String relative) throws IOException {
         JsonNode login = JSON.readTree(resp.getBody());
         assertThat(login.path("success").asBoolean())
                 .as("登录失败: %s%n"
+                        + "--- system 内部凭据端点直探: %s%n"
                         + "--- system 子进程日志尾部 ---%n%s%n"
                         + "--- auth 子进程日志尾部 ---%n%s",
                         resp.getBody(),
+                        probeSystemCredentialEndpoint(),
                         tail(procLogs.get("system")),
                         tail(procLogs.get("auth")))
                 .isTrue();
         return login.path("data").path("token").asText();
+    }
+
+    /**
+     * 登录失败时**直连** system 的内部凭据端点，绕过网关与 Feign。
+     *
+     * <p>用途: 把“登录失败”这一个症状拆成可区分的几类。该错误码在 auth 侧被多个原因共用 ——
+     * {@code UserDetailsServiceImpl} 查不到用户时抛 {@code UsernameNotFoundException}，
+     * 会被 {@code DaoAuthenticationProvider} 转成 {@code BadCredentialsException}，
+     * 与“密码真的错”落到同一个码。仅看响应体无法判断属于哪一类。</p>
+     *
+     * <p>本探测用与 Feign 相同的内部签名直连，能区分:</p>
+     * <ul>
+     *   <li>连接异常 → system 子进程不可达 / 端口不对</li>
+     *   <li>HTTP 401/403 → 内部签名校验没过</li>
+     *   <li>HTTP 200 且 body 含该用户 → 用户查询正常, 问题在密码比对或会话链路</li>
+     *   <li>HTTP 200 但查无此人 → 种子数据未加载</li>
+     * </ul>
+     */
+    private static String probeSystemCredentialEndpoint() {
+        try {
+            long ts = System.currentTimeMillis();
+            String nonce = "probe-" + ts;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(InternalCallCrypto.HEADER_SIGN,
+                    InternalCallCrypto.sign(INTERNAL_CALL_VALUE, ts, nonce));
+            headers.set(InternalCallCrypto.HEADER_TIMESTAMP, String.valueOf(ts));
+            headers.set(InternalCallCrypto.HEADER_NONCE, nonce);
+
+            String url = "http://127.0.0.1:" + systemPort
+                    + "/internal/system/user/credential/username/admin";
+            ResponseEntity<String> r = HTTP.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            return "HTTP " + r.getStatusCode().value() + " body=" + r.getBody();
+        } catch (Exception e) {
+            return "探测异常 " + e.getClass().getSimpleName() + ": " + e.getMessage();
+        }
     }
 }
