@@ -233,6 +233,21 @@ class CrossServiceFeignChainIntegrationTest {
         procLogs.put(name, logFile);
         List<String> cmd = new ArrayList<>();
         cmd.add("java");
+        // **必须限制堆大小**。
+        //
+        // 本测试同时持有: 3 个 Testcontainers (PG + Redis + RabbitMQ) + 测试 JVM 本身
+        // + 下面 2 个子 JVM。若不限制, 子 JVM 默认堆 = 物理内存的 1/4, 在
+        // GitHub ubuntu-latest (2 核 / 7 GB) 上两者合计就会把 runner 撑爆 ——
+        // 2026-10-01 实测到 JVM 直接崩掉:
+        //   There is insufficient memory for the Java Runtime Environment to continue.
+        //   Native memory allocation (mmap) failed
+        // 在 19 GB 的开发机上同样会崩, 说明这是**峰值需求**问题而非机器配置问题。
+        //
+        // 附带收益: 不限堆时子进程启动要 86 秒(日志实测, 大量时间在反复 GC);
+        // 限堆后启动显著加快, 也让 awaitPort 的 300s 预算不再处于边缘。
+        cmd.add("-Xms64m");
+        cmd.add("-Xmx512m");
+        cmd.add("-XX:MaxMetaspaceSize=192m");
         // 内部调用密钥必须以 JVM 系统属性(-D)或环境变量注入, 不能用 --key=value:
         // InternalCallCrypto.resolveSecret() 只读 System.getenv("INTERNAL_CALL_SECRET")
         // 与 System.getProperty("cloud-infra.internal-call.secret"), 它刻意绕开 Spring
