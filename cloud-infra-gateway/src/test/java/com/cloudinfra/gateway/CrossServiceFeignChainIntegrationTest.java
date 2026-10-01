@@ -453,7 +453,13 @@ private static String resolveExecJar(String relative) throws IOException {
                 JSON.writeValueAsString(loginBody));
         JsonNode login = JSON.readTree(resp.getBody());
         assertThat(login.path("success").asBoolean())
-                .as("登录失败: %s", resp.getBody()).isTrue();
+                .as("登录失败: %s%n"
+                        + "--- system 子进程日志尾部 ---%n%s%n"
+                        + "--- auth 子进程日志尾部 ---%n%s",
+                        resp.getBody(),
+                        tail(procLogs.get("system")),
+                        tail(procLogs.get("auth")))
+                .isTrue();
         return login.path("data").path("token").asText();
     }
 }
