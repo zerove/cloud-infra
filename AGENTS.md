@@ -374,6 +374,22 @@ Unable to start web server → Unable to start embedded Tomcat
 共发现 4 处: `WebSocketIdentityTrustIT`、`SystemGrpcSecurityBoundaryTest`（既有）
 + `GatewayTenantPropagationIT`、`TenantFilterWiringTest`（本次新写, 同一错误）。
 
+**CI 验证（run `36845519152`）**: notification-service 的 IT 从 12 项 ERROR
+（`NotificationServiceIntegrationTest` 7 + `NotificationMqFlowIntegrationTest` 5）
+降到 **0** —— 修复生效。
+
+**仍存两项, 均非本次引入**:
+
+1. `WebSocketIntegrationTest` 偶发 1 项 ERROR:
+   `The remote endpoint was in state [TEXT_FULL_WRITING]`。
+   本地连续 3 次均绿 → 判定为 **flaky**。但它指向一个真实隐患:
+   `NotificationWebSocketHandler.sendText` 在心跳与推送并发时可能同时 `sendString`，
+   Tomcat 会话状态机因而拒绝。修法（加同步 / 换 `ConcurrentWebSocketSessionDecorator`）
+   **尚未实施**。
+2. `CrossServiceFeignChainIntegrationTest` 4 项失败: 登录返回“用户名或密码错误”，
+   而 system / auth 子进程均已启动（Tomcat 14 个端口）。本地同命令绿、CI 红，
+   **尚未定性**（已排除密钥问题；待查 auth 侧 Feign 到 system 的用户查询链路）。
+
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
 - **集成测试**: `skipITs` 默认 `true`，`mvn test` 跑不到 IT。手工跑全量:
