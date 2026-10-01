@@ -87,14 +87,35 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 > | :--- | :--- | :--- |
 > | `NotificationDispatcher.decodeChannels` 命中 PMD `ReturnEmptyCollectionRatherThanNull` | 008d773（前次遗留） | 已修 `ca1eac8` |
 > | ArchUnit 步骤的 `-DfailIfNoTests` 在 Surefire 3.x 已失效 → **该门禁从未真正执行过架构校验** | CI 配置长期缺陷 | 已修 `22ebb8e` |
-> | IT 在 CI 上失败（`UnknownHostException: cloud-nacos`，notification 7 + gateway 4 项） | CI runner 环境 | **待查** |
+> | IT 在 CI 上失败（notification 7 + gateway 4 项） | **测试抹除 failsafe 注入的密钥属性** | 已修 `b2534a1` |
 >
-> **IT 失败的判定过程**: 本地用 CI 的**完全相同命令**
-> （`test-compile failsafe:integration-test failsafe:verify -DskipITs=false`）
-> 跑 `NotificationServiceIntegrationTest` → **7 项全绿**；全量 IT 111 项亦全绿。
-> CI 日志显示 runner 上 Nacos 客户端仍在解析 `cloud-nacos` 主机名
-> （而测试属性已设 `spring.cloud.nacos.config.enabled=false`）。
-> 结论指向 **runner 环境差异**，但这是**推断而非已证明** —— 需在 CI 环境复现才能定论。
+> **【2026-10-01 定性】IT 失败的真根因不是 CI 环境, 我先前的归因是错的**
+>
+> 我最初按日志里的 `UnknownHostException: cloud-nacos` 判为“runner 环境差异”，
+> **那是干扰项**。下载 CI 上传的 `test-reports` artifact、逐层读 `Caused by` 链才得到真实根因：
+>
+> ```
+> Unable to start web server
+>   → Unable to start embedded Tomcat
+>     → Error creating bean 'webSocketAuthFilter'
+>       → Error creating bean 'internalCallSecretProvider': init failed
+>         → IllegalStateException: 内部调用签名凭据缺失
+> ```
+>
+> `WebSocketIdentityTrustIT` 与 `SystemGrpcSecurityBoundaryTest` 的 `@AfterEach` 用
+> `System.clearProperty("cloud-infra.internal-call.secret")` 清理，**顺手抹掉了 pom.xml
+> `systemPropertyVariables` 在 JVM 启动时注入的同一个属性**且不恢复；而
+> `InternalCallSecretProvider` 是 fail-fast 的（issue 30 之后无默认值），
+> 于是同 JVM 内后续需要它的 IT 全部启动失败。
+>
+> **本地不复现仅因测试类执行顺序不同**（order-dependent test）。用
+> `-Dfailsafe.runOrder=reversealphabetical` 强制污染源先跑即可确定性复现：
+> 修复前 `NotificationMqFlowIntegrationTest` 5 ERROR + `NotificationServiceIntegrationTest` 7 ERROR，
+> 修复后同一命令 **30 项全绿**。
+>
+> **教训（已记入第 4 节测试夹具隔离）**: `@AfterEach` 清理系统属性必须**还原原值**，
+> 不能无条件 `clear` —— 构建插件注入的值不属于“本测试设置的”。本次共发现 4 处：
+> 2 处既有 + 2 处本次新写的。
 >
 > **值得记下的**: 本次推送的三个新 IT 在 CI 上**全部通过**
 > （`TenantIsolationEndToEndIT` 4、`GatewayTenantPropagationIT` 7、
@@ -314,7 +335,46 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 但**新增夹具时必须遵守上面的规则**，否则下一个被扫到的就是它。
 逐个迁移属存量清理，在出现实际冲突前不做（见准入原则）。
 
-### 5. 质量基线 (2026-10-01)
+### 5. 系统属性清理必须还原, 不能无条件 clear (2026-10-01)
+
+**与上节同源的另一类污染**: 测试改的是 **JVM 全局系统属性**。
+
+`pom.xml` 的 surefire / failsafe 都配了
+`<systemPropertyVariables><cloud-infra.internal-call.secret>${test.internal-call.secret}</...>`,
+即构建插件在 **JVM 启动时**注入该属性。而若某个测试的 `@AfterEach` 写
+`System.clearProperty("cloud-infra.internal-call.secret")`,
+它抹掉的是**构建插件注入的值**, 不只是自己设的 —— 同 JVM 内后续需要
+`InternalCallSecretProvider` 的测试会拿到 `null`, 而该 bean 是 **fail-fast** 的
+（issue 30 之后无内置默认值），于是**整类 IT 连带启动失败**:
+
+```
+Unable to start web server → Unable to start embedded Tomcat
+  → Error creating bean 'internalCallSecretProvider': init failed
+    → IllegalStateException: 内部调用签名凭据缺失
+```
+
+**这类失败极难归因**: 本地几乎必然绿（测试类执行顺序不同），
+只在特定顺序下才红; CI 上的报错还夹杂 Nacos 之类的干扰信息。
+本次我正是先被 `UnknownHostException: cloud-nacos` 带偏,
+下载 `test-reports` artifact 逐层读 `Caused by` 链才找到真因。
+
+**规则**: 改全局系统属性必须"存原值 → 还原"：
+
+```java
+@BeforeEach void remember() { original = System.getProperty(KEY); /* 改 */ }
+@AfterEach  void restore() {
+    if (original == null) System.clearProperty(KEY); else System.setProperty(KEY, original);
+}
+```
+
+**确定性复现手法**（把偶发变必然）:
+`mvn failsafe:verify -Dfailsafe.runOrder=reversealphabetical` —— 强制让污染源先跑。
+本次据此在本地复现了 CI 的失败, 修复后同一命令 30 项全绿。
+
+共发现 4 处: `WebSocketIdentityTrustIT`、`SystemGrpcSecurityBoundaryTest`（既有）
++ `GatewayTenantPropagationIT`、`TenantFilterWiringTest`（本次新写, 同一错误）。
+
+### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
 - **集成测试**: `skipITs` 默认 `true`，`mvn test` 跑不到 IT。手工跑全量:
   `nohup mvn -o verify -DskipITs=false -DskipUnitTests=true > /tmp/fullit.log 2>&1 &`
