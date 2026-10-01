@@ -198,24 +198,35 @@ public class NotificationWebSocketHandler {
         if (!session.isOpen()) {
             return false;
         }
-        try {
-            session.getBasicRemote().sendText(text);
-            if (PUSH_SUCCESS != null) {
-                PUSH_SUCCESS.increment();
-            }
-            return true;
-        } catch (IOException e) {
-            if (PUSH_FAILURE != null) {
-                PUSH_FAILURE.increment();
-            }
-            log.warn("WebSocket 发送失败, 关闭 session: sessionId={}, err={}",
-                session.getId(), e.getMessage());
+        // getBasicRemote() 返回的是**阻塞式且非线程安全**的端点: Tomcat 用状态机保护它,
+        // 同一连接上有第二个线程进入时会抛
+        //   IllegalStateException: The remote endpoint was in state [TEXT_FULL_WRITING]
+        // 这不是假想 —— 心跳 pong 跑在 Tomcat 的消息线程上、业务推送跑在 MQ 消费线程上,
+        // 两者会并发进入同一 session (2026-10-01 在 CI 上实测到该异常, 见
+        // WebSocketIntegrationTest.tlsHandshakeHeartbeatPushAndCleanup)。
+        //
+        // 用 session 自身作锁把**同一连接**上的发送串行化; 不同 session 各有各的锁,
+        // 互不阻塞。锁粒度是"每连接", 不是"全局", 不会把并发推送退化成单线程。
+        synchronized (session) {
             try {
-                session.close();
-            } catch (IOException ignored) {
-                // ignore
+                session.getBasicRemote().sendText(text);
+                if (PUSH_SUCCESS != null) {
+                    PUSH_SUCCESS.increment();
+                }
+                return true;
+            } catch (IOException e) {
+                if (PUSH_FAILURE != null) {
+                    PUSH_FAILURE.increment();
+                }
+                log.warn("WebSocket 发送失败, 关闭 session: sessionId={}, err={}",
+                    session.getId(), e.getMessage());
+                try {
+                    session.close();
+                } catch (IOException ignored) {
+                    // ignore
+                }
+                return false;
             }
-            return false;
         }
     }
 
