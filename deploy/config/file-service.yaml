@@ -106,3 +106,14 @@ management:
       export:
         otlp:
           endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
+
+# 平台能力配置
+cloud-infra:
+  tenant:
+    # 多租户隔离（M6-01）。2026-10-01 开启。
+    # FileMetadataMapper 带类级 @TenantFilter，file_metadata 表有 tenant_id 列，
+    # 此前开关默认 false 且部署配置未开，隔离在部署态从未生效。
+    # 租户身份由网关按 JWT 中的 tenantId claim 注入，不接受客户端自选。
+    enabled: true
+    # 不强制：MQ 消费与内部调用无登录主体。租户头存在时必须通过内部签名验签才被采信。
+    require-tenant: false

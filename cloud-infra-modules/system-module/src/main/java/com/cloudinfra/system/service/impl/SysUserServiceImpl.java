@@ -75,6 +75,7 @@ public class SysUserServiceImpl implements ISysUserService {
             .deptId(user.getDeptId())
             .roleId(user.getRoleId())
             .roles(roles)
+            .tenantId(user.getTenantId())
             .permissions(new java.util.HashSet<>(permissionService.getPermissionsByUserId(userId)))
             .build();
     }

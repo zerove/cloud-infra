@@ -29,6 +29,11 @@ public class LoginUser {
     private List<SysRole> roles;
     private Set<String> permissions;
 
+    /**
+     * 所属租户 ID（M6-01）。租户身份必须随令牌签发，不能由客户端请求头断言。
+     */
+    private String tenantId;
+
     public Long getUserId() { return userId; }
     public Long getDeptId() { return deptId; }
     public List<SysRole> getRoles() { return roles; }

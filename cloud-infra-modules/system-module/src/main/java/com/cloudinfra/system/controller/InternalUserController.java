@@ -124,6 +124,7 @@ public class InternalUserController {
             .deptId(user.getDeptId())
             .roleId(user.getRoleId())
             .password(user.getPassword())
+            .tenantId(user.getTenantId())
             .permissions(new HashSet<>(permissionService.getPermissionsByUserId(user.getUserId())))
             .build();
     }

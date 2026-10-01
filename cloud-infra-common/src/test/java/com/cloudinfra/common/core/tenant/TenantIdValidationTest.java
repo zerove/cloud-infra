@@ -1,5 +1,6 @@
 package com.cloudinfra.common.core.tenant;
 
+import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,15 +23,32 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 修复前 {@code TenantContextFilter} 只做 {@code trim()}, 注释却声称"已通过校验"。</p>
  *
  * <p>本测试不依赖容器。</p>
+ *
+ * <p><b>2026-10-01 更新</b>: 租户头现在必须随有效的内部调用签名一同到达（见
+ * {@code TenantContextFilterTest} 的完整信任边界说明），因此"合法租户标识被接受"
+ * 的用例需带签名构造请求。本测试关注的是<b>标识格式校验</b>这一层，
+ * 签名边界的用例不重复。</p>
  */
 class TenantIdValidationTest {
+
+    /** 测试用密钥，仅用于本测试构造签名，不涉及任何真实凭据。 */
+    private static final String SECRET = "tenant-id-validation-test-secret-0123456789";
 
     private TenantContextFilter filter;
 
     @BeforeEach
     void setUp() {
         TenantContext.clear();
-        filter = new TenantContextFilter(false);
+        filter = new TenantContextFilter(false, SECRET);
+    }
+
+    /** 在给定请求上补上有效的内部调用签名头（模拟网关转发） */
+    private void sign(MockHttpServletRequest request) {
+        long ts = System.currentTimeMillis();
+        String nonce = "n-" + ts;
+        request.addHeader(InternalCallCrypto.HEADER_SIGN, InternalCallCrypto.sign(SECRET, ts, nonce));
+        request.addHeader(InternalCallCrypto.HEADER_TIMESTAMP, String.valueOf(ts));
+        request.addHeader(InternalCallCrypto.HEADER_NONCE, nonce);
     }
 
     @AfterEach
@@ -97,6 +115,7 @@ class TenantIdValidationTest {
     void validHeaderStillPasses() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/system/user/list");
         request.addHeader(TenantContextFilter.TENANT_HEADER, "  tenant-x9  ");
+        sign(request);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         boolean[] seenTenant = { false };
