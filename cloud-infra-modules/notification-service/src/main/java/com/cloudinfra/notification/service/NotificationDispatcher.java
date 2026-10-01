@@ -113,7 +113,10 @@ public class NotificationDispatcher {
 
     private List<String> decodeChannels(String stored) {
         if (stored == null || stored.isBlank()) {
-            return null;
+            // 未指定渠道时返回空集合而非 null: NotificationRouter 的判定是
+            // `channels() != null && !channels().isEmpty()`, 两者走同一条 else 分支
+            // (交由偏好路由决定), 因此改成空集合不改变行为, 且省掉每层调用方的 null 防御。
+            return List.of();
         }
         return Arrays.stream(stored.split(","))
             .map(String::trim)
