@@ -118,7 +118,15 @@ jobs:
       - name: ArchUnit architecture guard (5 rules)
         # 守护 framework/common/api/modules 分层, 防止架构腐化.
         # 详见 ArchitectureTest.java (5 rules). 任一违反即拦截 PR.
-        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -DfailIfNoTests=false --batch-mode
+        #
+        # 2026-10-01: 参数从 -DfailIfNoTests=false 改为 -Dsurefire.failIfNoSpecifiedTests=false。
+        # Surefire 3.x 已不再认 failIfNoTests, 传了等于没传; 而 -am 会连带构建
+        # cloud-infra-common / cloud-infra-test-support 等**没有** ArchitectureTest 的模块,
+        # Surefire 因"无匹配测试"直接失败, 于是本步骤在 2026-10-01 首次真正跑起来时立刻红:
+        #   No tests matching pattern "ArchitectureTest" were executed!
+        # 注意: 真正的架构违规会以不同的措辞出现 (Architecture Violation ... was violated),
+        # 两者不要混淆 —— 本次是参数名失效, 不是分层被破坏。
+        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false --batch-mode
 
       - name: Upload quality reports
         # 本地与 CI 的静态分析结论曾长期不一致 (本地 ~/.m2 残留历史 SNAPSHOT +
