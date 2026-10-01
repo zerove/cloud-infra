@@ -50,7 +50,7 @@ import java.util.Map;
  * 一方, 仅凭 {@code X-User-Id: <任意 ID>} 即可冒充该用户订阅其实时通知。
  * 现与 HTTP 侧对齐 —— 网关 SecurityFilter 会为所有经其转发的请求注入
  * {@link InternalCallCrypto} 签名, 此处在 {@code verify-internal-sign=true} 时要求验签通过。
- * 开关默认 false 以兼容存量部署; 生产应置 true。</p>
+ * 开关与 HTTP 侧同开关同默认值 (fail-closed 默认 true); 本地直连调试可显式置 false。</p>
  *
  * <p>本 Filter 仅作用于 WebSocket 握手请求 (匹配 WS_PATH 前缀), 不影响其他 HTTP 端点.</p>
  */
@@ -69,9 +69,10 @@ public class WebSocketAuthFilter extends OncePerRequestFilter {
 
     /**
      * 是否要求内部调用签名。与 HTTP 侧 {@code HeaderAuthenticationFilter}
-     * 使用同一开关名, 两处行为一致。默认 false 兼容存量部署; 生产应置 true。
+     * 使用同一开关名, 两处默认值一致 (fail-closed 默认 true)。
+     * 本地直连调试确需关闭时显式置 false。
      */
-    @Value("${cloud-infra.security.verify-internal-sign:false}")
+    @Value("${cloud-infra.security.verify-internal-sign:true}")
     private boolean verifyInternalSign;
 
     /** 可选注入: 单元测试以无参构造创建本 Filter, 此时无密钥提供者。 */

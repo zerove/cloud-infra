@@ -238,9 +238,12 @@ class WebSocketAuthFilterTest {
     }
 
     @Test
-    @DisplayName("验签关闭 (默认, 兼容存量) + 无签名 → 放行")
-    void signatureCheckDisabledByDefault() throws Exception {
-        // 不开启 verifyInternalSign —— 字段保持 Java 默认值 false
+    @DisplayName("单元构造 (未经 Spring 装配) 时字段保持 Java 默认 false, 无签名放行")
+    void signatureCheckDisabledWithoutSpringWiring() throws Exception {
+        // 注意: 本用例不走 Spring, @Value 不生效, 所以断言的是"裸 new 出来的实例字段为 false",
+        // **不是** Spring 装配后的默认值。装配后的默认值由 WebSocketAuthFilterDefaultFailClosedTest
+        // 守护 (fail-closed 为 true)。
+        // 保留本用例是为了锁住“关闭开关”这条通路仍可用, 供本地直连调试。
         MockHttpServletRequest request = upgradeRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
