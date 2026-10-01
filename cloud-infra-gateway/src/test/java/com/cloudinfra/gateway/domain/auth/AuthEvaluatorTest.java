@@ -22,6 +22,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -524,6 +525,122 @@ class AuthEvaluatorTest {
                 logger.detachAppender(listAppender);
                 logger.setLevel(Level.INFO);
             }
+        }
+    }
+
+    // ==================== 场景四：租户身份绑定认证主体 (M6-01, 2026-10-01) ====================
+
+    @Nested
+    @DisplayName("租户身份随认证主体绑定（不可由客户端自选）")
+    class TenantBindingTest {
+
+        @BeforeEach
+        void setUp() {
+            authEvaluator = new AuthEvaluator(sessionStore, List.of("/auth/login"), jwtUtils);
+        }
+
+        private com.auth0.jwt.interfaces.Claim claim(Object value) {
+            com.auth0.jwt.interfaces.Claim c = mock(com.auth0.jwt.interfaces.Claim.class);
+            if (value instanceof Long l) {
+                when(c.asLong()).thenReturn(l);
+            } else if (value instanceof String s) {
+                when(c.asString()).thenReturn(s);
+            }
+            return c;
+        }
+
+        /** 构造一次成功的认证判定，令牌携带指定租户 */
+        private AuthResult evaluateWithTenant(String tenantClaim) {
+            // 先把三个 claim mock 造好并各自完成 stubbing，再交给 evaluate ——
+            // 若在 when(decodedJWT.getClaim(...)) 的参数里现场造 claim，
+            // evaluate 内部对该 mock 的调用会打断正在进行的 stubbing（UnfinishedStubbing）
+            com.auth0.jwt.interfaces.Claim userIdClaim = claim(TEST_USER_ID);
+            com.auth0.jwt.interfaces.Claim jtiClaim = claim(TEST_JTI);
+            com.auth0.jwt.interfaces.Claim tenantIdClaim = claim(tenantClaim);
+
+            when(jwtUtils.parseToken(PURE_TOKEN)).thenReturn(decodedJWT);
+            when(decodedJWT.getClaim("userId")).thenReturn(userIdClaim);
+            when(decodedJWT.getClaim("jti")).thenReturn(jtiClaim);
+            when(decodedJWT.getClaim(AuthEvaluator.CLAIM_TENANT_ID)).thenReturn(tenantIdClaim);
+            when(decodedJWT.getSubject()).thenReturn(TEST_USERNAME);
+            when(sessionStore.validateSession(TEST_USER_ID, TEST_JTI)).thenReturn(true);
+
+            return authEvaluator.evaluate(
+                new AuthContext(VALID_TOKEN, "/system/user/list", "GET", "127.0.0.1", Map.of()));
+        }
+
+        @Test
+        @DisplayName("令牌中的 tenantId 进入 Identity（网关据此注入下游租户头）")
+        void tenantIdFromTokenBindsToIdentity() {
+            AuthResult result = evaluateWithTenant("tenant-A");
+
+            assertTrue(result.isSuccess());
+            assertEquals("tenant-A", result.identity().tenantId());
+        }
+
+        @Test
+        @DisplayName("缺 tenantId claim → 落到 default，不返回 null")
+        void missingTenantClaimFallsBackToDefault() {
+            AuthResult result = evaluateWithTenant(null);
+
+            assertTrue(result.isSuccess());
+            // null 会让下游 TenantContextFilter 短路放行，等于静默关闭租户隔离
+            assertEquals("default", result.identity().tenantId());
+        }
+
+        @Test
+        @DisplayName("空白 tenantId claim → 落到 default")
+        void blankTenantClaimFallsBackToDefault() {
+            AuthResult result = evaluateWithTenant("   ");
+
+            assertTrue(result.isSuccess());
+            assertEquals("default", result.identity().tenantId());
+        }
+
+        @Test
+        @DisplayName("非法 tenantId claim → 落到 default（不把未校验值传向下游）")
+        void invalidTenantClaimFallsBackToDefault() {
+            String[] malicious = {
+                "tenant'; DROP TABLE sys_user; --",
+                "bad tenant",
+                "tenant/../etc",
+                "a".repeat(65)
+            };
+            for (String value : malicious) {
+                assertThat(com.cloudinfra.common.core.tenant.TenantContext.isValidTenantId(value))
+                    .as("测试前提: 该值应被判为非法租户标识 -> " + value)
+                    .isFalse();
+
+                AuthResult result = evaluateWithTenant(value);
+                assertTrue(result.isSuccess());
+                assertEquals("default", result.identity().tenantId(),
+                    "非法租户标识必须回落 default, 实际=" + value);
+            }
+        }
+
+        @Test
+        @DisplayName("合法租户形态原样保留（含连字符与下划线）")
+        void validTenantVariantsPreserved() {
+            assertEquals("tenant-abc12345", evaluateWithTenant("tenant-abc12345").identity().tenantId());
+            assertEquals("acme_corp", evaluateWithTenant("acme_corp").identity().tenantId());
+            assertEquals("T1", evaluateWithTenant("T1").identity().tenantId());
+        }
+
+        @Test
+        @DisplayName("白名单请求无登录主体 → identity 为 null（登录接口不注入租户）")
+        void whiteListedRequestHasNoIdentity() {
+            AuthResult result = authEvaluator.evaluate(
+                new AuthContext(null, "/auth/login", "POST", "127.0.0.1", Map.of()));
+
+            assertTrue(result.isSuccess());
+            assertNull(result.identity());
+        }
+
+        @Test
+        @DisplayName("claim 名常量: 网关侧声明的 tenantId")
+        void claimNameConstantIsStable() {
+            // 改名不会编译失败，只会让租户隔离无声失效 —— 故显式锁定字面量
+            assertEquals("tenantId", AuthEvaluator.CLAIM_TENANT_ID);
         }
     }
 }

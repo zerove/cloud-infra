@@ -78,3 +78,15 @@ management:
       export:
         otlp:
           endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
+
+# 平台能力配置
+cloud-infra:
+  tenant:
+    # 多租户隔离（M6-01）。2026-10-01 开启。
+    # NotificationMapper / UserNotificationPreferenceMapper 带类级 @TenantFilter，
+    # 此前开关默认 false 且部署配置未开，隔离在部署态从未生效。
+    # 注：NotificationDispatchMapper 刻意不加 @TenantFilter —— 分发由 MQ 消费者与
+    # 定时补扫驱动，无登录主体，加了会被改写为 1=0 致分发静默失效。
+    enabled: true
+    # 不强制：分发补扫与 MQ 消费链路本就无登录主体。租户头存在时必须验签通过才被采信。
+    require-tenant: false

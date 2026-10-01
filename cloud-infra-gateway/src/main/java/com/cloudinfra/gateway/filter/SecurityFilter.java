@@ -33,6 +33,12 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityFilter.class);
     private static final String TRACE_ID = "traceId";
+
+    /**
+     * 注入下游的租户请求头。与 {@code TenantContextFilter.TENANT_HEADER} 同名，
+     * 由 {@code TenantHeaderNameConsistencyTest} 做跨模块一致性断言。
+     */
+    private static final String TENANT_HEADER = "X-Tenant-Id";
     
     @Resource
     private AuthEvaluator authEvaluator;
@@ -93,14 +99,12 @@ AuthContext authContext = new AuthContext(
             if (identity != null) {
                 headers.put("X-User-Id", identity.userId().toString());
                 headers.put("X-User-Name", identity.username());
+                // 多租户上下文传播（M6-01）：租户取自 JWT 中随登录主体签发的 tenantId claim。
+                // 原实现是把客户端的 X-Tenant-Id 原样透传下去 —— 那是让调用方自选租户，
+                // 任意已认证用户改一个头就能读到其他租户的数据，隔离形同虚设。
+                propagateTenantHeader(identity, headers);
             }
             headers.put(TRACE_ID, traceId);
-            // 多租户上下文传播 (M6-01): 透传 X-Tenant-Id 到下游,
-            // 下游 TenantContextFilter 读取并注入 TenantContext (ThreadLocal),
-            // TenantSqlInterceptor 自动追加 WHERE tenant_id = ?
-            // - 缺失则不注入, 下游走 requireTenant=false 短路放行 (单租户模式兼容)
-            // - 后续 M7+ 可从 JWT claim 提取 tenantId 实现自动绑定
-            propagateTenantHeader(request, headers);
             // 先剥离外部伪造的内部调用标识，再注入网关自己的签名：
             // 下游统一验签通过才信任身份头，内网直连无有效签名即被拒
             String nonce = Long.toHexString(System.currentTimeMillis()) + ':'
@@ -140,22 +144,24 @@ AuthContext authContext = new AuthContext(
     }
 
     /**
-     * 透传 X-Tenant-Id header 到下游 (M6-01).
+     * 把认证主体绑定的租户注入下游请求头（M6-01）。
      *
-     * 防御性校验: 仅透传符合 [a-zA-Z0-9\\-_]{1,50} 的 tenantId,
-     * 阻断 HTTP header 注入 (CRLF) 与过长字符串 DoS.
+     * <p>租户来源是 JWT 的 {@code tenantId} claim，由 auth 在登录时按 {@code sys_user.tenant_id}
+     * 签发。<b>不再读取客户端的 {@code X-Tenant-Id}</b>：该头完全由调用方控制，
+     * 沿用它等于允许任意已认证用户把自己声明成任意租户。</p>
+     *
+     * <p>下游 {@code TenantContextFilter} 读取该头注入 {@code TenantContext}，
+     * {@code TenantSqlInterceptor} 再据此追加 {@code WHERE tenant_id = ?}。</p>
+     *
+     * <p>白名单请求没有登录主体（{@code identity == null}），不注入租户 ——
+     * 那类请求本身是免认证的公开端点，登录接口即属此类。</p>
      */
-    private void propagateTenantHeader(HttpServletRequest request, Map<String, String> headers) {
-        String tenantId = request.getHeader("X-Tenant-Id");
+    private void propagateTenantHeader(Identity identity, Map<String, String> headers) {
+        String tenantId = identity.tenantId();
         if (tenantId == null || tenantId.isBlank()) {
             return;
         }
-        String trimmed = tenantId.trim();
-        if (trimmed.length() > 50 || !trimmed.matches("[a-zA-Z0-9\\-_]+")) {
-            log.warn("[SecurityFilter] 非法 X-Tenant-Id 拒绝透传: length={}", trimmed.length());
-            return;
-        }
-        headers.put("X-Tenant-Id", trimmed);
+        headers.put(TENANT_HEADER, tenantId);
     }
 
     @Override

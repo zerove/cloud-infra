@@ -42,6 +42,9 @@ public class UserCredentialDTO {
     @Schema(description = "角色标识集合")
     private Set<String> roles;
 
+    @Schema(description = "所属租户 ID（M6-01，多租户隔离）")
+    private String tenantId;
+
     @Schema(description = "权限标识集合")
     private Set<String> permissions;
 }

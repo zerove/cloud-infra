@@ -40,6 +40,7 @@ public class UserServiceImpl implements UserService {
                 .deptId(dto.getDeptId())
                 .roleId(dto.getRoleId())
                 .password(dto.getPassword())
+                .tenantId(dto.getTenantId())
                 .permissions(dto.getPermissions() == null ? new HashSet<>() : new HashSet<>(dto.getPermissions()))
                 .build();
     }

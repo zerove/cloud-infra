@@ -50,6 +50,18 @@ public class SysUser extends BaseEntity {
     /** 帐号状态（0正常 1停用） */
     private Integer status;
 
+    /**
+     * 所属租户 ID（M6-01 多租户隔离）。
+     *
+     * <p><b>为什么它必须是认证主体的属性</b>: V14 迁移已给 sys_user 建了 tenant_id 列，
+     * 但多租户开关在部署态从未打开，且网关原样透传客户端的 {@code X-Tenant-Id}——
+     * 意味着租户身份由客户端断言，任意已认证用户可改头读取其他租户数据。
+     * 把租户绑定到登录主体后，租户身份随 JWT 签发并由网关校验，下游无法伪造。
+     *
+     * <p>存量数据由 V14 的 {@code DEFAULT 'default'} 兜底，故 null 表示 default。</p>
+     */
+    private String tenantId;
+
     /** 密码 */
     @NotBlank(message = "密码不能为空")
     @Size(min = 6, message = "密码长度不能少于6个字符")
@@ -101,6 +113,8 @@ public class SysUser extends BaseEntity {
     public void setPostId(Long postId) { this.postId = postId; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
     public String getEmail() { return email; }

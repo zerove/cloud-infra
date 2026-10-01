@@ -201,6 +201,17 @@ cloud-infra:
   security:
     # 开启后 X-User-Id 仅在携带有效网关签名时被信任，防内网直连伪造身份
     verify-internal-sign: true
+  tenant:
+    # 多租户隔离（M6-01）。2026-10-01 开启。
+    #
+    # 此前默认 false 且所有部署配置均未开启，导致 TenantContextFilter 不注册、
+    # TenantContext 恒空、9 个 @TenantFilter Mapper 与 V14 的 tenant_id 列在部署态全部无效。
+    # 租户身份现已绑定到认证主体（auth 登录时按 sys_user.tenant_id 签入 JWT tenantId claim，
+    # 网关校验后注入 X-Tenant-Id），不再是客户端可自选的值。
+    enabled: true
+    # 不强制要求租户头：内部服务间调用与 MQ 消费链路本就没有登录主体，
+    # 强制会打断它们。租户头存在时必须验签通过才被采信。
+    require-tenant: false
   # 插件系统安全模型: ADR-010
   # URLClassLoader 可加载任意 jar, 继承 system-module 全部权限, 生产环境必须禁用
   # 启用条件 (按 profile):
