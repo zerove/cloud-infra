@@ -3,6 +3,8 @@ package com.cloudinfrait.starter;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.common.core.tenant.TenantContextFilter;
 import com.cloudinfra.starter.PlatformStarterAutoConfiguration;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -60,6 +62,34 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code com.cloudinfrait.scheduling.ScheduledTaskRuntimeTriggerIT} 的说明）。</p>
  */
 class TenantFilterWiringTest {
+
+    private static final String PROP_INTERNAL_CALL_SECRET = "cloud-infra.internal-call.secret";
+
+    /** surefire/failsafe 注入的原值，用于 @AfterEach 还原而非抹除 */
+    private String originalInternalCallSecret;
+
+    @BeforeEach
+    void rememberInjectedSecret() {
+        originalInternalCallSecret = System.getProperty(PROP_INTERNAL_CALL_SECRET);
+    }
+
+    /**
+     * 还原构建插件注入的密钥属性。
+     *
+     * <p><b>不要写成 {@code System.clearProperty}</b>: 那会抹掉 pom.xml 的
+     * {@code systemPropertyVariables} 在 JVM 启动时注入的值, 使同一 JVM 内后续需要
+     * {@code InternalCallSecretProvider} 的测试因密钥缺失而失败（该 bean 是 fail-fast 的）。
+     * 本项目已因此踩坑: {@code WebSocketIdentityTrustIT} 与
+     * {@code SystemGrpcSecurityBoundaryTest}。本类是 2026-10-01 新写的, 不重复同样的错。</p>
+     */
+    @AfterEach
+    void restoreInjectedSecret() {
+        if (originalInternalCallSecret == null) {
+            System.clearProperty(PROP_INTERNAL_CALL_SECRET);
+        } else {
+            System.setProperty(PROP_INTERNAL_CALL_SECRET, originalInternalCallSecret);
+        }
+    }
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(PlatformStarterAutoConfiguration.class))
@@ -184,7 +214,7 @@ class TenantFilterWiringTest {
         @Bean
         InternalCallSecretProvider internalCallSecretProvider() {
             // 测试专用密钥，仅在本上下文内有效，不是任何运行环境的凭据
-            System.setProperty("cloud-infra.internal-call.secret",
+            System.setProperty(PROP_INTERNAL_CALL_SECRET,
                 "tenant-wiring-test-secret-0123456789abcdef");
             return new InternalCallSecretProvider();
         }

@@ -7,6 +7,8 @@ import com.cloudinfra.gateway.config.AuthWhiteListProperties;
 import com.cloudinfra.gateway.domain.auth.AuthEvaluator;
 import com.cloudinfra.gateway.domain.auth.SessionStore;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -59,6 +61,34 @@ class GatewayTenantPropagationIT {
 
     /** 仅用于自洽性探针的固定密钥, 不参与任何跨组件校验 */
     private static final String SECRET_PROBE = "gateway-tenant-it-probe-secret";
+
+    private static final String PROP_INTERNAL_CALL_SECRET = "cloud-infra.internal-call.secret";
+
+    /** failsafe 注入的原值, 用于 @AfterEach 还原 */
+    private String originalInternalCallSecret;
+
+    @BeforeEach
+    void rememberInjectedSecret() {
+        originalInternalCallSecret = System.getProperty(PROP_INTERNAL_CALL_SECRET);
+    }
+
+    /**
+     * 还原 failsafe 注入的密钥属性。
+     *
+     * <p><b>不要写成 {@code System.clearProperty}</b>: 那样会抹掉 pom.xml 的
+     * {@code systemPropertyVariables} 在 JVM 启动时注入的值, 使同一 JVM 内后续需要
+     * {@code InternalCallSecretProvider} 的 IT 因密钥缺失而启动失败（该 bean 是 fail-fast 的）。
+     * 本项目已因此踩坑两次: {@code WebSocketIdentityTrustIT} 与
+     * {@code SystemGrpcSecurityBoundaryTest}。本 IT 是 2026-10-01 新写的, 不重复同样的错。</p>
+     */
+    @AfterEach
+    void restoreInjectedSecret() {
+        if (originalInternalCallSecret == null) {
+            System.clearProperty(PROP_INTERNAL_CALL_SECRET);
+        } else {
+            System.setProperty(PROP_INTERNAL_CALL_SECRET, originalInternalCallSecret);
+        }
+    }
 
     @Test
     @DisplayName("令牌中的租户被注入转发头, 且客户端伪造的租户头被忽略")
@@ -261,7 +291,7 @@ class GatewayTenantPropagationIT {
 
     /** 真实密钥持有者: 由 InternalCallCrypto.resolveSecret() 解析测试用密钥 */
     private static InternalCallSecretProvider realSecretProvider() {
-        System.setProperty("cloud-infra.internal-call.secret", INTERNAL_SECRET);
+        System.setProperty(PROP_INTERNAL_CALL_SECRET, INTERNAL_SECRET);
         InternalCallSecretProvider provider = new InternalCallSecretProvider();
         ReflectionTestUtils.invokeMethod(provider, "init");
         return provider;

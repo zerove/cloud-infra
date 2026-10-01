@@ -56,15 +56,32 @@ import static org.mockito.Mockito.when;
 class SystemGrpcSecurityBoundaryTest {
 
     private static final String SECRET = "system-grpc-security-test-secret";
+    private static final String PROP_INTERNAL_CALL_SECRET = "cloud-infra.internal-call.secret";
+
+    /** failsafe 在 JVM 启动时注入的原值，用于还原而非抹除 */
+    private String originalInternalCallSecret;
 
     @BeforeEach
     void setUp() {
-        System.setProperty("cloud-infra.internal-call.secret", SECRET);
+        // 先存原值: 本 IT 结束后要把它还回去, 而不是连同注入值一起清掉
+        originalInternalCallSecret = System.getProperty(PROP_INTERNAL_CALL_SECRET);
+        System.setProperty(PROP_INTERNAL_CALL_SECRET, SECRET);
     }
 
+    /**
+     * @AfterEach
+     * <p><b>2026-10-01 修正</b>: 原来这里是 {@code System.clearProperty(...)}，
+     * 连带抹掉了 failsafe 启动时注入的 {@code cloud-infra.internal-call.secret}，
+     * 使同一 JVM 内后续需要 {@code InternalCallSecretProvider} 的 IT 因密钥缺失而
+     * 启动失败（该 bean 是 fail-fast 的）。改为还原原值。</p>
+     */
     @AfterEach
     void tearDown() {
-        System.clearProperty("cloud-infra.internal-call.secret");
+        if (originalInternalCallSecret == null) {
+            System.clearProperty(PROP_INTERNAL_CALL_SECRET);
+        } else {
+            System.setProperty(PROP_INTERNAL_CALL_SECRET, originalInternalCallSecret);
+        }
         TenantContext.clear();
     }
 
