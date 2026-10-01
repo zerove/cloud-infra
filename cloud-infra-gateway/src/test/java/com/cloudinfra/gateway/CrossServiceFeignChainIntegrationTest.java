@@ -178,8 +178,9 @@ class CrossServiceFeignChainIntegrationTest {
                 "--spring.profiles.active=dev",          // dev profile 使 logback appender 可见
                 "--server.port=0",                        // 随机端口，从日志解析
                 // 无 ES 容器：指向死地址，连接失败仅影响搜索索引同步，不阻塞启动
-                "--spring.elasticsearch.uris=http://127.0.0.1:1",
-                "--cloud-infra.internal-call.secret=" + INTERNAL_CALL_VALUE));
+                // 内部调用密钥由 startProcess 以 -D 注入, 不用 --key=value:
+                // 那个形式对 InternalCallCrypto.resolveSecret() 不可见 (见 startProcess 内说明)
+                "--spring.elasticsearch.uris=http://127.0.0.1:1"));
         Process sysProc = startProcess("system",
                 resolveExecJar("cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT-exec.jar"),
                 sysArgs);
@@ -195,8 +196,7 @@ class CrossServiceFeignChainIntegrationTest {
                 // Simple Discovery 实例指向 system 真实端口（服务名须与 lb://system-module 一致）
                 "--spring.cloud.discovery.client.simple.instances.system-module[0].uri=http://127.0.0.1:" + systemPort,
                 "--feign.client.config.default.connectTimeout=3000",
-                "--feign.client.config.default.readTimeout=5000",
-                "--cloud-infra.internal-call.secret=" + INTERNAL_CALL_VALUE));
+                "--feign.client.config.default.readTimeout=5000"));
         Process authProc = startProcess("auth",
                 resolveExecJar("cloud-infra-auth/target/cloud-infra-auth-1.0.0-SNAPSHOT-exec.jar"),
                 authArgs);
@@ -232,6 +232,16 @@ class CrossServiceFeignChainIntegrationTest {
         procLogs.put(name, logFile);
         List<String> cmd = new ArrayList<>();
         cmd.add("java");
+        // 内部调用密钥必须以 JVM 系统属性(-D)或环境变量注入, 不能用 --key=value:
+        // InternalCallCrypto.resolveSecret() 只读 System.getenv("INTERNAL_CALL_SECRET")
+        // 与 System.getProperty("cloud-infra.internal-call.secret"), 它刻意绕开 Spring
+        // Environment (规避 jasypt 4.0.4 + Nacos 的 CachingResolver 时序冲突)。
+        // 而 Spring Boot 3+ 不再把命令行参数写回 System property, 只放进自己的 Environment,
+        // 因此 `--cloud-infra.internal-call.secret=...` 对 resolveSecret() 完全不可见 →
+        // 抛 "内部调用签名凭据缺失" → 子进程启动即失败。
+        // 2026-10-01: 本测试此前用命令行参数传密钥, 基线上稳定失败
+        // (Caused by: BeanCreationException: internalCallSecretProvider init failed)。
+        cmd.add("-Dcloud-infra.internal-call.secret=" + INTERNAL_CALL_VALUE);
         cmd.add("-jar");
         cmd.add(jar);
         cmd.addAll(appArgs);

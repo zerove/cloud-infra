@@ -1,4 +1,4 @@
-package com.cloudinfra.starter.config;
+package com.cloudinfrait.starter;
 
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.common.core.tenant.TenantContextFilter;
@@ -46,6 +46,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p><b>组件扫描范围的守护放在各业务模块自己身上</b>
  * （{@code TenantFilterSecretWiringTest} × 3）: starter 只依赖 cloud-infra-common,
  * 反向引用业务主类会破坏分层。</p>
+ *
+ * <h2>为什么本类不在 com.cloudinfra 包下</h2>
+ *
+ * <p>本类的夹具会注册一个 {@link InternalCallSecretProvider} bean。若它落在 {@code com.cloudinfra} 下,
+ * 业务主类的 {@code @ComponentScan(basePackages = "com.cloudinfra")} 会扫到它 ——
+ * {@code ClassPathScanningCandidateComponentProvider} 默认
+ * {@code considerIndependentNestedClasses = true}, 静态嵌套的 {@code @Configuration} 会被发现 ——
+ * 于是在<b>其他测试的 Spring 上下文里</b>真实的密钥持有者被替换成测试密钥。
+ * 业务应用只排除了 {@code com.cloudinfra.starter.domain}, 不排除 {@code config}。</p>
+ *
+ * <p>2026-10-01 已在 system-module 上因同类原因踩过一次（见
+ * {@code com.cloudinfrait.scheduling.ScheduledTaskRuntimeTriggerIT} 的说明）。</p>
  */
 class TenantFilterWiringTest {
 

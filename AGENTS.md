@@ -241,6 +241,24 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **配置修改**: 修改服务配置应优先修改 `deploy/config/` 下对应的 `.yaml` 文件，然后运行 `./deploy/up.sh` 同步至 Nacos。
 - **密钥管理**: 所有密钥 (JWT, INTERNAL_CALL, DB, MQ, MinIO) **禁止默认值**，必须通过环境变量注入。`compose.yaml` 使用 `${VAR:?}` 强制模式，`up.sh` 自动生成 `.env`。
 
+  > **【2026-10-01 新增】`INTERNAL_CALL_SECRET` 只认两种注入方式, 其余一律无效**
+  >
+  > `InternalCallCrypto.resolveSecret()` 刻意绕开 Spring `Environment`
+  > （为规避 jasypt 4.0.4 + Nacos `CachingResolver` 的时序冲突）, 因此它**只读**:
+  > 1. 环境变量 `INTERNAL_CALL_SECRET`
+  > 2. JVM 系统属性 `-Dcloud-infra.internal-call.secret=...`
+  >
+  > **以下方式写了不生效, 且因缺失即 fail-fast 而导致服务启动失败**:
+  > - `--cloud-infra.internal-call.secret=...` 命令行参数
+  >   （Spring Boot 3+ 只放进自己的 Environment, 不再写回 `System.getProperty`）
+  > - `application.yml` / `deploy/config/*.yaml` 里的同名键
+  > - Nacos 配置中心的同名键
+  >
+  > 2026-10-01 实际踩到：`CrossServiceFeignChainIntegrationTest` 用 `--key=value` 给子进程
+  > 注入密钥, 导致 system 子进程 `internalCallSecretProvider` 初始化失败、启动即退,
+  > 该 IT 稳定失败（也正是 2026-09-30 CI 报出的 gateway IT 失败之一）。
+  > 改用 `-D` 后该 IT 从 1 项 ERROR 变为 **5 项全绿**。
+
 ### 3. 关键依赖版本
 - **Spring Boot**: 4.1.0
 - **Spring Cloud**: 2025.1.2
@@ -249,7 +267,25 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 8.18, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
-### 4. 质量基线 (2026-09-29)
+### 4. 测试夹具隔离 (2026-10-01 新增)
+
+**2026-10-01 实际踩到的事故**: 新写的 `ScheduledTaskRuntimeTriggerIT` 放在 `com.cloudinfra.system` 包下,
+其静态嵌套夹具 `@Configuration TaskHarness` 注册了一个 `SysTxMessageService` 的 **mock**。
+`SystemApplication` 的 `@ComponentScan(basePackages = "com.cloudinfra")` 会扫到它 ——
+`ClassPathScanningCandidateComponentProvider` 默认 `considerIndependentNestedClasses = true`,
+**静态嵌套的 `@Configuration` 会被发现**。
+
+后果: 那些夹具在**其他测试的 Spring 上下文里也生效**, 真实 service 被 mock 替身覆盖,
+令 `TxMessageFlowIntegrationTest` 的 `TxMessageRetryTask` 拿到空列表而不真正查库 → 稳定失败。
+
+**为什么难发现**: 单独跑被污染的测试永远是绿的; 只有整套 IT 一起跑才显形。
+用 `git stash` 做基线对照是定位这类问题的可靠手段。
+
+**规则**: 需要注册 bean 的测试夹具, 放在 **`com.cloudinfra` 之外的包**（本次用 `com.cloudinfrait.*`）,
+或确保它不带 `@Configuration` / `@Component`。已随本次修正迁移的夹具:
+`ScheduledTaskRuntimeTriggerIT`、`TenantFilterWiringTest`、`IdempotentOptInTest`。
+
+### 5. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
 - **集成测试**: 本地 `mvn test` 因 `skipITs=true` 跑不到 IT, 需手工: `mvn -o verify -pl <module> -DskipITs=false -Dit.test=<Class>`。CI 侧 IT 步骤本身是好的（`GRAALVM` 问题已于 `7c095a3` 修复并推送），但**账号计费自 2026-09-30 08:13 起阻塞所有 job 启动**，详见上方“CI 诊断更正”。计费恢复后需先处理它跑出的真实失败：2026-09-30 07:44 那次运行报出 notification / file / gateway / search 四个模块的 IT 失败
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30); **该开关已改为默认 fail-closed (true), 两侧同默认, commit `2c4e528`** —— 此前默认 false 使 `isTrustedInternalRequest` 首行恒真、验签代码不可达。守护测试 `*DefaultFailClosedTest` x2 走真实 Spring 装配断言默认值, `WebSocketIdentityTrustIT` 提供端到端证据
