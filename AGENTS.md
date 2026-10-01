@@ -382,13 +382,16 @@ Unable to start web server → Unable to start embedded Tomcat
 
 1. `WebSocketIntegrationTest` 偶发 1 项 ERROR:
    `The remote endpoint was in state [TEXT_FULL_WRITING]`。
-   本地连续 3 次均绿 → 判定为 **flaky**。但它指向一个真实隐患:
-   `NotificationWebSocketHandler.sendText` 在心跳与推送并发时可能同时 `sendString`，
-   Tomcat 会话状态机因而拒绝。修法（加同步 / 换 `ConcurrentWebSocketSessionDecorator`）
-   **尚未实施**。
+   **已定性并修复**（commit `91c8f71`）：`getBasicRemote()` 是阻塞式非线程安全端点，
+   心跳 pong（Tomcat 消息线程）与业务推送（MQ 消费线程）会并发进入同一 session。
+   现以 session 自身作锁把**每连接**的发送串行化（锁粒度不是全局，不影响跨连接并发），
+   并新增 `NotificationWebSocketSendConcurrencyTest` —— 用模拟 Tomcat 状态机的假端点
+   把并发窗口固定下来，含负向对照。
 2. `CrossServiceFeignChainIntegrationTest` 4 项失败: 登录返回“用户名或密码错误”，
-   而 system / auth 子进程均已启动（Tomcat 14 个端口）。本地同命令绿、CI 红，
-   **尚未定性**（已排除密钥问题；待查 auth 侧 Feign 到 system 的用户查询链路）。
+   子进程均已启动。**已排除**验证码（抛 `CAPTCHA_ERROR`）与登录锁定（抛 `ACCOUNT_LOCKED`）。
+   本地连续跑观察到它**本身也偶发失败**（一次 IT=1、随后两次 BUILD SUCCESS），
+   即为 flaky；时序根因**尚未定位**。已在断言中转储 system / auth 子进程日志尾部，
+   下次红即可直接读出根因（commit `91c8f71`）。
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
