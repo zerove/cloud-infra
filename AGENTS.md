@@ -285,9 +285,20 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 或确保它不带 `@Configuration` / `@Component`。已随本次修正迁移的夹具:
 `ScheduledTaskRuntimeTriggerIT`、`TenantFilterWiringTest`、`IdempotentOptInTest`。
 
+**存量提醒**: 全仓还有 8 个同模式夹具（notification 4 个、file 1 个、framework-web / tracing / mybatis 各 1 个）。
+2026-10-01 首次完整跑完全量 IT（23/23 模块、111 项）已通过，说明它们之间暂未构成实际冲突。
+但**新增夹具时必须遵守上面的规则**，否则下一个被扫到的就是它。
+逐个迁移属存量清理，在出现实际冲突前不做（见准入原则）。
+
 ### 5. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
-- **集成测试**: 本地 `mvn test` 因 `skipITs=true` 跑不到 IT, 需手工: `mvn -o verify -pl <module> -DskipITs=false -Dit.test=<Class>`。CI 侧 IT 步骤本身是好的（`GRAALVM` 问题已于 `7c095a3` 修复并推送），但**账号计费自 2026-09-30 08:13 起阻塞所有 job 启动**，详见上方“CI 诊断更正”。计费恢复后需先处理它跑出的真实失败：2026-09-30 07:44 那次运行报出 notification / file / gateway / search 四个模块的 IT 失败
+- **集成测试**: `skipITs` 默认 `true`，`mvn test` 跑不到 IT。手工跑全量:
+  `nohup mvn -o verify -DskipITs=false -DskipUnitTests=true > /tmp/fullit.log 2>&1 &`
+  —— **必须用 nohup 或分模块跑**: 全量约 **37 分钟**，会被前台 600s 上限截断（本次连续被截断 3 次）。
+  2026-10-01 实测：**23/23 模块 SUCCESS，26 个 IT 类 / 111 项，0 失败**，
+  这是本项目**首次完整跑完全量 IT**（此前因超时长期只有部分覆盖）。
+  ⚠️ **分模块跑（`-pl <module>`）会掩盖跨模块的夹具污染**（见上节）—— 验证时优先用全量。
+  CI 侧 IT 步骤本身是好的（`GRAALVM` 问题已于 `7c095a3` 修复并推送），但**账号计费自 2026-09-30 08:13 起阻塞所有 job 启动**，详见上方“CI 诊断更正”。计费恢复后需先处理它跑出的真实失败：2026-09-30 07:44 那次运行报出 notification / file / gateway / search 四个模块的 IT 失败
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30); **该开关已改为默认 fail-closed (true), 两侧同默认, commit `2c4e528`** —— 此前默认 false 使 `isTrustedInternalRequest` 首行恒真、验签代码不可达。守护测试 `*DefaultFailClosedTest` x2 走真实 Spring 装配断言默认值, `WebSocketIdentityTrustIT` 提供端到端证据
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
