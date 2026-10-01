@@ -4,6 +4,7 @@ import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.notification.config.WebSocketConfig;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -53,14 +54,45 @@ class WebSocketIdentityTrustIT {
     @TempDir
     Path temporary;
 
+    private static final String PROP_INTERNAL_CALL_SECRET = "cloud-infra.internal-call.secret";
+    private static final String PROP_VERIFY_INTERNAL_SIGN = "cloud-infra.security.verify-internal-sign";
+
+    /** failsafe 注入的原值，用于 {@code @AfterEach} 还原而非抹除 */
+    private String originalInternalCallSecret;
+    private String originalVerifyInternalSign;
+
     /**
-     * 清理本 IT 设置的系统属性 —— 否则会污染同一 JVM 内后续 IT
-     * (如 {@code WebSocketIntegrationTest} 不发签名, 会被误拒)。
+     * 恢复本 IT 设置的系统属性 —— 而不是直接清除。
+     *
+     * <p><b>2026-10-01 修正</b>: 原实现是 {@code System.clearProperty(...)}。它确实让本 IT
+     * 内部干净，但**顺手抹掉了 failsafe 在 JVM 启动时注入的
+     * {@code cloud-infra.internal-call.secret}**（pom.xml 的
+     * {@code systemPropertyVariables}）且不恢复。同一 JVM 内后续任何需要
+     * {@code InternalCallSecretProvider} 的 IT 都会拿到 {@code null} 密钥，
+     * 而该 bean 是 fail-fast 的 —— 于是在 CI 上表现为
+     * {@code NotificationServiceIntegrationTest} 整类
+     * “Unable to start embedded Tomcat / 内部调用签名凭据缺失”。
+     * 本地不复现只是因为测试类执行顺序不同（顺序依赖的经典形态）。</p>
      */
+    @BeforeEach
+    void rememberInjectedProperties() {
+        originalInternalCallSecret = System.getProperty(PROP_INTERNAL_CALL_SECRET);
+        originalVerifyInternalSign = System.getProperty(PROP_VERIFY_INTERNAL_SIGN);
+    }
+
     @AfterEach
-    void clearSystemProperties() {
-        System.clearProperty("cloud-infra.security.verify-internal-sign");
-        System.clearProperty("cloud-infra.internal-call.secret");
+    void restoreSystemProperties() {
+        restore(PROP_INTERNAL_CALL_SECRET, originalInternalCallSecret);
+        restore(PROP_VERIFY_INTERNAL_SIGN, originalVerifyInternalSign);
+    }
+
+    /** 恢复单个系统属性：原值存在则写回，不存在才清除 */
+    private static void restore(String key, String originalValue) {
+        if (originalValue == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, originalValue);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)
