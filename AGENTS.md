@@ -122,6 +122,16 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 
 **新交付一项能力的最低验证动作**: 改坏它, 确认守护会红, 改回来, 确认会绿。
 
+> **同日第二次复现, 而且这次抓到的是我自己刚写的守护。**
+> 为“密钥拿不到 → 全站 403”补的 `TenantFilterSecretWiringTest` 里, 我写了
+> `p.startsWith("com.cloudinfra")` 作为“扫描范围覆盖密钥类”的判据。
+> 负向对照把 `basePackages` 收窄为 `com.cloudinfra.system` 后 —— **守护没变红**:
+> 该串确实以 `com.cloudinfra` 开头, 却不包含密钥所在的 `com.cloudinfra.common`。
+> 改为精确包含关系 (包相等, 或以 `包 + "."` 为前缀) 后才真正变红。
+>
+> 结论比原话更强: **“我加了守护”不等于“守护有效”, 而差的那一步恰好就是负向对照**。
+> 它守护的是全站 403 级风险, 假绿尤其致命。
+
 ### 证据分级（本次实践后的补充）
 
 | 级别 | 手段 | 能证明什么 |
@@ -131,8 +141,13 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 | L3 端到端 | **真实容器**跑完整链路 | 运行时确实按预期工作 |
 | L2.5 负向对照 | 改坏 → 断言守护变红 | 守护本身有效 |
 
-`TenantIsolationEndToEndIT` 是本项目第一个 L3 多租户证据: 真实 PostgreSQL 容器 +
-真实 `TenantSqlInterceptor` + 真实过滤器, 而非 mock 直调方法。
+`TenantIsolationEndToEndIT` 的定位: 真实 PostgreSQL 容器 + 真实 `TenantSqlInterceptor` + 真实过滤器,
+而非 mock 直调方法。
+
+**但它不是本项目第一个 L3 多租户证据** —— `docs/perf/2026-09-04-m6-01-runtime-verify.md`
+已有一份人工运行时验证报告。它的增量价值在于**自动化与可重复**:
+那份报告是一次性的人工取证, 不在默认构建里跑, 回归时不会自动重现;
+本 IT 每次 `mvn verify -DskipITs=false` 都会执行, 因此能长期充当回归网。
 
 ---
 
@@ -235,7 +250,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 质量基线 (2026-09-29)
-- **构建**: `mvn -o test` → BUILD SUCCESS, **474 tests, 0 fail, 1 skipped** (2026-09-30 实测)。统计以 surefire XML 为准, 勿用控制台汇总行累加 (会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
+- **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
 - **集成测试**: 本地 `mvn test` 因 `skipITs=true` 跑不到 IT, 需手工: `mvn -o verify -pl <module> -DskipITs=false -Dit.test=<Class>`。CI 侧 IT 步骤本身是好的（`GRAALVM` 问题已于 `7c095a3` 修复并推送），但**账号计费自 2026-09-30 08:13 起阻塞所有 job 启动**，详见上方“CI 诊断更正”。计费恢复后需先处理它跑出的真实失败：2026-09-30 07:44 那次运行报出 notification / file / gateway / search 四个模块的 IT 失败
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30); **该开关已改为默认 fail-closed (true), 两侧同默认, commit `2c4e528`** —— 此前默认 false 使 `isTrustedInternalRequest` 首行恒真、验签代码不可达。守护测试 `*DefaultFailClosedTest` x2 走真实 Spring 装配断言默认值, `WebSocketIdentityTrustIT` 提供端到端证据
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
