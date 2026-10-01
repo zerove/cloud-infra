@@ -69,16 +69,30 @@ class ArchitectureTest {
             root = root.getParentFile().getParentFile(); // cloud-infra/
         }
         if (root.isDirectory()) {
+            // 目标路径形如 <root>/<module>/target/classes, 即深度 3。
+            // 用 walk(root, 3) 而非 walk(root): 无界遍历会走进 .git、benchmark/results 等
+            // 与架构校验无关的目录 —— 既慢, 又会在并发 git 操作时踩到 .git/index.lock 抛
+            // UncheckedIOException (它不是 IOException, 下面的兜底抓不到, 直接让本测试 ERROR)。
+            // 那种失败与架构规则无关, 却会把 BUILD 染红并掩盖真实失败。
             try (java.util.stream.Stream<java.nio.file.Path> stream =
-                 java.nio.file.Files.walk(root.toPath())) {
+                 java.nio.file.Files.walk(root.toPath(), 3)) {
                 stream.filter(java.nio.file.Files::isDirectory)
                     .filter(p -> p.endsWith(java.nio.file.Path.of("target/classes")))
-                    .filter(p -> p.toString().contains("/cloud-infra-"))
+                    .filter(p -> p.getParent() != null
+                                 && p.getParent().getParent() != null
+                                 && p.getParent().getParent().getFileName().toString()
+                                        .startsWith("cloud-infra-"))
                     .forEach(p -> {
                         try { urls.add(p.toUri().toURL()); }
                         catch (java.net.MalformedURLException ex) { /* skip */ }
                     });
-            } catch (java.io.IOException ex) { /* skip */ }
+            } catch (java.io.IOException | java.io.UncheckedIOException ex) {
+                // 扫描失败不阻断架构校验: 拿不到全部类时, 规则会在信息不全的基础上给出结论,
+                // 那比直接失败更危险。因此只记跳过 —— 但 UncheckedIOException 必须一并捕获,
+                // 否则上面说的 index.lock 场景会绕过我这条兜底。
+                java.util.logging.Logger.getLogger(ArchitectureTest.class.getName())
+                    .warning("扫描模块 target/classes 失败, 架构校验将基于不完整的类集: " + ex);
+            }
         }
         // 加上 system-module 自己的 target/classes (业务代码未打包成 jar, 编译后在此目录)
         java.io.File ownClasses = new java.io.File("target/classes");
