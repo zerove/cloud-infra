@@ -110,6 +110,15 @@ class CrossServiceFeignChainIntegrationTest {
     static int systemPort;
     static int authPort;
 
+    /**
+     * 子进程固定端口。
+     *
+     * <p>见 {@link #gatewayProperties} 的说明: 用固定端口是为了消除
+     * "SimpleDiscoveryProperties 绑定早于 @BeforeAll 回填端口" 这个时序缺陷。</p>
+     */
+    private static final int SYSTEM_PORT = 18081;
+    private static final int AUTH_PORT = 18082;
+
     /** 各子进程日志文件，awaitPort 轮询用 */
     private static final Map<String, Path> procLogs = new HashMap<>();
 
@@ -151,12 +160,21 @@ class CrossServiceFeignChainIntegrationTest {
         registry.add("spring.data.redis.port", REDIS::getFirstMappedPort);
         // 本上下文无 Flyway/数据源需求（system 以外部进程运行）。
         // 路由目标：Simple Discovery 实例指向真实进程端口。
-        // 关键：supplier 惰性求值——网关上下文在 @BeforeAll 起完进程后才加载，
-        // 此时 systemPort/authPort 已回填。
+        //
+        // **为什么用固定端口而不是 Supplier**（2026-10-01 定位到的 flaky 根因）:
+        // `SimpleDiscoveryProperties` 是 @ConfigurationProperties, 它在**bean 初始化那一刻**
+        // 一次性绑定全部属性。此时机早于测试类的 @BeforeAll(startServices) ——
+        // JUnit 5 里 Extension 的 BeforeAllCallback(Spring 上下文加载) **先于** @BeforeAll 方法。
+        // 所以 authPort/systemPort 在绑定时通常还是 0, 网关转发到 127.0.0.1:0 →
+        // ResourceAccessException → SecurityFilter 兜底成 500。
+        // 写 Supplier 并不能解决: 它只在“属性被读取那一刻”求值, 而绑定只发生一次。
+        //
+        // 固定端口让值在编译期即为常量, 无论何时绑定都正确, 从根上消除时序依赖。
+        // 端口选用高位且成对, 与常见服务(8080/8083/9090 等)不冲突。
         registry.add("spring.cloud.discovery.client.simple.instances.system-module[0].uri",
-                () -> "http://127.0.0.1:" + systemPort);
+                () -> "http://127.0.0.1:" + SYSTEM_PORT);
         registry.add("spring.cloud.discovery.client.simple.instances.cloud-auth[0].uri",
-                () -> "http://127.0.0.1:" + authPort);
+                () -> "http://127.0.0.1:" + AUTH_PORT);
     }
 
     // ==================== 进程编排 ====================
@@ -177,7 +195,10 @@ class CrossServiceFeignChainIntegrationTest {
         List<String> sysArgs = commonArgs(pgUrl, redisHost, redisPort, mqHost, mqPort);
         sysArgs.addAll(List.of(
                 "--spring.profiles.active=dev",          // dev profile 使 logback appender 可见
-                "--server.port=0",                        // 随机端口，从日志解析
+                // 固定端口而非 0(随机): 网关的 SimpleDiscoveryProperties 在 Spring 上下文
+                // 初始化时一次性绑定, 早于本 @BeforeAll 回填端口。随机端口会导致
+                // 绑定时拿到 0, 网关转发到 127.0.0.1:0 而失败。见 gatewayProperties 注释。
+                "--server.port=" + SYSTEM_PORT,
                 // 无 ES 容器：指向死地址，连接失败仅影响搜索索引同步，不阻塞启动
                 // 内部调用密钥由 startProcess 以 -D 注入, 不用 --key=value:
                 // 那个形式对 InternalCallCrypto.resolveSecret() 不可见 (见 startProcess 内说明)
@@ -192,10 +213,10 @@ class CrossServiceFeignChainIntegrationTest {
         List<String> authArgs = commonArgs(pgUrl, redisHost, redisPort, mqHost, mqPort);
         authArgs.addAll(List.of(
                 "--spring.profiles.active=dev",
-                "--server.port=0",
+                "--server.port=" + AUTH_PORT,
                 "--management.server.port=0",             // auth 主配置固定 9301，会与网关冲突
                 // Simple Discovery 实例指向 system 真实端口（服务名须与 lb://system-module 一致）
-                "--spring.cloud.discovery.client.simple.instances.system-module[0].uri=http://127.0.0.1:" + systemPort,
+                "--spring.cloud.discovery.client.simple.instances.system-module[0].uri=http://127.0.0.1:" + SYSTEM_PORT,
                 "--feign.client.config.default.connectTimeout=3000",
                 "--feign.client.config.default.readTimeout=5000"));
         Process authProc = startProcess("auth",
@@ -516,7 +537,7 @@ private static String resolveExecJar(String relative) throws IOException {
             headers.set(InternalCallCrypto.HEADER_TIMESTAMP, String.valueOf(ts));
             headers.set(InternalCallCrypto.HEADER_NONCE, nonce);
 
-            String url = "http://127.0.0.1:" + systemPort
+            String url = "http://127.0.0.1:" + SYSTEM_PORT
                     + "/internal/system/user/credential/username/admin";
             ResponseEntity<String> r = HTTP.exchange(
                     url, HttpMethod.GET, new HttpEntity<>(headers), String.class);
