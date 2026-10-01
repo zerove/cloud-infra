@@ -197,10 +197,7 @@ auth:
     secret: ${AUTH_JWT_SECRET:}
     expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
 
-# 内部服务间调用签名密钥（生产必须通过 INTERNAL_CALL_SECRET 注入外置强密钥）
 cloud-infra:
-  internal-call:
-    secret: ${INTERNAL_CALL_SECRET:}
   security:
     # 开启后 X-User-Id 仅在携带有效网关签名时被信任，防内网直连伪造身份
     verify-internal-sign: true
