@@ -1,7 +1,8 @@
-package com.cloudinfra.starter.config;
+package com.cloudinfrait.starter;
 
 import com.cloudinfra.framework.web.aspect.IdempotentAspect;
 import com.cloudinfra.framework.web.idempotency.IdempotencyStore;
+import com.cloudinfra.starter.config.IdempotentAutoConfiguration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,14 @@ import static org.mockito.Mockito.mock;
  * 能暴露它的跨服务链路集成测试从不在 {@code mvn test} / CI 中执行。</p>
  *
  * <p>本测试不依赖容器, 每次 {@code mvn test} 执行。</p>
+ *
+ * <p><b>2026-10-01 移包</b>: 本类原在 {@code com.cloudinfra.starter.config}。其内嵌夹具
+ * {@code InfrastructureBeans} 注册了一个 mock 的 {@code RedisTemplate}，
+ * 而业务主类的 {@code @ComponentScan(basePackages = "com.cloudinfra")} 会扫到静态嵌套的
+ * {@code @Configuration}（{@code considerIndependentNestedClasses} 默认为 true），
+ * 于是在其他测试的 Spring 上下文里真实的 {@code RedisTemplate} 被 mock 替身覆盖。
+ * 移到 {@code com.cloudinfrait.starter} 后彻底避开。详见
+ * {@code com.cloudinfrait.starter.TenantFilterWiringTest} 与 AGENTS.md 第三条硬规则。</p>
  */
 class IdempotentOptInTest {
 
