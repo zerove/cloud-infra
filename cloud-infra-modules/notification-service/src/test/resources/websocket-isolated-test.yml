@@ -6,8 +6,8 @@
 # PropertySource, 也没有 PropertySourcesPlaceholderConfigurer (这两个测试只
 # @ImportAutoConfiguration 选了 SSL/Tomcat/Dispatcher 三个自动配置)。
 # 于是 WebSocketAuthFilter 上的
-#   @Value("${cloud-infra.security.verify-internal-sign:false}")
-# 不会被解析, 字面量 "${cloud-infra.security.verify-internal-sign:false}" 被直接注入到
+#   @Value("${cloud-infra.security.verify-internal-sign:true}")
+# 不会被解析, 字面量 "${cloud-infra.security.verify-internal-sign:true}" 被直接注入到
 # boolean 字段 -> TypeMismatchException -> 整个 Web 容器起不来。
 #
 # 这里显式给出该开关的真实取值, 而不是依赖 @Value 的默认值 —— 默认值只在占位符能被解析时
@@ -26,8 +26,10 @@ cloud-infra:
 #      InternalCallCrypto.resolveSecret() 只读 System.getenv("INTERNAL_CALL_SECRET")
 #      和 System.getProperty("cloud-infra.internal-call.secret"), 不查 Spring Environment,
 #      所以 PropertySource 里配什么都不影响它。放着只会误导后来人以为改这里能生效。
-#   2. 密钥"缺失"时并非验签恒为 false —— resolveSecret() 最后回落到内置默认值
-#      "cloud-infra-internal-dev-secret"。也就是说测试当时是悄悄拿开发默认密钥在跑。
+#   2. 密钥"缺失"时的行为已经变了(2026-09-30, issue 30): resolveSecret() 不再回落到
+#      内置默认值 "cloud-infra-internal-dev-secret" —— 那个写在公开源码里的固定凭据已被删除,
+#      现在缺失即抛 IllegalStateException 使上下文启动失败。所以"测试悄悄用开发默认密钥跑"
+#      这种事现在不可能发生。
 # 真要让测试用指定密钥, 必须走 System.setProperty("cloud-infra.internal-call.secret", ...)
 # 或设置环境变量 INTERNAL_CALL_SECRET, 而这两者都是进程级的, 会污染同 JVM 内其它测试。
 # 本模块的 WS 测试不需要特定密钥 (验签开关为 false 时不参与验签), 故此处一律不配置。
