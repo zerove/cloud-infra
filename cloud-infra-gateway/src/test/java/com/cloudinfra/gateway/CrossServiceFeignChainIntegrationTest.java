@@ -224,7 +224,16 @@ class CrossServiceFeignChainIntegrationTest {
                 // Nacos 配置导入与发现均关闭，快速失败
                 "--spring.cloud.nacos.config.enabled=false",
                 "--spring.cloud.nacos.config.import-check.enabled=false",
-                "--spring.cloud.nacos.discovery.enabled=false"));
+                "--spring.cloud.nacos.discovery.enabled=false",
+                // **必须禁用 gRPC**，否则 system/auth 子进程会各自去绑 **固定端口 9090**
+                // (GrpcServerAutoConfiguration 是 matchIfMissing=true, 默认启用且端口写死 9090)。
+                // CI 上该端口常被占用/残留进程持有 → BindException: Address already in use
+                // → 子进程启动即失败 → 登录时连不上 system → "用户名或密码错误"。
+                // 2026-10-01 由 probeSystemCredentialEndpoint 直探确认:
+                // 直连 system 内部端点同样是 ResourceAccessException(连不上),
+                // 从而排除了 Feign/签名/数据三类原因, 指向"子进程根本没起来"。
+                // 本用例验证的是 HTTP 链路, 不需要 gRPC。
+                "--cloudinfra.grpc.enabled=false"));
     }
 
     /** 启动子进程：stdout/stderr 合并追加写入日志文件（绕开 springProfile 日志黑洞） */
