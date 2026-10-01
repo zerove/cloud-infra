@@ -74,7 +74,31 @@
 `The job was not started because recent account payments have failed or your spending
 limit needs to be increased` —— **账号计费/额度问题**, 任何代码改动都修不了,
 需人工在 GitHub `Settings → Billing & plans` 处理。
-2026-10-01 复核仍在同一状态 (`gh run view 36697715625`), **不要再改 `ci.yml`**。
+2026-10-01 复核仍在同一状态 (`gh run view 36697715625`)。
+
+> **【2026-10-01 08:00 再更正】账号计费已恢复, CI 确实在跑**
+>
+> 上述“阻塞”只持续到 2026-10-01 上午。推送后的 run `36832793467` / `36836223793`
+> **真正执行了 10 分钟**并报出真实失败, 此后不再复现阻塞。
+>
+> **CI 首次真正跑起来后查出的真实问题**（均为长期掩盖，**非本次改动引入**）:
+>
+> | 问题 | 归属 | 状态 |
+> | :--- | :--- | :--- |
+> | `NotificationDispatcher.decodeChannels` 命中 PMD `ReturnEmptyCollectionRatherThanNull` | 008d773（前次遗留） | 已修 `ca1eac8` |
+> | ArchUnit 步骤的 `-DfailIfNoTests` 在 Surefire 3.x 已失效 → **该门禁从未真正执行过架构校验** | CI 配置长期缺陷 | 已修 `22ebb8e` |
+> | IT 在 CI 上失败（`UnknownHostException: cloud-nacos`，notification 7 + gateway 4 项） | CI runner 环境 | **待查** |
+>
+> **IT 失败的判定过程**: 本地用 CI 的**完全相同命令**
+> （`test-compile failsafe:integration-test failsafe:verify -DskipITs=false`）
+> 跑 `NotificationServiceIntegrationTest` → **7 项全绿**；全量 IT 111 项亦全绿。
+> CI 日志显示 runner 上 Nacos 客户端仍在解析 `cloud-nacos` 主机名
+> （而测试属性已设 `spring.cloud.nacos.config.enabled=false`）。
+> 结论指向 **runner 环境差异**，但这是**推断而非已证明** —— 需在 CI 环境复现才能定论。
+>
+> **值得记下的**: 本次推送的三个新 IT 在 CI 上**全部通过**
+> （`TenantIsolationEndToEndIT` 4、`GatewayTenantPropagationIT` 7、
+> `ScheduledTaskRuntimeTriggerIT` 2），单测也通过 —— 即本次改动本身在 CI 上成立。
 
 详见 `ROADMAP.md` “运行时有效性审计” 与 issue 29。
 

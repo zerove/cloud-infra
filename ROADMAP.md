@@ -149,6 +149,16 @@ Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此�
 `InternalEndpointExposureTest` ×4、`ControllerAuthorizationTest` ×2、`TenantIdValidationTest` ×22。
 其中调度修复做了**负向对照** (去掉注解后测试如期失败)。
 
+**2026-10-01 补: CI 首次真正跑起来后, 又查出一条同类的"空转门禁"。**
+`Quality Gates` 的 "ArchUnit architecture guard (5 rules)" 步骤传的是
+`-DfailIfNoTests=false`, 而 Surefire 3.x **已不认这个参数名**
+(正确写法是 `-Dsurefire.failIfNoSpecifiedTests=false`)。加上 `-am` 连带构建了
+不含 `ArchitectureTest` 的模块, Surefire 在第一个依赖模块就报
+`No tests matching pattern "ArchitectureTest" were executed!` 退出 ——
+**该步骤从未真正执行过架构校验**, 每次都死在半路。
+已在 `git clone` 出的纯净副本上用 CI 原命令复现并验证修复 (commit `22ebb8e`)。
+与上面四处同源: 门禁**看起来**在守护, 实际从未生效。
+
 ### ⚠️ 唯一标 🟢 的多租户, 在任何部署配置中都未启用
 
 > **✅ 本节已于 2026-10-01 处置完毕**（commit `adefc3b`）。下文保留为决策依据的存档，
