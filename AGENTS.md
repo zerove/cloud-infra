@@ -388,10 +388,22 @@ Unable to start web server → Unable to start embedded Tomcat
    并新增 `NotificationWebSocketSendConcurrencyTest` —— 用模拟 Tomcat 状态机的假端点
    把并发窗口固定下来，含负向对照。
 2. `CrossServiceFeignChainIntegrationTest` 4 项失败: 登录返回“用户名或密码错误”，
-   子进程均已启动。**已排除**验证码（抛 `CAPTCHA_ERROR`）与登录锁定（抛 `ACCOUNT_LOCKED`）。
-   本地连续跑观察到它**本身也偶发失败**（一次 IT=1、随后两次 BUILD SUCCESS），
-   即为 flaky；时序根因**尚未定位**。已在断言中转储 system / auth 子进程日志尾部，
-   下次红即可直接读出根因（commit `91c8f71`）。
+   子进程均已启动。**本轮尝试定性未果**, 根因仍未定位。已排除与收集到的证据:
+   - **已排除验证码**: 它抛 `CAPTCHA_ERROR` 而非 `LOGIN_FAILED`
+   - **已排除登录锁定**: 抛 `ACCOUNT_LOCKED`
+   - **已排除密钥/系统属性**: b2534a1 修复后该现象依旧
+   - **确认是 flaky 而非稳定失败**: 本地连续跑也观察到一次失败、两次 BUILD SUCCESS
+   - **错误码来源已收窄**: `LOGIN_FAILED` 只在 principal 为 null / fullUser 为 null 时抛,
+     而 `UserDetailsServiceImpl` 查不到用户时抛 `UsernameNotFoundException`,
+     它会被 `DaoAuthenticationProvider` 转成 `BadCredentialsException` →
+     与“密码错”**共用同一个错误码**。所以“用户名或密码错误”**也可能意味着用户没查到**。
+   - **待验证的假设**: auth 日志里出现
+     `For 'system-module' URL not provided. Will try picking an instance via load-balancing`
+     —— Simple Discovery 可能未生效, 致 Feign 无法解析 `lb://system-module`。
+     但本地同配置正常, 且 auth 侧没有输出任何登录尝试的日志, 现有证据不足以定论。
+
+   已在断言中转储 system / auth 子进程日志尾部（commit `91c8f71`），下次红即可直接读出更多线索。
+   **本项未解决**, 不应按"已修复"记账。
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
