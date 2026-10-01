@@ -36,10 +36,10 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * 身份头信任开关：开启后 X-User-Id 仅在携带有效网关内部签名时被信任，
-     * 防止绕过网关直连伪造身份。默认关闭以兼容存量部署与本地直连调试；
-     * 生产环境应置 true（deploy/config 统一下发）。
+     * 防止绕过网关直连伪造身份。默认开启（fail-closed）：缺失或验签失败即视为不可信。
+     * 本地直连调试确需关闭时显式置 false（cloud-infra.security.verify-internal-sign=false）。
      */
-    @org.springframework.beans.factory.annotation.Value("${cloud-infra.security.verify-internal-sign:false}")
+    @org.springframework.beans.factory.annotation.Value("${cloud-infra.security.verify-internal-sign:true}")
     private boolean verifyInternalSign;
 
     @org.springframework.beans.factory.annotation.Autowired
