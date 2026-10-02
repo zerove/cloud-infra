@@ -170,9 +170,23 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Build Native Images
+        # -J-Xmx 决定 native-image 的**分析阶段** Java 堆；而 native-image 另有
+        # 一块 image heap 由 JVM 可见的物理内存决定。两者叠加才是真实占用。
+        #
+        # 2026-10-02 调整: 原为 `-J-Xmx8g` 且**不限制 MaxRAM**。该 job 此前一直被
+        # skipped，2026-10-01 首次真正执行即失败于 `native-image [8/8] Creating image...`
+        # （最后阶段，日志无明确错误、被系统终止）—— 这是资源峰值耗尽的典型形态，
+        # 而非缺类/反射配置错误（那类会在 analysis 阶段就失败）。
+        #
+        # ubuntu-latest 为 4 核 / 16 GB。8 GB 堆 + 不受限的 image heap 会顶穿该规格。
+        # 现改为: 堆 4 GB, 并用 -XX:MaxRAM=10g 限定 JVM 可见总内存, 使 image heap
+        # 随之收敛。两者之和 (< 10 GB) 稳定落在 16 GB 以内, 留出 OS 与构建进程余量。
+        #
+        # 仍需注意: 本调整尚未在 CI 上验证通过（首次真跑即失败，见上）。
+        # 若仍失败, 说明不是纯资源问题, 需按 native-image 的其他失败形态继续定位。
         run: |
-          mvn clean package -T 1 -Pnative -DskipTests -Dnative.image.args="-J-Xmx8g" -pl cloud-infra-gateway,cloud-infra-auth -am --batch-mode
-          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx8g" -pl cloud-infra-gateway,cloud-infra-auth --batch-mode
+          mvn clean package -T 1 -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=10g" -pl cloud-infra-gateway,cloud-infra-auth -am --batch-mode
+          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=10g" -pl cloud-infra-gateway,cloud-infra-auth --batch-mode
 
       - name: Upload native binaries
         uses: actions/upload-artifact@v4
