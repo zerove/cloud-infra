@@ -31,6 +31,19 @@ PASS=0; FAIL=0
 ok()   { printf "  \033[32mPASS\033[0m %s\n" "$1"; PASS=$((PASS+1)); }
 fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
 
+# 采集容器状态 + 日志尾部。两个失败分支共用, 避免"只在一处接了诊断"。
+# 不只查 exited: 就绪等待超时通常是容器仍在 running 但服务没起来
+# (Elasticsearch 首启要 30s+, 且 mem_limit=1g 在 runner 上可能直接被 OOM kill 后重启)。
+dump_container_diagnostics() {
+  echo "--- 未就绪容器的状态与日志 ---" >&2
+  local c
+  for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null | head -12); do
+    [ -n "$c" ] || continue
+    echo "### $c  [$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)]" >&2
+    podman logs --tail 12 "$c" >&2 2>&1 || true
+  done
+}
+
 # 服务镜像: "<Dockerfile 仓库根相对路径>:<tag>"
 # 与 deploy/compose.yaml 中每个服务的 image 名一一对应。
 SERVICE_IMAGES=(
@@ -201,14 +214,7 @@ else
   tail -40 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
   podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
-  echo "--- 未就绪容器的状态与日志 ---" >&2
-  # 不只查 exited: 就绪等待超时通常是容器仍在 running 但服务没起来
-  # (Elasticsearch 首启要 30s+, 且 mem_limit=1g 在 runner 上可能直接被 OOM kill 后重启)。
-  for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null | head -12); do
-    [ -n "$c" ] || continue
-    echo "### $c  [$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)]" >&2
-    podman logs --tail 12 "$c" >&2 2>&1 || true
-  done
+  dump_container_diagnostics
   exit 1
 fi
 echo
@@ -246,6 +252,11 @@ else
   fail "未 healthy:$MISSING"
   echo "  容器状态:" >&2
   podman ps -a --format '{{.Names}}\t{{.Status}}' 2>&1 | grep '^cloud-' >&2
+  # 2026-10-02: 这个分支原先只打印状态, 不打印日志。
+  # 结果 run 37033739185 上 4 个服务 Exited(1) 却拿不到任何异常,
+  # 而采日志的代码只存在于 3/7 的失败分支 —— 即"诊断修好了却在下一层失效",
+  # 与 issue 29 记录的"从未登记进 imports"同类: 机制在, 但没接到这条路径上。
+  dump_container_diagnostics
   exit 1
 fi
 echo
