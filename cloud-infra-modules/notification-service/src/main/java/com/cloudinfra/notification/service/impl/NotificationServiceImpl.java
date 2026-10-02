@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,7 +49,30 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationQuotaService quotaService;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
-    /** 异步投递执行器 (Spring Boot 自动配置的虚拟线程 {@code applicationTaskExecutor})。 */
+    /**
+     * 异步投递执行器。
+     *
+     * ⚠️ 必须显式 {@code @Qualifier}（CI E2E run 37059177909 实测）。
+     * {@code AsyncTaskExecutor} 在上下文里有**两个**候选:
+     * <ul>
+     *   <li>{@code applicationTaskExecutor} —— 本项目的
+     *       {@code VirtualThreadConfig}（虚拟线程）</li>
+     *   <li>{@code taskScheduler} —— Spring Boot 的
+     *       {@code DefaultTaskSchedulerConfiguration}，而本模块的
+     *       {@code spring.task.scheduling} 配置非空时会额外注册它</li>
+     * </ul>
+     * 两者类型相同，按类型注入即二义，报
+     * "Parameter 8 ... required a single bean, but 2 were found" 并启动失败。
+     *
+     * <p>本地长期复现不了：本地 {@code deploy/nacos/data} 保留了旧的
+     * {@code search-service.yaml} 等配置，且此前那份配置里没有
+     * {@code spring.task.scheduling} 段，因而 {@code taskScheduler}
+     * 那个候选 Bean 根本没被注册。CI 每次 down 后数据目录全新，必然命中。
+     *
+     * <p>不要改成 {@code @Primary}：那会影响全局其他注入点，
+     * 而这里只需要明确"我要的是哪一个"。
+     */
+    @Qualifier("applicationTaskExecutor")
     private final AsyncTaskExecutor taskExecutor;
 
 

@@ -7,6 +7,7 @@ import com.cloudinfra.notification.mapper.NotificationDispatchMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -62,6 +63,16 @@ public class NotificationDispatchRecoveryTask {
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate redisTemplate;
     private final NotificationDispatcher dispatcher;
+    /**
+     * 异步执行器 —— 必须限定为 {@code applicationTaskExecutor}。
+     *
+     * <p>与 {@code NotificationServiceImpl} 同因（CI E2E run 37059177909）：
+     * {@code AsyncTaskExecutor} 另有 {@code taskScheduler} 一个候选，
+     * 按类型注入会报 "required a single bean, but 2 were found"。
+     * 本类由 {@code @Scheduled} 驱动，在同一上下文中被创建，
+     * 因此两处必须同时修 —— 只修一处仍然起不来。
+     */
+    @Qualifier("applicationTaskExecutor")
     private final AsyncTaskExecutor taskExecutor;
 
     /**
