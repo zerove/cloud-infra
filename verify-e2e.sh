@@ -139,8 +139,31 @@ MICROSERVICES=(gateway auth system file notification search)
 build_images() {
   local entry dockerfile tag failed=()
   for entry in "${SERVICE_IMAGES[@]}"; do
+    # ⚠️ 拆 tag 必须按**第一个**冒号切分, 而不是最后一个（2026-10-03）。
+    #   SERVICE_IMAGES 的元素形如
+    #     cloud-infra-gateway/Dockerfile:localhost/cloud-infra-gateway:latest
+    #   即 "<Dockerfile 路径> : <镜像引用>"。而镜像引用自身**也含冒号**（":latest"），
+    #   元素里因此有**两个**冒号，于是:
+    #     ${entry%%:*}  → dockerfile ✅（左侧无冒号，最短匹配到第一个）
+    #     ${entry##*:}  → tag       ❌ ## 是"删最长的 *: 前缀"，一路吃到**最后一个**冒号，
+    #                               即 dockerfile 与镜像路径全被丢弃，只剩 "latest"
+    #   实测（run 37068311894）: 6 个镜像全被打成 localhost/latest:latest,
+    #   彼此互相覆盖；随后 compose 找 localhost/cloud-infra-gateway:latest 报
+    #     Error: initializing source docker://localhost/cloud-infra-gateway:latest
+    #     error code: 125
+    #   而 build_images 打印的是 "ok latest" —— 6 个 tag 全是 latest,
+    #   这一点当时就该被当成异常，只是没人看那一行。
+    #
+    # 正确拆法: 与 %% 配对的 # 也是最短匹配, 取**第一个**冒号之后的全部,
+    # 完整保留 "localhost/<name>:latest"。
     dockerfile="${entry%%:*}"
-    tag="${entry##*:}"
+    tag="${entry#*:}"
+    # 双保险: 拆解失效的**特征**就是 tag 恰好等于 "latest"（镜像路径被整段吃掉）。
+    # 显式判它, 好过让 6 个镜像再次静默塌成同一个 tag —— 那正是本次缺陷的形态。
+    if [ "$tag" = "latest" ]; then
+      echo "    拆解异常: entry='$entry' → tag='$tag'（SERVICE_IMAGES 格式已变）" >&2
+      return 1
+    fi
     if podman build -f "$SCRIPT_DIR/$dockerfile" -t "$tag" "$SCRIPT_DIR"; then
       printf "    ok   %s\n" "$tag"
     else
