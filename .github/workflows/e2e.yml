@@ -45,6 +45,25 @@ jobs:
         # 管道退出码取自 tee(恒 0), 脚本失败会被整个吞掉。
         shell: bash
 
+      - name: Verify Dockerfile packaging integrity
+        # 2026-10-02 新增。
+        #
+        # 起因: cloud-infra-gateway/Dockerfile 长期写着 `COPY target/*.jar app.jar`,
+        # 而 spring-boot-maven-plugin 的 repackage 会在 target/ 留下两个 jar:
+        #   xxx-exec.jar  106MB  Main-Class: JarLauncher  ← 该复制这个
+        #   xxx.jar        54KB  无 Main-Class             ← 多源 COPY 取最后一个, 即这个
+        # 于是镜像里打进的是那个 54KB 的库 jar, 容器启动即
+        #   no main manifest attribute, in /app/app.jar  →  Exited (1)
+        #
+        # ⚠️ 为什么需要单独一道门禁: **podman build 对两种写法都 exit=0**。
+        # 实测(2026-10-02)两种写法构建都"成功", 差别只在容器启动时才暴露 ——
+        # 而镜像构建是 CI 里唯一覆盖 Dockerfile 的步骤, 缺陷就这么一路溜过去了。
+        #
+        # 本步自带负向对照(守护 2/2): 造一个改回 *.jar 的样本, 断言判定规则会判 FAIL。
+        # 若这一步变红, 说明 Dockerfile 的 jar 写法退回了, 或守护本身失效了。
+        run: bash verify-dockerfiles.sh
+        shell: bash
+
       - name: Install Podman + podman-compose
         run: |
           sudo apt-get update
