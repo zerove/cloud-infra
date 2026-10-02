@@ -68,19 +68,29 @@ dump_container_diagnostics() {
       # 滤掉就等于把根因删了。真正的做法是把噪音源滤掉后, **优先保留含关键字的行**:
       #   ERROR/Exception/Caused by/FATAL/APPLICATION FAILED 等, 最多补 40 行上下文。
       # 这样无论噪音占多少, 根因一定在窗口内。
+      # ⚠️ 不用 `| head -N` 收尾（2026-10-03 实测修正）。
+      # head 读够 40 行就关闭管道, 上游 grep 随即收到 SIGPIPE, 打出
+      # "grep: write error: Broken pipe"。在 run 37050526759 的日志里实测到,
+      # 且它紧跟在关键错误行之后, 容易被误读成根因的一部分。
+      # 改用 sed -n '1,40p': sed 会读完整个输入, 不产生 SIGPIPE。
       echo "--- $c 关键错误行（ERROR/Exception/Caused by/FAILED）---" >&2
       podman logs --tail -1 "$c" 2>&1 \
-        | grep -E 'ERROR|Exception|Caused by|FATAL|APPLICATION FAILED|OutOfMemory|exited|Bind' \
-        | grep -vE "$NOISE" | head -40 >&2 || true
+        | grep -E 'ERROR|Exception|Caused by|FATAL|APPLICATION FAILED|OutOfMemory|exited|Bind|placeholder' \
+        | grep -vE 'RunnableWithExceptionProtection|skywalking-api\.log' \
+        | sed -n '1,40p' >&2 || true
+      # 首部窗口。⚠️ 过滤名单必须区分"agent 噪音"与"可能的真实异常":
+      # FileNotFoundException 上一版也在名单里, 但它完全可能是真根因
+      # (例如挂载卷缺失), 滤掉就等于把证据销毁 —— 只滤掉确定属于
+      # SkyWalking agent 自身噪声的那几行, 且不滤异常类型行本身。
       echo "--- $c 日志首 25 行有效内容（已滤 SkyWalking agent 加载噪音）---" >&2
       podman logs --tail -1 "$c" 2>&1 \
-        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|FileOutputStream|FileNotFoundException|sun\.misc\.Unsafe|Picked up JAVA_TOOL" \
+        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|sun\.misc\.Unsafe|Picked up JAVA_TOOL" \
         | grep -vE '^\s+at |^\s*\.\.\. [0-9]+ more' \
         | sed -n '1,25p' >&2 || true
-      # 同时给出尾部有效内容: Spring 的失败堆栈在末尾, 但末尾同样常被 agent 噪音污染
+      # 尾部有效内容: Spring 的失败堆栈在末尾, 但末尾同样常被 agent 噪音污染
       echo "--- $c 日志尾 25 行有效内容 ---" >&2
       podman logs --tail -1 "$c" 2>&1 \
-        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|FileOutputStream|FileNotFoundException|sun\.misc\.Unsafe" \
+        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|sun\.misc\.Unsafe" \
         | tail -25 >&2 || true
     fi
     podman logs --tail 12 "$c" >&2 2>&1 || true
