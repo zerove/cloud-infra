@@ -205,7 +205,23 @@ jobs:
         # ⚠️ 14 GB 这一档**尚未在 CI 上验证**, 不应被当作已修复。
         run: |
           mvn clean package -T 1 -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-gateway,cloud-infra-auth -am --batch-mode
-          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-gateway,cloud-infra-auth --batch-mode
+          # **两个模块分两次 Maven 调用构建**, 2026-10-02 修正。
+          #
+          # 起因: 同一会话内先后构建 gateway 与 auth 时, gateway 成功而 auth 报
+          #   native-maven-plugin:0.10.4:compile failed:
+          #   Cannot invoke "java.util.LinkedHashMap.get(Object)" because "this.inodes" is null
+          # 该 NPE 在 **5.188 秒**内抛出 —— native-image 进程**根本没被启动**,
+          # 所以它不是"分析失败"也不是"内存耗尽"。
+          #
+          # 本地对照实验支持"插件跨模块会话状态被污染"这一解释:
+          #   单独构建 auth → 能跑过该插件并真正启动 native-image(随后才撞上本机 mmap 沙箱限制)
+          #   gateway+auth 同一会话 → gateway 成功后 auth 在插件内 NPE
+          # 即失败与"auth 在 gateway 之后构建"相关, 而与 auth 自身代码无关
+          # (PR #58 回退 auth 代码后仍以相同方式失败, 已在 CI 上验证)。
+          #
+          # 分开会话即可让每个模块拿到干净的插件状态; 同时 native-image 峰值更可能独占机器。
+          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-gateway --batch-mode
+          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-auth --batch-mode
 
       - name: Upload native binaries
         uses: actions/upload-artifact@v4

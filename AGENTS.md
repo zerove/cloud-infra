@@ -426,24 +426,56 @@ Unable to start web server → Unable to start embedded Tomcat
 即：**必须限制 MaxRAM**（放开后 image heap 会自行涨到顶穿 16 GB runner），
 堆 4 GB + MaxRAM 限制即可让 gateway 稳定通过。
 
+> ⚠️ auth 那一列的"失败"**不能读作内存不足** —— 详见下方自我更正：
+> 它在 5 秒内就失败了，压根没进入 native-image 构建阶段。
+
 **auth 的失败已由 A/B 对照实验定性为既有问题，与本次改动无关。**
 2026-10-02 开 PR #58，仅回退 auth 的两个生产文件
 （`AuthTokenServiceImpl` / `UserServiceImpl`）到 `0c66985`，其余不动 —
 
 | | gateway | auth |
 | :--- | :--- | :--- |
-| master（含本次 auth 租户改动） | 成功 | 失败 @ `[8/8]` |
-| PR #58（回退 auth 租户改动） | 成功 | **失败 @ `[8/8]`，失败模块同为 `cloud-infra-auth`** |
+| master（含本次 auth 租户改动） | 成功（9m9s） | 失败，5.188s，插件启动阶段 NPE |
+| PR #58（回退 auth 租户改动） | 成功 | **失败于同一模块、同一阶段、同一 NPE** |
 
 回退后 auth 以**完全相同的方式**失败、gateway 同样成功，
-且该 PR 的 Unit & Integration Tests 与 Quality Gates 均 pass。
 故 auth 的 native 失败属**既有问题**（该 job 长期 skipped、从未真正验证过），
 **不作为本次改动的遗留问题记账**。
 
-剩余待办（既有问题，非本次引入）：定位 `cloud-infra-auth` 在 `[8/8] Creating image`
-被系统终止的原因。线索：四个内存档位全部同样失败、且无任何错误输出；
-本地无法作为验证环境（同机在 `CrossServiceFeignChain` 上也遇到
-`Native memory allocation (mmap) failed`，属本机沙箱限制）。
+### ⚠️ 对上述“同一种失败”的自我更正（2026-10-02 深夜复查）
+
+我先前把 auth 的失败描述为“停在 `[8/8] Creating image` 之后、被系统终止、无错误输出”，
+**这个描述是错的** —— `[8/8] Creating image` 那几行属于**刚刚成功完成的 gateway**，
+它紧跟在 gateway 的 `Finished generating ... in 9m 9s` 之后、Reactor Summary 之前。
+我把相邻模块的输出当成了 auth 的失败现场。
+
+取完整错误行后，auth 的真实失败是:
+
+```
+[INFO] cloud-infra-auth .................. FAILURE [  5.188 s]     ← 仅 5 秒
+[ERROR] Failed to execute goal org.graalvm.buildtools:native-maven-plugin:0.10.4:compile
+        (default-cli) on project cloud-infra-auth: Execution default-cli of goal
+        ...:compile failed: Cannot invoke "java.util.LinkedHashMap.get(Object)"
+        because "this.inodes" is null
+```
+
+**5.188 秒**意味着 **native-image 进程根本没被启动** ——
+所以它既不是“分析失败”，也不是“内存耗尽”“被系统终止”。我先前那套
+“四档内存配置都失败 ⇒ 内存参数不是关键变量”的推理**前提就是错的**：
+既然没跑到构建阶段，内存参数当然不可能是原因，那四档实测其实**没有区分力**。
+
+**唯一仍然成立的结论**是 PR #58 那条 A/B 对照：回退 auth 代码后仍以相同方式失败 ⇒
+与本次改动无关（该结论基于“失败模块与失败方式相同”，不依赖对失败原因的描述）。
+
+已按新认识改为**两个模块分两次 Maven 调用**（见上方 ci.yml 注释）：本地对照显示
+auth 单独构建能跑过该插件，故失败与“在 gateway 之后同会话构建”相关。
+
+剩余待办（既有问题，非本次引入）：定位 `cloud-infra-auth` 在
+`native-maven-plugin` 启动阶段的 NPE。已知的可靠线索：
+① 本地单独构建 auth 能跑过插件并真正启动 native-image；
+② 同一会话内 gateway 成功后 auth 报 `this.inodes is null`；
+③ 四档内存参数对该失败无区分力（因为根本没进入构建阶段）。
+本机因沙箱 mmap 限制无法验证修复效果，只能以 CI 为准。
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
