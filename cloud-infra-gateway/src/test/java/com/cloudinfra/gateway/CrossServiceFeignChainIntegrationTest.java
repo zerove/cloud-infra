@@ -304,22 +304,57 @@ class CrossServiceFeignChainIntegrationTest {
      */
     private static int awaitPort(Process proc, String name) throws Exception {
         Path logFile = procLogs.get(name);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(300);
+        // 300 秒不够: 2026-10-02 实测 system 启动耗时 **130 秒**、auth **91 秒**（CI runner 上,
+        // 叠加容器冷启动与机器负载还会更慢）。两个子进程**串行**启动, 叠加已超 220 秒,
+        // 逼近原 300 秒上限 —— 机器稍慢即超时, 是 flaky 的另一个来源。
+        // 现放宽到 600 秒, 让就绪判据(而非超时)成为唯一门槛。
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(600);
+        // 提到循环外: 超时消息里要报告"已见到端口但未见就绪标志"还是"两者都没见到",
+        // 这两种情况的排查方向完全不同。
+        int port = -1;
+        boolean started = false;
         while (System.nanoTime() < deadline) {
             if (!proc.isAlive()) {
                 throw new IllegalStateException(name + " 进程异常退出(exit=" + proc.exitValue()
                         + ")，日志尾部:\n" + tail(logFile));
             }
+            // **两阶段就绪**（2026-10-02 修正）:
+            // 先从 "Tomcat started on port" 取出端口号, **再等 "Started XxxApplication"**
+            // 才算就绪。原先只看到端口行就返回, 而 Spring Boot 的
+            // `Tomcat started` 早于 `Started XxxApplication` 数秒 —— 实测 auth 这段间隔
+            // 约 5 秒, 期间应用尚未完成初始化。请求落在窗口内会拿到
+            // 500 Internal Server Error（表现为登录偶发失败, 极难归因）。
+            //
+            // 直接从全部日志行里取端口号 + 单独判断就绪标志, 避免两次扫描。
             for (String line : readAllLinesSafe(logFile)) {
                 if (line.contains("Tomcat started on port")) {
                     int from = line.indexOf("port ") + 5;
                     String rest = line.substring(from).replaceAll("[()\\[\\]]", " ");
-                    return Integer.parseInt(rest.trim().split("\\s+")[0]);
+                    // 同一进程会打印两次: 业务端口与管理端口(server.port / management.server.port)。
+                    // 业务端口先打印, 故只在尚未取到时赋值, 避免被管理端口覆盖。
+                    if (port < 0) {
+                        port = Integer.parseInt(rest.trim().split("\\s+")[0]);
+                    }
                 }
+                // 日志里的类名是首字母大写的 <Name>Application, 而传入的 name 是小写
+                // ("system" / "auth"), 故需转换, 否则永远等不到而超时。
+                if (line.contains("Started "
+                        + Character.toUpperCase(name.charAt(0)) + name.substring(1)
+                        + "Application in ")) {
+                    started = true;
+                }
+            }
+            if (port > 0 && started) {
+                return port;
             }
             Thread.sleep(500);
         }
-        throw new IllegalStateException(name + " 启动超时(300s)，未捕获到 Tomcat 端口行，日志尾部:\n" + tail(logFile));
+        throw new IllegalStateException(name
+                + " 启动超时(600s)，端口=" + port + " 应用就绪标志=" + started
+                + "（需同时看到 Tomcat 端口行与 Started "
+                + Character.toUpperCase(name.charAt(0)) + name.substring(1)
+                + "Application），日志尾部:\n"
+                + tail(logFile));
     }
 
     private static List<String> readAllLinesSafe(Path file) {
