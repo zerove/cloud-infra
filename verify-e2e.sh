@@ -246,6 +246,35 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 else
   ok "跳过镜像构建 (--skip-build)"
 fi
+
+# 2b. 释放构建产物占用的磁盘
+#
+# 2026-10-03: run 37059177909 里cloud-search 启动失败, 真实根因不在业务代码:
+#   cloud-elasticsearch 日志: flood stage disk watermark [95%] exceeded ...
+#   free: 1.3gb[1.8%], all indices on this node will be marked read-only
+# ES 进入 flood stage 后拒绝一切写操作, search-service 建索引时被拒:
+#   DataAccessResourceFailureException: ... status: 400, [es/indices.exists]
+#
+# 磁盘为什么不够: mvn clean install 产出约 900MB target/, 6 个镜像又把
+# 同一批 jar COPY 进各自镜像层 —— 同一份数据存了两遍, 而脚本全程不清除。
+# 本机对照: 188 个镜像占 23.41GB。
+#
+# 镜像构建完成后 target/ 已无用途 (fat jar 已在镜像内), 此时删掉最安全。
+# 用 --fail 之外的显式判断: 删除失败不应中断 E2E, 但要如实报告。
+echo "[2b/7] 清理 target/ (fat jar 已入镜像, 释放磁盘) ..."
+TARGET_FREED=$(du -sm --exclude=node_modules */target cloud-infra-*/*/target 2>/dev/null \
+  | awk '{s+=$1} END {print s+0}')
+rm -rf -- */target cloud-infra-*/*/target 2>/dev/null || true
+LEFT=$(find . -maxdepth 3 -type d -name target -not -path './.git/*' 2>/dev/null | wc -l)
+if [ "$LEFT" -eq 0 ]; then
+  ok "已清理 target/, 释放约 ${TARGET_FREED}MB"
+else
+  echo "  ⚠️  仍有 $LEFT 个 target/ 残留 (未阻断, 但磁盘可能仍紧张)" >&2
+fi
+
+# 顺带清掉构建中间层: dangling 层在新镜像构建后必然产生,
+# 它们不占 tag 但实打实占盘。--force 才会连带清理未 tag 的层。
+podman image prune -f >/dev/null 2>&1 || true
 echo
 
 # 3. 启动基础设施 + 微服务
