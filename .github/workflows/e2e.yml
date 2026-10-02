@@ -111,6 +111,24 @@ jobs:
         run: python3 deploy/tests/test_config_sync_order.py
         shell: bash
 
+      - name: Guard Nacos config readability
+        # 根因: 顺序对了 ≠ 服务能读到。
+        #   CI run 37070818024 里 6 个容器全创建成功, gateway/auth/system/file
+        #   四个 healthy, 只有 notification/search 挂。真实日志:
+        #     WARN  config[dataId=notification-service.yaml] is empty
+        #     ERROR Could not resolve placeholder 'spring.datasource.url'
+        #
+        #   NacosConfigDataLoader 启动期只拉一次, 读到空就当"dataId 不存在"
+        #   继续启动且**不重试** —— 于是反复重启也读不到。
+        #   本地长期不复现, 因为 deploy/nacos/data 保留了上次运行的配置残留。
+        #
+        # ⚠️ 为什么上面的顺序守护抓不到:
+        #   它在上一轮**判定为通过**, 而缺陷依旧命中。顺序是**必要条件**,
+        #   代码只满足了必要条件就宣称完成。本守护盯充分性:
+        #   上传后必须回读确认非空, 且读不到要 exit 而非硬启动。
+        run: python3 deploy/tests/test_config_readback_gate.py
+        shell: bash
+
       - name: Guard image tag expansion
         # 根因: verify-e2e.sh 用 ${entry##*:} 拆 tag, 而 SERVICE_IMAGES 的元素
         #   含**两个**冒号（"路径:Dockerfile" + 镜像引用里的 ":latest"）,

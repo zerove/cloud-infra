@@ -356,6 +356,56 @@ for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
 done
 echo "=== 同步完成: $SYNC_COUNT 个配置 ==="
 
+# ⚠️ 上传返回成功 ≠ 微服务能读到（CI run 37070818024, 2026-10-03）。
+#
+#   那次 6 个微服务容器全部创建成功, gateway/auth/system/file 四个都 healthy,
+#   只有 notification 与 search 卡住。notification 的真实报错是:
+#     WARN  NacosConfigDataLoader - config[dataId=notification-service.yaml] is empty
+#     ERROR Could not resolve placeholder 'spring.datasource.url'
+#
+#   即它在 **22:15:48** 去拉配置时 Nacos 还是空的, 而配置同步在其后才完成。
+#   Spring Cloud Nacos 的 ConfigDataLoader 在启动期只拉一次:
+#   读到空就当"该 dataId 不存在"直接继续, **不会重试**。
+#   于是它带着一个残缺的环境永久启动失败 —— 反复重启也读不到,
+#   因为启动上下文里那份空结果已被固化。
+#
+#   为什么之前没被发现:
+#     · 本地 deploy/nacos/data 有残留配置, 配置早就在 Nacos 里, 读多少次都非空;
+#     · CI 每次都是全新 Nacos 目录, 才必然撞上。
+#   也就是说"配置同步早于微服务启动"这个顺序要求**还不够** ——
+#   顺序对了, 但中间缺了"同步确已落地"的确认。
+#
+# 这里显式回读每个 dataId, 非空才算通过。宁可多等几秒,
+# 也不要让服务带着残缺配置反复重启 —— 那种失败在日志里伪装成
+# "业务代码有 bug", 排查成本高一个量级。
+echo "=== 3c. 回读验证配置已落地 (非空) ==="
+CONFIG_READY=0
+MISSING_CFG=()
+for attempt in $(seq 1 15); do
+  MISSING_CFG=()
+  for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
+    [ -e "$file" ] || continue
+    filename=$(basename "$file")
+    content=$(curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=$filename&groupName=DEFAULT_GROUP&namespaceId=public" 2>/dev/null)
+    [ -n "$content" ] || MISSING_CFG+=("$filename")
+  done
+  if [ "${#MISSING_CFG[@]}" -eq 0 ]; then
+    CONFIG_READY=1
+    break
+  fi
+  echo "  配置尚未可读 ($attempt/15), 缺: ${MISSING_CFG[*]}"
+  sleep 2
+done
+if [ "$CONFIG_READY" -eq 1 ]; then
+  echo "  ✓ 全部配置可读, 微服务可以安全启动"
+else
+  # 这里必须 exit: 带着空配置启动服务, 失败会以"业务 bug"的面貌出现在
+  # 服务日志里, 而不是以"配置没同步好"的面貌出现在这里。
+  echo "❌ 配置在 Nacos 中不可读, 放弃启动微服务: ${MISSING_CFG[*]}" >&2
+  echo "   否则服务会报 Could not resolve placeholder, 误导为业务缺陷。" >&2
+  exit 1
+fi
+
 # 配置已在 Nacos 里, 此时才允许拉起微服务。
 if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   echo "=== 2b. 启动微服务 (配置已就绪) ==="
