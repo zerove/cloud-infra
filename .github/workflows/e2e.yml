@@ -138,18 +138,6 @@ jobs:
         run: python3 deploy/tests/test_es_diagnostics_index_names.py
         shell: bash
 
-      - name: Guard Lombok @Qualifier propagation
-        # 类里**早就写了** @Qualifier, 但写在字段上, 且类上有
-        # @RequiredArgsConstructor —— Lombok 不把它复制到构造参数,
-        # 而 Spring 注入看的是构造参数。故该注解从未生效（CI run 37074048182:
-        # "Parameter 8 ... required a single bean, but 2 were found"）。
-        #
-        # 任何基于 grep 的守护都会通过（源码里确实有那个词）,
-        # 唯一能区分的判据是**字节码里构造参数上有没有它**。
-        # 本守护跑 javap, 检查的正是 Spring 运行时实际看到的。
-        run: mvn -o -q -pl cloud-infra-modules/notification-service -DskipTests compile && python3 deploy/tests/test_lombok_qualifier_propagation.py
-        shell: bash
-
       - name: Guard image tag expansion
         # 根因: verify-e2e.sh 用 ${entry##*:} 拆 tag, 而 SERVICE_IMAGES 的元素
         #   含**两个**冒号（"路径:Dockerfile" + 镜像引用里的 ":latest"）,
@@ -194,6 +182,26 @@ jobs:
         env:
           # 让 compose 在 runner 上能找到 Nacos
           JAVA_OPTS: ""
+
+      - name: Guard Lombok @Qualifier propagation
+        # 类里**早就写了** @Qualifier, 但写在字段上, 且类上有
+        # @RequiredArgsConstructor —— Lombok 不把它复制到构造参数,
+        # 而 Spring 注入看的是构造参数。故该注解从未生效（CI run 37074048182:
+        # "Parameter 8 ... required a single bean, but 2 were found"）。
+        #
+        # 任何基于 grep 的守护都会通过（源码里确实有那个词）,
+        # 唯一能区分的判据是**字节码里构造参数上有没有它**。
+        # 本守护跑 javap, 检查的正是 Spring 运行时实际看到的。
+        #
+        # ⚠️ 位置很关键: 必须放在 verify-e2e.sh **之后**。
+        #   它需要 target/classes 里的字节码, 而那要等编译完成;
+        #   之前放在 "Cache Maven packages" 之前（run 37076989259）, 既没有
+        #   字节码也没有依赖（mvn -o 报 Non-resolvable import POM）, 直接红。
+        #   `if: always()` 保证 E2E 本步失败时它仍执行 ——
+        #   否则就变成"只有全绿才检查的假门禁"。
+        if: always()
+        run: python3 deploy/tests/test_lombok_qualifier_propagation.py
+        shell: bash
 
       - name: Install Python websockets client
         # Notification WebSocket e2e 端到端测试 (commit af10741)

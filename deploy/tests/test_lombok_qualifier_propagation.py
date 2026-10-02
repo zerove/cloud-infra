@@ -80,6 +80,21 @@ def main() -> int:
         print(f"FAIL 源文件不存在: {SRC}")
         return 1
 
+    # ⚠️ 没有编译产物时**跳过并说明原因**, 不能判红。
+    #   第一版把这个守护放在 E2E 早期步骤里（"Cache Maven packages" 之前）,
+    #   那时 target/classes 还不存在, 于是 javap 失败 -> run 37076989259 直接红。
+    #   但"没编译过"不是"注解没生效" —— 两者必须分开,
+    #   否则这个守护就只能放在编译之后, 失去前置拦截的价值。
+    #   故: 有字节码则判定, 无字节码则跳过; 调用方需自行确认会编译。
+    class_file = CLASSES / "com" / "cloudinfra" / "notification" / "service" / \
+        "impl" / "NotificationServiceImpl.class"
+    if not class_file.exists():
+        print(
+            f"SKIP 未编译（{class_file.relative_to(ROOT)} 不存在）—— "
+            "本次不判定。请在编译之后运行本守护。"
+        )
+        return 0
+
     src = SRC.read_text(encoding="utf-8")
     block = constructor_block()
 
