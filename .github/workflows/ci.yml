@@ -249,7 +249,15 @@ jobs:
           path: artifacts/
 
       - name: Set up Podman
-        uses: redhat-actions/podman-installer@v1
+        # 2026-10-02 修正: 原为 `redhat-actions/podman-installer@v1`，该 action 已被
+        # **重命名**为 `podman-install`(经 GitHub API 核实: podman-installer 返回 404,
+        # 而 redhat-actions/podman-install 存在且有 v1/v1.1.x 标签)。
+        #
+        # 此缺陷一直存在但从未暴露: 本 job `needs` native-build, 而 native-build
+        # 在 2026-10-01 之前长期处于 skipped, 于是本 job 也一直被 skipped ——
+        # 典型的"依赖链上游坏掉, 把自己也伪装成没验证过"。
+        # native-build 修好后本 job 首次真正执行, 才露出这个引用失效。
+        uses: redhat-actions/podman-install@v1
 
       - name: Login to GitHub Container Registry
         uses: redhat-actions/podman-login@v2
