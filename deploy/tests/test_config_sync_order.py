@@ -126,14 +126,22 @@ def resolve_up_args(lines: list[tuple[int, str]]) -> tuple[int | None, list[str]
 
 
 def find_microservice_start_line(lines: list[tuple[int, str]]) -> int | None:
-    """微服务容器启动的行号。
+    """**微服务**容器启动的行号 (不是任意 up -d)。
 
-    两种形态都要认:
-      1. `podman-compose ... up -d ${FULL_SERVICES[@]}` (按服务名启动)
-      2. `podman-compose ... up -d` (--profile full, 全部一起起) —— 这种最危险,
-         因为它看起来只像"启动基础设施", 实际把微服务也拉起来了。
+    ## 为什么不能把所有 up -d 都当启动点
 
-    排除 down / --dry-run / stop, 以及只用来探测能力的 `podman-compose --help`。
+    修复后的 up.sh 有两次 up -d:
+      1. `podman-compose ... up -d`                              (只起基础设施, 安全)
+      2. `podman-compose ... --profile full ... "${UP_ARGS[@]}"` (起微服务, 危险)
+
+    第一版守护把两者都算作启动点, 结果修复后仍报红 —— 即一个会因为"已经修好"
+    而误报的守护。第一版报红时理由也是错的 (它报的是找不到启动点, 不是竞态)。
+    假门禁比没有门禁更糟: 它要么被忽略, 要么逼人改坏代码去迎合它。
+
+    所以判据必须是**这条命令会不会拉起微服务**:
+      - 带 `--profile full`  => 会 (profile 里含 6 个微服务)
+      - 展开 `"${UP_ARGS[@]}"` => 会 (值来自 compose_up_args)
+      - 光秃秃的 `up -d`   => 不会 (默认 profile 只有基础设施)
     """
     up_args_kind, _ = resolve_up_args(lines)
     if up_args_kind is None:
@@ -147,14 +155,36 @@ def find_microservice_start_line(lines: list[tuple[int, str]]) -> int | None:
             continue
         if "--help" in line:
             continue
-        if not re.search(r"(^|\s)up(\s+-\w+)*\s+-d(\s|$)", line):
-            # 命令本身没有字面 up -d 时, 必须是展开 UP_ARGS 的那一条。
-            if "UP_ARGS" not in line:
-                continue
+
+        starts_microservices = "--profile full" in line or "UP_ARGS" in line
+        if not starts_microservices:
+            continue
+
+        # 防御: 确认这确实是一条 up 命令而不是别的东西。
+        if not (re.search(r"(^|\s)up(\s+-\w+)*\s+-d(\s|$)", line) or "UP_ARGS" in line):
+            continue
         candidates.append(i)
     if not candidates:
         return None
     return min(candidates)
+
+
+def find_infra_start_line(lines: list[tuple[int, str]]) -> int | None:
+    """基础设施启动行号 —— 仅用于诊断输出, 不参与判定。
+
+    它本身是安全的 (不拉微服务), 但如果它携带 --profile full 就同样是竞态,
+    所以还是记下来看一眼。
+    """
+    for i, line in lines:
+        if "podman-compose" not in line:
+            continue
+        if " down" in f" {line}" or "--help" in line or "dry-run" in line:
+            continue
+        if "--profile full" in line or "UP_ARGS" in line:
+            continue
+        if re.search(r"(^|\s)up(\s+-\w+)*\s+-d(\s|$)", line):
+            return i
+    return None
 
 
 def find_profile_up_args_line(src: str) -> int | None:
@@ -180,32 +210,36 @@ def main() -> int:
 
     upload_line = find_config_upload_line(lines)
     start_line = find_microservice_start_line(lines)
+    infra_line = find_infra_start_line(lines)
     up_args_kind, up_args = resolve_up_args(lines)
 
     print("=== up.sh 执行顺序分析 ===")
-    print(f"  配置上传调用点   : {upload_line}")
-    print(f"  容器启动调用点   : {start_line}")
-    print(f"  compose_up_args  : {' '.join(up_args) or '(未解析)'} (kind={up_args_kind})")
+    print(f"  基础设施启动点 : {infra_line}")
+    print(f"  配置上传调用点 : {upload_line}")
+    print(f"  微服务启动点   : {start_line}")
+    print(f"  compose_up_args: {' '.join(up_args) or '(未解析)'} (kind={up_args_kind})")
 
     failures = []
 
     if upload_line is None:
         failures.append("找不到 nacos_config_upload 调用点, up.sh 结构可能已变, 需人工确认")
     if start_line is None:
-        failures.append("找不到 podman-compose up -d 调用点, up.sh 结构可能已变, 需人工确认")
-
-    if upload_line is not None and start_line is not None and upload_line < start_line:
-        print(f"\nFAIL: 配置同步 (行 {upload_line}) 早于容器启动 (行 {start_line}) —— 这才是正确顺序")
-        failures.append("检测逻辑疑似反向, 需人工确认")
+        failures.append(
+            "找不到会拉起微服务的 podman-compose 命令 (带 --profile full 或展开 "
+            "UP_ARGS), up.sh 结构可能已变, 需人工确认"
+        )
 
     if upload_line is not None and start_line is not None:
         if upload_line > start_line:
             failures.append(
-                f"竞态: 容器启动在行 {start_line}, 但配置上传在行 {upload_line} —— "
+                f"竞态: 微服务启动在行 {start_line}, 但配置上传在行 {upload_line} —— "
                 "微服务会比配置先启动, 首次部署必然读不到配置"
             )
         else:
-            print(f"\nOK: 配置同步 (行 {upload_line}) 早于容器启动 (行 {start_line})")
+            print(
+                f"\nOK: 配置同步 (行 {upload_line}) 早于微服务启动 (行 {start_line})"
+                + (f", 基础设施启动 (行 {infra_line}) 在前且不拉微服务" if infra_line else "")
+            )
 
     if up_args_kind == 2:
         print(
