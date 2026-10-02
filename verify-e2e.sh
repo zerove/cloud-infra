@@ -50,7 +50,12 @@ es_diagnostics() {
   es_port=$(podman port cloud-elasticsearch 9200/tcp 2>/dev/null | head -1 | sed 's/.*://')
   if [ -n "$es_port" ]; then
     es="http://127.0.0.1:${es_port}"
-    for idx in oper_log search_log; do
+    # ⚠️ 索引名必须与 @Document(indexName=...) 一致, 否则探的是一个不存在的索引。
+    #   实测只有两个: OperLogDocument -> sys_oper_log, DeviceTelemetryDocument -> iot_telemetry。
+    #   我第一版写的是 oper_log/search_log, 第二版按**类名**猜成 device_telemetry ——
+    #   两个都不存在, 探它们恒返回 404, 会得出"ES 正常"的错误结论。
+    #   守护: test_es_diagnostics_index_names.py 直接比对 Java 侧, 防再次漂移。
+    for idx in sys_oper_log iot_telemetry; do
       printf 'HEAD /%s -> %s\n' "$idx" \
         "$(curl -s -o /dev/null -w '%{http_code}' -I "$es/$idx" --max-time 10 2>&1)" >&2
     done
