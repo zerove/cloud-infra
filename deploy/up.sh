@@ -420,6 +420,58 @@ for i in $(seq 1 90); do
     sleep 2
 done
 
+# 7b. 调低 ES 磁盘水位阈值
+#
+# 2026-10-03: CI E2E run 37059177909 里 cloud-search 启动失败, 根因不在业务代码:
+#   cloud-elasticsearch 日志:
+#     flood stage disk watermark [95%] exceeded ...
+#     free: 1.3gb[1.8%], all indices on this node will be marked read-only
+#   search-service 侧:
+#     DataAccessResourceFailureException: status: 400, [es/indices.exists]
+#
+# 关键不只在百分比, 更在 ES 的 max_headroom 语义:
+# 实际触发线 = max(百分比, 总容量 - max_headroom)。默认
+# flood_stage.max_headroom=100GB / high.max_headroom=150GB,
+# 而 runner 磁盘总共才十几 GB —— 对 CI 环境而言这套官方默认值
+# 相当于"几乎立刻判定磁盘已满"。那是为大规模集群设计的, 用在小磁盘
+# 测试环境必然误判。
+#
+# ⚠️ 为什么用 API 而非环境变量或 elasticsearch.yml（两者都实测无效）:
+#   ① 环境变量 `cluster.routing.*` —— 实测容器内确实存在该变量, 但
+#      _cluster/settings 读回仍是 95%/100GB, 即 ES 完全不认;
+#   ② `elasticsearch.yml` 挂载 —— 文件确实进了容器, 集群也能正常起,
+#      但把 flood_stage 设为 0% 时 ES 报错说的是 "high disk watermark
+#      [90%]" 而非 yml 里写的 98%, 证明 yml 根本没被读取;
+#   ③ `command: elasticsearch -E ...` —— ES 8.18 的 server-cli 会丢弃 -E,
+#      容器内 ps 可见 -E 没进入 java 进程;
+#   ④ `command: -E ...` —— 直接启动失败:
+#      "exec: -E: invalid option"。
+#   唯一实测有效的是 PUT _cluster/settings: 返回 acknowledged:true,
+#   读回值与写入完全一致。
+#   用 persistent 而非 transient —— transient 语义重启即失。
+echo "=== 7b. 调整 ES 磁盘水位阈值 (小磁盘环境) ==="
+ES_SETTINGS_PAYLOAD='{"persistent":{
+  "cluster.routing.allocation.disk.watermark.low":"97%",
+  "cluster.routing.allocation.disk.watermark.high":"98%",
+  "cluster.routing.allocation.disk.watermark.flood_stage":"99%",
+  "cluster.routing.allocation.disk.watermark.low.max_headroom":"1GB",
+  "cluster.routing.allocation.disk.watermark.high.max_headroom":"1GB",
+  "cluster.routing.allocation.disk.watermark.flood_stage.max_headroom":"1GB",
+  "cluster.routing.allocation.disk.watermark.flood_stage.frozen":"99%",
+  "cluster.routing.allocation.disk.watermark.flood_stage.frozen.max_headroom":"1GB"
+}}'
+if ES_RESP=$(curl -sf -X PUT http://localhost:9200/_cluster/settings \
+      -H 'Content-Type: application/json' -d "$ES_SETTINGS_PAYLOAD" 2>/dev/null) \
+   && echo "$ES_RESP" | grep -q '"acknowledged":true'; then
+  echo "  ✓ ES 磁盘水位阈值已下调 (flood_stage=99%, max_headroom=1GB)"
+else
+  # 不阻断: 这是兜底优化, 设不上会退回原默认值并再次触发 flood stage,
+  # 所以必须显式告警 —— 静默失败等于把同一个坑留给下一个人。
+  echo "  ⚠️  ES 磁盘水位阈值设置失败: ${ES_RESP:-无响应}" >&2
+  echo "      小磁盘环境 (如 CI runner) 下 ES 可能再次进入 flood stage," >&2
+  echo "      表现为 search-service 报 indices.exists status 400。" >&2
+fi
+
 # 等待 Prometheus 就绪
 echo "=== 8. 等待 Prometheus 就绪 ==="
 for i in $(seq 1 10); do
