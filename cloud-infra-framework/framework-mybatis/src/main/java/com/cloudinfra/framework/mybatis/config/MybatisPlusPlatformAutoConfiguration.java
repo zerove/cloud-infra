@@ -17,7 +17,6 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -40,7 +39,32 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 @AutoConfiguration
 @AutoConfigureAfter(com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration.class)
 @ConditionalOnClass({ SqlSessionFactory.class, MybatisSqlSessionFactoryBean.class })
-@ConditionalOnSingleCandidate(DataSource.class)
+// 类级**不再**加任何 DataSource 条件注解 (2026-10-02 修正)。
+//
+// 症状: 子进程(system-module exec.jar)启动即失败, Mapper 报
+//   "Property 'sqlSessionFactory' or 'sqlSessionTemplate' are required";
+//   启动日志里 DataSource/Flyway/Hikari 一个字都没有。
+//
+// 根因: 原先类上有 @ConditionalOnSingleCandidate(DataSource.class)。
+// Spring 的 ConditionEvaluationReport 写着
+//   MybatisPlusPlatformAutoConfiguration: Did not match:
+//     @ConditionalOnSingleCandidate (types: javax.sql.DataSource) did not find any beans
+// 而**同一个报告里** dataSource bean 已经存在 —— 其他用 @ConditionalOnBean(DataSource)
+// 的自动配置(DataSourcePoolMetricsAutoConfiguration、FlywayAutoConfiguration)
+// 都写着 "found bean 'dataSource'"。
+//
+// 即: bean **定义**已存在, 但 @ConditionalOnSingleCandidate 在自动配置求值阶段
+// 判定为"无单候选"(它需要候选 bean 完成 @Primary 解析, 而此时另一个 jar 里的
+// DataSourceOptimizationAutoConfiguration 刚注册定义、尚未实例化), 于是整支被跳过。
+//
+// 为什么不用 @ConditionalOnBean 替换: 同样依赖跨 jar 求值顺序,
+// 在局部 ApplicationContextRunner 下会判为不满足(已实测), 属于换一种方式再踩坑。
+// 真正需要 DataSource 的是 sqlSessionFactory(@Bean 方法), 它已用
+// `DataSource dataSource` 参数注入 —— 缺 bean 时 Spring 在**实例化阶段**报
+// 清晰的 NoSuchBeanDefinitionException, 比类级条件静默跳过整支要好得多。
+//
+// 为什么此前从未暴露: 该缺陷只在**独立进程 + 完整自动配置链**下出现;
+// 依赖 ApplicationContextRunner 的局部测试走不到跨 jar 的排序路径。
 public class MybatisPlusPlatformAutoConfiguration {
 
     @Bean
