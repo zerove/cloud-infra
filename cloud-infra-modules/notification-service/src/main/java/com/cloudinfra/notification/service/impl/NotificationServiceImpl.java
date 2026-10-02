@@ -20,7 +20,6 @@ import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.util.TemplateProcessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -38,7 +37,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class NotificationServiceImpl implements INotificationService {
 
     private final NotificationMapper notificationMapper;
@@ -52,8 +50,7 @@ public class NotificationServiceImpl implements INotificationService {
     /**
      * 异步投递执行器。
      *
-     * ⚠️ 必须显式 {@code @Qualifier}（CI E2E run 37059177909 实测）。
-     * {@code AsyncTaskExecutor} 在上下文里有**两个**候选:
+     * <p>⚠️ {@code AsyncTaskExecutor} 在上下文里有**两个**候选:
      * <ul>
      *   <li>{@code applicationTaskExecutor} —— 本项目的
      *       {@code VirtualThreadConfig}（虚拟线程）</li>
@@ -70,10 +67,51 @@ public class NotificationServiceImpl implements INotificationService {
      * 那个候选 Bean 根本没被注册。CI 每次 down 后数据目录全新，必然命中。
      *
      * <p>不要改成 {@code @Primary}：那会影响全局其他注入点，
-     * 而这里只需要明确"我要的是哪一个"。
+     * 而这里只需要明确“我要的是哪一个”。
      */
-    @Qualifier("applicationTaskExecutor")
     private final AsyncTaskExecutor taskExecutor;
+
+    /**
+     * 显式构造器 —— 不能用 Lombok 的 {@code @RequiredArgsConstructor}。
+     *
+     * <p><b>这是本类先前“修过但从未生效”的原因</b>（CI run 37074048182, 2026-10-03）。
+     * 之前那次修复把 {@code @Qualifier} 加在**字段**上，看起来合理、编译通过、
+     * 单测也绿；但 Lombok 生成的构造器**不复制字段上的 {@code @Qualifier}
+     * 到构造参数**，而 Spring 注入看的是**构造参数**。
+     *
+     * <p>实测证据（Lombok 1.18.40 + JDK 25，本机跑的探针）:
+     * <pre>
+     *   字节码: NotificationServiceImpl 构造器参数级 @Qualifier 数 = 0
+     *   探针:  @RequiredArgsConstructor + 字段 @Qualifier -> 参数级 0 个
+     *   加上 lombok.config copyableAnnotations += Qualifier -> 1 个
+     * </pre>
+     *
+     * <p>选显式构造器而非 {@code lombok.config}：后者是全局开关，
+     * 会改变全仓 Lombok 生成行为；这里只需一处明确意图，作用域越小越好。
+     *
+     * <p>守护: {@code LombokQualifierPropagationTest} —— 若有人改回
+     * {@code @RequiredArgsConstructor}，它会直接红。
+     */
+    public NotificationServiceImpl(
+            NotificationMapper notificationMapper,
+            NotificationLogMapper logMapper,
+            NotificationTemplateMapper templateMapper,
+            NotificationRouter notificationRouter,
+            ScheduledNotificationMapper scheduleMapper,
+            NotificationQuotaService quotaService,
+            ObjectMapper objectMapper,
+            RabbitTemplate rabbitTemplate,
+            @Qualifier("applicationTaskExecutor") AsyncTaskExecutor taskExecutor) {
+        this.notificationMapper = notificationMapper;
+        this.logMapper = logMapper;
+        this.templateMapper = templateMapper;
+        this.notificationRouter = notificationRouter;
+        this.scheduleMapper = scheduleMapper;
+        this.quotaService = quotaService;
+        this.objectMapper = objectMapper;
+        this.rabbitTemplate = rabbitTemplate;
+        this.taskExecutor = taskExecutor;
+    }
 
 
     @Override

@@ -138,6 +138,18 @@ jobs:
         run: python3 deploy/tests/test_es_diagnostics_index_names.py
         shell: bash
 
+      - name: Guard Lombok @Qualifier propagation
+        # 类里**早就写了** @Qualifier, 但写在字段上, 且类上有
+        # @RequiredArgsConstructor —— Lombok 不把它复制到构造参数,
+        # 而 Spring 注入看的是构造参数。故该注解从未生效（CI run 37074048182:
+        # "Parameter 8 ... required a single bean, but 2 were found"）。
+        #
+        # 任何基于 grep 的守护都会通过（源码里确实有那个词）,
+        # 唯一能区分的判据是**字节码里构造参数上有没有它**。
+        # 本守护跑 javap, 检查的正是 Spring 运行时实际看到的。
+        run: mvn -o -q -pl cloud-infra-modules/notification-service -DskipTests compile && python3 deploy/tests/test_lombok_qualifier_propagation.py
+        shell: bash
+
       - name: Guard image tag expansion
         # 根因: verify-e2e.sh 用 ${entry##*:} 拆 tag, 而 SERVICE_IMAGES 的元素
         #   含**两个**冒号（"路径:Dockerfile" + 镜像引用里的 ":latest"）,
