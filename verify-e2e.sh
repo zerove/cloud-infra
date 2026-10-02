@@ -289,6 +289,12 @@ echo "[3/7] 启动基础设施 + 微服务 (deploy/up.sh --full) ..."
 UP_LOG="$SCRIPT_DIR/.e2e-up.log"
 if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
   ok "compose 启动 + Nacos 配置同步完成"
+  # ⚠️ 成功路径同样要留档（2026-10-03）。up.sh 返回 0 **不等于**微服务起来了:
+  # CI run 37064502008 里 up.sh 报 PASS, 而 6 个微服务容器全部 absent
+  # (不是 Exited, 是压根没创建) —— 失败点在步骤 [5/7], 于是成功路径下
+  # $UP_LOG 被后续流程覆盖, artifact 里查不到 podman-compose 的真实输出,
+  # 只能靠猜。保留一份不花钱, 省掉的是一整轮 CI。
+  cp "$UP_LOG" "$SCRIPT_DIR/.e2e-up-ok.log"
 else
   # ⚠️ 措辞不要写成 "compose 启动失败": up.sh --full 后面还有 9 步等待
   # (Nacos / PostgreSQL / Redis / RabbitMQ / ES / Prometheus / Sentinel / 配置同步),
@@ -360,6 +366,30 @@ else
   fail "未 healthy:$MISSING"
   echo "  容器状态:" >&2
   podman ps -a --format '{{.Names}}\t{{.Status}}' 2>&1 | grep '^cloud-' >&2
+  # ⚠️ "absent" 与 "unhealthy" 是两类完全不同的故障, 处理方式也不同（2026-10-03）。
+  #    absent = 容器压根没被创建 ⇒ 问题在 **podman-compose 启动这一步**,
+  #    而不在服务本身。此时 dump_container_diagnostics 只能打印基础设施的日志
+  #    (它遍历存在的容器), 对"没创建的容器"一个字都吐不出来 ——
+  #    run 37064502008 就是这样: 6 个微服务全 absent, 日志里零线索。
+  #    故这里显式区分, 并把 compose 自己的输出摆出来。
+  case "$MISSING" in
+    *absent*)
+      echo >&2
+      echo "  ⚠️ 有容器状态为 absent —— 它们从未被创建, 故障在 podman-compose 启动," >&2
+      echo "     而不在服务内部。compose 自己的输出:" >&2
+      echo "--- podman-compose ps ---" >&2
+      podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps -a >&2 2>&1 || true
+      echo "--- up.sh 完整日志（成功路径留档）---" >&2
+      if [ -s "$SCRIPT_DIR/.e2e-up-ok.log" ]; then
+        # 只取 2b 段: 前面是基础设施 up 的刷屏, 与本故障无关。
+        sed -n '/2b\. 启动微服务/,/=== 4\./p' "$SCRIPT_DIR/.e2e-up-ok.log" >&2 || true
+        echo "--- up.sh 末尾 25 行 ---" >&2
+        tail -25 "$SCRIPT_DIR/.e2e-up-ok.log" >&2
+      else
+        echo "  (无留档 —— 该 run 早于本次修复, up.sh 日志未被保留)" >&2
+      fi
+      ;;
+  esac
   # 2026-10-02: 这个分支原先只打印状态, 不打印日志。
   # 结果 run 37033739185 上 4 个服务 Exited(1) 却拿不到任何异常,
   # 而采日志的代码只存在于 3/7 的失败分支 —— 即"诊断修好了却在下一层失效",

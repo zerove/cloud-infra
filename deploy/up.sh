@@ -362,6 +362,33 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   mapfile -t UP_ARGS < <(compose_up_args)
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
     ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+
+  # ⚠️ podman-compose 返回 0 **不等于**微服务起来了（2026-10-03, CI run 37064502008）。
+  #   那次 up.sh 报 PASS、verify-e2e.sh 也据此判 PASS, 而 6 个微服务容器
+  #   全部 absent —— 压根没被创建。compose 1.0.6 在 profile 过滤等情形下
+  #   会"安静地什么都不做"却仍然 exit 0。
+  #
+  #   不加断言的后果: 这是一条**假门禁** —— 上游报成功、下游才发现没起来,
+  #   而两者之间的日志已被重定向丢弃, 排障只能靠猜。
+  #   故这里必须验证"容器确实存在", 而不能只信退出码。
+  #
+  # 只判存在不判 healthy: 健康是另一回事, 由后续就绪等待与 E2E 门禁负责。
+  # 也不打印 podman-compose 的输出(刷屏且无信息量), 有缺失才报。
+  sleep 1
+  MISSING_SVCS=()
+  for svc in "${FULL_SERVICES[@]}"; do
+    podman container exists "cloud-$svc" 2>/dev/null || MISSING_SVCS+=("$svc")
+  done
+  if [ "${#MISSING_SVCS[@]}" -gt 0 ]; then
+    echo "❌ 微服务容器未创建: ${MISSING_SVCS[*]}" >&2
+    echo "   compose 已 exit 0 但这些容器不存在 ⇒ 启动参数被静默忽略。" >&2
+    echo "   排查: FULL=$FULL, compose_supports_profile=$(compose_supports_profile && echo yes || echo no)" >&2
+    echo "   实际 up 参数: ${UP_ARGS[*]}" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+      ps -a >&2 2>&1 || true
+    exit 1
+  fi
+  echo "  ✓ ${#FULL_SERVICES[@]} 个微服务容器已创建"
 fi
 
 # 等待 PostgreSQL 就绪
