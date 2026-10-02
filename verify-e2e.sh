@@ -47,7 +47,12 @@ dump_container_diagnostics() {
     [ -n "$c" ] || continue
     state=$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)
     echo "### $c  [$state]" >&2
-    if echo "$state" | grep -q "exit=[1-9]"; then
+    # ⚠️ 不只给已退出的容器打详细日志（2026-10-03 修正, 依据 run 37057477434）。
+    # 那次修完配置竞态后, 四个服务从 Exited(1) 变成 Up + unhealthy —— 竞态确实
+    # 消失了, 但 5/7 仍超时失败。而本诊断只在 exit=1 时展开日志, 于是
+    # "Up 但未就绪" 这种最需要看日志的情况反而一个字都没输出。
+    # 现在对 running / unhealthy 也展开, 否则会误以为"没错误信息 = 没问题"。
+    if ! echo "$state" | grep -q "exit=0"; then
       # 2026-10-02: 启动失败的真正原因在日志**首部**，不在尾部。
       # Spring 的 NoUniqueBeanDefinitionException / BeanCreationException 把 Bean 名与
       # "expected single matching bean but found N" 放在异常首段，尾部只剩
@@ -92,6 +97,13 @@ dump_container_diagnostics() {
       podman logs --tail -1 "$c" 2>&1 \
         | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|sun\.misc\.Unsafe" \
         | tail -25 >&2 || true
+      # 启动进度信号: 只看错误行会漏掉"没报错但也没起来"这一类。
+      # run 37057477434 就是这种 —— 无任何异常, 但 5/7 仍超时。
+      # 有了这几行才能区分"卡在某一步"与"已经起来只是健康检查没绿"。
+      echo "--- $c 启动进度（Tomcat/Started/readiness/健康）---" >&2
+      podman logs --tail -1 "$c" 2>&1 \
+        | grep -E 'Tomcat (initialized|started)|Started [A-Za-z]+ in |readinessState|AvailabilityChangeEvent|LiveReload' \
+        | tail -8 >&2 || echo "    (无启动完成信号 —— 服务尚未走到 Tomcat 启动)" >&2
     fi
     podman logs --tail 12 "$c" >&2 2>&1 || true
   done
@@ -287,7 +299,21 @@ echo
 # 逐个按容器名判定, 而不是只数 `podman ps` 里 healthy 的总数:
 # 后者会让"基础设施里有 6 个健康容器"冒充"6 个微服务都健康"。
 echo "[5/7] 等待 ${#MICROSERVICES[@]} 个微服务 healthy ..."
-DEADLINE=$(( $(date +%s) + 240 ))
+# 预算从 240s 提到 600s（2026-10-03，依据 run 37057477434 的真实观测）。
+#
+# 证据不是"感觉慢", 而是那次 run 的容器状态:
+#   cloud-auth Up 5 minutes (unhealthy) / cloud-file Up 4 minutes (unhealthy)
+#   cloud-notification Up 4 minutes (unhealthy) / cloud-system Up 4 minutes (starting)
+# 即 240s 预算耗尽时, 服务仍在正常启动途中, 且**没有任何异常日志**
+# （该 run 全文 "Could not resolve placeholder" 命中数为 0）。
+# 本地同配置实测启动跨度约 968s（但本机负载 9.12/12 核, 容器内存一度到
+# 461.6/469.8MB, 不能直接外推到 runner）, 故取 600s 作为
+# “比实测短、比旧预算宽”的折中, 而不是直接照抄 968。
+#
+# ⚠️ 同时修正一个诊断误导: 预算耗尽时服务可能只是在启动, 不是挂了。
+#    所以下面失败分支会打印启动进度信号（Tomcat/Started/readiness）,
+#    否则“没错误信息”会被误读成“没问题”。
+DEADLINE=$(( $(date +%s) + 600 ))
 MISSING=""
 while :; do
   MISSING=""
