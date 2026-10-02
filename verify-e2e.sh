@@ -36,10 +36,32 @@ fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
 # (Elasticsearch 首启要 30s+, 且 mem_limit=1g 在 runner 上可能直接被 OOM kill 后重启)。
 dump_container_diagnostics() {
   echo "--- 未就绪容器的状态与日志 ---" >&2
-  local c
-  for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null | head -12); do
+  local c state
+  # ⚠️ 不得用 `head -N` 截断容器列表（2026-10-02 修复）。
+  # compose 声明了 23 个容器，`podman ps -a` 的返回顺序按创建时间，
+  # 实测 cloud-notification 排在**第 14 位** —— 而旧代码只取前 12 个,
+  # 恰好把唯一失败的那个服务**整个跳过**，诊断输出里根本没有它的日志。
+  # 这是比"只打tail"更隐蔽的假门禁: 看上去有诊断, 实际漏掉了目标。
+  # 改为遍历全部容器, 不做数量截断。
+  for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null); do
     [ -n "$c" ] || continue
-    echo "### $c  [$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)]" >&2
+    state=$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)
+    echo "### $c  [$state]" >&2
+    if echo "$state" | grep -q "exit=[1-9]"; then
+      # 2026-10-02: 启动失败的真正原因在日志**首部**，不在尾部。
+      # Spring 的 NoUniqueBeanDefinitionException / BeanCreationException 把 Bean 名与
+      # "expected single matching bean but found N" 放在异常首段，尾部只剩
+      # "Action:/Consider marking ... @Primary" 这段对任何多 Bean 场景都会打印的通用建议。
+      # 此前只取tail 12，导致 run 37036943534 上 cloud-notification 的
+      # [exited exit=1] 一个 Bean 名都没拿到 —— 而这恰恰是唯一的失败服务。
+      # 故对已退出的容器同时打印首部（异常通常在开头 60 行内）。
+      # ⚠️ podman logs **没有** --head 参数（只有 --tail/--since/--until），
+      # 实测 `podman logs --head 60` 直接报 "unknown flag" 并输出空内容 ——
+      # 那样等于既没报错退出也没拿到日志，是最坏的一种假门禁。
+      # 正确写法：--tail -1 输出全部，再用 sed 取首部。
+      echo "--- $c 日志首 60 行（启动失败的真实原因在这里）---" >&2
+      podman logs --tail -1 "$c" 2>&1 | sed -n '1,60p' >&2 || true
+    fi
     podman logs --tail 12 "$c" >&2 2>&1 || true
   done
 }
