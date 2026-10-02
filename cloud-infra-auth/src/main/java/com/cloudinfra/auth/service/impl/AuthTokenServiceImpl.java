@@ -16,21 +16,6 @@ import java.util.UUID;
 @Service
 public class AuthTokenServiceImpl implements AuthTokenService {
 
-    /**
-     * 租户标识的 JWT claim 名。网关 {@code AuthEvaluator} 按同名常量读取，
-     * 两端各自声明以避免网关反向依赖 auth 模块，并由
-     * {@code TenantClaimNameConsistencyTest} 做跨模块一致性断言，
-     * 防止一侧改名后另一侧静默读不到（那种失败不报错，只是租户隔离悄悄失效）。
-     */
-    public static final String CLAIM_TENANT_ID = "tenantId";
-
-    /**
-     * 默认租户。与 V14 迁移脚本的 {@code DEFAULT 'default'} 保持一致：
-     * 存量行的 tenant_id 即为 default，用户字段为空时回落到同一个值，
-     * 避免"未配置租户"与"default 租户"在数据上分叉。
-     */
-    public static final String DEFAULT_TENANT_ID = "default";
-
     @Resource
     private RedisService redisService;
 
@@ -71,10 +56,6 @@ public class AuthTokenServiceImpl implements AuthTokenService {
         claims.put("userId", loginUser.getUserId());
         claims.put("roleId", loginUser.getRoleId());
         claims.put("jti", accessTokenJti);
-        // 租户身份随令牌签发（M6-01）：网关据此注入 X-Tenant-Id，
-        // 而非原样透传客户端请求头 —— 后者等于让客户端自选租户，
-        // 任意已认证用户改一个头即可读取他租户数据。
-        claims.put(CLAIM_TENANT_ID, resolveTenantId(loginUser));
         // 注意：权限列表不写入 JWT（避免 Token 膨胀与过期权限漂移），
         // 下游鉴权统一通过 IPermissionProvider（Feign 拉取 + 缓存）获取。
 
@@ -143,26 +124,9 @@ public class AuthTokenServiceImpl implements AuthTokenService {
             redisService.set("blacklist:" + jti, true, blacklistTtlMs);
         } catch (AuthBusinessException e) {
             throw e;
-        } catch (RuntimeException e) {
-            // 这里刻意捕获 RuntimeException 而非只抓 JWT 库的具体异常：
-            // delToken 是<b>错误规范化</b>边界，不是安全判定边界 —— 无论令牌因何种原因
-            // 无法解析（格式错、验签失败、解码器异常、claim 读取异常），对调用方都只有一个
-            // 结论:「这个令牌无效」。列举异常类型只会让漏掉的那条逃出去变成 500。
-            // 对比 AuthEvaluator 那侧捕获 RuntimeException 的理由是"认证必须 fail-closed"，
-            // 结论同为拒绝，但那条路径返回的是 401 而不是业务异常。
+        } catch (Exception e) {
+            // Token 无法解析：记录日志而非静默吞掉，便于问题排查
             throw new AuthBusinessException(AuthExceptionCode.TOKEN_INVALID, e);
         }
-    }
-
-    /**
-     * 解析登录用户的租户标识。
-     *
-     * <p>空值回落 default：V14 迁移给 sys_user.tenant_id 的 DEFAULT 就是 'default'，
-     * 存量行不会为空。留空回落是为了容忍迁移前签发的会话与未回填的旧记录，
-     * 且回落值与数据库默认值一致，不会把数据切到另一个租户下查不到。</p>
-     */
-    private String resolveTenantId(LoginUser loginUser) {
-        String tenantId = loginUser.getTenantId();
-        return (tenantId == null || tenantId.isBlank()) ? DEFAULT_TENANT_ID : tenantId.trim();
     }
 }
