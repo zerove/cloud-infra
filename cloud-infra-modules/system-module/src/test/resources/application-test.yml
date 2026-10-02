@@ -31,3 +31,18 @@ auth:
   jwt:
     secret: test-jwt-secret-key-for-integration-testing-32-chars-minimum
     expire-time: 86400000
+
+# gRPC 测试端口。
+# 2026-10-02: 此前本文件**没有**任何 grpc 配置, 而 CloudInfraGrpcProperties.port
+# 默认 9090, 于是每一个 system-module 的 @SpringBootTest 集成测试都会去抢占 9090。
+# 只要开发机上该端口被占用(compose 栈里的 Prometheus 就映射 9090), 这些 IT 全部
+# 以 BindException: Address already in use 启动失败 —— 而 CI runner 上干净, 于是永绿。
+#
+# 这是缺陷 C 的完整版: 前面只修了两个**单测**, 而 IT 层同样中招
+# (SystemIntegrationTest 7 ERROR + TxMessageFlowIntegrationTest 4 ERROR)。
+# 修在这里而非逐个 IT, 是因为所有 IT 共用这份 profile 配置。
+#
+# 0 = 让操作系统分配临时端口。需要真实端口的测试自己从 server.getPort() 读回。
+cloudinfra:
+  grpc:
+    port: 0
