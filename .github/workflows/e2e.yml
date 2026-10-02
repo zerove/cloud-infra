@@ -97,6 +97,20 @@ jobs:
           bash deploy/up.sh --self-test
         shell: bash
 
+      - name: Gate integrity self-check (config sync ordering)
+        # 2026-10-03 新增, 守护 E2E run 37050526759 的根因。
+        #
+        # 那次红灯的真实异常是
+        #   PlaceholderResolutionException: Could not resolve placeholder 'spring.datasource.url'
+        # 根因是 up.sh 一次性 `up -d` 拉起微服务, 而 Nacos 配置同步排在最后。
+        # 本地因 deploy/nacos/data 保留残留配置而长期不复现 —— 只靠本地跑是发现不了的。
+        #
+        # ⚠️ 上一条 self-check 查不出这类问题: 它验证的是"参数能不能被解析",
+        #    而本缺陷的 up.sh 参数完全合法, 只是**执行顺序**错了。
+        #    两个守护查的是不同维度, 不能相互替代。
+        run: python3 deploy/tests/test_config_sync_order.py
+        shell: bash
+
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
