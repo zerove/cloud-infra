@@ -64,8 +64,10 @@ jobs:
         #   ③ 它比对的是"命令能否被解析", 而当时的 FULL_SERVICES 用的是**镜像名**
         #      (cloud-infra-gateway) 而非 compose 服务名 (gateway)。
         #
-        # 现在的 up.sh --self-test 改为两件真能失败的事: 用 config --services
+        # 现在的 up.sh --self-test 改为两件真能失败的事: 用 awk 解析 compose.yaml
         # 核对服务名集合 + 用 1.0.6 行为桩校验参数顺序, 并自带负向对照。
+        # (2026-10-02 修正: 原先用 `podman-compose config --services`, 但 CI 的
+        #  1.0.6 无此子命令 → 自检恒定报 FAIL。本地 1.6.0 有, 故本地绿、CI 红。)
         #
         # ⚠️ 必须排在 "Install Podman + podman-compose" **之后**: self_test 在
         # podman-compose 缺失时是直接 return 0 的 (本地无该命令时属正常),

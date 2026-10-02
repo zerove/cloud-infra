@@ -183,8 +183,22 @@ UP_LOG="$SCRIPT_DIR/.e2e-up.log"
 if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
   ok "compose 启动 + Nacos 配置同步完成"
 else
-  fail "compose 启动失败, 末尾 25 行:"
-  tail -25 "$UP_LOG" >&2
+  fail "compose 启动失败, 末尾 40 行:"
+  # 排障前提: 即使日志为空也要说清楚, 否则"末尾 N 行"后面接空白会被误读成
+  # "脚本没输出任何东西"。2026-10-02 的 E2E 红灯正是如此: tail 出来一片空白,
+  # 无法区分“日志为空”与“日志没写到这里”。
+  if [ ! -s "$UP_LOG" ]; then
+    echo "  (日志文件 $UP_LOG 不存在或为空 —— 脚本在产生任何输出前就失败了)" >&2
+  fi
+  tail -40 "$UP_LOG" >&2 || true
+  echo "--- compose ps ---" >&2
+  podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
+  echo "--- 失败容器日志(尾部) ---" >&2
+  podman ps -a --filter "status=exited" --format '{{.Names}}' 2>/dev/null | head -5 | while read -r c; do
+    [ -n "$c" ] || continue
+    echo "### $c" >&2
+    podman logs --tail 15 "$c" >&2 2>&1 || true
+  done
   exit 1
 fi
 echo
