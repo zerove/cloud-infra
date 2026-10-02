@@ -31,6 +31,44 @@ PASS=0; FAIL=0
 ok()   { printf "  \033[32mPASS\033[0m %s\n" "$1"; PASS=$((PASS+1)); }
 fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
 
+# ES 专项诊断。抽成函数是因为 search 有**两条**失败路径 (unhealthy / absent),
+# 而 bash 的 case 只能走第一个命中分支, 内联写会漏掉其中一条 (实测过 fallthrough 不合法)。
+#
+# 用途: run 37070818024 里 search 的 ES 400 至今无法从客户端侧定位。栈是:
+#     SimpleElasticsearchRepository.<init>
+#       -> IndicesTemplate.exists -> HEAD /<index>
+#       -> TransportException: status 400, "Expecting a response body, but none was sent"
+# 客户端只说"400 且无 body", 不说**为什么**; 本地同一条 HEAD /oper_log 返回 404
+# (索引不存在, 正常), 同版本 ES 8.18, 配置无差异 —— 本地复现不了。
+#
+# 在拿到 ES 服务端证据之前不猜。故把两边的原始响应都打出来:
+# 复刻 search 实际发出的 HEAD 请求 + ES 侧 read_only/flood_stage/磁盘水位。
+es_diagnostics() {
+  echo >&2
+  echo "--- ES 专项诊断 (search 相关失败) ---" >&2
+  local es_port es
+  es_port=$(podman port cloud-elasticsearch 9200/tcp 2>/dev/null | head -1 | sed 's/.*://')
+  if [ -n "$es_port" ]; then
+    es="http://127.0.0.1:${es_port}"
+    for idx in oper_log search_log; do
+      printf 'HEAD /%s -> %s\n' "$idx" \
+        "$(curl -s -o /dev/null -w '%{http_code}' -I "$es/$idx" --max-time 10 2>&1)" >&2
+    done
+    echo "GET _cluster/health:" >&2
+    curl -s "$es/_cluster/health" --max-time 10 2>&1 | head -20 >&2
+    echo "GET _cluster/settings?flat_settings=true (水位/只读):" >&2
+    curl -s "$es/_cluster/settings?flat_settings=true" --max-time 10 2>&1 | head -30 >&2
+    echo "GET _nodes/fs (磁盘水位依据):" >&2
+    curl -s "$es/_nodes/fs" --max-time 10 2>&1 | head -25 >&2
+  else
+    echo "  (未取到 ES 端口, 跳过 API 探测)" >&2
+  fi
+  echo "--- cloud-elasticsearch 服务端日志尾部 ---" >&2
+  podman logs --tail 120 cloud-elasticsearch 2>&1 \
+    | grep -iE "flood|read.only|reject|indices.exists|status.*400|illegal_argument|exception" | head -30 >&2 || true
+  echo "--- End ES 专项诊断 ---" >&2
+}
+
 # 采集容器状态 + 日志尾部。两个失败分支共用, 避免"只在一处接了诊断"。
 # 不只查 exited: 就绪等待超时通常是容器仍在 running 但服务没起来
 # (Elasticsearch 首启要 30s+, 且 mem_limit=1g 在 runner 上可能直接被 OOM kill 后重启)。
@@ -411,7 +449,14 @@ else
       else
         echo "  (无留档 —— 该 run 早于本次修复, up.sh 日志未被保留)" >&2
       fi
+      # ⚠️ case 只走**第一个**命中分支, 且 bash 的 case 不支持跳 pattern 的
+      #    fallthrough (删掉 `;;` 会直接语法报错, 已实测)。因此 search=absent
+      #    会先命中上面那个 absent 分支, ES 诊断被跳过。
+      #    两条路径都可能源于 ES 侧问题, 故 absent 分支内也直接调 es_diagnostics。
+      case "$MISSING" in *search*) es_diagnostics ;; esac
       ;;
+    *search*)
+      es_diagnostics
   esac
   # 2026-10-02: 这个分支原先只打印状态, 不打印日志。
   # 结果 run 37033739185 上 4 个服务 Exited(1) 却拿不到任何异常,
