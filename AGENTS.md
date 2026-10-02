@@ -411,6 +411,25 @@ Unable to start web server → Unable to start embedded Tomcat
 
 ### ⚠️ Native Image Build 首次真正执行即失败（未解决）
 
+`Native Image Build (Gateway + Auth)` 此前因上游 job 失败一直被 **skipped**，
+2026-10-01 才第一次真跑起来，失败于 `native-image [8/8] Creating image...`，
+日志无明确错误、被系统终止。CI 配置为 `-Dnative.image.args="-J-Xmx8g"`。
+
+**本项未定位**。本次改动确实触及了 gateway/auth 的生产代码（多租户相关），
+因此**不能断言与本次改动无关**。
+
+**已准备的对照手段**（2026-10-02）：本地分支 `ci/native-baseline-check`，
+在 `master` 基础上把 gateway/auth 的 6 个生产文件回退到 `0c66985`。
+开 PR 即可触发 `pull_request` 路径的 CI（`ci.yml` 同时监听 `push: [master, main]`
+与 `pull_request: [master]`），与 `master` 的结果对比即可定论。
+首次尝试推送时本机代理对 `github.com` 持续 TLS 失败（10+ 分钟），故尚未完成。
+
+**一个已知但未定性的线索**：本地跑同一个 native 构建**同样**失败于
+`Native memory allocation (mmap) failed` / `Not enough space`，
+且崩溃时物理内存尚有 15 GB 空闲 —— 与本机在 `CrossServiceFeignChain`
+上遇到的 mmap 失败**同源**，属本机沙箱限制而非代码问题。
+即**本机不能作为 native 构建的验证环境**，对照必须在 CI 上做。
+
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
 - **集成测试**: `skipITs` 默认 `true`，`mvn test` 跑不到 IT。手工跑全量:
