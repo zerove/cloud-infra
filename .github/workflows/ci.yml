@@ -148,7 +148,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: [test, quality-gate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # 2026-10-02 改为 always() 且不再限定 push-to-master。
+    #
+    # 旧条件有两个问题, 两者都在本次排查中实际发生:
+    # 1. 限定 `push to master` → **PR 完全无法验证 native 构建**。
+    #    曾开 PR #57 专做基线对照, 该 job 根本不触发(显示 "skipping"),
+    #    取不到对照数据, 只能关掉 PR 另寻他法。
+    # 2. 有 `needs` 但未加 always() → 上游任一失败, 本 job 即 skipped,
+    #    **native 的真实失败被上游失败掩盖**, 表现为"native 从未验证过"。
+    #
+    # 代价: 每个 PR 多耗约 20 分钟 runner。收益: native 成为一道
+    # **独立可验证**的门禁, 且改 native 相关代码时能在 PR 上直接看到结果。
+    if: ${{ always() }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
