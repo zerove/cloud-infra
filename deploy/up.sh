@@ -376,13 +376,22 @@ done
 
 # 等待 Elasticsearch 就绪
 echo "=== 7. 等待 Elasticsearch 就绪 ==="
-for i in $(seq 1 15); do
+# ⚠️ 预算从 15 次(30s) 提到 90 次(180s)。2026-10-02 实测: 干净环境下 ES 8.18.0
+# 冷启动到 / 接受请求需 **48 秒** (mem_limit=1g, ES_JAVA_OPTS=-Xms512m -Xmx512m,
+# oom=false)。原先 30s 预算必然超时 —— 这正是 E2E run 37023488729 / 37027922148
+# 连续两次红灯的真因, 而失败消息又被 'compose 启动失败' 的措辞掩盖成另一个问题。
+# 180s 是首启预算; 之后重启因数据卷已存在会快得多。
+for i in $(seq 1 90); do
     if curl -sf http://localhost:9200 > /dev/null 2>&1; then
-        echo "Elasticsearch 已就绪"
+        echo "Elasticsearch 已就绪 (等待 $((i*2))s)"
         break
     fi
-    [ $i -eq 15 ] && { echo "❌ Elasticsearch 启动超时"; exit 1; }
-    echo "等待 Elasticsearch... ($i/15)"
+    # ES 首启阶段会反复 OOM 重启, 提前把真实原因打出来, 不要让它静默耗尽预算
+    if [ $((i % 15)) -eq 0 ]; then
+        ES_STATE=$(podman inspect -f '{{.State.Status}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}}' cloud-elasticsearch 2>/dev/null || echo "容器不存在")
+        echo "  等待 Elasticsearch... ($i/90, ${i}s) [$ES_STATE]"
+    fi
+    [ $i -eq 90 ] && { echo "❌ Elasticsearch 启动超时 (180s) [$ES_STATE]"; podman logs --tail 20 cloud-elasticsearch 2>&1 || true; exit 1; }
     sleep 2
 done
 

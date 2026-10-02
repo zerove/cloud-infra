@@ -5,7 +5,17 @@ RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra
 RUN chown -R cloudinfra:cloudinfra /app 
 USER cloudinfra
 # 明确复制 repackaged fat jar，排除 .original 文件
-COPY cloud-infra-gateway/target/*.jar app.jar
+# ⚠️ 必须用 *-exec.jar 而不是 *.jar (2026-10-02 修复)。
+# spring-boot-maven-plugin 的 repackage 会在 target/ 留下**两个** jar:
+#   cloud-infra-gateway-1.0.0-SNAPSHOT-exec.jar  106MB  Main-Class: JarLauncher (可执行)
+#   cloud-infra-gateway-1.0.0-SNAPSHOT.jar      54KB  无 Main-Class            (普通库 jar)
+# 原写法 `COPY target/*.jar app.jar` 匹配到两个源, Docker 复制多源到单目标时取**最后一个**,
+# 于是打进镜像的是 54KB 的库 jar → 容器启动即
+#   no main manifest attribute, in /app/app.jar
+#   Exited (1)
+# 证据: E2E run 37027922148 的 cloud-gateway 容器日志。
+# 注意 cloud-infra-auth/Dockerfile 早已用 *-exec.jar —— 这个坑被踩过一次, 只是漏了 gateway。
+COPY cloud-infra-gateway/target/*-exec.jar app.jar
 # 复制 CDS 存档（不存在时忽略）
 RUN cp cloud-infra-gateway/target/*.cds /app/application.cds 2>/dev/null || true
 
