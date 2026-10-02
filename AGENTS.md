@@ -387,23 +387,29 @@ Unable to start web server → Unable to start embedded Tomcat
    现以 session 自身作锁把**每连接**的发送串行化（锁粒度不是全局，不影响跨连接并发），
    并新增 `NotificationWebSocketSendConcurrencyTest` —— 用模拟 Tomcat 状态机的假端点
    把并发窗口固定下来，含负向对照。
-2. `CrossServiceFeignChainIntegrationTest` 4 项失败: 登录返回“用户名或密码错误”，
-   子进程均已启动。**本轮尝试定性未果**, 根因仍未定位。已排除与收集到的证据:
-   - **已排除验证码**: 它抛 `CAPTCHA_ERROR` 而非 `LOGIN_FAILED`
-   - **已排除登录锁定**: 抛 `ACCOUNT_LOCKED`
-   - **已排除密钥/系统属性**: b2534a1 修复后该现象依旧
-   - **确认是 flaky 而非稳定失败**: 本地连续跑也观察到一次失败、两次 BUILD SUCCESS
-   - **错误码来源已收窄**: `LOGIN_FAILED` 只在 principal 为 null / fullUser 为 null 时抛,
-     而 `UserDetailsServiceImpl` 查不到用户时抛 `UsernameNotFoundException`,
-     它会被 `DaoAuthenticationProvider` 转成 `BadCredentialsException` →
-     与“密码错”**共用同一个错误码**。所以“用户名或密码错误”**也可能意味着用户没查到**。
-   - **待验证的假设**: auth 日志里出现
-     `For 'system-module' URL not provided. Will try picking an instance via load-balancing`
-     —— Simple Discovery 可能未生效, 致 Feign 无法解析 `lb://system-module`。
-     但本地同配置正常, 且 auth 侧没有输出任何登录尝试的日志, 现有证据不足以定论。
+2. ~~`CrossServiceFeignChainIntegrationTest` 4 项失败~~ → **已修复**
+   （`fae998c` + `4ba43bd`），CI run `36883836629` 验证 **5 项全绿**。
 
-   已在断言中转储 system / auth 子进程日志尾部（commit `91c8f71`），下次红即可直接读出更多线索。
-   **本项未解决**, 不应按"已修复"记账。
+   定位过程值得记录 —— **症状与根因相距四层**，靠读业务代码几乎推不出来：
+   1. 表面症状：登录返回"用户名或密码错误"，看似密码/数据问题
+   2. 逐一排除：验证码(`CAPTCHA_ERROR`)、登录锁定(`ACCOUNT_LOCKED`)、密钥属性(`b2534a1`)
+   3. **直探端点给出转折**：直连 system 返回 **HTTP 200 + 完整 admin 数据**（BCrypt hash + 40 权限），
+      而登录返回的是 **Spring Boot 默认 500 格式**（`{"timestamp","status","error","path"}`）
+      而非 auth 的统一 `Result` 格式 → 排除 Feign/签名/数据，指向"网关转发时连不上 auth"
+   4. 网关日志坐实：`SecurityFilter - Security filter error: ResourceAccessException`
+   5. **根因一**（`fae998c`）：gRPC 默认启用（`matchIfMissing=true`）且**固定端口 9090**，
+      CI 上该端口被占 → `BindException` → system 子进程启动即失败
+   6. **根因二**（`4ba43bd`）：`SimpleDiscoveryProperties` 是 `@ConfigurationProperties`，
+      在 bean 初始化时**一次性绑定**；而 JUnit 5 里 `BeforeAllCallback`（Spring 上下文加载）
+      **先于** `@BeforeAll`（startServices）→ 绑定时 `authPort` 还是 0 → 网关转发到 `127.0.0.1:0`。
+      原注释"supplier 惰性求值——上下文在 @BeforeAll 之后加载"这个假设**恰好是反的**，
+      而且 Supplier 也救不了（它只在属性被读取那一刻求值，绑定只发生一次）。
+      修复：子进程与网关配置统一用**固定端口**（18081 / 18082），从根上消除时序依赖。
+
+   附带的诊断能力（`7c44680`）：`probeSystemCredentialEndpoint()` 直连 system 内部端点，
+   能把"登录失败"拆成连接异常/401/查无此人/数据正常四类。第 3 步的转折正是它给出的。
+
+### ⚠️ Native Image Build 首次真正执行即失败（未解决）
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
