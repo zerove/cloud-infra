@@ -319,11 +319,17 @@ echo "=== 1. 停止并清理旧环境 ==="
 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true
 echo "  已停止旧环境 (保留数据卷)"
 
-echo "=== 2. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
+# ⚠️ 两阶段启动的原因 (2026-10-02, CI E2E run 37050526759 的根因):
+#   原来只有一次 `podman-compose up -d`, 把基础设施和 6 个微服务一起拉起,
+#   而配置同步放在最后 (原步骤 10)。CI 每次 down 后 deploy/nacos/data 是
+#   全新空目录, 于是微服务必然先于配置存在而启动, 报
+#   "Could not resolve placeholder 'spring.datasource.url'" 并 Exited (1)。
+#   本地不复现是因为那个 bind mount 保留了上次运行的配置残留。
+#   修法: 基础设施先起 -> 等 Nacos 就绪 -> 同步配置 -> 再起微服务。
+echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
-  mapfile -t UP_ARGS < <(compose_up_args)
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-    ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+  # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
 fi
 
 # 等待 Nacos 就绪
@@ -338,6 +344,25 @@ for i in $(seq 1 30); do
     echo "等待 Nacos... ($i/30)"
     sleep 2
 done
+
+# 同步配置到 Nacos —— 必须在微服务容器启动之前 (见步骤 1 处的说明)。
+# 用 v3 admin API, --data-urlencode content@$file 保证原文多行/中文/转义正确。
+echo "=== 3b. 同步配置到 Nacos (微服务启动前) ==="
+CONFIG_DIR="$SCRIPT_DIR/config"
+SYNC_COUNT=0
+for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
+    [ -e "$file" ] || continue
+    nacos_config_upload "$file" && SYNC_COUNT=$((SYNC_COUNT+1))
+done
+echo "=== 同步完成: $SYNC_COUNT 个配置 ==="
+
+# 配置已在 Nacos 里, 此时才允许拉起微服务。
+if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
+  echo "=== 2b. 启动微服务 (配置已就绪) ==="
+  mapfile -t UP_ARGS < <(compose_up_args)
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+    ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+fi
 
 # 等待 PostgreSQL 就绪
 echo "=== 4. 等待 PostgreSQL 就绪 ==="
@@ -418,16 +443,6 @@ for i in $(seq 1 10); do
     echo "等待 Sentinel Dashboard... ($i/10)"
     sleep 2
 done
-
-# 同步配置到 Nacos (v3 admin API, --data-urlencode content@$file 保证原文多行/中文/转义正确)
-echo "=== 10. 同步配置到 Nacos ==="
-CONFIG_DIR="$SCRIPT_DIR/config"
-SYNC_COUNT=0
-for file in "$CONFIG_DIR"/*.yaml "$CONFIG_DIR"/*.json; do
-    [ -e "$file" ] || continue
-    nacos_config_upload "$file" && SYNC_COUNT=$((SYNC_COUNT+1))
-done
-echo "=== 同步完成: $SYNC_COUNT 个配置 ==="
 
 echo ""
 echo "=== 本地开发环境已就绪 ==="
