@@ -223,14 +223,34 @@ jobs:
           mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-gateway --batch-mode
           mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" -pl cloud-infra-auth --batch-mode
 
+      - name: Stage native binaries
+        # 2026-10-02 修正: 直接把 target/ 下的两个文件交给 upload-artifact,
+        # v4 会以**所有 path 的最小公共祖先**为根, 于是 artifact 内部结构是
+        #   cloud-infra-gateway/target/cloud-infra-gateway-binary
+        #   cloud-infra-auth/target/cloud-infra-auth-binary
+        # 而 docker-build 里写的是 `cp artifacts/cloud-infra-gateway-binary`（扁平路径）,
+        # 2026-10-02 该 job 首次真正执行即以此报错:
+        #   cp: cannot stat 'artifacts/cloud-infra-gateway-binary': No such file or directory
+        #
+        # 与其依赖 download-artifact 的 LCA 计算规则（隐式、易随 action 版本变化）,
+        # 不如**显式暂存**: 上传 artifacts/ 目录, 使 artifact 内部结构 = 文件名,
+        # 与 docker-build 的 cp 路径一一对应。
+        #
+        # 附带收益: cp 在 `bash -e` 下失败即中断 —— 二进制没生成就不会上传空 artifact,
+        # 把"上游没产出却往下游传"这条静默路径堵死。
+        run: |
+          mkdir -p artifacts
+          cp cloud-infra-gateway/target/cloud-infra-gateway-binary artifacts/
+          cp cloud-infra-auth/target/cloud-infra-auth-binary artifacts/
+          ls -l artifacts/
+
       - name: Upload native binaries
         uses: actions/upload-artifact@v4
         with:
           name: native-binaries
-          path: |
-            cloud-infra-gateway/target/cloud-infra-gateway-binary
-            cloud-infra-auth/target/cloud-infra-auth-binary
+          path: artifacts/
           retention-days: 7
+          if-no-files-found: error
 
   docker-build:
     name: Build & Push Docker Images
@@ -268,6 +288,9 @@ jobs:
 
       - name: Build Gateway Native Image
         run: |
+          # 先断言构件真的在（而非让 cp 的报错在 6 步之后才出现）
+          test -f artifacts/cloud-infra-gateway-binary || { echo "::error::gateway native 二进制缺失, 上游 native-build 未产出"; exit 1; }
+          test -f artifacts/cloud-infra-auth-binary || { echo "::error::auth native 二进制缺失, 上游 native-build 未产出"; exit 1; }
           mkdir -p cloud-infra-gateway/target
           cp artifacts/cloud-infra-gateway-binary cloud-infra-gateway/target/
           podman build -f cloud-infra-gateway/Dockerfile.native -t ghcr.io/${{ github.repository }}/cloud-infra-gateway-native:${{ github.sha }} cloud-infra-gateway/
@@ -297,6 +320,11 @@ jobs:
     timeout-minutes: 5
     needs: [test, quality-gate, native-build, docker-build]
     if: always()
+    env:
+      # 必须在**作业级**声明: 步骤级 `if` 表达式求值时看不到步骤自己的 env,
+      # 原写法 `if: env.SLACK_WEBHOOK_URL != ''` 配 `env:` 写在同一步骤里,
+      # 条件恒为假 —— 这条通知自加入以来从未执行过(第 7 例"门禁/步骤形同虚设")。
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Send status to Slack
         if: env.SLACK_WEBHOOK_URL != ''
@@ -305,5 +333,3 @@ jobs:
           status: ${{ job.status }}
           channel: '#ci-cd'
           text: "Cloud-Infra Pipeline: ${{ job.status }}"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

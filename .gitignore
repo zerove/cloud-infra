@@ -43,6 +43,10 @@ notification_api_tracker.md
 search_service_tracker.md
 task_tracker.md
 
+# verify-e2e.sh 的中间日志（失败时随 artifact 上传，不入库）
+/.e2e-up.log
+/.e2e-acceptance.log
+
 # Ignore system files
 .DS_Store
 Thumbs.db

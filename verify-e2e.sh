@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Cloud-Infra 端到端复现脚本
-# 完整闭环: 构建镜像 -> 部署 -> 漂移检测 -> 启动 -> 健康 -> e2e 验收
+# 完整闭环: 构建镜像 -> 部署 -> 漂移检测 -> 健康 -> e2e 验收 -> 容器 env 一致性
 #
 # 前置条件:
 #   - podman / podman-compose 已装
 #   - mvn (或 mvnw) 可用
 #   - 端口 8081/8082/8083/8084/8085/9000/9301 未占用
-#   - 当前 commit 在 4ed317f 之后
 #
 # 用法:
-#   ./verify-e2e.sh           # 完整流程
-#   ./verify-e2e.sh --skip-build  # 跳过 mvn 构建 (用现有镜像)
+#   ./verify-e2e.sh                 # 完整流程
+#   ./verify-e2e.sh --skip-build    # 跳过 mvn 构建 (用现有镜像)
+#   ./verify-e2e.sh --self-test     # 门禁自检 (负向对照, 见 run_gate_selftest)
 
 set -uo pipefail
 # 脚本位于 repo 根, cd 到自身所在目录
@@ -18,16 +18,104 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
 SKIP_BUILD=0
+SELFTEST=0
 for arg in "$@"; do
   case "$arg" in
     --skip-build) SKIP_BUILD=1 ;;
-    *) echo "未知参数: $arg"; exit 1 ;;
+    --self-test)  SELFTEST=1 ;;
+    *) echo "未知参数: $arg (支持 --skip-build --self-test)"; exit 1 ;;
   esac
 done
 
 PASS=0; FAIL=0
 ok()   { printf "  \033[32mPASS\033[0m %s\n" "$1"; PASS=$((PASS+1)); }
 fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; FAIL=$((FAIL+1)); }
+
+# 服务镜像: "<Dockerfile 仓库根相对路径>:<tag>"
+# 与 deploy/compose.yaml 中每个服务的 image 名一一对应。
+SERVICE_IMAGES=(
+  "cloud-infra-gateway/Dockerfile:localhost/cloud-infra-gateway:latest"
+  "cloud-infra-auth/Dockerfile:localhost/cloud-infra-auth:latest"
+  "cloud-infra-modules/system-module/Dockerfile:localhost/cloud-infra-system:latest"
+  "cloud-infra-modules/file-service/Dockerfile:localhost/cloud-infra-file:latest"
+  "cloud-infra-modules/notification-service/Dockerfile:localhost/cloud-infra-notification:latest"
+  "cloud-infra-modules/search-service/Dockerfile:localhost/cloud-infra-search:latest"
+)
+MICROSERVICES=(gateway auth system file notification search)
+
+# ---------------------------------------------------------------------------
+# 镜像构建
+#
+# 构建上下文必须是**仓库根**, 不是服务目录: 各服务 Dockerfile 里的 COPY
+# 都是仓库根相对路径 (如 `COPY cloud-infra-gateway/target/*.jar app.jar`),
+# deploy/compose.yaml 里对应的也是 `context: ..`。
+#
+# 2026-10-02 事故: 本脚本当时传的是服务目录 (podman build ... cloud-infra-gateway),
+# 6 个镜像**全部**构建失败, 报错长这样:
+#   Error: building at STEP "COPY cloud-infra-modules/search-service/target/*-exec.jar app.jar":
+#   copier: stat: ["/cloud-infra-modules/search-service/target/*-exec.jar"]: no such file or directory
+# 而失败被 `| tail -3` 吞掉后, 脚本仍打印 "PASS 6 个镜像构建完成" ——
+# 门禁假通过, 与本项目已记录的 6 例同类缺陷同源。
+# 因此这里逐个服务判定并返回真实退出码。
+# ---------------------------------------------------------------------------
+build_images() {
+  local entry dockerfile tag failed=()
+  for entry in "${SERVICE_IMAGES[@]}"; do
+    dockerfile="${entry%%:*}"
+    tag="${entry##*:}"
+    if podman build -f "$SCRIPT_DIR/$dockerfile" -t "$tag" "$SCRIPT_DIR"; then
+      printf "    ok   %s\n" "$tag"
+    else
+      printf "    FAIL %s (dockerfile: %s)\n" "$tag" "$dockerfile" >&2
+      failed+=("$tag")
+    fi
+  done
+  if [ "${#failed[@]}" -ne 0 ]; then
+    echo "构建失败: ${failed[*]}" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 门禁自检 (负向对照)
+#
+# AGENTS.md 第四课: "我加了守护"不等于"守护有效", 差的那一步恰好就是负向对照。
+# 本函数用一个"build 一律失败"的假 podman 顶替真 podman, 断言 build_images
+# **真的**返回非零 —— 即错误不会被吞掉。
+#
+# 修复前的脚本在这里必然全绿 (它压根不判定 build 的退出码), 这正是本次缺陷的形态。
+# ---------------------------------------------------------------------------
+run_gate_selftest() {
+  local tmp rc
+  tmp=$(mktemp -d)
+  cat > "$tmp/podman" <<'STUB'
+#!/usr/bin/env bash
+# 假 podman: build 模拟 2026-10-02 的上下文错误; 其余子命令静默成功
+if [ "${1:-}" = "build" ]; then
+  echo "Error: building at STEP \"COPY .../target/*-exec.jar app.jar\": copier: stat: no such file or directory" >&2
+  exit 125
+fi
+exit 0
+STUB
+  chmod +x "$tmp/podman"
+  PATH="$tmp:$PATH" build_images >/dev/null 2>&1
+  rc=$?
+  rm -rf "$tmp"
+
+  if [ "$rc" -eq 0 ]; then
+    echo "  FAIL 镜像构建失败时 build_images 仍返回 0 —— 错误被吞掉, 门禁形同虚设" >&2
+    return 1
+  fi
+  echo "  PASS 镜像构建失败被正确识别 (build_images 返回 $rc)"
+  return 0
+}
+
+if [ "$SELFTEST" -eq 1 ]; then
+  echo "=== E2E 门禁自检 (负向对照) ==="
+  run_gate_selftest
+  exit $?
+fi
 
 echo "=========================================="
 echo "  Cloud-Infra E2E 复现 ($(git rev-parse --short HEAD))"
@@ -56,7 +144,7 @@ echo
 if [ "$SKIP_BUILD" -eq 0 ]; then
   echo "[1/7] mvn clean install -DskipTests ..."
   if mvn clean install -DskipTests -q 2>&1 | tail -5; then
-    ok "19 模块编译完成"
+    ok "全模块编译完成"
   else
     fail "mvn 编译失败"
     exit 1
@@ -66,69 +154,96 @@ else
 fi
 echo
 
-# 2. Docker 镜像
-echo "[2/7] 构建 6 个服务镜像 ..."
+# 2. 服务镜像
+echo "[2/7] 构建 ${#SERVICE_IMAGES[@]} 个服务镜像 (上下文 = 仓库根) ..."
 unset JAVA_OPTS
 set -a; source <(grep -v '^JAVA_OPTS=' .env); set +a
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  (
-    podman build -t localhost/cloud-infra-gateway:latest cloud-infra-gateway
-    podman build -t localhost/cloud-infra-auth:latest cloud-infra-auth
-    podman build -t localhost/cloud-infra-system:latest cloud-infra-modules/system-module
-    podman build -t localhost/cloud-infra-file:latest cloud-infra-modules/file-service
-    podman build -t localhost/cloud-infra-notification:latest cloud-infra-modules/notification-service
-    podman build -t localhost/cloud-infra-search:latest cloud-infra-modules/search-service
-  ) 2>&1 | tail -3
-  ok "6 个镜像构建完成"
+  if build_images; then
+    ok "${#SERVICE_IMAGES[@]} 个镜像构建完成"
+  else
+    fail "镜像构建失败"
+    exit 1
+  fi
 else
   ok "跳过镜像构建 (--skip-build)"
 fi
 echo
 
-# 3. 启动基础设施
-echo "[3/7] 启动基础设施 + 微服务 ..."
-cd deploy
-podman-compose --profile full --env-file ../.env up -d 2>&1 | tail -3
-ok "compose 启动"
+# 3. 启动基础设施 + 微服务
+#
+# 走项目统一入口 deploy/up.sh --full: compose 调用、profile 展开、Nacos 配置同步
+# 都收敛在那里。本脚本不再另起一套 podman-compose 调用 —— 2026-10-02 之前这里是
+# `podman-compose --profile full --env-file ../.env up -d 2>&1 | tail -3` 后无条件
+# 打印 PASS, 而 CI 上该命令实际报
+#   podman-compose: error: argument command: invalid choice: 'full'
+# 同样是门禁假通过。
+echo "[3/7] 启动基础设施 + 微服务 (deploy/up.sh --full) ..."
+UP_LOG="$SCRIPT_DIR/.e2e-up.log"
+if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
+  ok "compose 启动 + Nacos 配置同步完成"
+else
+  fail "compose 启动失败, 末尾 25 行:"
+  tail -25 "$UP_LOG" >&2
+  exit 1
+fi
 echo
 
-# 4. 漂移检测
+# 4. 漂移检测 (必须在上一步之后: Nacos 没起来时所有配置都会被判"漂移")
 echo "[4/7] Nacos 配置漂移检测 ..."
-cd ..
 if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
   ok "Nacos 配置 0 漂移"
 else
   fail "Nacos 配置存在漂移"
-  ./deploy/up.sh --check 2>&1 | tail -3
+  ./deploy/up.sh --check 2>&1 | tail -3 >&2
 fi
 echo
 
 # 5. 等健康
-echo "[5/7] 等待 6 个微服务 healthy ..."
-NEEDED=6
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-  HEALTHY=$(podman ps --format "{{.Status}}" 2>/dev/null | grep -E "Up .* \(healthy\)|healthy\)" | wc -l)
-  if [ "$HEALTHY" -ge "$NEEDED" ]; then ok "微服务 $HEALTHY 个 healthy"; break; fi
+#
+# 逐个按容器名判定, 而不是只数 `podman ps` 里 healthy 的总数:
+# 后者会让"基础设施里有 6 个健康容器"冒充"6 个微服务都健康"。
+echo "[5/7] 等待 ${#MICROSERVICES[@]} 个微服务 healthy ..."
+DEADLINE=$(( $(date +%s) + 240 ))
+MISSING=""
+while :; do
+  MISSING=""
+  for svc in "${MICROSERVICES[@]}"; do
+    state=$(podman inspect --format '{{.State.Health.Status}}' "cloud-$svc" 2>/dev/null || echo absent)
+    [ "$state" = "healthy" ] || MISSING="$MISSING $svc=$state"
+  done
+  [ -z "$MISSING" ] && break
+  [ "$(date +%s)" -ge "$DEADLINE" ] && break
   sleep 6
 done
-[ "$HEALTHY" -ge "$NEEDED" ] || { fail "仅 $HEALTHY 个 healthy, 等待超时"; exit 1; }
+if [ -z "$MISSING" ]; then
+  ok "${#MICROSERVICES[@]} 个微服务全部 healthy"
+else
+  fail "未 healthy:$MISSING"
+  echo "  容器状态:" >&2
+  podman ps -a --format '{{.Names}}\t{{.Status}}' 2>&1 | grep '^cloud-' >&2
+  exit 1
+fi
 echo
 
 # 6. e2e 验收
+#
+# 判据必须锚定 "FAIL=0": 原写法 `grep -q "PASS=6"` 会被
+# "PASS=6 FAIL=2" 一并匹配上 —— 有失败也照样判过。
 echo "[6/7] e2e-test.sh ..."
-if bash e2e-test.sh 2>&1 | tail -1 | grep -q "PASS=6"; then
+if bash e2e-test.sh 2>&1 | tee "$SCRIPT_DIR/.e2e-acceptance.log" | tail -1 | grep -qE "结果: PASS=6 FAIL=0"; then
   ok "e2e 6/6 PASS"
 else
-  fail "e2e 未全过"
-  bash e2e-test.sh 2>&1 | tail -5
+  fail "e2e 未全过, 末尾 10 行:"
+  tail -10 "$SCRIPT_DIR/.e2e-acceptance.log" >&2
 fi
 echo
 
 # 7. 容器 env 一致性
 echo "[7/7] 容器 env 一致性 ..."
 ALL_OK=1
-for svc in gateway auth system file notification search; do
-  INT=$(podman exec cloud-$svc sh -c 'echo "${#INTERNAL_CALL_SECRET}"' 2>/dev/null)
+for svc in "${MICROSERVICES[@]}"; do
+  INT=$(podman exec "cloud-$svc" sh -c 'echo "${#INTERNAL_CALL_SECRET}"' 2>/dev/null)
   if [ "$INT" = "48" ]; then
     : # 静默 OK
   else
@@ -136,7 +251,7 @@ for svc in gateway auth system file notification search; do
     ALL_OK=0
   fi
 done
-[ "$ALL_OK" -eq 1 ] && ok "6 容器 INTERNAL_CALL_SECRET=48"
+[ "$ALL_OK" -eq 1 ] && ok "${#MICROSERVICES[@]} 容器 INTERNAL_CALL_SECRET=48"
 echo
 
 echo "=========================================="
