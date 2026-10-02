@@ -88,9 +88,15 @@ resolve_compose_args
 #      等于**永远没演练过 CI 的那条路径** —— 这是 548b9bc 自检方案的根本缺陷。
 #
 # 因此自检改为两件真正能失败的事:
-#   ① 用 `config --services` (真实子命令, 无副作用) 核对服务名集合;
+#   ① 直接解析 compose.yaml 的 services 键, 核对 FULL_SERVICES 集合;
 #   ② 用一个 1.0.6 行为桩校验参数**顺序** —— 桩只复刻 argparse 的
 #      "第一个位置参数即 command" 这条规则, 与真实 1.0.6 报错一致。
+#
+# ⚠️ ① 为什么不用 `podman-compose config --services`(2026-10-02 修正):
+#   该子命令在 CI 的 1.0.6 上**不存在**, 命令整体报错。原先的 `|| true`
+#   把失败吞成空串, 于是自检在 CI 上恒定报 FAIL —— 又一次"本地绿、CI 红"。
+#   本地是 1.6.0(支持该子命令), 正是这个版本差让它逃过了本地验证。
+#   改为解析 YAML 文本: 不依赖 podman-compose 版本, 两边行为必然一致。
 #
 # ⚠️ 本自检自身也是负向对照的对象: 把服务名挪回 `up` 之前, 或改回镜像名,
 # ① / ② 都必须变红。
@@ -98,17 +104,21 @@ resolve_compose_args
 self_test() {
   local failures=0
 
-  if ! command -v podman-compose >/dev/null 2>&1; then
-    echo "跳过: 未安装 podman-compose"
-    return 0
-  fi
-
   echo "自检 1/2: FULL_SERVICES 与 compose.yaml 的服务名一致"
+  # 只取 services 块内的顶层键。compose.yaml 里 services 下缩进 2 空格。
   local svc_list svc
-  svc_list="$(podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-    --profile full config --services 2>/dev/null || true)"
+  svc_list="$(awk '
+    /^services:[[:space:]]*$/ { in_services = 1; next }
+    in_services && /^[^[:space:]#]/ { in_services = 0 }
+    in_services && /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ {
+      line = $0
+      sub(/^  /, "", line)
+      sub(/:.*/, "", line)
+      print line
+    }
+  ' "$SCRIPT_DIR/compose.yaml")"
   if [ -z "$svc_list" ]; then
-    echo "  FAIL  无法用 config --services 枚举服务 (podman-compose 版本可能过旧)"
+    echo "  FAIL  无法从 compose.yaml 解析出 services 列表"
     failures=$((failures + 1))
   else
     for svc in "${FULL_SERVICES[@]}"; do
