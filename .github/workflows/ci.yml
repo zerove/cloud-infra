@@ -170,23 +170,32 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Build Native Images
-        # -J-Xmx 决定 native-image 的**分析阶段** Java 堆；而 native-image 另有
-        # 一块 image heap 由 JVM 可见的物理内存决定。两者叠加才是真实占用。
+        # 2026-10-02 三次实测得到的事实（勿凭猜测再改）:
         #
-        # 2026-10-02 调整: 原为 `-J-Xmx8g` 且**不限制 MaxRAM**。该 job 此前一直被
-        # skipped，2026-10-01 首次真正执行即失败于 `native-image [8/8] Creating image...`
-        # （最后阶段，日志无明确错误、被系统终止）—— 这是资源峰值耗尽的典型形态，
-        # 而非缺类/反射配置错误（那类会在 analysis 阶段就失败）。
+        #   配置                              gateway          auth
+        #   -J-Xmx8g（原，不限 MaxRAM）        失败              失败
+        #   -J-Xmx4g -J-XX:MaxRAM=10g         成功(9m9s/6.18GB) 失败
+        #   -J-Xmx4g（当前，不限 MaxRAM）      待验证            待验证
         #
-        # ubuntu-latest 为 4 核 / 16 GB。8 GB 堆 + 不受限的 image heap 会顶穿该规格。
-        # 现改为: 堆 4 GB, 并用 -XX:MaxRAM=10g 限定 JVM 可见总内存, 使 image heap
-        # 随之收敛。两者之和 (< 10 GB) 稳定落在 16 GB 以内, 留出 OS 与构建进程余量。
+        # 三点结论:
+        # 1. **gateway 的失败确为资源问题** —— 第二种配置下它成功生成了
+        #    cloud-infra-gateway-binary（Peak RSS 6.18GB）。
+        # 2. **auth 在前两种配置下都失败**，均停在 `[8/8] Creating image` 之后、
+        #    无明确错误、被系统终止。16 GB runner 上 gateway 已用到 6.18 GB，
+        #    auth 依赖更多（Nacos/Feign/Redis/Security），怀疑 `[8/8]` 的峰值更高。
+        # 3. 第三种配置是**去掉 MaxRAM 限制、只保留较小的堆**：
+        #    上一轮的 MaxRAM=10g 虽让 gateway 通过，但它同时**限制了 image heap 的上限**,
+        #    对峰值更高的 auth 可能恰好成为瓶颈。本次放开该限制, 让 image heap 自行决定,
+        #    仅靠 -Xmx4g 控制分析阶段的堆。
         #
-        # 仍需注意: 本调整尚未在 CI 上验证通过（首次真跑即失败，见上）。
-        # 若仍失败, 说明不是纯资源问题, 需按 native-image 的其他失败形态继续定位。
+        # 若第三种配置 auth 仍失败，则可排除"MaxRAM 限制"这一因素,
+        # 需转向其他形态（届时可考虑临时回退 cloud-infra-auth/src/main 到 0c66985
+        # 做对照 —— 注意该 job 只在 push 到 master 时触发, PR 路径无效）。
+        #
+        # ⚠️ 第三种配置**尚未在 CI 上验证**, 不应被当作已修复。
         run: |
-          mvn clean package -T 1 -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=10g" -pl cloud-infra-gateway,cloud-infra-auth -am --batch-mode
-          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=10g" -pl cloud-infra-gateway,cloud-infra-auth --batch-mode
+          mvn clean package -T 1 -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g" -pl cloud-infra-gateway,cloud-infra-auth -am --batch-mode
+          mvn native:compile -Pnative -DskipTests -Dnative.image.args="-J-Xmx4g" -pl cloud-infra-gateway,cloud-infra-auth --batch-mode
 
       - name: Upload native binaries
         uses: actions/upload-artifact@v4
