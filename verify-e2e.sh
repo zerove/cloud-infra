@@ -183,21 +183,31 @@ UP_LOG="$SCRIPT_DIR/.e2e-up.log"
 if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
   ok "compose 启动 + Nacos 配置同步完成"
 else
-  fail "compose 启动失败, 末尾 40 行:"
+  # ⚠️ 措辞不要写成 "compose 启动失败": up.sh --full 后面还有 9 步等待
+  # (Nacos / PostgreSQL / Redis / RabbitMQ / ES / Prometheus / Sentinel / 配置同步),
+  # 失败点可能在任意一步。2026-10-02 的两次 E2E 红灯都源于此 —— 当时误以为是
+  # compose 启动失败, 实际是第 7 步 Elasticsearch 15 次探测全部超时。
+  # 失败消息位于日志**第一行**, 而 tail -N 取的是**末尾** N 行, 于是"末尾 25 行"
+  # 里只剩后续步骤的等待输出, 真正的错误反被截掉 —— 这才是当时"看起来日志为空"的成因。
+  fail "deploy/up.sh --full 未完成(可能在 compose 启动, 也可能在后续就绪等待), 末尾 40 行:"
   # 排障前提: 即使日志为空也要说清楚, 否则"末尾 N 行"后面接空白会被误读成
-  # "脚本没输出任何东西"。2026-10-02 的 E2E 红灯正是如此: tail 出来一片空白,
-  # 无法区分“日志为空”与“日志没写到这里”。
+  # "脚本没输出任何东西"。
   if [ ! -s "$UP_LOG" ]; then
     echo "  (日志文件 $UP_LOG 不存在或为空 —— 脚本在产生任何输出前就失败了)" >&2
   fi
+  echo "--- 日志首 5 行(失败消息通常在这里, 不在末尾) ---" >&2
+  head -5 "$UP_LOG" >&2 || true
+  echo "--- 日志末尾 40 行 ---" >&2
   tail -40 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
   podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
-  echo "--- 失败容器日志(尾部) ---" >&2
-  podman ps -a --filter "status=exited" --format '{{.Names}}' 2>/dev/null | head -5 | while read -r c; do
+  echo "--- 未就绪容器的状态与日志 ---" >&2
+  # 不只查 exited: 就绪等待超时通常是容器仍在 running 但服务没起来
+  # (Elasticsearch 首启要 30s+, 且 mem_limit=1g 在 runner 上可能直接被 OOM kill 后重启)。
+  for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null | head -12); do
     [ -n "$c" ] || continue
-    echo "### $c" >&2
-    podman logs --tail 15 "$c" >&2 2>&1 || true
+    echo "### $c  [$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)]" >&2
+    podman logs --tail 12 "$c" >&2 2>&1 || true
   done
   exit 1
 fi
