@@ -464,18 +464,37 @@ Unable to start web server → Unable to start embedded Tomcat
 “四档内存配置都失败 ⇒ 内存参数不是关键变量”的推理**前提就是错的**：
 既然没跑到构建阶段，内存参数当然不可能是原因，那四档实测其实**没有区分力**。
 
-**唯一仍然成立的结论**是 PR #58 那条 A/B 对照：回退 auth 代码后仍以相同方式失败 ⇒
-与本次改动无关（该结论基于“失败模块与失败方式相同”，不依赖对失败原因的描述）。
+### ✅ Native 构建已全部通过（CI run 36969220950）
 
-已按新认识改为**两个模块分两次 Maven 调用**（见上方 ci.yml 注释）：本地对照显示
-auth 单独构建能跑过该插件，故失败与“在 gateway 之后同会话构建”相关。
+改为**两个模块分两次 Maven 调用**后，native 门禁首次全绿。证据不止job 状态：
 
-剩余待办（既有问题，非本次引入）：定位 `cloud-infra-auth` 在
-`native-maven-plugin` 启动阶段的 NPE。已知的可靠线索：
-① 本地单独构建 auth 能跑过插件并真正启动 native-image；
-② 同一会话内 gateway 成功后 auth 报 `this.inodes is null`；
-③ 四档内存参数对该失败无区分力（因为根本没进入构建阶段）。
-本机因沙箱 mmap 限制无法验证修复效果，只能以 CI 为准。
+- `Upload native binaries` 日志明确：`there will be **2 files** uploaded`，
+  路径正是 `cloud-infra-gateway/target/cloud-infra-gateway-binary` 与
+  `cloud-infra-auth/target/cloud-infra-auth-binary` ⇒ **auth 的二进制确实生成了**
+- artifact `native-binaries` 最终大小 100,735,406 字节
+- 即失败确由“gateway 成功后的同一 Maven 会话内构建 auth”触发，
+  分开会话即消除
+
+> 教训：当时有两条**本机 mmap 崩溃**的失败日志（`nat_head.log` / `nat_auth_only.log`），
+> 很容易让人认定“本机也无法验证、只能靠 CI”，从而放弃用本机做对照实验。
+> 实际上 auth **单独**构建时能跑过插件并真正启动 native-image ——
+> 这条对照才是定位到真因的关键。**不要因为一个环境跑不通就停止用它做对照。**
+
+### ⚠️ 又一个被依赖链掩盖的既有缺陷：Docker 构建
+
+native 修好后，`Build & Push Docker Images` 首次真正执行，立刻失败：
+
+```
+##[error]Unable to resolve action redhat-actions/podman-installer, repository not found
+```
+
+经 GitHub API 核实：该 action 已被**重命名**为 `redhat-actions/podman-install`
+（`podman-installer` 返回 404，`podman-install` 存在且有 v1/v1.1.x）。
+同 job 其余引用经核实均有效（`actions/download-artifact@v8`、`redhat-actions/podman-login@v2`）。
+
+**这个缺陷同样从未暴露过**：本 job `needs` native-build，而 native-build
+在 2026-10-01 之前长期 skipped，于是它也一直 skipped。
+“上游坏掉 → 自己伪装成从未验证过”，这是本项目第 6 例同类问题。
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
