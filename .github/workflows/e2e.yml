@@ -129,6 +129,15 @@ jobs:
         run: python3 deploy/tests/test_config_readback_gate.py
         shell: bash
 
+      - name: Guard ES diagnostics index names
+        # es_diagnostics() 探的索引名必须与 @Document(indexName=...) 一致。
+        # 我第一版写 oper_log/search_log、第二版按**类名**猜成 device_telemetry,
+        # 两者都不存在 —— 探不存在的索引恒返回 404, 看起来"ES 正常",
+        # 是**看起来正常的错误信息**, 比报错更危险。
+        # 在拿到 ES 服务端日志之前这套诊断是唯一取证手段, 探错对象则结论不可信。
+        run: python3 deploy/tests/test_es_diagnostics_index_names.py
+        shell: bash
+
       - name: Guard image tag expansion
         # 根因: verify-e2e.sh 用 ${entry##*:} 拆 tag, 而 SERVICE_IMAGES 的元素
         #   含**两个**冒号（"路径:Dockerfile" + 镜像引用里的 ":latest"）,
