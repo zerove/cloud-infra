@@ -9,6 +9,7 @@
 #   ./up.sh --check        # 检测本地配置与 Nacos 的漂移, 不执行变更
 #   ./up.sh --sync         # 仅同步本地配置到 Nacos (不启动基础设施, 不重启容器)
 #   ./up.sh --infra        # 仅启动基础设施 (不级联清理数据卷)
+#   ./up.sh --self-test    # 仅运行兼容性自检 (不碰容器, 可在 CI 跑)
 
 set -euo pipefail
 
@@ -17,32 +18,175 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # 默认仅基础设施; --full 时含微服务
 COMPOSE_ARGS=()
+FULL_SERVICES=()
 FULL=0
 CHECK_ONLY=0
 SYNC_ONLY=0
 INFRA_ONLY=0
+SELF_TEST=0
 for arg in "$@"; do
   case "$arg" in
     --full) FULL=1 ;;
     --check) CHECK_ONLY=1 ;;
     --sync) SYNC_ONLY=1 ;;
     --infra) INFRA_ONLY=1 ;;
-    *) echo "未知参数: $arg (支持 --full --check --sync --infra)" >&2; exit 1 ;;
+    --self-test) SELF_TEST=1 ;;
+    *) echo "未知参数: $arg (支持 --full --check --sync --infra --self-test)" >&2; exit 1 ;;
   esac
 done
 
-if [ "$FULL" -eq 1 ]; then
-  # 探测 podman-compose 是否支持 --profile CLI 选项:
-  #   本地 1.6.0 支持; CI 的 apt 包 1.0.6 不支持 —— 不支持时 --profile full
-  #   会把 full 当成 command 位置参数 → error: argument command: invalid choice: 'full'。
-  # 不支持时改为显式列出服务名: 显式指定的服务不受 profile 过滤影响,
-  # 语义上与 `--profile full` 完全相同。
-  if podman-compose --help >/dev/null 2>&1 | grep -q -- '--profile'; then
+# compose.yaml 中 `profiles: ["full"]` 的服务名。
+#
+# ⚠️ 这里必须用 **compose 的服务名 (services 段下的 key)**, 不是镜像名, 也不是
+# container_name。镜像名是 localhost/cloud-infra-gateway, container_name 是
+# cloud-gateway, 但服务名就是 gateway。
+# 548b9bc 误用了镜像名 (cloud-infra-gateway), 于是即便参数位置正确也会失败。
+FULL_SERVICES=(gateway auth system file notification search)
+
+# 探测 podman-compose 是否支持 --profile。
+# CI 的 apt 包是 1.0.6 (实测其源码 grep -c profile = 0, 完全无此特性);
+# 本地通常是 1.6.0。
+compose_supports_profile() {
+  podman-compose --help 2>&1 | grep -q -- '--profile'
+}
+
+# 拼出最终命令行。兼容两条路径:
+#   支持 --profile: `podman-compose --profile full up -d`
+#   不支持:        `podman-compose up -d gateway auth ...`
+#                   实测 1.0.6 下显式点名确实会绕过 profile 过滤
+#                   (最小复现: up -d web 启动 web, up -d infra 则 web/api 均被 skip),
+#                   因此回退路径语义等价。
+#
+# ⚠️ 服务名必须放在 `up -d` **之后**。1.0.6 的 argparse 把第一个位置参数当 command,
+# 放前面会得到 "invalid choice: 'gateway'" (2026-10-02 E2E 红灯的直接原因)。
+resolve_compose_args() {
+  COMPOSE_ARGS=()
+  if [ "$FULL" -eq 1 ] && compose_supports_profile; then
     COMPOSE_ARGS+=(--profile full)
-  else
-    COMPOSE_ARGS+=(cloud-infra-gateway cloud-infra-auth cloud-infra-system cloud-infra-file cloud-infra-notification cloud-infra-search)
   fi
+}
+
+# 实际拼出的 `up` 参数列表。放服务名的分支与不放服务名的一律用数组返回,
+# 避免未定义数组在 set -u 下展开出错。
+compose_up_args() {
+  if [ "$FULL" -eq 1 ] && ! compose_supports_profile; then
+    printf '%s\n' up -d "${FULL_SERVICES[@]}"
+  else
+    printf '%s\n' up -d
+  fi
+}
+
+resolve_compose_args
+
+# ---------------------------------------------------------------------------
+# 兼容性自检 (--self-test): 不启动任何容器, 验证参数拼装与 compose.yaml 一致。
+#
+# ⚠️ 为什么不能"跑一次 podman-compose 看退出码"来自检:
+#   ① podman-compose --dry-run 在 1.6.0 下**输出为空** (实测 stdout/stderr 均 0 行),
+#      探测不到任何东西; 放在 up 之后还会直接 error: unrecognized arguments;
+#   ② 本地版本与 CI 不同 (本地 1.6.0 / CI apt 包 1.0.6), 用本地二进制自检
+#      等于**永远没演练过 CI 的那条路径** —— 这是 548b9bc 自检方案的根本缺陷。
+#
+# 因此自检改为两件真正能失败的事:
+#   ① 用 `config --services` (真实子命令, 无副作用) 核对服务名集合;
+#   ② 用一个 1.0.6 行为桩校验参数**顺序** —— 桩只复刻 argparse 的
+#      "第一个位置参数即 command" 这条规则, 与真实 1.0.6 报错一致。
+#
+# ⚠️ 本自检自身也是负向对照的对象: 把服务名挪回 `up` 之前, 或改回镜像名,
+# ① / ② 都必须变红。
+# ---------------------------------------------------------------------------
+self_test() {
+  local failures=0
+
+  if ! command -v podman-compose >/dev/null 2>&1; then
+    echo "跳过: 未安装 podman-compose"
+    return 0
+  fi
+
+  echo "自检 1/2: FULL_SERVICES 与 compose.yaml 的服务名一致"
+  local svc_list svc
+  svc_list="$(podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+    --profile full config --services 2>/dev/null || true)"
+  if [ -z "$svc_list" ]; then
+    echo "  FAIL  无法用 config --services 枚举服务 (podman-compose 版本可能过旧)"
+    failures=$((failures + 1))
+  else
+    for svc in "${FULL_SERVICES[@]}"; do
+      if printf '%s\n' "$svc_list" | grep -qx "$svc"; then
+        echo "  PASS  服务名 '$svc' 存在"
+      else
+        echo "  FAIL  服务名 '$svc' 在 compose.yaml 中不存在"
+        failures=$((failures + 1))
+      fi
+    done
+  fi
+
+  echo "自检 2/2: 服务名位于 'up' 之后 (1.0.6 行为桩)"
+  # 桩: 复刻 1.0.6 的 argparse —— 第一个位置参数必须是已知 command。
+  # 真实 1.0.6 报错为 "argument command: invalid choice: 'gateway'"。
+  local stub
+  stub="$(mktemp)"
+  cat > "$stub" <<'STUB'
+#!/usr/bin/env bash
+# 复刻 podman-compose 1.0.6: 第一个位置参数被当作 command, 不匹配即报错。
+positional=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -f|--file|--env-file|-p|--podman-path|--podman-args) shift 2 ;;
+    -*) shift ;;
+    *) positional+=("$1"); shift ;;
+  esac
+done
+if [ ${#positional[@]} -eq 0 ]; then
+  echo "STUB: 缺少 command" >&2
+  exit 1
 fi
+case "${positional[0]}" in
+  help|version|wait|systemd|pull|push|build|up|down|ps|run|exec|start|stop|restart|logs|config|port|pause|unpause|kill) ;;
+  *) echo "podman-compose: error: argument command: invalid choice: '${positional[0]}'" >&2; exit 2 ;;
+esac
+echo "STUB_OK command=${positional[0]}"
+STUB
+  chmod +x "$stub"
+
+  # 在子 shell 里把 compose_supports_profile 打成"不支持", 以覆盖 CI 的 1.0.6 路径。
+  if (
+    compose_supports_profile() { return 1; }
+    FULL=1
+    mapfile -t up_args < <(compose_up_args)
+    "$stub" "${up_args[@]}"
+  ) >/dev/null 2>&1; then
+    echo "  PASS  服务名位于 up 之后, 1.0.6 可解析"
+  else
+    echo "  FAIL  服务名位置或顺序错误, 1.0.6 无法解析 (会得到 invalid choice)"
+    failures=$((failures + 1))
+  fi
+
+  # 负向对照: 若顺序被改回 "服务名 up -d", 桩必须拒绝。
+  if "$stub" "${FULL_SERVICES[0]}" up -d >/dev/null 2>&1; then
+    echo "  FAIL  桩未能拒绝错误顺序, 说明自检本身失效"
+    failures=$((failures + 1))
+  else
+    echo "  PASS  桩正确拒绝错误顺序 (负向对照成立)"
+  fi
+
+  rm -f "$stub"
+
+  if [ "$failures" -eq 0 ]; then
+    echo "自检通过"
+    return 0
+  fi
+  echo "自检失败: $failures 项"
+  return 1
+}
+
+if [ "$SELF_TEST" -eq 1 ]; then
+  ENV_FILE="$PROJECT_ROOT/.env"
+  resolve_compose_args
+  self_test
+  exit $?
+fi
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "=== 配置漂移检测模式 (仅比较, 不执行变更) ==="
 fi
@@ -167,7 +311,9 @@ echo "  已停止旧环境 (保留数据卷)"
 
 echo "=== 2. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ${COMPOSE_ARGS[@]} up -d
+  mapfile -t UP_ARGS < <(compose_up_args)
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+    ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
 fi
 
 # 等待 Nacos 就绪

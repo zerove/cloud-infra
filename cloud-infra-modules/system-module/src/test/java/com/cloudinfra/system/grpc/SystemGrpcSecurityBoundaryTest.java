@@ -114,6 +114,10 @@ class SystemGrpcSecurityBoundaryTest {
             .withPropertyValues(
                 "cloudinfra.system.grpc.enabled=true",
                 "cloudinfra.grpc.enabled=true",
+                // 2026-10-02: 显式指定临时端口。CloudInfraGrpcProperties.port 默认 9090,
+                // 本测试过去未覆盖 → 抢占 9090 → 本地被占用时以 BindException 失败。
+                // 与 SystemGrpcNetworkTest 同一根因, 一并修掉。
+                "cloudinfra.grpc.port=0",
                 "cloudinfra.grpc.ssl.enabled=true",
                 "cloudinfra.grpc.ssl.cert-chain-file=file:" + tls.certificate(),
                 "cloudinfra.grpc.ssl.private-key-file=file:" + tls.privateKeyPem(),

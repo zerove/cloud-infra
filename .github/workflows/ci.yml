@@ -258,6 +258,16 @@ jobs:
     timeout-minutes: 60
     needs: native-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # 2026-10-02 新增。此前本 job **没有任何 permissions 声明**, 而仓库的
+    # 默认 workflow 权限是 read (经 API 核实:
+    # {"default_workflow_permissions":"read"}), 因此 GITHUB_TOKEN 无权写 packages。
+    # 表现: 镜像本地构建成功, push 时报
+    #   denied: installation not allowed to Create organization package
+    # 这同样是"上游坏掉 → 把自己伪装成从未验证过"的第 N 例: aaf0f67 修好 podman
+    # action 之后本 job 才首次真正执行, 才露出这个从未被验证过的权限缺失。
+    permissions:
+      contents: read   # 下载 artifact 不需要, 但 checkout 需要
+      packages: write   # 推 ghcr.io 必需
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
