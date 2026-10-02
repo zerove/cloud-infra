@@ -15,6 +15,8 @@ jobs:
     name: End-to-End Verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,6 +51,30 @@ jobs:
           sudo apt-get install -y podman podman-compose
           podman --version
           podman-compose --version
+
+      - name: Gate integrity self-check (up.sh)
+        # 2026-10-02 新增。
+        #
+        # 本仓库已记录 8 例"门禁看起来在守护, 实际从未生效"。本次 E2E 红灯本身
+        # 就是第 9 例的原料: 548b9bc 为修 E2E 加的 up.sh --self-test 有三重失效 ——
+        #   ① 它调用的是**本地/CI 各自安装的** podman-compose (本地 1.6.0, CI 1.0.6),
+        #      因此从不演练 CI 真正会走的那条分支;
+        #   ② `podman-compose --dry-run up -d` 在 1.6.0 下输出为空 (实测 stdout/stderr
+        #      均 0 行), 探测不到任何东西, 退出码也不可靠 (正确顺序 exit=1);
+        #   ③ 它比对的是"命令能否被解析", 而当时的 FULL_SERVICES 用的是**镜像名**
+        #      (cloud-infra-gateway) 而非 compose 服务名 (gateway)。
+        #
+        # 现在的 up.sh --self-test 改为两件真能失败的事: 用 config --services
+        # 核对服务名集合 + 用 1.0.6 行为桩校验参数顺序, 并自带负向对照。
+        #
+        # ⚠️ 必须排在 "Install Podman + podman-compose" **之后**: self_test 在
+        # podman-compose 缺失时是直接 return 0 的 (本地无该命令时属正常),
+        # 放到安装步骤之前就等于在 CI 上静默跳过 —— 那正是本次要消灭的那类假门禁。
+        run: |
+          # 显式断言工具存在, 避免 self_test 的"跳过即通过"分支掩盖未安装的情况
+          command -v podman-compose >/dev/null 2>&1 || { echo "::error::podman-compose 未安装, 自检会被静默跳过"; exit 1; }
+          bash deploy/up.sh --self-test
+        shell: bash
 
       - name: Cache Maven packages
         uses: actions/cache@v4

@@ -82,6 +82,14 @@ class SystemGrpcNetworkTest {
                 .withPropertyValues(
                     "cloudinfra.system.grpc.enabled=true",
                     "cloudinfra.grpc.enabled=true",
+                    // 2026-10-02: 显式指定临时端口。
+                    // CloudInfraGrpcProperties.port 默认 9090 (见其字段声明), 而本测试
+                    // 过去**没有覆盖它**, 于是直接抢占 9090。开发者本地只要有进程占用
+                    // 该端口 (如 compose 栈里的 Prometheus 就映射 9090), 本测试即以
+                    // BindException: Address already in use 失败 —— 而 CI 上干净, 永绿。
+                    // 这类缺陷只靠"本机偶发红"暴露, 属于典型的环境依赖型脆弱测试。
+                    // 测试随后从 server.getPort() 读回实际端口, 因此 0(临时端口)不影响断言。
+                    "cloudinfra.grpc.port=0",
                     "cloudinfra.grpc.ssl.enabled=true",
                     "cloudinfra.grpc.ssl.cert-chain-file=file:" + certificate.toAbsolutePath(),
                     "cloudinfra.grpc.ssl.private-key-file=file:" + privateKeyPem.toAbsolutePath())
