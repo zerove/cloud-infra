@@ -409,26 +409,38 @@ Unable to start web server → Unable to start embedded Tomcat
    附带的诊断能力（`7c44680`）：`probeSystemCredentialEndpoint()` 直连 system 内部端点，
    能把"登录失败"拆成连接异常/401/查无此人/数据正常四类。第 3 步的转折正是它给出的。
 
-### ⚠️ Native Image Build 首次真正执行即失败（未解决）
+### ⚠️ Native Image Build：gateway 已通过，auth 仍未定位
 
 `Native Image Build (Gateway + Auth)` 此前因上游 job 失败一直被 **skipped**，
-2026-10-01 才第一次真跑起来，失败于 `native-image [8/8] Creating image...`，
-日志无明确错误、被系统终止。CI 配置为 `-Dnative.image.args="-J-Xmx8g"`。
+2026-10-01 才第一次真跑起来，失败于 `native-image [8/8] Creating image...`。
 
-**本项未定位**。本次改动确实触及了 gateway/auth 的生产代码（多租户相关），
-因此**不能断言与本次改动无关**。
+2026-10-02 调整内存参数（`-J-Xmx8g` → `-J-Xmx4g -J-XX:MaxRAM=10g`）后，
+**两模块的表现分化了**，这本身是有价值的信息：
 
-**已准备的对照手段**（2026-10-02）：本地分支 `ci/native-baseline-check`，
-在 `master` 基础上把 gateway/auth 的 6 个生产文件回退到 `0c66985`。
-开 PR 即可触发 `pull_request` 路径的 CI（`ci.yml` 同时监听 `push: [master, main]`
-与 `pull_request: [master]`），与 `master` 的结果对比即可定论。
-首次尝试推送时本机代理对 `github.com` 持续 TLS 失败（10+ 分钟），故尚未完成。
+| 配置 | cloud-infra-gateway | cloud-infra-auth |
+| :--- | :--- | :--- |
+| `-J-Xmx8g`（原，不限 MaxRAM） | 失败 | 失败 |
+| `-J-Xmx4g -J-XX:MaxRAM=10g`（现） | ✅ **成功**（9m9s，Peak RSS 6.18GB） | ❌ 失败 |
 
-**一个已知但未定性的线索**：本地跑同一个 native 构建**同样**失败于
-`Native memory allocation (mmap) failed` / `Not enough space`，
-且崩溃时物理内存尚有 15 GB 空闲 —— 与本机在 `CrossServiceFeignChain`
-上遇到的 mmap 失败**同源**，属本机沙箱限制而非代码问题。
-即**本机不能作为 native 构建的验证环境**，对照必须在 CI 上做。
+即：**gateway 的失败确实是资源问题，已由本次调整解决**；
+但 **auth 在两种配置下都失败**，且都是 `[8/8] Creating image` 之后
+无明确错误、被系统终止 —— **不是单纯的内存不足**，auth 侧另有原因，**尚未定位**。
+
+**一个仍未排除的可能**：本次改动给 `AuthTokenServiceImpl` / `UserServiceImpl`
+增加了租户相关逻辑（`CLAIM_TENANT_ID` 常量、`resolveTenantId`）。native-image 的
+闭世界假设下，新增的 `TenantContext` 引用可能需要反射配置（`reflect-config.json`）
+或初始化代码（`native-image-agent`），而这类缺失**通常在 analysis 阶段报错**，
+与观察到的"最后阶段被终止"不完全吻合 —— 故**既不能断言相关、也不能排除**。
+
+**可用的对照手段（尚未执行）**：该 job 的条件是
+`if: github.event_name == 'push' && github.ref == 'refs/heads/master'`，
+**PR 路径不触发它**（2026-10-02 开 PR #57 验证过，确认无法产出对照数据）。
+要做对照只能：临时把 `cloud-infra-auth/src/main` 回退到 `0c66985` 并 push 到 master，
+对比后再恢复。
+
+**本机无法作为验证环境**：本地跑同一 native 构建同样失败于
+`Native memory allocation (mmap) failed`，且崩溃时物理内存尚有 15 GB 空闲 ——
+与本机在 `CrossServiceFeignChain` 上的失败**同源**，属本机沙箱限制。
 
 ### 6. 质量基线 (2026-10-01)
 - **构建**: `mvn -o clean test` → BUILD SUCCESS, **501 项单测, 0 失败, 1 跳过** (2026-10-01 实测, 以 surefire XML 为准, 勿用控制台汇总行累加 —— 会重复计数)。**注意: 单测数不是交付证据** —— 见上方第三条硬规则, 2026-09-30 审计查出 4 处"自测全绿但实际从未运行"的缺陷
