@@ -25,6 +25,24 @@ jobs:
           distribution: temurin
           java-version: '25'
 
+      - name: Verify E2E gate integrity (negative control)
+        # 2026-10-02 新增。
+        #
+        # 本仓库已记录 6 例"门禁看起来在守护, 实际从未生效", 其中 E2E 占了两处:
+        #   ① verify-e2e.sh 的镜像构建上下文用服务目录, 6 个镜像全部构建失败,
+        #      失败被 `| tail -3` 吞掉后仍打印 "PASS 6 个镜像构建完成";
+        #   ② `podman-compose --profile full ... | tail -3` 报 invalid choice 也判 PASS。
+        # 两者都只有"人肉读日志"才看得出来 —— 所以这里给门禁本身加一道负向对照:
+        # 用假 podman 强制 build 失败, 断言脚本真的会判 FAIL。
+        #
+        # 若这一步变红, 说明有人把"吞掉错误"的写法改回来了。
+        run: bash verify-e2e.sh --self-test
+        # 注意: GitHub Actions 的**默认** shell 是 `bash -e {0}` —— **不含** `-o pipefail`;
+        # 只有显式声明 `shell: bash` 才会变成 `bash --noprofile --norc -eo pipefail {0}`。
+        # 本项目多个步骤用 `... | tee /tmp/x.log`, 一旦漏掉 pipefail,
+        # 管道退出码取自 tee(恒 0), 脚本失败会被整个吞掉。
+        shell: bash
+
       - name: Install Podman + podman-compose
         run: |
           sudo apt-get update
@@ -52,7 +70,13 @@ jobs:
       - name: Run E2E verify script
         # --skip-build 不传: CI 走完整流程 (mvn + podman build)
         # 失败时上传 build 产物与日志便于排查
+        #
+        # `shell: bash` 不可省: GitHub 的**默认** shell 是 `bash -e {0}`, 不带
+        # `-o pipefail`, 管道退出码取自 tee(恒 0) → verify-e2e.sh 失败会被整个吞掉,
+        # 表现为"这步绿了, 下一步却莫名其妙地 Connection refused"。
+        # 2026-10-02 的 E2E 红灯正是这样被掩盖的。
         run: bash verify-e2e.sh 2>&1 | tee /tmp/e2e.log
+        shell: bash
         env:
           # 让 compose 在 runner 上能找到 Nacos
           JAVA_OPTS: ""
