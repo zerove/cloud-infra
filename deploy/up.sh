@@ -32,7 +32,16 @@ for arg in "$@"; do
 done
 
 if [ "$FULL" -eq 1 ]; then
-  COMPOSE_ARGS+=(--profile full)
+  # 探测 podman-compose 是否支持 --profile CLI 选项:
+  #   本地 1.6.0 支持; CI 的 apt 包 1.0.6 不支持 —— 不支持时 --profile full
+  #   会把 full 当成 command 位置参数 → error: argument command: invalid choice: 'full'。
+  # 不支持时改为显式列出服务名: 显式指定的服务不受 profile 过滤影响,
+  # 语义上与 `--profile full` 完全相同。
+  if podman-compose --help >/dev/null 2>&1 | grep -q -- '--profile'; then
+    COMPOSE_ARGS+=(--profile full)
+  else
+    COMPOSE_ARGS+=(cloud-infra-gateway cloud-infra-auth cloud-infra-system cloud-infra-file cloud-infra-notification cloud-infra-search)
+  fi
 fi
 if [ "$CHECK_ONLY" -eq 1 ]; then
   echo "=== 配置漂移检测模式 (仅比较, 不执行变更) ==="
