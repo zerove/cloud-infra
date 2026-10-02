@@ -55,12 +55,33 @@ dump_container_diagnostics() {
       # 此前只取tail 12，导致 run 37036943534 上 cloud-notification 的
       # [exited exit=1] 一个 Bean 名都没拿到 —— 而这恰恰是唯一的失败服务。
       # 故对已退出的容器同时打印首部（异常通常在开头 60 行内）。
-      # ⚠️ podman logs **没有** --head 参数（只有 --tail/--since/--until），
-      # 实测 `podman logs --head 60` 直接报 "unknown flag" 并输出空内容 ——
-      # 那样等于既没报错退出也没拿到日志，是最坏的一种假门禁。
-      # 正确写法：--tail -1 输出全部，再用 sed 取首部。
-      echo "--- $c 日志首 60 行（启动失败的真实原因在这里）---" >&2
-      podman logs --tail -1 "$c" 2>&1 | sed -n '1,60p' >&2 || true
+      # ⚠️ 第三处假门禁（2026-10-03，依据 E2E run 37046848357 实测）:
+      # 首 60 行里**100% 是 SkyWalking agent 的插件加载噪音**,
+      # 实测 60/60 行均为 agent 类, 应用自己的日志一行都没有。
+      # 原因是 SkyWalking agent 在 main 之前完成 300+ 个插件的类加载。
+      # 噪音来源已用真实日志穷尽统计(按 "main <Class> :" 计数):
+      #   AgentClassLoader 157 / PluginResourcesResolver 146 /
+      #   SnifferConfigInitializer 3 / SkyWalkingAgent 1 / AgentPackagePath 1
+      # 即恰好 5 个类, 下面按类名白名单反向排除, 而非逐条猜测。
+      local NOISE='AgentClassLoader|PluginResourcesResolver|SnifferConfigInitializer|SkyWalkingAgent|AgentPackagePath'
+      # 注意: 不能简单地“滤掉所有 at 开头的行” —— Spring 的失败堆栈**主体就是 at 行**,
+      # 滤掉就等于把根因删了。真正的做法是把噪音源滤掉后, **优先保留含关键字的行**:
+      #   ERROR/Exception/Caused by/FATAL/APPLICATION FAILED 等, 最多补 40 行上下文。
+      # 这样无论噪音占多少, 根因一定在窗口内。
+      echo "--- $c 关键错误行（ERROR/Exception/Caused by/FAILED）---" >&2
+      podman logs --tail -1 "$c" 2>&1 \
+        | grep -E 'ERROR|Exception|Caused by|FATAL|APPLICATION FAILED|OutOfMemory|exited|Bind' \
+        | grep -vE "$NOISE" | head -40 >&2 || true
+      echo "--- $c 日志首 25 行有效内容（已滤 SkyWalking agent 加载噪音）---" >&2
+      podman logs --tail -1 "$c" 2>&1 \
+        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|FileOutputStream|FileNotFoundException|sun\.misc\.Unsafe|Picked up JAVA_TOOL" \
+        | grep -vE '^\s+at |^\s*\.\.\. [0-9]+ more' \
+        | sed -n '1,25p' >&2 || true
+      # 同时给出尾部有效内容: Spring 的失败堆栈在末尾, 但末尾同样常被 agent 噪音污染
+      echo "--- $c 日志尾 25 行有效内容 ---" >&2
+      podman logs --tail -1 "$c" 2>&1 \
+        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|FileOutputStream|FileNotFoundException|sun\.misc\.Unsafe" \
+        | tail -25 >&2 || true
     fi
     podman logs --tail 12 "$c" >&2 2>&1 || true
   done
