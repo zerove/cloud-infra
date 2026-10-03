@@ -485,3 +485,102 @@ failed to unmarshal existing healthcheck results ... readObjectStart: expect { o
 | 完整根因 | **仍未闭环**，候选剩 CPU 核数 / agent arena 规划 |
 
 **未写入任何仓库配置** —— 唯一候选变量尚未通过有效对照实验。
+
+---
+
+## 十一、第六轮：拿到最硬的一次证据，但根因仍未闭环
+
+本轮解决了观测可靠性（见 11.1），并首次让 **6 服务全部 healthy**（11.2），
+但也证伪了"内存不足"这一整条主线（11.3–11.4）。
+
+### 11.1 先解决观测手段：崩溃转储落宿主目录
+
+podman 状态损坏会让容器表现为 `no such container`，与"JVM 崩溃退出"**无法区分**。
+解法是让证据绕过 podman：为每个服务加 bind mount
+`<scratch>/jvmprobe-r2/<svc>:/app/probe`，JVM 转储直接落宿主目录。
+
+已验证可行（容器以 uid 100 运行，目录需 `chmod 777`）。
+
+### 11.2 6 服务首次同时健康
+
+基础设施**完全预热**后启动 6 业务服务：
+
+```
+t+30s   healthy=4
+t+180s  healthy=6   ✅ 全部 healthy
+```
+
+而第五轮（基础设施未预热）同样 6 服务却崩了两个。
+⇒ **预热程度是重要变量**，此前多轮实验未控制它。
+
+### 11.3 但 system 随后仍崩溃——且是在启动成功之后
+
+```
+11:38:22.581  Started SystemApplication in 337.879 seconds
+11:38:25.564  Native memory allocation (mmap) failed to map 65536 bytes
+              Error detail: committing reserved memory
+              exit=1  oom=false
+```
+
+**启动完成 3 秒后**才崩。这排除了"启动期按错误内存视图规划"的旧说法。
+
+### 11.4 决定性反证：内存量与崩溃**反向相关**
+
+三组受控实验，唯一变量为system 的内存配置：
+
+| 配置 | 结果 |
+| :--- | :--- |
+| `mem_limit: 2g` / `-Xmx1536m`（原样） | 启动成功，**338 秒后**崩 |
+| `mem_limit: 1200m` / `-Xmx640m`（收紧） | **75 秒**就崩（更早） |
+| **完全移除 `mem_limit`**（20.97GB 上限） | **25 秒**内崩（最早） |
+
+**给更多内存反而更早崩溃。** 这与"内存不足"假设直接矛盾。
+
+崩溃时刻的环境快照：
+
+```
+宿主 available = 10454 MB          ← 还有 10GB 空闲
+file / search / notification / auth / gateway = 全部 healthy
+oom=false  exit=1
+```
+
+⇒ **不是内存不够，也不是系统内 OOM。**
+
+### 11.5 三次失败的失败点各不相同
+
+| 场景 | `Error detail` |
+| :-- | :-- |
+| 第八节（单服务 448m） | `AllocateHeap` (112 B) |
+| 第五节（auth 并行） | `Chunk::new` (129816 B) |
+| 本节收紧后 | `Chunk::new` (252424 B) |
+| 本节原样 | `mmap ... committing reserved memory` (65536 B) |
+
+三次失败点不同，但都报`insufficient memory`。**该消息是症状，不是原因。**
+
+### 11.6 已排除清单（累计）
+
+| 假设 | 排除依据 |
+| :-- | :-- |
+| 内核 OOM killer | `OOMKilled=false`, `oom_kill=0` |
+| 元空间 reserved 撑爆 | 转储 `committed=24320K` |
+| 映射数耗尽 | 289 / 10485760 |
+| 总量超限 | `-Xms` 合计 2176MB / available 12786MB |
+| cgroup 内存不足 | 收紧/移除 `mem_limit` 后**更早**崩（11.4） |
+| SkyWalking agent 开关 | 开与关 system 都能起（第五节，但该对照有预热变量干扰） |
+| CPU 核数 / JIT arena | 对照实验两次被 podman 状态损坏打断，**未完成** |
+
+### 11.7 当前判断
+
+`insufficient memory` 出现在多种不同分配路径上，且**与实际可用内存反向相关**，
+这不符合"资源耗尽"的任何已知形态。更可能的是**运行环境层面的限制**
+（cgroup v2 在 podman rootless 下的某项未识别约束），而非应用或 JVM 配置问题。
+
+**但本轮未能取得该限制的直接证据**，故仍不写入任何配置变更。
+
+### 11.8 下一步（需要真实证据，不再猜参数）
+
+1. 在崩溃**发生的同一瞬间**抓 `/sys/fs/cgroup/memory.events`、`memory.stat`、
+   `memory.pressure`（本轮只拿到事后快照）
+2. 用 `strace -f -e trace=mmap,madvise` 记录失败的那次系统调用及其参数
+3. 对照 podman 版本 / cgroup 版本：同一镜像在 `cgroup v1` 与 `v2` 下各跑一轮
+4. 先解决 podman 状态反复损坏（它已让至少3 轮实验作废）
