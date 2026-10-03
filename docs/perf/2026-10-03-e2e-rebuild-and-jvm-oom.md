@@ -31,15 +31,18 @@ podman rm -f --all
 
 ---
 
-## 二、JVM 崩溃归因：三次假设被实测推翻
+## 二、JVM 崩溃归因：四次尝试，最终仍未定位
 
-现象: 6 个业务服务并行启动时 4 个崩溃，日志为
+现象: 业务服务启动过程中崩溃，日志为
 
 ```
 # There is insufficient memory for the Java Runtime Environment to continue.
-# Native memory allocation (malloc) failed to allocate 7127768 bytes
+# Native memory allocation (malloc) failed to allocate 65560 bytes
 # Out of Memory Error (os_linux.cpp:3000), pid=1, tid=4
 ```
+
+> ⚠️ **本节结论已被后续实测部分推翻，保留在此是为了记录"我错在哪"。**
+> 真正的定位见第三节。
 
 ### 假设 1: `mem_limit` 太小 → 加 `-XX:MaxRAM`
 
@@ -88,8 +91,101 @@ load average: 14.91, 13.55, 11.08     # 饱和
 `os_linux.cpp:3000` 在**线程栈分配失败**时同样出现 ——
 CPU 饱和下JVM 创建线程超时，是比"内存不足"更贴合全部证据的解释。
 
-**结论: 当前崩溃由本机 CPU 饱和导致，不是仓库配置问题。**
-因此**未对 `deploy/compose.yaml` 做任何 JVM 参数改动**（已 `git checkout` 还原）。
+**结论（当时）: 崩溃由本机 CPU 饱和导致。**
+因此未对 `deploy/compose.yaml` 做任何 JVM 参数改动（已 `git checkout` 还原）。
+
+---
+
+## 三、后续实测: "CPU 饱和" 同样不成立
+
+CPU 负载从 14.9 降到 ~7 后重跑，**崩溃依旧**，且呈现稳定规律。
+
+### 关键反证: `cloud-system` 的内存曲线完全健康
+
+单独启动 `cloud-system`（`mem_limit=2048MB`），每 15 秒采样:
+
+```
+t+15s   511.9MB / 2.147GB
+t+60s   713.6MB
+t+105s  891.6MB
+t+120s  897.3MB
+t+180s  901.1MB
+t+240s  902.9MB      ← 4 分钟内零波动, 进程始终 running
+```
+
+**稳态内存只用到 limit 的 44%，且完全平稳。**
+若是内存问题，不可能出现这种"稳定在 900MB 却不崩"的曲线。
+
+### 真正的规律: 先启动的先崩溃
+
+无论并行还是串行，规律一致 —— **启动顺序靠前的服务崩溃，靠后的存活**:
+
+| 启动顺序 | 服务 | 结果 |
+| :--- | :--- | :--- |
+| 1 | system | exited（内存崩溃 ×1） |
+| 2 | file | exited（内存崩溃 ×1） |
+| 3 | search | exited（内存崩溃 ×1） |
+| 4 | notification | **running / healthy** |
+| 5 | auth | **running / healthy** |
+| 6 | gateway | running |
+
+串行启动（每次等 125 秒）**并未解决问题** —— 只是把崩溃顺序往后推。
+
+### 当前状态
+
+**6 个服务从未同时健康过。** 已尝试并失败的路径:
+
+| 尝试 | 结果 |
+| :--- | :--- |
+| 6 服务并行 | 4 崩 2 活 |
+| 加 `-XX:MaxRAM` | 单服务成立，6 并行仍崩 |
+| 关 `UseCompactObjectHeaders` | 仍崩 |
+| 完全移除 `mem_limit` | 仍崩 |
+| 串行启动 | 仍崩（仅顺序变化） |
+| 等 CPU 负载下降 | 仍崩 |
+
+**未定位。** 已停止试错 —— 继续猜参数缺乏依据。
+仓库配置未做任何改动（`deploy/compose.yaml` 与 HEAD 一致）。
+
+---
+
+## 四、根因: podman rootless 下 `/proc/meminfo` 未隔离
+
+在运行中的容器里直接读:
+
+```
+容器内 MemTotal:      20,480,648 kB      ← 20GB, 这是**宿主的值**
+容器内 MemAvailable:  11,997,904 kB
+容器内 cgroup max:      469,762,048       ← 448MB, 这是**真实限制**
+```
+
+**JVM 看到的是 20GB，按 20GB 规划**线程栈、元空间、代码缓存、
+arena 数量 —— 这些都远超 448MB 的真实上限，于是
+`Native memory allocation (malloc) failed` 并最终
+`os_linux.cpp:3000` (OS 层线程栈分配失败)。
+
+`-XX:+UseContainerSupport` 本应修正这个偏差，但实测无效
+（它依赖的 `/proc/meminfo` 或 cgroup 接口在 podman rootless 下不可靠)。
+
+这解释了此前所有现象:
+
+| 现象 | 解释 |
+| :--- | :--- |
+| 单服务能跑 | 20GB 规划出来的元空间暂时没撑爆 448MB |
+| 多服务时先启动的先崩 | 越早启动的 JVM 越早进入"按 20GB 规划"状态, 越早撑爆 |
+| `system` 稳态只用 903MB 却仍崩 | 崩溃发生在**启动期规划阶段**, 不是稳态 RSS |
+| 崩溃信息说"memory"但宿主机有 11GB 可用 | 报错基于错误的内存视图 |
+
+### 修复方向（未实施）
+
+显式告诉 JVM 真实上限, 即加 `-XX:MaxRAM=<mem_limit>`。
+实测**单服务成立**（auth 加 `-XX:MaxRAM=448m` 后稳定 3 分钟,
+去掉则 60 秒崩溃），但**多服务并行时仍崩** ——
+说明还有第二个因素未被隔离, 因此未写入仓库。
+
+**正确的修法应从容器运行时层面解决**（如给容器注入正确的
+`/proc/meminfo` 视图, 或统一在 JAVA_OPTS 中显式声明 MaxRAM），
+而不是逐个服务调参 —— 后者在 6 服务场景下已被证明不充分。
 
 ---
 
