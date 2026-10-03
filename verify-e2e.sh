@@ -114,7 +114,104 @@ es_diagnostics() {
   echo "--- cloud-elasticsearch 服务端日志尾部 ---" >&2
   podman logs --tail 120 cloud-elasticsearch 2>&1 \
     | grep -iE "flood|read.only|reject|indices.exists|status.*400|illegal_argument|exception" | head -30 >&2 || true
+
+  # --- 生产同路径 Java 客户端探针（2026-10-03 本地实测, 见 deploy/tools/EsClientProbe.java）---
+  # ⚠️ 上面**所有**探针（含"容器内对照"）都是 curl/wget, 而 curl **不发送**
+  #   Accept/Content-Type: application/vnd.elasticsearch+json; compatible-with=9
+  # 所以 curl 探针**测不出**本项目真正踩到的故障。同一台 ES 上的对照结果:
+  #   curl HEAD /sys_oper_log                        -> 404  (正常)
+  #   Java 客户端 indices.exists -> ES 8.18.0        -> 400 media_type_header_exception
+  #   Java 客户端 indices.exists -> ES 9.0.3         -> false (正常)
+  # 只看 curl 会得出"ES 没问题"的假绿灯 —— 这正是本次差点误判的地方,
+  # 也是容器内对照补了仍不够的原因: 它换了发起方, 没用客户端。
+  echo "--- 生产同路径 Java 客户端探针 (真实 compatible-with 头) ---" >&2
+  run_es_client_probe "${es_port:-9200}" || true
   echo "--- End ES 专项诊断 ---" >&2
+}
+
+# 用 search-service 的真实依赖跑 EsClientProbe, 走与 search-service 启动时
+# createIndexAndMappingIfNeeded -> IndicesTemplate.exists 完全相同的一组类。
+#
+# 退出码语义: 函数本身恒返回 0, 探针结论打在输出里并单列退出码。
+# 之所以不让它影响 E2E 判定: 本函数只在 search **已经失败**时被调用 (诊断用),
+# 此时 E2E 无论成败都不该由探针二次决定; 探针的价值是给出根因, 不是充当门禁。
+# 但**绝不能**因此省略退出码 —— 无差别 exit 0 会让读日志的人无法区分
+# "探针通过" 与 "探针没跑成", 这类歧义本项目已吃过多次。
+run_es_client_probe() {
+  local es_port="$1"
+  local probe_src="$SCRIPT_DIR/deploy/tools/EsClientProbe.java"
+
+  # ⚠️ 模块目录名**不靠猜**。第一版硬写 cloud-infra-search-service, 实际是
+  # search-service, 结果探针每次都走"找不到模块"分支 —— 而那分支返回 0,
+  # 在 CI 上就表现为"诊断跑过了但没输出", 又是一个假绿灯。
+  # 这里改为按内容定位: 哪个模块的 pom 里含 spring-data-elasticsearch, 就用哪个。
+  local search_dir
+  search_dir=$(for p in "$SCRIPT_DIR"/cloud-infra-modules/*/pom.xml; do
+    [ -f "$p" ] || continue
+    grep -qi 'spring-boot-starter-data-elasticsearch\|spring-data-elasticsearch' "$p" \
+      && dirname "$p" && break
+  done)
+  if [ -z "$search_dir" ]; then
+    echo "  [client-probe] 不可用: 在 cloud-infra-modules/ 下找不到依赖 elasticsearch 的模块" >&2
+    return 0
+  fi
+  echo "  [client-probe] 客户端依赖来源: ${search_dir#"$SCRIPT_DIR"/}" >&2
+
+  local work cp_file
+  work="$(mktemp -d -t es-probe.XXXXXX)"
+  cp_file="$work/cp.txt"
+  if ! mvn -o -q -f "$search_dir/pom.xml" dependency:build-classpath \
+        -Dmdep.outputFile="$cp_file" >/dev/null 2>&1; then
+    echo "  [client-probe] 不可用: 无法解析 search-service 依赖 classpath (mvn 离线或模块缺失)" >&2
+    rm -rf "$work"
+    return 0
+  fi
+  # ⚠️ 不能写成 `if ! javac ... | sed ...; then` —— 管道的退出码取自最后一个命令(sed, 恒 0),
+  #   javac 失败也会被当成成功, 探针随后以"类不存在"报出一堆无关异常。
+  #   这正是本项目反复出现的假门禁形态, 自己刚写出来就得当场拆掉。
+  javac -nowarn -cp "$(cat "$cp_file")" -d "$work" "$probe_src" 2>&1 \
+    | sed 's/^/  [client-probe] /' >&2
+  local jrc=${PIPESTATUS[0]}
+  if [ "$jrc" -ne 0 ]; then
+    echo "  [client-probe] 不可用: 探针编译失败 (退出码 $jrc, 依赖版本可能已变)" >&2
+    rm -rf "$work"
+    return 0
+  fi
+
+  # 参数是 host:port, **不带 scheme**。带 scheme 会被 ClientConfiguration 拼成
+  # http://http//host:port, 报 "Name or service not known" —— 看起来像连不上 ES,
+  # 实则是参数用错, 这个坑本机已踩过一次。
+  # 同时清掉代理变量: 宿主机 curl 可能走代理, 而探针必须直连,
+  # 否则报出来的是代理错误而非 ES 错误, 指向错误的方向。
+  local out_file="$work/probe.out"
+  timeout 120 env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+    -u no_proxy -u NO_PROXY \
+    java -cp "$(cat "$cp_file"):$work" EsClientProbe "127.0.0.1:${es_port}" \
+    > "$out_file" 2>&1
+  local rc=$?
+  sed 's/^/  /' "$out_file" >&2
+
+  # 判定读的是**探针自己打的 RESULT 行**, 不是退出码。
+  # 退出码无法区分"探针正常但发现 ES 有问题"与"探针自身崩了(JVM 起不来/classpath 缺件)",
+  # 而这两种情况的处置完全不同 —— 前者说明 search 的根因, 后者说明这段诊断不可信。
+  #
+  # ⚠️ 顺序必须是"先看有没有结论, 再看是否超时"。
+  # 第一版把 rc==124 放在最前面, 于是探针**已经打出 RESULT = OK**、
+  # 只是关闭连接池时慢了几秒的情况, 会被改写成"未完成: 探针超时 —— 不等于通过",
+  # 覆盖掉真实结论。超时只是"拿不到结论"的一种原因, 不是结论本身。
+  if grep -q "RESULT = OK" "$out_file"; then
+    echo "  [client-probe] 结论: 客户端与 ES 版本兼容 (RESULT = OK)$([ "$rc" -eq 124 ] \
+      && echo ' [注: 探针在关闭连接后未及时退出, 已被 timeout 终止, 但结论已产出]')" >&2
+  elif grep -q "RESULT = FAILED" "$out_file"; then
+    echo "  [client-probe] 结论: 客户端与 ES **不兼容** (RESULT = FAILED) —— 上方异常即根因" >&2
+  elif [ "$rc" -eq 124 ]; then
+    echo "  [client-probe] 未完成: 探针超时(120s) 且未产出 RESULT 行 —— 不等于通过" >&2
+  else
+    echo "  [client-probe] 未完成: 探针未产出 RESULT 行 (退出码 $rc), 本段诊断**不可信**" >&2
+    tail -5 "$out_file" | sed 's/^/  /' >&2
+  fi
+  rm -rf "$work"
+  return 0
 }
 
 # 采集容器状态 + 日志尾部。两个失败分支共用, 避免"只在一处接了诊断"。
