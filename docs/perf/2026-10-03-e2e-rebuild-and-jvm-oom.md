@@ -42,7 +42,7 @@ podman rm -f --all
 ```
 
 > ⚠️ **本节结论已被后续实测部分推翻，保留在此是为了记录"我错在哪"。**
-> 真正的定位见第三节。
+> 后续实测见第三节与第八节，**均未定位到根因**。
 
 ### 假设 1: `mem_limit` 太小 → 加 `-XX:MaxRAM`
 
@@ -149,7 +149,10 @@ t+240s  902.9MB      ← 4 分钟内零波动, 进程始终 running
 
 ---
 
-## 四、根因: podman rootless 下 `/proc/meminfo` 未隔离
+## 四、已验证的重要线索（非完整根因）
+
+> ⚠️ 本节是线索而非根因。第八节用实测推翻了「按 20GB 规划即撑爆 448MB」
+> 这条推理链（「元空间 1GB 是 reserved 非committed」）。编号沿用原稿。
 
 在运行中的容器里直接读:
 
@@ -167,7 +170,7 @@ arena 数量 —— 这些都远超 448MB 的真实上限，于是
 `-XX:+UseContainerSupport` 本应修正这个偏差，但实测无效
 （它依赖的 `/proc/meminfo` 或 cgroup 接口在 podman rootless 下不可靠)。
 
-这解释了此前所有现象:
+已验证该线索与下列现象相容（但非唯一解释）:
 
 | 现象 | 解释 |
 | :--- | :--- |
@@ -189,7 +192,7 @@ arena 数量 —— 这些都远超 448MB 的真实上限，于是
 
 ---
 
-## 三、附带确认: OAP 依赖回退有效（提交 `8d25b2ee`）
+## 五、附带确认: OAP 依赖回退有效（提交 `8d25b2ee`）
 
 `cloud-system` 在 OAP 完全 Exited 时仍能 `Started SystemApplication in 104.218 seconds`，
 `/management/health/readiness` 返回结构化 401（鉴权正常）。
@@ -199,21 +202,98 @@ arena 数量 —— 这些都远超 448MB 的真实上限，于是
 
 ---
 
-## 四、待解决（按优先级）
+## 六、待解决（按优先级）
 
-1. **本机 CPU 饱和**（rustc 编译 + 早前的 pytest）——
-   这是当前 6 服务并行的唯一障碍，属环境问题，需等负载下降。
+1. **JVM 原生内存崩溃，完整根因仍未闭环** —— 这是 6 服务并行的唯一障碍。
+   已被实验推翻的假设不要再试：`MaxRAM`、`CompressedClassSpaceSize`、
+   `UseCompactObjectHeaders`、`mem_limit`、串行启动、CPU 饱和。
+   下一步取证方向见第八节末：`memory.events` 的 `oom_kill` 计数、
+   容器内 `dmesg`、在完整 Compose 环境对真实服务开 NMT。
 2. **方案 a/b/c 仍待选择** —— ES 9 与 SkyWalking 的冲突客观存在，
    门禁 `check_sw_oap_config.sh` 仍以 `exit 1` 正确报出。
-3. **推送仍被阻断** —— 本地代理对 `github.com` 分流失效，
-   四个提交（`5ec63718` / `601eb759` / `8d25b2ee`）停留在本地。
+3. **推送仍被阻断** —— 本地代理对 `github.com` 分流失效（连续多次 `000`），
+   本地领先远端。已推送: `5ec63718` / `601eb759` / `8d25b2ee` / `77d03ad8`。
+4. **GitHub 计费阻塞** —— run `37108821203` 为 `BILLING_BLOCKED`（`steps=0`），
+   代码从未执行，需人工在 `Settings → Billing & plans` 处理。
+5. **双 ES 门禁可能假绿** —— `check_sw_oap_config.sh` 只比较主机名，
+   目标改成不存在的 `cloud-elasticsearch-sw` 仍返回 0；
+   落地方案 b 前须补强「服务真实存在」与「镜像确为 ES 7/8」两项。
 
 ---
 
-## 五、方法论备忘
+## 七、方法论备忘
 
 - `podman network inspect` 的 `Containers` 可能为空且与实际不符，
   判断连通性应直接 `curl` 探针而非读 podman 元数据。
 - 探针报`000` 时先用 `curl -v` 确认它连了谁 —— 代理环境变量会伪造故障。
 - 单服务对照成立 ≠ 多服务成立。本轮三次假设都是
   "单服务修好 → 推广 → 仍崩"，最后靠**去掉前提本身**才找到正确方向。
+
+---
+
+## 八、第三轮受控实验：第四节不足以解释全部崩溃
+
+### 5.1 元空间 1GB 是 `reserved`，不是 `committed`
+
+第四节的推理链是「JVM 按 20GB 规划 → 分配超过 448MB → 失败」。
+直接读JVM 自己的日志验证这一环：
+
+```
+[0.021s][info][gc,metaspace] Compressed class space mapped at:
+    0x00000000a1000000-0x00000000e1000000, reserved size: 1073741824
+```
+
+关键词是 **`reserved size`（预留）**。该区间是虚拟地址空间预留，
+实际提交（committed）只有被写入的页。⇒ **「预留 1GB 撑爆 448MB」这条链路不成立。**
+
+### 5.2 `MaxRAM` 不是元空间的计算输入
+
+同一个 576m 容器内，只改 JVM 参数，读 `-XX:+PrintFlagsFinal`：
+
+| 参数 | `CompressedClassSpaceSize` | `MaxRAM` |
+| :--- | --- | :--- |
+| 无 | 1073741824 (1.00 GB) | 137438953472 (128 GB) |
+| `-XX:MaxRAM=576m` | 1073741824 (1.00 GB) | 603979776 (576 MB) |
+| `+ -XX:ActiveProcessorCount=2` | 1073741824 (1.00 GB) | 603979776 (576 MB) |
+
+⇒ `MaxRAM` **生效**（128GB → 576MB），但对 `CompressedClassSpaceSize` **毫无影响**。
+这解释了单服务对照为何成立：真正起作用的是 `MaxRAM` 收窄了
+`MaxDirectMemorySize`（240MB→126MB）与代码缓存等其它项，**不是元空间**。
+
+### 5.3 CPU 核数未隔离，但本机无法施加限制
+
+```
+宿主 nproc:              12
+容器内 nproc:            12
+容器内 cpu.max:          max 100000      ← 无 CPU 限制
+```
+
+JVM 因此按 12 核规划 GC 线程与arena。但 `podman-compose` 写入 `cpus: 2` 后
+**podman 直接报 exit 125**（rootless 下不支持），该假设无法在机验证。
+
+### 5.4 探针方法论失效
+
+两次 NMT 探针（`nmt2` / `nmt3`）**均无输出**：auth 脱离 Nacos 会立即退出，
+`jcmd` 也不在PATH。⇒ 该环境不能用来测「Spring 应用真实原生内存」。
+
+### 5.5 附带发现：`healthcheck.log` 损坏与崩溃可能同源
+
+第二次实验后 `podman ps` 再次报同样的 `healthcheck.log` 解析失败（0 字节）。
+两次损坏**都发生在服务被 `kill -9` 之后**，而 JVM 原生内存崩溃正是 SIGKILL。
+⇒ 崩溃与状态损坏很可能是同一因果链的两端，而非两个独立问题。
+
+### 5.6 当前结论
+
+| 结论 | 证据级别 |
+| :-- | :-- |
+| `/proc/meminfo` 未隔离，真实存在 | 已实测 |
+| 元空间 1GB 为预留，不足以致崩 | 已实测（推翻 4.x 推理） |
+| `MaxRAM` 有效但与元空间无关 | 已实测 |
+| CPU 12 核未隔离 | 已实测，但无法在本机制限 |
+| **完整根因** | **仍未闭环** |
+
+已停止猜参数。`deploy/compose.yaml` 与 HEAD 一致，工作区干净。
+
+**下一步应从容器运行时层面取证**，而非继续调 JVM 参数：
+`memory.events`（`oom_kill` 计数）、容器内 `dmesg`、以及在**完整 Compose 环境**中
+对真实服务开 NMT。
