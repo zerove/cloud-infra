@@ -548,8 +548,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
     logging: *default-logging
@@ -595,8 +609,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -645,8 +673,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -692,8 +734,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -739,8 +795,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -786,8 +856,22 @@ services:
     depends_on:
       nacos:
         condition: service_healthy
+      # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
+      #   我曾把它改成 service_healthy, 理由是"OAP 起不来业务服务会被带崩",
+      #   但那条因果链是**错的**, 实测证伪:
+      #     - 应用代码对 OAP **无任何启动期依赖**:
+      #       TracingAutoConfiguration 只提供虚拟线程 + MDC 传播, 不碰 OAP;
+      #       全仓 `backend_service` 只出现在 agent-entrypoint.sh 一处。
+      #     - SkyWalking agent 是 -javaagent 注入的**异步 gRPC 上报**,
+      #       OAP 不可达只会丢 trace, 不阻塞应用启动。
+      #     - 实测: OAP 处于 Exited 时, cloud-system 仍达到 healthy,
+      #       /actuator/health 200, /sys/user/list 返回结构化 401 (鉴权正常)。
+      #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
+      #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
+      #     这正是可观测性组件该有的隔离性。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
       skywalking-oap:
-        condition: service_healthy
+        condition: service_started
       elasticsearch:
         condition: service_healthy
     logging: *default-logging
