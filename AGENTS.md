@@ -292,7 +292,48 @@ mvn -o → Non-resolvable import POM（既无依赖也无字节码）→ 该步�
 > 这条与第四课的“负向对照”同源：守护的价值不在“它会红”，而在“它红的时候确实有东西坏了”。
 > 守护自己出错时，它和被守护对象一样会骗人。
 
-### ⚠️ 第六课: 排查环境本身的差异，会伪装成被测系统的缺陷（2026-10-03）
+### ⚠️ 第六课补记: ES 版本不匹配，会伪装成“客户端异常”（2026-10-03）
+
+`search` 的报错连续两个 E2E run（`37077332251` / `37079433594`）都停在这里：
+
+```text
+DataAccessResourceFailureException: node: http://cloud-elasticsearch:9200/,
+  status: 400, [es/indices.exists] Expecting a response body, but none was sent
+```
+
+这个信息有**三重误导**，所以定位花了好几轮：
+
+| 误导 | 事实 |
+| :--- | :--- |
+| “ES 返回 400 但没说原因” | 服务端说了：`media_type_header_exception: Invalid media-type value on headers [Accept, Content-Type]`，只是客户端把它丢了 |
+| “curl 正常，ES 没事” | curl **不发**那两个头。带 `compatible-with=9` 立刻报同一个错 |
+| “带 `node: http://…`，是网络/代理问题” | 是版本问题。我本地还真先被自己的 `http_proxy` 带偏了一轮 |
+
+真实根因：Spring Boot 4.1.0 的 BOM 指定 `elasticsearch-client.version = 9.4.2`，
+而 `deploy/compose.yaml` 写的是 `elasticsearch:8.18.0`。9.x 客户端默认发
+`compatible-with=9` 头，8.x 服务端不认。
+
+**可复现的判据**（不需要启动整套服务）：
+
+```bash
+curl -s http://127.0.0.1:9200/ \
+  -H "Accept: application/vnd.elasticsearch+json; compatible-with=9" \
+  -H "Content-Type: application/vnd.elasticsearch+json; compatible-with=9"
+# → media_type_header_exception
+```
+
+> **通用形式**：客户端库与服务端的主版本不一致时，报错往往落在**协议层**（头、编码、帧格式），
+> 完全不提“版本”这个词。看到 `media_type_header_exception` / `Unsupported Media-Type` /
+> `unexpected end of stream` 这类，就该直接去查两端版本，而不是从网络栈往下挖。
+
+#### 第七例“看起来正常的错误信息”
+
+这次的形态更隐蔽一层：**探测手段（curl）恰好绕开了故障条件**，
+于是“ES 健康”被反复确认，方向却一直错。已有守护
+`deploy/tests/test_es_version_alignment.py` 从 Maven BOM 读客户端版本，
+与三处服务端配置比对（含“各处必须一致”）。
+
+### ⚠️ 第六课补记二: 排查环境本身的差异，会伪装成被测系统的缺陷（2026-10-03）
 
 search 的 ES `status: 400, Expecting a response body, but none was sent` 在本地**直接复现了**，
 且复现得像真的一样：
@@ -447,7 +488,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **Spring Cloud**: 2025.1.2
 - **JDK**: 25
 - **数据库**: PostgreSQL 16 (实际使用) / MySQL 8.4 (驱动可配)
-- **中间件**: Redis 7.2, Nacos 3.x, Elasticsearch 8.18, RabbitMQ 3.x
+- **中间件**: Redis 7.2, Nacos 3.x, **Elasticsearch 9.0.3**（主版本必须与 Spring Boot 4.1.0 BOM 指定的客户端 9.4.2 一致，见第六课补记）, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 测试夹具隔离 (2026-10-01 新增)
