@@ -138,6 +138,16 @@ jobs:
         run: python3 deploy/tests/test_es_diagnostics_index_names.py
         shell: bash
 
+      - name: Guard ES version alignment
+        # ES 服务端主版本必须与客户端一致（Spring Boot 4.1.0 BOM = 9.4.2）。
+        # 8.x 服务端 + 9.x 客户端 -> 400 media_type_header_exception
+        # -> search 启动失败（run 37077332251 / 37079433594）。
+        #
+        # 这个守护放在**编译之前**是安全的：它只读 Maven BOM 与 YAML，
+        # 不需要字节码，也不依赖 ~/.m2 里有完整依赖树（有 BOM 降级路径）。
+        run: python3 deploy/tests/test_es_version_alignment.py
+        shell: bash
+
       - name: Guard image tag expansion
         # 根因: verify-e2e.sh 用 ${entry##*:} 拆 tag, 而 SERVICE_IMAGES 的元素
         #   含**两个**冒号（"路径:Dockerfile" + 镜像引用里的 ":latest"）,
