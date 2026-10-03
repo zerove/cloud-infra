@@ -393,3 +393,95 @@ Started AuthApplication in 103.409 seconds
 
 前八节的归因（meminfo 偏差、元空间、MaxRAM、CPU）全部作废 ——
 它们解释的是一个**从未发生的故障**。
+
+---
+
+## 十、第五轮（续）：崩溃确实存在，转储给出了两条不同的失败路径
+
+第九节写"服务从未崩溃"—— **该结论需要再次更正**。
+第九节观察的是 auth 单服务（它确实不崩）；本节观察 6 服务并行，崩溃稳定复现。
+
+### 10.1 崩溃真实存在，且有 JVM 转储
+
+```
+cloud-system:  # /app/hs_err_pid1.log
+cloud-auth:    # /app/hs_err_pid1.log
+cloud-gateway: # /app/replay_pid1.log
+```
+
+`hs_err_pid*.log` 与 `replay_pid*.log` 只有 SIGSEGV / SIGABRT / 内部错误才会生成。
+⇒ 前八节"崩溃现象"是真的；第九节"从未崩溃"只在单服务条件下成立。
+
+### 10.2 两次崩溃的失败点不同，但同属原生 arena 分配
+
+| 服务 | 失败操作 | 栈顶 |
+| :-- | :-- | :-- |
+| system | `AllocateHeap`（112 bytes） | `ThreadImpl.getThreadInfo1` ← SkyWalking `ThreadProvider.getThreadMetrics` |
+| auth | `Chunk::new`（129816 bytes） | `ChunkPool::allocate_chunk` ← `Arena::grow` ← `G1BarrierSetC2::late_barrier_analysis` |
+
+两者都在**原生内存 arena 分配**处失败，触发者是 **SkyWalking agent**（system 的栈
+明确在`ThreadProvider` 内）。
+
+### 10.3 元空间不是原因（已用转储实测数据排除）
+
+```
+Metaspace used 23962K  committed 24320K  reserved 1114112K
+```
+
+崩溃时**实际只用 24MB**，reserved 1.06GB 从未被提交。
+⇒ 前文"1GB 元空间预留撑爆容器"的推理链被自己的转储数据推翻。
+
+### 10.4 映射数不是原因
+
+```
+Total number of mappings: 289
+/proc/sys/vm/max_map_count = 10485760
+```
+
+289远低于上限，第二个可能原因排除。
+
+### 10.5 CPU 核数未隔离，且被 JVM 用于规划 arena
+
+```
+CPUs: 12 total, 12 available       ← 容器内可见全部宿主核
+```
+
+JVM 按核数决定 C2 编译器线程与 arena 数量。auth 的容器上限仅 448MB。
+**这是仍待验证的最后一个候选变量**（`CICompilerCount` / `ActiveProcessorCount`），
+但本节实验被环境打断，见10.6。
+
+### 10.6 环境干扰：podman 状态损坏使部分实验无效
+
+本轮出现第4 次 `healthcheck.log` 0 字节损坏：
+
+```
+failed to unmarshal existing healthcheck results ... readObjectStart: expect { or n
+```
+
+后果是 `podman logs` / `podman inspect` / `podman ps` 对损坏容器直接报错，
+**容器被表现为 "no such container"**，与"JVM 崩溃退出"无法区分。
+
+因此：
+- 对照 A（`SW_AGENT_ENABLED=false`，system 单服务）→ 启动成功
+- 对照 B（`SW_AGENT_ENABLED=true`，system 单服务）→ **也**启动成功
+  ⇒ 两者之差实为**基础设施预热程度**（75s vs 150s），**不是** agent 开关。
+  这是一次无效对照，不可作为"agent 无关"的结论依据。
+- 对照 C（`CICompilerCount=2`）→ 容器 GONE 且崩溃计数 0
+  ⇒ 同样是状态损坏，**该对照无效**，需重做。
+
+**规则（新增）**：任何依赖 `podman logs`/`inspect` 的判据，必须先确认
+`podman ps` 能正常列出全部容器。若 `ps` 本身报错，则本轮数据**全部作废**，
+不得用来支持任何结论。
+
+### 10.7 已确证的结论（第五轮）
+
+| 结论 | 证据 |
+| :-- | :-- |
+| 6 服务并行崩溃真实存在 | 3 个服务产出 JVM 转储 |
+| 触发者在 SkyWalking agent | system 栈含 `ThreadProvider.getThreadMetrics` |
+| 元空间预留不是原因 | 转储显示 `committed24320K` |
+| 映射数不是原因 | 289 / 10485760 |
+| 内核 OOM killer 未参与 | `OOMKilled=false`, `oom_kill=0` |
+| 完整根因 | **仍未闭环**，候选剩 CPU 核数 / agent arena 规划 |
+
+**未写入任何仓库配置** —— 唯一候选变量尚未通过有效对照实验。
