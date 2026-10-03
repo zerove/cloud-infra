@@ -371,7 +371,7 @@ build_images() {
 # 修复前的脚本在这里必然全绿 (它压根不判定 build 的退出码), 这正是本次缺陷的形态。
 # ---------------------------------------------------------------------------
 run_gate_selftest() {
-  local tmp rc
+  local tmp rc failures=0
   tmp=$(mktemp -d)
   cat > "$tmp/podman" <<'STUB'
 #!/usr/bin/env bash
@@ -389,9 +389,95 @@ STUB
 
   if [ "$rc" -eq 0 ]; then
     echo "  FAIL 镜像构建失败时 build_images 仍返回 0 —— 错误被吞掉, 门禁形同虚设" >&2
+    failures=$((failures+1))
+  else
+    echo "  PASS 镜像构建失败被正确识别 (build_images 返回 $rc)"
+  fi
+
+  # ---- 覆盖 2: SERVICE_IMAGES 格式漂移必须被识别 --------------------------
+  # 2026-10-02 实测: entry 用 ${entry##*:} 时会把整段吃掉, 6 个镜像全塌成
+  # "latest" 且**打印 ok** —— 即 build 成功、tag 却全错, 互相覆盖。
+  # 现在的拆解是 ${entry#*:}(最短匹配), 故只有当 entry 恰好是
+  # "<x>:latest"、即 tag 被吃成裸 "latest" 时才会命中兜底分支。
+  # 用这个形态作为负向输入。
+  local probe_out
+  probe_out="$(
+    SERVICE_IMAGES=("Dockerfile.cloud-infra-gateway:latest")
+    build_images 2>&1
+  )"
+  if printf '%s' "$probe_out" | grep -q "拆解异常"; then
+    echo "  PASS SERVICE_IMAGES 格式漂移被识别 (tag 塌成 latest 时报错)"
+  else
+    echo "  FAIL tag 塌成 latest 未被识别 —— 6 个镜像会静默共用一个 tag" >&2
+    echo "        实际输出: $probe_out" >&2
+    failures=$((failures+1))
+  fi
+
+  # 反向对照: 正常 "file:tag" 格式**不该**被误报为拆解异常。
+  # 否则这条自检就成了"永远失败"的噪音, 久而久之没人看 —— 另一种假门禁。
+  local norm_out
+  norm_out="$(
+    SERVICE_IMAGES=("Dockerfile.gateway:localhost/cloud-infra-gateway:latest")
+    build_images 2>&1
+  )"
+  if printf '%s' "$norm_out" | grep -q "拆解异常"; then
+    echo "  FAIL 正常 'file:tag' 格式被误报为拆解异常 —— 自检本身是假门禁" >&2
+    failures=$((failures+1))
+  else
+    echo "  PASS 正常 'file:tag' 格式不误报 (自检无误报)"
+  fi
+
+  # ---- 覆盖 3: ok/fail 计数必须驱动退出码 --------------------------------
+  # 若 ok/fail 只打印不计数, 或结尾漏掉 exit $FAIL, 则全 FAIL 也可能 exit 0
+  # —— 正是本仓库反复出现的"控制台绿灯但实际失败"。
+  local count_out
+  count_out="$(
+    PASS=0; FAIL=0
+    ok "selftest-should-pass"; ok "selftest-should-pass-2"
+    fail "selftest-should-fail"
+    echo "COUNTS PASS=$PASS FAIL=$FAIL"
+  )"
+  if printf '%s' "$count_out" | grep -q "COUNTS PASS=2 FAIL=1"; then
+    echo "  PASS ok/fail 计数正确 (2 PASS / 1 FAIL)"
+  else
+    echo "  FAIL ok/fail 计数异常, 期望 'PASS=2 FAIL=1', 实得: $count_out" >&2
+    failures=$((failures+1))
+  fi
+
+  # ---- 覆盖 4: 脚本末尾确实以 FAIL 数作为退出码 -------------------------
+  # 直接静态检查结尾那行, 防止后续重构把 exit $FAIL 改掉。
+  if tail -5 "$SCRIPT_DIR/verify-e2e.sh" | grep -qE '^exit \$FAIL$'; then
+    echo "  PASS 脚本以 'exit \$FAIL' 收尾 (FAIL 数即退出码)"
+  else
+    echo "  FAIL 脚本结尾不是 'exit \$FAIL' —— 全 FAIL 也可能 exit 0" >&2
+    failures=$((failures+1))
+  fi
+
+  # ---- 覆盖 5: 关键判定不能被管道吞掉退出码 -----------------------------
+  # bash 经典陷阱: cmd | head 会让 $? 变成 head 的退出码。
+  # 本脚本大量使用 `curl ... | head`, 故显式断言关键 build 判定不走管道。
+  #
+  # ⚠️ grep 必须排除 run_gate_selftest 函数体, 否则会匹配到本函数里
+  #   打印该字符串的 echo 行 —— 自检把自己当成被检对象, 恒失败。
+  #   第一版就踩了这个坑(实测 FAIL: 存在 'podman build ... | head')。
+  local piped_build
+  piped_build="$(awk '
+    /^run_gate_selftest\(\)/ {inself=1; next}
+    inself && /^}/ {inself=0; next}
+    !inself && /podman build/ && /\|/ {print NR": "$0}
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
+  if [ -n "$piped_build" ]; then
+    echo "  FAIL podman build 判定被管道截断 —— 退出码会被下游吞掉:" >&2
+    printf '%s\n' "$piped_build" | sed 's/^/        /' >&2
+    failures=$((failures+1))
+  else
+    echo "  PASS build 判定未被管道截断 (自检函数外无 'podman build | ...')"
+  fi
+
+  if [ "$failures" -ne 0 ]; then
+    echo "  => $failures 项自检未通过" >&2
     return 1
   fi
-  echo "  PASS 镜像构建失败被正确识别 (build_images 返回 $rc)"
   return 0
 }
 
