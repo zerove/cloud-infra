@@ -122,7 +122,21 @@ services:
 
   # ========== 搜索引擎 ==========
   elasticsearch:
-    image: elasticsearch:8.18.0
+    # ⚠️ 主版本必须与 ES 客户端对齐, 不能随手填。
+    #   Spring Boot 4.1.0 的 BOM 指定 elasticsearch-client.version = 9.4.2
+    #   （见 ~/.m2/.../spring-boot-dependencies-4.1.0.pom 的 <elasticsearch-client.version>）,
+    #   而 9.x 客户端默认发送
+    #     Accept/Content-Type: application/vnd.elasticsearch+json; compatible-with=9
+    #   ES 8.x 服务端**直接拒绝**该头, 报 400:
+    #     media_type_header_exception: Invalid media-type value on headers
+    #     [Accept, Content-Type]
+    #   然后 search 启动即失败（SimpleElasticsearchRepository 构造时
+    #   createIndexAndMappingIfNeeded -> IndicesTemplate.exists）。
+    #
+    #   这个坑很隐蔽: 同一台 ES, curl HEAD /sys_oper_log 返回正常的 404,
+    #   因为 curl 不发这两个头 —— 只有 Java 客户端会踩到。
+    #   实测证据: 见 AGENTS.md「第六课补记: ES 版本不匹配伪装成客户端异常」。
+    image: elasticsearch:9.0.3
     restart: unless-stopped
     stop_grace_period: 60s
     container_name: cloud-elasticsearch
