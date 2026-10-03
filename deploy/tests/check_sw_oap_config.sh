@@ -81,17 +81,34 @@ else
 fi
 echo
 
+ALL_OK=$HEADER_OK
+# 本脚本用 `set -u`，而被 SKIP_IMAGE_PROBE 等条件跳过的分支仍可能在
+# 末尾的提示语里被引用。统一预初始化，避免"某个开关组合下直接报错退出"
+# ——那会被当成检查失败，掩盖真实结论 (2026-10-03 实测拄过两次)。
+MODULES_OK=1
+ES_OK=1
+UI_OK=1
+# 末尾的提示语会引用 $RUNNER，即便跳过镜像比对也不能让它未定义 (set -u)。
+RUNNER="podman"; command -v podman >/dev/null 2>&1 || RUNNER="docker"
+
 # ---------- 3. 模块清单差集 (需镜像) ----------
 if [[ "${SKIP_IMAGE_PROBE:-0}" == "1" ]]; then
   yellow "SKIP_IMAGE_PROBE=1 —— 跳过模块清单比对"
-  [[ "$HEADER_OK" == "1" ]] && exit 0 || exit 1
+  echo
+  echo "──────────────────────────────────────────────"
+  echo "跳过的是**模块清单**比对; 第 4/5 节(ES 版本、UI 版本)仍会执行。"
+  echo "原因: ES 冲突会导致 OAP **必然**启动失败 (已实测 100%),"
+  echo "      它不依赖镜像内配置, 不该被'跳过模块比对'一并带过。"
+  echo "      本节 2026-10-03 修复过一个真实假绿: 早前这里直接 exit 0,"
+  echo "      导致 SKIP_IMAGE_PROBE=1 时 ES 冲突检查从未被执行过。"
 fi
 
+if [[ "${SKIP_IMAGE_PROBE:-0}" != "1" ]]; then
 if ! command -v podman >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
   yellow "⚠️  无 podman/docker —— 跳过模块清单比对 (仅完成版本声明检查)"
-  [[ "$HEADER_OK" == "1" ]] && exit 0 || exit 1
 fi
 
+if command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
 RUNNER="podman"; command -v podman >/dev/null 2>&1 || RUNNER="docker"
 
 OFFICIAL_MODULES="$(mktemp)"; REPO_MODULES="$(mktemp)"
@@ -101,10 +118,8 @@ if ! $RUNNER run --rm --entrypoint sh "$IMAGE_REPO:$TAG" -c \
      'grep -oE "^[a-z][a-z0-9-]*:" /skywalking/config/application.yml | tr -d ":" | sort -u' \
      > "$OFFICIAL_MODULES" 2>/dev/null; then
   yellow "⚠️  无法拉取/读取镜像 $IMAGE_REPO:$TAG 的配置 —— 跳过模块清单比对"
-  [[ "$HEADER_OK" == "1" ]] && exit 0 || exit 1
-fi
-
-grep -oE '^[a-z][a-z0-9-]*:' "$CONFIG_FILE" | tr -d ':' | sort -u > "$REPO_MODULES"
+else
+  grep -oE '^[a-z][a-z0-9-]*:' "$CONFIG_FILE" | tr -d ':' | sort -u > "$REPO_MODULES"
 
 EXTRA="$(comm -13 "$OFFICIAL_MODULES" "$REPO_MODULES")"   # 配置有、镜像官方无
 MISSING="$(comm -23 "$OFFICIAL_MODULES" "$REPO_MODULES")" # 镜像官方有、配置无
@@ -123,7 +138,12 @@ fi
 
 if [[ "$MODULES_OK" == "1" ]]; then
   green "✅ 模块清单与镜像 $TAG 完全对齐 (共 $(wc -l < "$OFFICIAL_MODULES") 个模块)"
+else
+  ALL_OK=0
 fi
+fi   # 关闭: if 镜像可读
+fi   # 关闭: if RUNNER 存在
+fi   # 关闭: if SKIP_IMAGE_PROBE != 1
 
 echo
 echo "──────────────────────────────────────────────"
@@ -167,16 +187,41 @@ if [[ -f "$COMPOSE_FILE" ]]; then
 
     # 取主机名部分(去掉 :9200), 与 ES 服务名比对
     SW_ES_HOST="${SW_ES_NODES%%:*}"
+
+    # 1) 定位 OAP 目标对应的 compose 服务块
+    #    不能只比字符串: 目标主机必须**真实对应一个 Compose 服务**, 否则
+    #    把值改成任意不存在的名字同样能"骗过"检查 (2026-10-03 实测假绿)。
+    SW_TARGET_SVC=""
+    SW_TARGET_IMAGE=""
+    SW_TARGET_CNAME=""
+    if [[ -n "$SW_ES_HOST" ]]; then
+      SW_TARGET_SVC="$(awk -v h="$SW_ES_HOST" '
+        /^  [a-zA-Z0-9_-]+:/ {svc=$1; sub(/:$/, "", svc)}
+        svc && /^    container_name:/ {cn=$2; if (cn==h) {print svc; exit}}
+      ' "$COMPOSE_FILE")"
+      if [[ -n "$SW_TARGET_SVC" ]]; then
+        SW_TARGET_IMAGE="$(awk -v s="  $SW_TARGET_SVC:" '
+          $0==s {inblk=1; next}
+          inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
+          inblk && $1=="image:" {print $2; exit}
+        ' "$COMPOSE_FILE" | sed 's/.*://')"
+      fi
+    fi
+
     ES_SVC_NAME="$(awk '
       /^  [a-zA-Z0-9_-]+:/ {svc=$1; sub(/:$/, "", svc)}
       svc == "elasticsearch" && /^    container_name:/ {print $2; exit}
     ' "$COMPOSE_FILE")"
 
-    if [[ -n "$SW_ES_HOST" && -n "$ES_SVC_NAME" && "$SW_ES_HOST" != "$ES_SVC_NAME" ]]; then
-      green "✅ ES 版本冲突已通过双实例分离:"
-      green "     search  → $ES_SVC_NAME ($ES_IMAGE)"
-      green "     OAP     → $SW_ES_HOST (独立实例)"
-    else
+    if [[ -z "$SW_ES_HOST" ]]; then
+      red "❌ 未解析出 SW_STORAGE_ES_CLUSTER_NODES, 无法确认 OAP 的 ES 目标。"
+      ES_OK=0
+    elif [[ -z "$SW_TARGET_SVC" ]]; then
+      red "❌ OAP 的 ES 目标 '$SW_ES_HOST' 在 compose 里**不存在对应服务**。"
+      red "   该主机名不是任何服务的 container_name。"
+      red "   ⇒ 这种配置无法启动, 且旧版检查会误判为'已分离'而报绿。"
+      ES_OK=0
+    elif [[ "$SW_ES_HOST" == "$ES_SVC_NAME" ]]; then
       red "❌ OAP 与 search 指向同一个 ES($ES_IMAGE), 但 SkyWalking 仅支持 ES 7/8。"
       red "   实测: OAP 启动抛 'Unsupported version: ElasticSearch 9.0',"
       red "        且**与 OAP 镜像版本无关** (9.7.0 / 10.1.0 均复现)。"
@@ -193,6 +238,19 @@ if [[ -f "$COMPOSE_FILE" ]]; then
       #     属于"需要留意", 报 yellow 恰当。
       # 门禁各检查项的严重级别应与"实测确定性"匹配, 而不是一律软失败。
       ES_OK=0
+    elif [[ -z "$SW_TARGET_IMAGE" ]]; then
+      red "❌ OAP 的 ES 目标服务 '$SW_TARGET_SVC' 没有 image 字段, 无法确认版本。"
+      ES_OK=0
+    elif [[ "$SW_TARGET_IMAGE" =~ ^9\. ]]; then
+      red "❌ OAP 指向的独立实例用的是 ES $SW_TARGET_IMAGE —— SkyWalking 仍不支持 9.x。"
+      red "   目标服务 : $SW_TARGET_SVC ($SW_ES_HOST)"
+      red "   镜像     : $SW_TARGET_IMAGE"
+      red "   ⇒ '分离'了, 但两边都是 ES 9, 版本冲突依旧存在。"
+      ES_OK=0
+    else
+      green "✅ ES 版本冲突已通过双实例分离:"
+      green "     search  → $ES_SVC_NAME ($ES_IMAGE)"
+      green "     OAP     → $SW_ES_HOST [服务 $SW_TARGET_SVC, 镜像 ES $SW_TARGET_IMAGE]"
     fi
   elif [[ -n "$ES_IMAGE" ]]; then
     green "✅ compose 的 ES 版本为 $ES_IMAGE, 在 SkyWalking 支持范围内 (7/8)"
@@ -225,5 +283,5 @@ echo "静态检查到此为止。**它不能替代真实启动验证** ——"
 echo "配置类问题只有真正跑一次 OAP 才会暴露 (本文件就是这么被发现的)。"
 echo
 
-[[ "$ES_OK" == "1" ]] || exit 1
+[[ "$ALL_OK" == "1" && "$ES_OK" == "1" ]] || exit 1
 exit 0
