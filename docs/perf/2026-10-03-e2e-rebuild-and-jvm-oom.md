@@ -297,3 +297,99 @@ JVM 因此按 12 核规划 GC 线程与arena。但 `podman-compose` 写入 `cpus
 **下一步应从容器运行时层面取证**，而非继续调 JVM 参数：
 `memory.events`（`oom_kill` 计数）、容器内 `dmesg`、以及在**完整 Compose 环境**中
 对真实服务开 NMT。
+
+---
+
+## 九、第四轮：前七轮的前提本身是错的 —— 服务从未崩溃
+
+前八节反复记录"业务服务启动过程中崩溃"。本节用容器运行时证据证明：
+**该结论不成立。服务能稳定运行；观察到的"崩溃"来自探针方法本身。**
+
+### 9.1 内核从未 OOM
+
+```
+podman inspect cloud-auth → OOMKilled=false, ExitCode=0, RestartCount=0
+/sys/fs/cgroup/memory.events → low 0  high 0  max 0  oom 0  oom_kill 0
+```
+
+内核 OOM killer **完全没有参与**。若真是 cgroup 内存耗尽，
+`oom_kill` 必然大于 0。这与前面所有"内存不足"的推断直接冲突。
+
+### 9.2 退出时的实际内存远未触限
+
+以 448MB 上限运行 auth，每 3 秒采样：
+
+```
+t+3s   running  73.25MB / 469.8MB
+t+6s   exited   202.1MB / 469.8MB     ← 43%
+```
+
+退出时仅用 **43%**。"内存不足导致崩溃"在此不成立。
+
+### 9.3 无 JVM 崩溃转储
+
+```
+-XX:ErrorFile=/tmp/hs_err.log → (无崩溃转储)
+```
+
+SIGSEGV / SIGABRT 一律会产生 `hs_err_pid*.log`。没有转储 ⇒ 不是 JVM 崩溃。
+
+### 9.4 真正原因：手工探针缺环境变量
+
+用 `podman run` 手工启动时，只给了 `SPRING_DATASOURCE_URL`。
+而 compose 路径下 auth 还依赖：
+
+```
+SW_AGENT_ENABLED=true
+SW_AGENT_OAP=cloud-skywalking-oap:11800
+AUTH_JWT_SECRET / AUTH_CAPTCHA_FIXED_CODE / INTERNAL_CALL_SECRET
+```
+
+缺 `SW_AGENT_*` 时 SkyWalking agent 静默失败：
+
+```
+java.io.FileNotFoundException: /skywalking/agent/logs/skywalking-api.log
+```
+
+⇒ 手工探针的 `exit=1` 是**探针构造错误**，不是服务故障。
+**这就是"单服务对照成立、推广即崩"的来源：单服务那次用的正是 compose 路径。**
+
+### 9.5 真实结果
+
+按 compose 真实路径启动 `cloud-auth`（`--profile full`）：
+
+| 指标 | 值 |
+| :--- | :--- |
+| 状态 | `running/healthy` |
+| `Started AuthApplication in 103.409 seconds` | 启动成功 |
+| `RestartCount` | **0** |
+| `OOMKilled` | **false** |
+| 内存 | 542.7MB / 604MB（正常） |
+
+**auth 一次成功、零重启。**
+
+### 9.6 启动慢才是当初的观感来源
+
+```
+Root WebApplicationContext: initialization completed in 39302 ms
+Started AuthApplication in 103.409 seconds
+```
+
+本机 podman rootless 下启动需 **103 秒**。前几轮我用 30–60 秒的观察窗口，
+在服务**尚未启动完**时就判定"崩溃" —— 于是把"还没起来"读成了"起不来"。
+
+### 9.7 方法论更正（比结论更重要）
+
+| 错误做法 | 后果 |
+| :-- | :-- |
+| 手工 `podman run` 复现 | 环境变量不全，与生产路径不同源 |
+| 固定 30–60 秒观察窗口 | 本机需 103 秒，窗口内必然误判 |
+| 用日志末尾无输出判崩溃 | Spring 启动期本就长时间静默 |
+| 凭 `out of memory` 字样归因 | 与 `oom_kill=0` 直接矛盾却未核对 |
+
+**规则**：凡"崩溃"结论，必须同时满足
+① `OOMKilled` / `oom_kill` 计数为空，② 有 `hs_err_pid*.log` 或 SIGSEGV/SIGABRT 迹象，
+③ **走 compose 真实路径**而非手工构造。三者缺一就不能写"崩溃"。
+
+前八节的归因（meminfo 偏差、元空间、MaxRAM、CPU）全部作废 ——
+它们解释的是一个**从未发生的故障**。
