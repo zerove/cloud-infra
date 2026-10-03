@@ -65,6 +65,49 @@ es_diagnostics() {
     curl -s "$es/_cluster/settings?flat_settings=true" --max-time 10 2>&1 | head -30 >&2
     echo "GET _nodes/fs (磁盘水位依据):" >&2
     curl -s "$es/_nodes/fs" --max-time 10 2>&1 | head -25 >&2
+
+    # --- 容器内对照（2026-10-03, 依据 run 37079433594）----------------------
+    # 上面全部是**宿主机**发起的请求。CI 实测:
+    #     宿主机 curl HEAD /sys_oper_log  -> 404 （正常, 索引不存在）
+    #     search 容器内 Java 客户端      -> 400 "Expecting a response body, but none was sent"
+    # 同一个索引、同一个 ES, 两侧结果不同 => 差异在**客户端侧**, 不在 ES 服务端。
+    # 只有同时拿到容器内的响应, 才能把这两件事区分开; 只看宿主机探针会得出
+    # "ES 正常, 那问题在哪?" 的死局 —— 这正是本次差点误判的地方。
+    # 故此处必须补一条容器内探针, 否则本诊断只有一半证据。
+    if podman ps --format '{{.Names}}' 2>/dev/null | grep -qx cloud-search; then
+      echo "--- 容器内对照: 从 cloud-search 内部访问同一索引 ---" >&2
+      # ⚠️ search 镜像是 jre-alpine, **不保证有 curl**。
+      #   没有就退到 wget; 都没有必须明确说"探针不可用",
+      #   不能静默跳过 —— 否则本诊断又变成半截证据, 而这正是它存在的理由。
+      podman exec cloud-search sh -c '
+        if command -v curl >/dev/null 2>&1; then
+          fetch_code() { curl -s -o /dev/null -w "%{http_code}" -I "$1" --max-time 10 2>&1; }
+          fetch_raw() { curl -s -D - -o /dev/null -I "$1" --max-time 10 2>&1 | head -20; }
+          fetch_get() { curl -s -w "\n  http_code=%{http_code}\n" "$1" --max-time 10 2>&1 | head -15; }
+        elif command -v wget >/dev/null 2>&1; then
+          fetch_code() { wget -q -S --spider --timeout=10 "$1" 2>&1 | grep -oE "HTTP/[0-9.]+ [0-9]+" | tail -1 | awk "{print \$2}"; }
+          fetch_raw() { wget -q -S --spider --timeout=10 "$1" 2>&1 | head -20; }
+          fetch_get() { wget -q -O - --timeout=10 "$1" 2>&1 | head -15; }
+        else
+          echo "  [in-container] curl 与 wget 均不存在, 探针不可用 —— 该容器缺少 HTTP 工具"
+          exit 0
+        fi
+        for idx in sys_oper_log iot_telemetry; do
+          echo "  [in-container] HEAD /$idx -> $(fetch_code http://cloud-elasticsearch:9200/$idx)"
+        done
+        echo "  [in-container] 完整响应头 (HEAD /sys_oper_log):"
+        fetch_raw http://cloud-elasticsearch:9200/sys_oper_log
+        echo "  [in-container] GET / 根路径:"
+        fetch_get http://cloud-elasticsearch:9200/
+      ' 2>&1 | sed 's/^/  /' >&2 || echo "  (容器内探针执行失败)" >&2
+
+      echo "--- search 容器环境 (ELASTICSEARCH_URIS / 代理变量) ---" >&2
+      podman exec cloud-search sh -c \
+        'env | grep -iE "elastic|proxy|http_proxy|no_proxy" || echo "  (无相关环境变量)"' \
+        2>&1 | sed 's/^/  /' >&2 || true
+    else
+      echo "--- cloud-search 未运行, 无法做容器内对照 ---" >&2
+    fi
   else
     echo "  (未取到 ES 端口, 跳过 API 探测)" >&2
   fi
