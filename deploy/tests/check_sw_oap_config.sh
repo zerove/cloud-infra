@@ -138,6 +138,9 @@ echo
 [[ "$HEADER_OK" == "1" && "$MODULES_OK" == "1" ]] || exit 1
 
 # ---------- 4. ES 版本兼容 (SkyWalking 只支持 ES 7/8) ----------
+# 默认"无冲突": 若 compose 里既没解析出 ES 版本, 也不构成冲突场景,
+# 不应因此判红 —— 保持"查不到就不下结论", 而不是"查不到就报错"。
+ES_OK=1
 # 官方文档 main 分支 backend-storage 明确写 "ElasticSearch 7 and 8"。
 # 而本仓库 ES 需与 search 服务的 Spring Data ES 9.x 客户端对齐 (ES 9)。
 # 两者冲突时 OAP 启动抛:
@@ -151,15 +154,49 @@ if [[ -f "$COMPOSE_FILE" ]]; then
   ' "$COMPOSE_FILE" | sed 's/.*://')"
 
   if [[ "$ES_IMAGE" =~ ^9\. ]]; then
-    yellow ""
-    yellow "⚠️  compose 的 ES 为 $ES_IMAGE, 但 SkyWalking 官方仅支持 ES 7/8。"
-    yellow "    若 search 服务使用 Spring Data ES 9.x 客户端 (需 ES 9),"
-    yellow "    则 OAP 启动会抛 'Unsupported version: ElasticSearch 9.0',"
-    yellow "    且**与 OAP 镜像版本无关** (9.7.0 / 10.1.0 均复现)。"
-    yellow "    这不是配置问题 —— search 与 SkyWalking 无法共用同一个 ES 实例。"
-    yellow "    解法三选一, 见 deploy/compose.yaml 中 skywalking-oap 的注释。"
+    # OAP 实际连的是哪个 ES, 取决于 SW_STORAGE_ES_CLUSTER_NODES 指向的服务名。
+    # 若该变量指向的就是这个 ES 9 实例, 则是真冲突; 若指向另一个 (ES 7/8)
+    # 实例, 则是**已正确分离**的双 ES 布局 —— 不能一律报红。
+    SW_ES_NODES="$(awk '
+      /^  skywalking-oap:/ {inblk=1; next}
+      inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
+      inblk && /SW_STORAGE_ES_CLUSTER_NODES=/ {
+        sub(/.*SW_STORAGE_ES_CLUSTER_NODES=/, ""); print; exit
+      }
+    ' "$COMPOSE_FILE")"
+
+    # 取主机名部分(去掉 :9200), 与 ES 服务名比对
+    SW_ES_HOST="${SW_ES_NODES%%:*}"
+    ES_SVC_NAME="$(awk '
+      /^  [a-zA-Z0-9_-]+:/ {svc=$1; sub(/:$/, "", svc)}
+      svc == "elasticsearch" && /^    container_name:/ {print $2; exit}
+    ' "$COMPOSE_FILE")"
+
+    if [[ -n "$SW_ES_HOST" && -n "$ES_SVC_NAME" && "$SW_ES_HOST" != "$ES_SVC_NAME" ]]; then
+      green "✅ ES 版本冲突已通过双实例分离:"
+      green "     search  → $ES_SVC_NAME ($ES_IMAGE)"
+      green "     OAP     → $SW_ES_HOST (独立实例)"
+    else
+      red "❌ OAP 与 search 指向同一个 ES($ES_IMAGE), 但 SkyWalking 仅支持 ES 7/8。"
+      red "   实测: OAP 启动抛 'Unsupported version: ElasticSearch 9.0',"
+      red "        且**与 OAP 镜像版本无关** (9.7.0 / 10.1.0 均复现)。"
+      red "   ⇒ 两者无法共用同一实例。已实测可行的解法(2026-10-03):"
+      red "        给 SkyWalking 单独一个 ES 8 实例, OAP 指向它 —— 日志出现"
+      red "        'ElasticSearch version is: ElasticSearch 8.18' 且"
+      red "        'listening on 11800', 无 Unsupported version。"
+      #
+      # 为什么这一项是**硬失败**而 UI 版本错开只是 yellow:
+      #   - ES 冲突: 已实测 100% 必崩, 且 6 个业务服务都
+      #     `condition: service_healthy` 依赖 OAP ⇒ OAP 崩则整个 full 环境起不来。
+      #     属于"必然失败", 不该只提醒。
+      #   - UI 版本错开: 只是**可能**有 GraphQL 字段变更, 未实测会坏,
+      #     属于"需要留意", 报 yellow 恰当。
+      # 门禁各检查项的严重级别应与"实测确定性"匹配, 而不是一律软失败。
+      ES_OK=0
+    fi
   elif [[ -n "$ES_IMAGE" ]]; then
     green "✅ compose 的 ES 版本为 $ES_IMAGE, 在 SkyWalking 支持范围内 (7/8)"
+    ES_OK=1
   fi
 
   # ---------- 5. UI 与 OAP 版本一致 ----------
@@ -188,4 +225,5 @@ echo "静态检查到此为止。**它不能替代真实启动验证** ——"
 echo "配置类问题只有真正跑一次 OAP 才会暴露 (本文件就是这么被发现的)。"
 echo
 
+[[ "$ES_OK" == "1" ]] || exit 1
 exit 0
