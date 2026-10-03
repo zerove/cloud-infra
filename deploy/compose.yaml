@@ -458,7 +458,11 @@ services:
     logging: *default-logging
 
   skywalking-ui:
-    image: apache/skywalking-ui:10.2.0
+    # 与 skywalking-oap 保持同版本 (原为 10.2.0, OAP 是 9.7.0)。
+    # OAP 本轮升到 10.1.0 后两者错开, 而 UI↔OAP 的 GraphQL 接口在小版本间
+    # 可能有字段变更 —— 不实测就等于把风险留给下一个人。
+    # 门禁只校验 OAP 的配置/镜像对齐, UI 版本由本注释 + 下方 verify-e2e.sh 覆盖。
+    image: apache/skywalking-ui:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-ui
