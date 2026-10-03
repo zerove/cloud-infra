@@ -161,6 +161,25 @@ if [[ -f "$COMPOSE_FILE" ]]; then
   elif [[ -n "$ES_IMAGE" ]]; then
     green "✅ compose 的 ES 版本为 $ES_IMAGE, 在 SkyWalking 支持范围内 (7/8)"
   fi
+
+  # ---------- 5. UI 与 OAP 版本一致 ----------
+  # 二者通过 GraphQL 交互, 跨小版本可能有字段变更。
+  # 本轮就出现过 OAP 升 10.1.0 而 UI 留在 10.2.0 的错开状态 —— 未实测即引入。
+  UI_IMAGE="$(awk '
+    /^  skywalking-ui:/ {inblk=1; next}
+    inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
+    inblk && $1=="image:" {print $2; exit}
+  ' "$COMPOSE_FILE" | sed 's/.*://')"
+
+  if [[ -n "$UI_IMAGE" ]]; then
+    if [[ "$UI_IMAGE" == "$TAG" ]]; then
+      green "✅ skywalking-ui($UI_IMAGE) 与 skywalking-oap($TAG) 版本一致"
+    else
+      yellow "⚠️  skywalking-ui 为 $UI_IMAGE, 但 skywalking-oap 为 $TAG —— 版本错开"
+      yellow "    UI↔OAP 通过 GraphQL 交互, 跨小版本可能有字段变更。"
+      yellow "    建议对齐后实测一次 (verify-e2e.sh 会覆盖 UI 可达性)。"
+    fi
+  fi
 fi
 
 echo
