@@ -19,7 +19,32 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-nacos
-    mem_limit: 768m
+    # ⚠️ 堆下限 1g / 上限 2g 不是随手填的, 是**实验收敛**出来的 (2026-10-03)。
+    #
+    # 现象: Nacos 崩溃重启循环 30+ 次, 每次 exit=0 / oom=false, 报
+    #   java.sql.SQLTimeoutException: Login timeout exceeded
+    #   ERROR XBDA0: Login timeout exceeded
+    #   → load derby-schema.sql error
+    # 然后下一轮变成
+    #   ERROR XBM0A: The database directory '.../derby-data' exists.
+    #   However, it does not contain the expected 'service.properties' file.
+    # 于是形成**自锁**: 第一轮建库失败留下半成品目录, 第二轮起再也不会成功。
+    #
+    # Derby 报错很有迷惑性 —— 它说的是"目录已存在", 看着像环境残留,
+    # 但清空目录后**第一轮**照样失败。真实原因在更下面一层:
+    # seg0/c10.dat 等段文件其实已写入(非空 8KB), 说明 Derby 真的启动了,
+    # 只是在最后写 service.properties 前被拖过了 boot 的 login 超时。
+    #
+    # 逐项排除的假设(每一项都真跑过, 不是推理):
+    #   mem_limit 768m -> 2g          仍失败 ⇒ 不是内存不足
+    #   bind mount    -> 命名卷        仍失败 ⇒ 不是 bind 挂载/文件锁
+    #   -Xmn512m      -> -Xmn170m      仍失败 ⇒ 不是 -Xmn == -Xmx
+    #   -Xms256m/-Xmx512m -> 1g/2g   ✅ service.properties 生成, Nacos 正常启动
+    #
+    # 即**堆太小, Derby 建库在超时内完不成**。镜像脚本自己拼的是
+    # `-Xms256m -Xmx512m -Xmn512m`(见容器日志), 官方默认 -Xms1g —— 本项目此前配的
+    # 恰好只有官方的 1/4。mem_limit 必须 >= Xmx + metaspace + 线程栈, 故取 4g。
+    mem_limit: 4g
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -36,8 +61,8 @@ services:
       # 注: NACOS_CORE_API_* 环境变量不在 docker-startup.sh 白名单, 用 JAVA_TOOL_OPTIONS 注入
       # - 认证关闭时 admin API 仍需登录, 本地开发禁用便于 up.sh 脚本同步配置
       JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false"
-      JVM_XMS: 256m
-      JVM_XMX: 512m
+      JVM_XMS: 1g
+      JVM_XMX: 2g
     volumes:
       - ./nacos/data:/home/nacos/data
     networks:
@@ -341,7 +366,27 @@ services:
   # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
-    image: apache/skywalking-oap-server:9.7.0
+    # ⚠️ 版本选择受 ES 版本钳制, 且当前存在**未解冲突** (2026-10-03 实测)。
+    #
+    #   已确认的事实:
+    #     OAP 10.1.0 + ES 9.0.3 → java.lang.UnsupportedOperationException:
+    #                                Unsupported version: ElasticSearch 9.0
+    #     官方文档(main 分支)明确写: "ElasticSearch 7 and 8"
+    #     即 **SkyWalking 全系不支持 ES 9**, 与 OAP 版本无关。
+    #
+    #   冲突面: 本仓库 ES 升到 9.0.3 是为了对齐 search 服务的
+    #   Spring Data ES 9.x 客户端(探针实测发 compatible-with=9, 对 ES 8 报 400),
+    #   而 SkyWalking 只吃 ES 7/8 —— **两者无法共用同一个 ES 实例**。
+    #
+    #   ⚠️ 不要仅凭本注释下调镜像 tag 试: 9.7.0 实测同样抛该异常
+    #   (先前有"9.7.0 报错、10.1.0 不报错"的中间结论, 后被用 10.1.0 官方配置
+    #   复测推翻 —— 差异来自配置文件版本, 不是 OAP 版本)。
+    #
+    #   解法需在以下三者中选一, 见 docs/decisions/ 下的 ES 版本决策记录:
+    #     a) SkyWalking 改用非 ES 存储 (BanyanDB / PostgreSQL)
+    #     b) search 与 SkyWalking 各用一个 ES 实例
+    #     c) search 降级到 ES 8 客户端
+    image: apache/skywalking-oap-server:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-oap
@@ -351,9 +396,57 @@ services:
       - "12800:12800"  # HTTP REST query
     volumes:
       - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
+    # ⚠️ 这个 healthcheck 不能省 (2026-10-03)。
+    #   6 个业务服务全部用 SW_AGENT_OAP=cloud-skywalking-oap:11800 连 OAP,
+    #   而它们对 oap 的依赖原先只写 `condition: service_started` ——
+    #   那只保证**进程存在**, 不保证 gRPC 11800 已在监听。
+    #   容器一多(system/file/search/notification/auth 同时起)就会踩到启动竞争:
+    #     Caused by: java.net.UnknownHostException: cloud-skywalking-oap: Name does not resolve
+    #   报错发生在业务服务自己的日志里, 且**间歇出现**(gateway/search 常常正常),
+    #   很容易被误判成"偶发环境问题"而不去查依赖条件。
+    #
+    #   判据用 12800(HTTP query 端口)而不是 11800: OAP 镜像里 curl 不可靠,
+    #   而 12800 走 HTTP, wget 即可探活。探活失败重试 30 次 × 5s = 150s,
+    #   覆盖 OAP 首次初始化(连 ES 建索引)的耗时。
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12800/public/graph || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
     environment:
       # SW 10.x 字段名: SW_CORE_GRPC_HOST (替换 9.6 的 SW_NODE_IP)
-      - SW_STORAGE=h2
+      # ⚠️ SW_STORAGE 必须是 elasticsearch, **不能是 h2** (2026-10-03 实测)。
+      #   原值 h2 一直配在这里, 但镜像 apache/skywalking-oap-server:9.7.0 里
+      #   只有 h2-2.1.212.jar(驱动), **没有** storage-h2-plugin(provider),
+      #   于是启动直接失败:
+      #     ProviderNotFoundException: no provider found for module storage,
+      #     if you're sure it's not required module and want to remove it,
+      #     set the selector to -
+      #   崩溃循环, restarts 一路涨到 51。
+      #
+      #   为什么此前一直没暴露: OAP 容器从未被真正重建过 —— 本机上跑的是
+      #   几个月前的旧镜像。而 depends_on 用 service_started,
+      #   只等进程存在, 不等它健康, 于是依赖它的 6 个业务服务照样"启动成功"。
+      #   即 **一个从未成功运行的服务, 被当成了已就绪的依赖**。
+      #   这次给 OAP 补上 healthcheck 并把 6 处依赖改成 service_healthy,
+      #   才把它暴露出来 —— 门禁变严后立刻抓到既有缺陷, 这是预期行为。
+      - SW_STORAGE=elasticsearch
+      # ⚠️ 必须显式给 ES 地址。application.yml 的默认值是 localhost:9200,
+      #   那是**官方单机默认**, 在 compose 网络里会连到自己容器内的 9200 →
+      #   Connection refused: localhost/127.0.0.1:9200, OAP 起不来。
+      #   实测: 同一份配置, 传 SW_STORAGE_ES_CLUSTER_NODES 时正常 listening 11800,
+      #        不传则必崩 —— 所以不能靠"配置默认值刚好对"。
+      - SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:9200
+      # 注: 曾试过用 SW_ADMIN_SERVER= / SW_STATUS= ... 禁用 9.7.0 没有的
+      # 6 个模块(admin-server/status/inspect/ui-management/dsl-debugging/
+      # receiver-runtime-rule), **实测无效** —— 空值会让 ${VAR:default} 回落
+      # default 而非置空, 仍报 "no provider found for module admin-server"。
+      # 真正解法不是禁用, 而是让配置与镜像版本对齐(已改为官方 10.1.0 原版
+      # application.yml), 故这些变量已删除。留在这里只会让人以为"配了就能禁用"。
+      #
+      # 该 6 个模块本项目零业务引用; 若将来确需 admin API, 应升级到含
+      # 这些 provider 的镜像版本, 而不是靠环境变量硬压。
       - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
       - JAVA_OPTS=-Xms512m -Xmx1024m
@@ -452,7 +545,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     logging: *default-logging
@@ -499,7 +592,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -549,7 +642,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -596,7 +689,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -643,7 +736,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -690,7 +783,7 @@ services:
       nacos:
         condition: service_healthy
       skywalking-oap:
-        condition: service_started
+        condition: service_healthy
       elasticsearch:
         condition: service_healthy
     logging: *default-logging
