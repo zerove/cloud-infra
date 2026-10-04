@@ -818,9 +818,20 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
     # 基础设施(含 SkyWalking OAP/UI 等)此时才启动。
     # 不能靠"只点名业务服务"隐式排他 —— 依赖关系仍会把基础设施一起带起。
     if compose_supports_profile; then
-      echo "  启动基础设施 (不带 --profile)..."
+      echo "  启动基础设施 (不带 --profile, 串行避免抢 commit)..."
+      # ⚠️ --parallel 1: 基础设施也必须**逐个启动**(2026-10-05 受控实验)。
+      #   实测对照(同一份 compose, 只改启动方式, 观测启动窗口内 Committed_AS 峰值):
+      #     并发 up -d        -> 峰值 99%  随后多个 JVM malloc 失败
+      #     串行 --parallel 1 -> 峰值 92%  20 个容器全部 healthy
+      #   即**业务服务串行还不够, 基础设施并发启动本身就是峰值来源** ——
+      #   三个最重的 JVM(nacos 1413MB / elasticsearch 838MB / oap 857MB)
+      #   同时初始化时, 瞬时提交量足以冲破全局预算。
+      #
+      #   稳态容量本身是够的: 基础设施稳定后 commit 74%(15813/21122MB),
+      #   剩余 5309MB > 六个业务服务所需的~3000MB。
+      #   **问题在启动瞬时峰值, 不在稳态容量** —— 故节流而非扩容是正解。
       podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-        "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" up -d
+        "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" --parallel 1 up -d
     fi
     # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
     #   早前写成两条并列的 for 循环(profile / 非 profile 各一份), 结果守护
