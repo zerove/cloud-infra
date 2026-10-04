@@ -471,4 +471,87 @@ podman exec cloud-postgres psql -U postgres -d skywalking -t -A \
 | 守护 | 防护什么 | 负向对照 |
 | :--- | :--- | :--- |
 | `check_sw_oap_config.sh` 按 `SW_STORAGE` 分派 | 非 ES 存储误报红 / 缺失 `SW_STORAGE` 误放行 | 已验证：删文案 → 命中 case9；缺失放行 → 命中 case10 |
-| `agent-entrypoint.sh` 默认 `SW_LOGGING_OUTPUT=CONSOLE` | 非 root 容器内 agent 日志写失败刷屏 | 已验证：不设 255 行 → 设后 0 行 |
+| `agent-entrypoint.sh` 注入 `-Dskywalking.logging.output=CONSOLE` | 非 root 容器内 agent 日志写失败刷屏 | 已验证：重建后异常 709/815 → **0** |
+| `e2e-test.sh` 场景六：查 SkyWalking 存储的 `segment_YYYYMMDD` 与上报服务名 | M7-01 “已交付”但实际未生效（只查 agent 日志或 OAP `/healthcheck` 均无效，后者postgres 停掉仍返回 200） | 四项对照全做：日期写错 → `FAIL=2`；白名单不匹配 → 服务名单独红而 segment 绿；停 OAP → `SKIP` 不误判红；`segment=0` → 独立红 |
+| `verify-e2e.sh` agent 日志异常显式断言 | 掩盖性 `grep -v 'skywalking-api.log'` 把未修缺陷伪装成干净日志 | 双向对照：未重建的 `cloud-auth` 命中 **815**，已修复的 `cloud-system` 命中 **0** |
+
+---
+
+## ⚠️ 2026-10-04 晚间更正：上一行那句负向对照是**无效的**
+
+上表原写：
+
+```
+| agent-entrypoint.sh 默认 SW_LOGGING_OUTPUT=CONSOLE | ... | 已验证：不设255 行 → 设后 0 行 |
+```
+
+**这条负向对照本身是无效的，被本轮实测推翻。**它测的是 entrypoint 脚本里
+`export SW_LOGGING_OUTPUT=...` 这一行的效果，而 agent 读的是**进程环境变量**
+（`agent.config` 第 115 行 `logging.output=${SW_LOGGING_OUTPUT:FILE}`）。
+shell 变量与环境变量同名但不是一回事，所以那一次“0 行”测的是别的东西。
+
+真实情况：异常并未消失，只是**换了一种形态**——
+
+|阶段 | 现象 |
+| :--- | :--- |
+| 修之前的“修复” | 每服务 45s 内 255 行 |
+| 那个无效修复之后 | 每服务 **360~815 行**，持续整个容器生命周期 |
+
+而 `verify-e2e.sh` 里有三处 `grep -v 'skywalking-api\.log'` **正在把它滤掉**，
+于是缺陷看起来像已修。**这正是本项目记录的“假绿”的一个全新变体：
+过滤规则本身就是掩盖器。**
+
+### 为什么会漏：负向对照打在了错误的层级
+
+第四课要求“改坏 → 守护变红”，本轮照做了，但**对照打在了被修改的那一层**
+（entrypoint 脚本），而不是**被保护的那一层**（agent 真正读取的环境/属性）。
+两端之间隔着一个进程边界，脚本层的任何改动都不会自动传到那里。
+
+> **规则**：若被守护对象的判据来自**另一个进程的资源**（环境变量、JVM 属性、
+> 文件、端口、网络），负向对照必须作用在**那个进程能看到的通道**上。
+> 在脚本里改一个 shell 变量，然后观察该脚本自己的输出，永远不会失败。
+
+### 正解与最终证据
+
+```
+SW_OPTS="${SW_OPTS} -Dskywalking.logging.output=${SW_LOGGING_TARGET:-CONSOLE}"
+```
+
+| 证据 | 修复前 | 修复后 |
+| :--- | --- | --- |
+| `cloud-system` 日志中 `skywalking-api.log` 命中 | 709 | **0** |
+| `cloud-auth` 同上 | 815 | **0** |
+| 运行中 JVM `/proc/1/environ` 实测属性 | 无 | `skywalking.logging.output=CONSOLE` |
+| agent 日志是否进 stdout | 否 | 是（576 行/90s） |
+
+注意第3 行：**必须读运行中进程**，不能另起一个 JVM 去查
+（本次先试`podman exec ... java -XX:+PrintFlagsFinal`，读到的是探针自己的堆上限，
+完全是另一个数——又一个“探针测错对象”）。
+
+### 顺带修掉的两个自身缺陷
+
+1. **`set -e` + `pipefail` 下探针失败 = 脚本崩溃，不是判定失败。**
+   两者在日志里长得一样：都是没有`FAIL` 消息就结束。已加 `|| true`。
+2. **`tr -d '[:space:]'` 把换行也删了**，多个服务名粘连成
+   `notification-servicecloud-postgres:5432file-service...`。
+   已改为逐行处理 + `grep -qx` 精确整行匹配。
+
+### 关于 commit 瓶颈：一项**取消**的改造
+
+本轮原计划把 `redisinsight` / `jaeger` / `promtail` / `loki` 改为按需 profile。
+**实测后取消**，理由如下（先有证据再动配置）：
+
+| 观察 | 含义 |
+| :--- | :--- |
+| 我批量查容器时 `Committed_AS` 达 **87%** | 那是**探针自身**造成的瞬时峰值 |
+| 静置后 `Committed_AS` 为 **56%**（11.51 / 20.63 GB），项目门禁 PASS，余量 9.12 GB | 当前**没有** commit 瓶颈 |
+| 容器 `VmSize` 合计远大于 `Committed_AS` | `VmSize` 严重高估（见第八课）：OAP 堆仅 1 GB 却 `VmSize` 8 GB |
+
+⇒ 重组件不是本机瓶颈；改 profile 属于无证据的改动，只会增加维护面。
+**“资源越多越早失败”那条签名本轮没有出现**，因此不构成改配置的依据。
+
+### 尚未验证的一项（明确标 ⚠️ 而非已完成）
+
+SkyWalking UI（`18080`）可打开，但**尚未验证在 UI 中实际展开一条 trace 详情**。
+OAP 的 GraphQL 查询 API 与版本强绑定，手写查询体两次踩空（`InvalidSyntax`），
+故 `e2e-test.sh` 改为查存储—— 存储能证明“收到数据”，但不能替代“UI 可读”。
