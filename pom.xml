@@ -466,6 +466,27 @@
                         <failOnViolation>true</failOnViolation>
                         <violationSeverity>warning</violationSeverity>
                         <consoleOutput>true</consoleOutput>
+                        <!--
+                          2026-10-04: 排除 **生成代码**。
+                          起因: system-module 的 checkstyle 唯一违规来自
+                            target/generated-sources/protobuf/java/.../UserProto.java:180
+                            (行长 206 > 200), 即 protoc 产物 —— 一行都改不了,
+                            也不该由人来改。此前没人报是因为该文件由本轮新增的
+                            gRPC proto 编译产生, 而门禁从 CI 长期 BILLING_BLOCKED
+                            从未真正跑过 (见 AGENTS.md「计费阻塞」节)。
+
+                          为什么用 excludes 而不是降低严重级别:
+                            - 降 severity 会同时放过**手写**代码的同类违规,
+                              那是真的规则, 不该为生成代码让步;
+                            - 规则不该为"我们改不了的文件"而修改定义。
+
+                          判据 (第五课: 探针对象要从被测系统提取):
+                            文件路径取自 checkstyle-result.xml 报告本身,
+                            而非手写猜测的目录名 —— 故此处用
+                            '**/generated-sources/**' 覆盖所有代码生成器
+                            (protobuf / mapstruct / openapi 等), 而非只写 protobuf 一家。
+                        -->
+                        <excludes>generated-sources/**</excludes>
                     </configuration>
                 </plugin>
                 <plugin>
