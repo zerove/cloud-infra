@@ -732,7 +732,9 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
     # 关键: 创建后必须**断言容器真的存在**, 而不是只看 podman-compose 的退出码。
     # 退出码 0 与"容器已创建"不是一回事 (见下方验证)。
     echo "  先创建业务服务容器 (只创建不启动, 不占 commit)..."
-    local create_failed=""
+    # 注: 这段在 main 流程里而非函数内, 不能用 local (bash 会报
+    #   "local: can only be used in a function" 并中断整个脚本)。
+    create_failed=""
     for svc in "${FULL_SERVICES[@]}"; do
       timeout 180 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
         ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} up --no-start "$svc" >/dev/null 2>&1 || true
