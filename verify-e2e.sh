@@ -228,7 +228,15 @@ dump_container_diagnostics() {
   # 改为遍历全部容器, 不做数量截断。
   for c in $(podman ps -a --format '{{.Names}}' 2>/dev/null); do
     [ -n "$c" ] || continue
-    state=$(podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)
+    # ⚠️ 必须加 timeout（2026-10-04）：实测 inspect 单次 1.4–2.0s，23 个容器
+    #   串行无超时可达数十秒。而本函数只在**失败路径**调用，它多耗的每一秒
+    #   都在拖慢已经失败的现场取证；Podman 状态损坏时单次可到数十秒，
+    #   整轮诊断会直接卡死 —— 拿不到任何日志的诊断等于没有诊断。
+    state=$(timeout 15 podman inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)
+    # 取不到值时必须**明说**，不能把空串当成 "exit=0" 而静默跳过该容器。
+    if [ -z "$state" ]; then
+      state="probe-timeout(无法读取状态, 该容器诊断缺失)"
+    fi
     echo "### $c  [$state]" >&2
     # ⚠️ 不只给已退出的容器打详细日志（2026-10-03 修正, 依据 run 37057477434）。
     # 那次修完配置竞态后, 四个服务从 Exited(1) 变成 Up + unhealthy —— 竞态确实
@@ -754,13 +762,41 @@ echo "[5/7] 等待 ${#MICROSERVICES[@]} 个微服务 healthy ..."
 #    否则“没错误信息”会被误读成“没问题”。
 DEADLINE=$(( $(date +%s) + 600 ))
 MISSING=""
+PROBE_FAILS=0
 while :; do
   MISSING=""
+  round_fail=0
   for svc in "${MICROSERVICES[@]}"; do
-    state=$(podman inspect --format '{{.State.Health.Status}}' "cloud-$svc" 2>/dev/null || echo absent)
+    # ⚠️ 必须加 timeout（2026-10-04）。
+    #   实测 `podman inspect --format '{{.State.Health.Status}}'` 单次耗时
+    #   **1.4–2.0 秒**; 6 个服务串行 = 约 10 秒/轮, 而循环 sleep 只有 6 秒。
+    #   也就是说循环体本身就超过间隔 —— 一旦 podman 变慢(Podman 状态损坏时
+    #   单次可到数十秒), 这个循环会**长时间不返回**, 600s 预算形同虚设。
+    #
+    #   更危险的是: `|| echo absent` 把"探针取不到值"与"容器真的不存在"
+    #   混为一谈。前者应重试, 后者才是故障。混为一谈会让预算在 podman
+    #   响应变慢时被提前耗尽, 报出一个**与真实原因无关**的失败。
+    state=$(timeout 15 podman inspect --format '{{.State.Health.Status}}' "cloud-$svc" 2>/dev/null)
+    rc=$?
+    if [ "$rc" -ne 0 ] || [ -z "$state" ]; then
+      state="probe-timeout"
+      round_fail=1
+      PROBE_FAILS=$((PROBE_FAILS+1))
+    fi
     [ "$state" = "healthy" ] || MISSING="$MISSING $svc=$state"
   done
+  [ "$round_fail" -eq 0 ] && PROBE_FAILS=0
   [ -z "$MISSING" ] && break
+  # 探针不可用时**不**消耗判定预算: 继续等, 直到能真正读到状态。
+  # 否则报出的 "未 healthy" 是在说探针坏了, 不是在说服务坏了。
+  if [ "$round_fail" -eq 1 ]; then
+    if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+      echo "  (最后一次探测: $PROBE_FAILS 轮 podman 探针超时, 非服务健康问题)" >&2
+      break
+    fi
+    sleep 6
+    continue
+  fi
   [ "$(date +%s)" -ge "$DEADLINE" ] && break
   sleep 6
 done
