@@ -474,6 +474,87 @@ STUB
     echo "  PASS build 判定未被管道截断 (自检函数外无 'podman build | ...')"
   fi
 
+  # ---- 覆盖 6: commit 预算门禁必须真的拦住 (2026-10-04) ----------------
+  # 只静态检查“在不在”不够: 该函数第一版写成 `out=$(...); rc=$?` 就已是错的
+  # —— 那样 rc 永远是 0, 门禁形同虚设。这里断言三件事:
+  #   a) 函数确实调用了守护脚本, 且用的是它的退出码
+  #   b) rc=1 时 return 非 0（否则 ok/fail 计数会把失败记成通过）
+  #   c) 前置门禁出现在任何 podman build / compose up 之前
+  if ! grep -q 'check_commit_budget.py' "$SCRIPT_DIR/verify-e2e.sh"; then
+    echo "  FAIL 未调用 check_commit_budget.py —— commit 预算门禁缺失" >&2
+    failures=$((failures+1))
+  else
+    echo "  PASS 已调用 check_commit_budget.py"
+  fi
+
+  # b) 退出码必须来自守护脚本本身, 不能被中间命令覆盖
+  local cc_line
+  cc_line="$(awk '/^check_commit_budget\(\)/{inself=1} inself && /rc=\$?/{print; exit} inself && /^}/{exit}' \
+    "$SCRIPT_DIR/verify-e2e.sh")"
+  case "$cc_line" in
+    *'rc=$?'*) echo "  PASS commit 门禁读取守护脚本退出码: ${cc_line//  /}" ;;
+    *) echo "  FAIL commit 门禁未正确读取退出码 (期望含 'rc=\$?'), 实得: ${cc_line:-未找到}" >&2
+       failures=$((failures+1)) ;;
+  esac
+
+  # c) 位置: 前置门禁必须在**首个** build_images / compose up 调用之前
+  #
+  # ⚠️ 这里连踩**四次**坑, 都是同一类: 探针取错了对象（AGENTS.md 第五课）。
+  #   第 1 次: `awk '/^build_images\(\)/'` 匹配到**函数定义**(322 行)而非调用
+  #            —— 一个真正前置的门禁被判成"位于 build 之后"。
+  #   第 2 次: 改成只认**裸调用** `^build_images$`, 又匹配不到 —— 真实调用
+  #            是 `if build_images; then`(610 行), 带 if 前缀。断言永远 SKIP,
+  #            而"永远 SKIP 的断言"等于没有断言。
+  #   第 3 次: 改用宽松匹配后, 命中 337 行的**缩进注释**
+  #            `#   而 build_images 打印的是 ...` —— `!/^#/` 只能滤掉行首 #,
+  #            滤不掉缩进注释。
+  #   第 4 次: 滤掉注释后, 命中 386 行的 `PATH="$tmp:$PATH" build_images`
+  #            —— 那是**自检函数体内**用假 podman 的探测调用。
+  #            即: 断言把自己当成了被检对象。这与本函数覆盖 5 踩过的坑
+  #            **完全同型**, 而那条注释就写在下方十几行处 —— 教训没被读到。
+  # 正解: 三重排除 —— 缩进注释 / 函数定义 / 自检函数体, 再取首次调用。
+  # 正解: 只在自检函数体**之外**搜索两个行号。
+  # ⚠️ 这里连踩六次, 全部是同一类"被检字面量污染自己的断言":
+  #   1) 匹配到 build_images **函数定义**而非调用
+  #   2) 只认裸调用 → 真实调用是 `if build_images; then` → 永远 SKIP
+  #   3) 宽松匹配 → 命中**缩进注释**里的 build_images
+  #   4) 滤注释后 → 命中**自检体自身**的假 podman 调用
+  #   5) 滤自检体后 → 命中**注释里写的行号示例** `if build_images; then`(610 行)
+  #   6) 门禁的 grep 模式**本身就含** `check_commit_budget; }; then`,
+  #      命中的是这行 grep 自己 → gate_line 恒小于 build_line → 断言恒绿
+  # 第 6 次最隐蔽: 污染源不是注释, 而是**断言代码自身**。
+  # 通用解法: 先定出自检体的行区间, 两个搜索都限定在该区间之外。
+  local self_start self_end
+  self_start="$(grep -n '^run_gate_selftest()' "$SCRIPT_DIR/verify-e2e.sh" | head -1 | cut -d: -f1)"
+  self_end="$(awk -v s="$self_start" 'NR>s && /^}/ {print NR; exit}' "$SCRIPT_DIR/verify-e2e.sh")"
+  gate_line="$(awk -v s="$self_start" -v e="$self_end" '
+    NR >= s && NR <= e { next }
+    /check_commit_budget; \}; then/ { print NR; exit }
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
+  build_line="$(awk -v s="$self_start" -v e="$self_end" '
+    NR >= s && NR <= e { next }
+    { line=$0; sub(/^[[:space:]]+/, "", line) }
+    line ~ /^#/ { next }
+    /build_images\(\)[ \t]*\{/ { next }
+    /build_images/ && line !~ /^echo/ { print NR; exit }
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
+  if [ -z "$gate_line" ]; then
+    echo "  FAIL 找不到 commit 前置门禁的调用点" >&2
+    failures=$((failures+1))
+  elif [ -z "$build_line" ]; then
+    # 这里**不能** SKIP: 找不到调用点意味着脚本结构已变, 断言失效。
+    # 按 AGENTS.md, 扫不到目标必须判红 —— 扫描器坏了 != 通过。
+    echo "  FAIL 找不到 build_images 的调用点 —— 位置断言已失效" >&2
+    echo "        (脚本结构可能已变; 此时不能假定门禁仍然前置)" >&2
+    failures=$((failures+1))
+  elif [ "$gate_line" -gt "$build_line" ]; then
+    echo "  FAIL commit 门禁不在 build_images 调用(行 $build_line)之前 (门禁在 $gate_line)" >&2
+    echo "        必须前置 —— 否则镜像构建已吃掉预算, 检查只剩事后诸葛" >&2
+    failures=$((failures+1))
+  else
+    echo "  PASS commit 门禁前置 (门禁行 $gate_line < build_images 调用行 $build_line)"
+  fi
+
   if [ "$failures" -ne 0 ]; then
     echo "  => $failures 项自检未通过" >&2
     return 1
@@ -490,6 +571,37 @@ fi
 echo "=========================================="
 echo "  Cloud-Infra E2E 复现 ($(git rev-parse --short HEAD))"
 echo "=========================================="
+echo
+
+# ── 前置门禁: 全局 commit 预算（2026-10-04）────────────────────────────
+# 必须放在**任何重资源操作之前**。若放在后面, 镜像构建 + 6 个服务启动
+# 已经把预算吃掉, 再检查就只剩"事后诸葛", 且探针本身也会受影响。
+#
+# 为什么这道门禁是必需的: 宿主 vm.overcommit_memory=2 (严格模式) 下,
+# 所有进程共享 CommitLimit = MemTotal + SwapTotal = 20.63 GB。
+# 预算耗尽时内核拒绝任何新 commit, JVM 报的是:
+#     Native memory allocation (malloc) failed to allocate 112 bytes
+#     pthread_create failed (EAGAIN) ... stacksize: 1024k
+# 而 cgroup 侧 memory.events oom=0 / OOMKilled=false —— **完全不像内存问题**。
+# 最坑的是: 提高 mem_limit 或 -Xmx 只会让它**更快**耗尽全局预算。
+check_commit_budget() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_budget.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "全局 commit 预算不足 —— 6 服务必然崩溃 (详见上方排查指引)"
+    return 1
+  fi
+  ok "全局 commit 预算充足"
+  return 0
+}
+
+if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; then
+  echo
+  echo "!! commit 预算不足, 继续跑只会得到 6 个服务随机崩溃的假象。" >&2
+  echo "!! 请先清理宿主上的孤儿进程 (不属于任何容器, podman ps 看不到)。" >&2
+  exit 1
+fi
 echo
 
 # 0. 准备 .env
