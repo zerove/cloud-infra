@@ -117,26 +117,47 @@ else
   fi
   # 附带确认: 上报的服务名里必须有我们的业务服务, 而不是只有中间件。
   # 只有中间件说明 agent 注入失败(中间件是 OAP 自己上报的)。
-  # ⚠️ 白名单必须从**代码里**提取, 不能凭印象手写 (第五课: 探针对象要从被测系统提取)。
+  #
+  # ⚠️ 数据源必须是 segment 表的 service_id, **不能查 service_traffic_YYYYMMDD**。
+  #   2026-10-05 实测踩坑: service_traffic 是**聚合表**, 由 OAP 定时任务生成,
+  #   实时 segment 写入时它仍是 0 行 —— 查它会得出"没有业务服务上报"的
+  #   **错误结论**, 而此刻 6 个服务的 agent 其实全部工作正常。
+  #   这正是第五课"探针给出语法合法但语义错误的结论": 全程无报错, 结论却是错的。
+  #
+  # ⚠️ service_id 格式是 `<base64服务名>.<序号>`(如 `Y2xvdWQtaW5mcmEtYXV0aA==.1`),
+  #   解码前**必须先regexp_replace 掉 `.N` 后缀**, 否则 psql 报
+  #   `invalid symbol "." found while decoding base64 sequence`。
+  # ⚠️ ORDER BY 必须写在子查询外并用**列名**(cnt) 而非位置号:
+  #   `... || '=' || count(*) ... ORDER BY 2` 会报
+  #   `ORDER BY position 2 is not in select list` —— 因为拼接后只剩一列。
+  #   同样地, 上面两个错误都会被 `2>/dev/null || true` 吞成空字符串,
+  #   使判据恒红且**看不出原因**。写SQL 时先在命令行验证再落盘。
+  #
+  # ⚠️ 白名单必须从**代码里**提取, 不能凭印象手写 (第五课)。
   #   实测两者**确实不一致**:
   #     Java 侧 spring.application.name = cloud-auth
   #     上报名(agent 读容器/环境变量)     = cloud-infra-auth
-  #   若按 Java 名手写白名单, 这项会永远判红 —— 而"永远判红"的守护比没有更坏,
-  #   因为它会让人习惯性忽略这一段输出。
   #   权威清单(cloud-infra-gateway / file-service / notification-service /
   #   search-service / system-module / cloud-infra-auth) 于 2026-10-04 从
-  #   `grep 'application.name'` + OAP 库双向比对确认。
+  #   `grep 'application.name'` + OAP 库双向比对确认, 并于 2026-10-05 用
+  #   `SELECT DISTINCT convert_from(decode(service_id,'base64'),'UTF8') FROM segment_*`
+  #   逐个核对计数确认。
   #   语义: 至少有一个**业务**服务上报即可, 不要求 6 个全在(逐个要求会让
   #   任何单个服务未启动就整体判红, 失去定位能力)。
-  SW_SVCS="$(seg_query "SELECT DISTINCT service_traffic_name FROM service_traffic_${TODAY};")"
-  if printf '%s\n' "$SW_SVCS" | tr -d '\r' | grep -qxE 'cloud-infra-gateway|file-service|notification-service|search-service|system-module|cloud-infra-auth'; then
+  SW_SVCS="$(seg_query "SELECT svc || '=' || cnt FROM (SELECT convert_from(decode(regexp_replace(service_id,'\\.[0-9]+\$',''),'base64'),'UTF8') AS svc, count(*) AS cnt FROM segment_${TODAY} GROUP BY 1) t ORDER BY cnt DESC;")"
+  SW_DECODED="$(printf '%s\n' "$SW_SVCS" | tr -d '\r' | cut -d'=' -f1 | grep -v '^$')"
+  if printf '%s\n' "$SW_DECODED" | grep -qxE 'cloud-infra-gateway|file-service|notification-service|search-service|system-module|cloud-infra-auth'; then
     PASS=$((PASS+1))
-    echo "  PASS: 上报服务名含业务服务"
+    echo "  PASS: 上报服务名含业务服务 (来自 segment_${TODAY}.service_id, 非聚合表)"
     printf '%s\n' "$SW_SVCS" | tr -d '\r' | sed 's/^/        - /' | head -10
   else
     FAIL=$((FAIL+1))
     echo "  FAIL: 上报服务名里没有业务服务 —— agent 注入可能失败。实际:"
     printf '%s\n' "$SW_SVCS" | tr -d '\r' | sed 's/^/        - /' | head -10
+    # service_traffic 是聚合表, 空是正常的; 明确区分两种"空"(第五课):
+    #   segment 有行但服务名解不出 -> SQL/编码问题
+    #   segment 为 0 行            -> agent 真的没上报
+    echo "        (注: service_traffic_*是聚合表, 空属正常; 判据以segment 表为准)"
   fi
 fi
 

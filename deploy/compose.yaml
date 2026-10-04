@@ -401,7 +401,16 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-oap
-    mem_limit: 1024m
+    # ⚠️ 2026-10-04 调整: 1024m -> 2048m。
+    #   依据是**实测事实**: 容器 RSS 长期贴着 98.3% 的原限额运行, 即原配置本身过紧。
+    #   注意这不是 malloc 失败的原因 —— 2026-10-05 实测推翻了先前的归因:
+    #   cloud-auth 堆外余量 384MB(远超任何合理阈值)照样 malloc 失败,
+    #   而真正的原因是**宿主机全局 commit 预算**被多个 JVM 冲破
+    #   (见 verify-e2e.sh 的 check_commit_budget 与那里的详细说明)。
+    #   本项只消除"OAP 自身余量过紧"这个独立问题, 不声称能防住 malloc 失败。
+    #   取 2048m: 与同级的 elasticsearch(1024m 限额 / 512m 堆) 相比留出足够余量,
+    #   也与 system-module 的 2048m 同档。
+    mem_limit: 2048m
     ports:
       - "11800:11800"  # gRPC agent 接收
       - "12800:12800"  # HTTP REST query
@@ -461,6 +470,7 @@ services:
       - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
       - JAVA_OPTS=-Xms512m -Xmx1024m
+      # 堆 1024m + 容器限额 2048m = 1024m 堆外余量, 供metaspace 与 300+ 线程栈使用。
     depends_on:
       # ⚠️ 依赖对象已随存储切换改为 postgres。
       #   保留指向 elasticsearch 会让 OAP 在 ES 慢启动时白等,
@@ -541,7 +551,7 @@ services:
       dockerfile: cloud-infra-gateway/Dockerfile
     image: localhost/cloud-infra-gateway:latest
     container_name: cloud-gateway
-    mem_limit: 448m
+    mem_limit: 640m
     ports:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
@@ -600,7 +610,7 @@ services:
       dockerfile: cloud-infra-auth/Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
-    mem_limit: 576m
+    mem_limit: 768m
     ports:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
@@ -727,7 +737,7 @@ services:
       dockerfile: cloud-infra-modules/file-service/Dockerfile
     image: localhost/cloud-infra-file:latest
     container_name: cloud-file
-    mem_limit: 448m
+    mem_limit: 640m
     ports:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
@@ -788,7 +798,7 @@ services:
       dockerfile: cloud-infra-modules/notification-service/Dockerfile
     image: localhost/cloud-infra-notification:latest
     container_name: cloud-notification
-    mem_limit: 448m
+    mem_limit: 640m
     ports:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
@@ -849,7 +859,7 @@ services:
       dockerfile: cloud-infra-modules/search-service/Dockerfile
     image: localhost/cloud-infra-search:latest
     container_name: cloud-search
-    mem_limit: 448m
+    mem_limit: 640m
     ports:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)

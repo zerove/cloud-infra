@@ -628,6 +628,30 @@ if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; t
 fi
 echo
 
+# ⚠️ 已删除的“堆外余量门禁” (2026-10-05) —— 记录它的错误与正确结论,
+#    避免下一个人把它重新加回来。
+#
+# 当初的假设: skywalking-oap 的 mem_limit(1024m) 恰好等于 -Xmx(1024m),
+# 堆外余量为 0 ⇒ 必然 malloc 失败。因此写了 check_heap_headroom.py,
+# 要求每个容器留 >=256MB 堆外余量, 并抬高了多个服务的 mem_limit。
+#
+# 实测证明这个假设**不成立**:
+#   · cloud-auth 的 mem_limit=768m、-Xmx=384m, 堆外余量 384MB (远超 256MB 阈值),
+#     门禁通过 —— 而它**照样** `Native memory allocation (malloc) failed`。
+#   · 反之, 逐个启动(间隔 45s)时commit 只到 73-84%, 同样的配置**不崩溃**。
+#   · 两者的报错文案完全一样(OOMKilled=false), 靠文案无法区分,
+#     靠“堆外余量”这个量也区分不了。
+#
+# 真正的判据是**上面的 check_commit_budget**: 宿主机 vm.overcommit_memory=2 下,
+# 全局 commit 额度(MemTotal+SwapTotal=20.63GB)被多个 JVM 的虚拟内存预留占满;
+# 连续启动多个服务时瞬时冲破, **已经在运行**的服务就会 malloc 失败而崩溃
+# (即“给更多资源反而更早失败”)。cgroup 限额管不到这件事, 所以任何基于
+# mem_limit/Xmx 的静态检查都无法预测它。
+#
+# 结论: 静态配置检查**无法**预测这类故障, 只能靠“降低启动并发 + 观察”的方式规避。
+# 因此保留 commit 门禁(它查的是真实配额), 删除堆外余量门禁(它查的是一个
+# 与故障无关的量, 留着会给人虚假的安全感)。
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then
@@ -893,11 +917,27 @@ echo
 # 判据必须锚定 "FAIL=0": 原写法 `grep -q "PASS=6"` 会被
 # "PASS=6 FAIL=2" 一并匹配上 —— 有失败也照样判过。
 echo "[6/7] e2e-test.sh ..."
-if bash e2e-test.sh 2>&1 | tee "$SCRIPT_DIR/.e2e-acceptance.log" | tail -1 | grep -qE "结果: PASS=6 FAIL=0"; then
-  ok "e2e 6/6 PASS"
+# ⚠️ 判据**不得**写死 PASS 的个数 (2026-10-04 实测踩到的自身回归)。
+#   背景: e2e-test.sh 新增了 2 项检查(输出变成 PASS=8), 而这里曾写死
+#   `grep -qE "结果: PASS=6 FAIL=0"` —— 于是整条 E2E 会把 8/8 全绿**判成红**,
+#   且日志里看不出原因(只说"e2e 未全过")。
+#   这正是本项目记录的"改了一处, 忘了另一处依赖它的地方"——
+#   被依赖方是**另一个脚本**, 不是编译期能发现的东西, 编译器不会报错。
+#
+#   正解: 只锚定 FAIL=0, 不锚定 PASS 的绝对值。
+#   · PASS 个数是"这轮加了几项检查"的函数, 本就会变;
+#   · FAIL=0 才是"全部检查都没红"这个不变量的语义;
+#   · 同时打印实际 PASS 值, 便于人工确认检查项没被误删(见下方fail 分支)。
+#   ⚠️ 也不能反向写成 "PASS>0" 就算过 —— 若e2e-test.sh 自身崩在第1 步,
+#   它不会输出 FAIL=0, 但极端情况下"检查项被删到只剩0 项且全过"同样该被发现。
+#   故此处同时要求 PASS>=1: 至少真的跑了一项。
+if bash e2e-test.sh 2>&1 | tee "$SCRIPT_DIR/.e2e-acceptance.log" \
+     | tail -1 | grep -qE "结果: PASS=([1-9][0-9]*) FAIL=0"; then
+  ok "e2e 全过 ($(tail -1 "$SCRIPT_DIR/.e2e-acceptance.log" | grep -oE 'PASS=[0-9]+' | head -1))"
 else
   fail "e2e 未全过, 末尾 10 行:"
   tail -10 "$SCRIPT_DIR/.e2e-acceptance.log" >&2
+  echo "  (若末行显示 PASS=8 FAIL=0 却仍报未全过, 说明本脚本的判据写死了检查项个数)" >&2
 fi
 echo
 
