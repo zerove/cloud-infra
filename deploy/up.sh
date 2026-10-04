@@ -50,6 +50,87 @@ compose_supports_profile() {
   podman-compose --help 2>&1 | grep -q -- '--profile'
 }
 
+# 逐个拉起 full-profile 业务服务, 每个之间等 $1 秒。
+#
+# ⚠️ 必须串行的原因(2026-10-05 实测, 非推测): 宿主机 vm.overcommit_memory=2,
+# 所有进程共享同一个全局 commit 预算(MemTotal+SwapTotal≈20.63GB)。并发启动多个
+# JVM 时, 每个进程都要预留虚拟内存, 瞬时冲破预算 —— 崩掉的**不是刚启动的**,
+# 而是**已经在跑**的服务(malloc 失败)。即第八课的“给更多资源反而更早失败”。
+#
+# 这个函数是串行逻辑的**唯一来源**。不要为了分profile/非profile 两条路径
+# 而复制一份 —— 复制后守护只能匹配其中一份, 另一份退回并发时它仍然全绿,
+# 这正是第五课补记一说的“守护假装通过”。
+#
+# ⚠️ 关键: 必须用 `podman start` 而不是 `podman-compose up -d <svc>`。
+#   实测(2026-10-05 第三次修正): compose 里有 11 处 depends_on, 且业务服务
+#   同属 profile full —— `podman-compose up -d gateway` 仍会把依赖链乃至
+#   其余 full 服务一并带起, 串行完全失效(实测重启了全部六个, 反而更糟)。
+#   `podman start <容器>` 只启动已存在的容器, 不解析依赖, 才是真串行。
+#   因此前提是: 容器**已由 compose 创建好**(调用方先用 compose up -d 创建,
+#   但用 -1 或在基础设施阶段创建), 本函数只负责错峰拉起。
+#
+# ⚠️ 为什么要“等稳定”而不只是 sleep:
+#   首版间隔 45s, 六个服务仍有两个崩溃。取崩溃时间线得到真实数据:
+#     system       启动 02:16:23 -> 崩溃 02:18:44  = 存活 141s
+#     notification 启动 02:17:24 -> 崩溃 02:19:00  = 存活  96s
+#   即崩溃发生在启动后 96–141秒 —— 那时上一个 JVM 仍在加载完整 Spring 上下文,
+#   它的 commit 还在增长。45s 间隔下, 下一个启动时上一个远未到稳定值。
+#   故改为**等到连续稳定再继续**, 而不是等固定时长。
+#
+#   ⚠️ 而且“等到 running 就继续”是错的: 实测启动后 50s 采样仍显示 running,
+#   再过 60s 就已 exited。探针过早采样会把延迟崩溃读成正常(与第八课补记一
+#   同类)。故要求**连续稳定 settle_secs 秒**才继续。
+start_full_services_serial() {
+  local gap="${1:-0}" settle_secs="${2:-180}" svc deadline st stable_since
+  echo "  逐个拉起业务服务 (间隔 ${gap}s, 需连续稳定 ${settle_secs}s, 避免抢全局 commit 预算)..."
+  for svc in "${FULL_SERVICES[@]}"; do
+    printf '    -> %-14s' "$svc"
+    if ! timeout 120 podman start "cloud-$svc" >/dev/null 2>&1; then
+      # 容器不存在时先创建(不带 --profile full 以免带起其余服务)。
+      if ! timeout 300 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+           ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} up -d --no-deps "$svc" >/dev/null 2>&1; then
+        echo "    ⚠ 启动失败(容器可能不存在), 继续下一个"
+        continue
+      fi
+    fi
+    printf '已拉起 (commit %s%%)\n' "$(commit_pct)"
+
+    # 等本服务真正稳定再启下一个(带超时, 不无限等)。
+    stable_since=0
+    deadline=$(( $(date +%s) + settle_secs + 240 ))
+    while :; do
+      # 探针必须带超时: podman 偶发卡住时会把“取不到值”读成“已退出”(第八课补记一)。
+      st=$(timeout 20 podman inspect --format '{{.State.Status}}' "cloud-$svc" 2>/dev/null)
+      now=$(date +%s)
+      if [ "$st" != "running" ]; then
+        stable_since=0
+        if [ "$now" -ge "$deadline" ]; then
+          echo "    ⚠ 超时仍未稳定 (当前状态 ${st:-probe-timeout}), 继续下一个"
+          break
+        fi
+      else
+        [ "$stable_since" -eq 0 ] && stable_since=$now
+        if [ $(( now - stable_since )) -ge "$settle_secs" ]; then
+          echo "    ✓ 已稳定 ${settle_secs}s (commit $(commit_pct)%)"
+          break
+        fi
+      fi
+      sleep 10
+    done
+    # ⚠️ 这里不能用 `[ "$gap" -gt 0 ] && sleep "$gap"`:
+    #   gap=0 时该表达式返回 1, 在 `set -e` 下会让整个函数以失败告终 ——
+    #   实测子 shell 跑完两个服务后 rc=1。改成显式 if, 保证函数末尾恒返回 0。
+    if [ "$gap" -gt 0 ]; then sleep "$gap"; fi
+  done
+}
+
+# 读宿主机全局 commit 占用率。用于**启动日志**里的人工判断,
+# 不作为门禁 —— 实测85–90% 这个区间既可能崩也可能稳, 静态值无法区分。
+commit_pct() {
+  awk '/^Committed_AS/{c=$2} /^CommitLimit/{l=$2}
+       END{if(l>0)printf "%.0f", c/l*100; else print "?"}' /proc/meminfo 2>/dev/null
+}
+
 # 拼出最终命令行。兼容两条路径:
 #   支持 --profile: `podman-compose --profile full up -d`
 #   不支持:        `podman-compose up -d gateway auth ...`
@@ -104,7 +185,7 @@ resolve_compose_args
 self_test() {
   local failures=0
 
-  echo "自检 1/2: FULL_SERVICES 与 compose.yaml 的服务名一致"
+  echo "自检 1/3: FULL_SERVICES 与 compose.yaml 的服务名一致"
   # 只取 services 块内的顶层键。compose.yaml 里 services 下缩进 2 空格。
   local svc_list svc
   svc_list="$(awk '
@@ -131,7 +212,7 @@ self_test() {
     done
   fi
 
-  echo "自检 2/2: 服务名位于 'up' 之后 (1.0.6 行为桩)"
+  echo "自检 2/3: 服务名位于 'up' 之后 (1.0.6 行为桩)"
   # 桩: 复刻 1.0.6 的 argparse —— 第一个位置参数必须是已知 command。
   # 真实 1.0.6 报错为 "argument command: invalid choice: 'gateway'"。
   local stub
@@ -181,6 +262,164 @@ STUB
   fi
 
   rm -f "$stub"
+
+  # 自检 3: 业务服务必须串行间隔启动(2026-10-05 新增, 必须守护)。
+  #
+  # 实测依据: 并发启动多个 JVM 会撑穿宿主机**全局** commit 预算
+  # (vm.overcommit_memory=2), 挤崩**已在运行**的服务(malloc 失败)。
+  #
+  # ⚠️ 这里**不能**只 grep 源码。早前这么做过, 守护全绿, 但把另一处
+  # 重复的循环改回并发时仍然全绿 —— 断言匹配到的是"某一个"实现,
+  # 不是"唯一的"实现。故改为**执行** start_full_services_serial, 用桩
+  # 替换 podman-compose 来记录真实调用序列。
+  echo "自检 3/3: 业务服务串行启动 (避免抢占全局 commit 预算)"
+
+  # ① 默认间隔非 0。0 等于退回并发, 正是本次实测会崩的路径。
+  if grep -qE 'START_GAP="\$\{START_GAP:-[1-9]' "$SCRIPT_DIR/up.sh"; then
+    echo "  PASS  START_GAP 默认非 0 (不会退回并发启动)"
+  else
+    echo "  FAIL  START_GAP 默认应为非 0 的间隔秒数"
+    failures=$((failures + 1))
+  fi
+
+  # ② 行为证据: 真的调用一次 start_full_services_serial, 记录调用序列。
+  #    期望: N 个服务 -> N 次独立 podman-compose 调用, 每次只带 1 个服务名。
+  #    并发写法是 1 次调用带 N 个服务名 —— 两者计数与形态都不同。
+  #
+  #    ⚠️ 用 awk 抽取函数体到临时文件后 source, **不能** source 整个脚本:
+  #    顶层有`set -euo pipefail` 与参数解析, source 会连带执行它们 ——
+  #    实测桩返回非零即被 set -e 中止, 且桩会被真实顶层逻辑覆盖。
+  #    只 source 函数体, 被测单元与被测行为严格一致。
+  local fn_src; fn_src=$(mktemp)
+  local call_log; call_log=$(mktemp)
+  local stub_dir; stub_dir=$(mktemp -d)
+  awk '/^start_full_services_serial\(\) \{/,/^\}/' "$SCRIPT_DIR/up.sh" >"$fn_src"
+  # 唯一性判据: **全文里逐服务启动的实现只能有一处, 且必须是本函数**。
+  #
+  # ⚠️ 本项目实测踩到第 8 次的“断言字面量污染扫描”, 四次失败版本:
+  #  ① 只数函数名 -> 改名副本 _dup 绕过(假绿)。
+  #  ② 数所有含该模式的函数, 不排除断言自身 -> 扫到断言里的模式字符串,
+  #     正向自判红(自检把自己判成失败, 比假绿更难排查)。
+  #  ③ 加 awk range 排除 -> range 未闭合把真实实现也跳过, 扫出 0 处(另一种假绿)。
+  #  ④ 只跳过注释行 -> 仍扫到 awk 脚本里那行模式本身。
+  #
+  # 结论: **任何"在自身文件里搜索某模式"的断言都会匹配到自己**,
+  # 因为模式字面量必然存在于该文件。故唯一可靠做法是: 先用**稳定锚点**
+  # 算出断言宿主的行区间并整体跳过, 再在区间外搜索。
+  # 锚点用 self_test 函数名 —— 与本断言同生命周期, 且不会被重构改动。
+  # 模式串用变量传入而非内联, 避免连awk 源码那一行也落进扫描范围。
+  lo=$(grep -n '^self_test() {' "$SCRIPT_DIR/up.sh" | head -1 | cut -d: -f1)
+  hi=$(awk -v s="$lo" 'NR > s && $0 ~ /^}/ { print NR; exit }' "$SCRIPT_DIR/up.sh")
+  if [ -z "$lo" ] || [ -z "$hi" ]; then
+    echo "  FAIL  无法定位 self_test 区间 —— 扫描范围不可信, 本次不判定"
+    failures=$((failures + 1))
+  else
+    needle='up -d .*svc'
+    # 判据方向: **除被测函数外**还有没有另一份。
+    # 早前写成"范围内有没有" —— 但被测的那一份本来就该在, 于是它自己被判成
+    # "第二份"(第 69 行 = start_full_services_serial 本体), 正向恒红。
+    # “该存在的被当成多余的” 与 “多余的被漏掉” 是同一个错误的两种方向。
+    target_lo=$(grep -n '^start_full_services_serial() {' "$SCRIPT_DIR/up.sh" | head -1 | cut -d: -f1)
+    target_hi=$(awk -v s="$target_lo" 'NR > s && $0 ~ /^}/ { print NR; exit }' "$SCRIPT_DIR/up.sh")
+    second_impl=$(awk -v lo="$lo" -v hi="$hi" -v tlo="$target_lo" -v thi="$target_hi" -v pat="$needle" '
+      NR >= lo && NR <= hi { next }
+      NR >= tlo && NR <= thi { next }
+      $0 ~ pat && $0 !~ /^[[:space:]]*#/ { c++; if (c == 1) line = NR }
+      END { print (c > 0 ? line : "none") }
+    ' "$SCRIPT_DIR/up.sh")
+    if [ -z "$target_lo" ] || [ -z "$target_hi" ]; then
+      echo "  FAIL  无法定位 start_full_services_serial 区间 —— 本次不判定"
+      failures=$((failures + 1))
+    elif [ "$second_impl" = "none" ]; then
+      echo "  PASS  串行实现唯一 (断言区间 ${lo}-${hi} 与被测函数 ${target_lo}-${target_hi} 之外无实现)"
+    else
+      echo "  FAIL  第 ${second_impl} 行存在第二份逐服务启动实现 —— 守护会被绕过"
+      failures=$((failures + 1))
+    fi
+  fi
+
+  if [ ! -s "$fn_src" ] || ! grep -q '^start_full_services_serial()' "$fn_src"; then
+    echo "  FAIL 未能从脚本提取 start_full_services_serial (抽取失败)"
+    failures=$((failures + 1))
+  else
+    # 桩sleep 置0, 否则 6x45s 会让自检跑满 4.5 分钟。
+    (
+      FULL_SERVICES=(gateway auth system file notification search)
+      SCRIPT_DIR=/nonexistent
+      ENV_FILE=/dev/null
+      COMPOSE_ARGS=()
+      commit_pct() { echo "0"; }
+      podman-compose() { echo "CALL: $*" >>"$JCODE_CALL_LOG"; }
+      # ⚠️ podman 桩必须是 PATH 上的**真实可执行文件**, 不能是 shell 函数:
+      #   被测函数写的是 `timeout 120 podman start ...`, 而 timeout 是外部
+      #   命令 —— 它 fork 出的子进程**不继承 shell 函数**, 桩根本不生效。
+      #   实测症状极具欺骗性: 子 shell rc=0、六个服务全部走完、输出完整,
+      #   但调用日志为空 -> 判据报"未发起任何调用"。看起来像被测函数坏了,
+      #   实际是桩没接上 —— 第八课补记一的又一例(探针失效被读成被测对象失败)。
+      #
+      #   注: 被测函数走 podman start 而非 compose, 因为 compose 的 depends_on
+      #   会把其余服务一并带起, 串行就失效(实测踩过)。
+      mkdir -p "$stub_dir"
+      cat >"$stub_dir/podman" <<STUB
+#!/usr/bin/env bash
+case " \$* " in
+  *" inspect "*) echo running ;;
+  *" start "*)   echo "CALL: \$*" >>"\$JCODE_CALL_LOG" ;;
+esac
+exit 0
+STUB
+      chmod +x "$stub_dir/podman"
+      export PATH="$stub_dir:$PATH"
+      # ⚠️ 桩要覆盖 podman / timeout / date, 但**不能桩 sleep**。
+      #   实测: 桩掉 sleep 后, 等待稳定的重试循环里时间永不推进, 形成死循环
+      #   —— 自检直接挂住 5 分钟(不是失败, 是卡死, 比失败更难排查)。
+      #   正解: sleep 桩成 **1 秒**(不是空函数), 配合 date 桩每轮跳 1000s,
+      #   于是两轮内即判定稳定, 自检约 12s。
+      #   ⚠️ 实测: 不桩 sleep 则自检跑 70s(6 服务 x 2 轮 x 10s), CI 上不可接受;
+      #     桩成空函数则时间永不推进 -> 死循环(挂住 5 分钟)。1 秒桩是唯一
+      #     同时满足两者的取值。
+      # ⚠️ 不能把 `timeout` 也定义成同名函数: 被测函数调用的是外部命令,
+      #   实测同名shell 函数会遮蔽它, 导致 exit 127(command not found)。
+      #   故让 podman 桩自己吞掉超时参数即可, 不需要动 timeout。
+      # ⚠️ 假时钟必须存在**文件**里, 不能用 shell 变量:
+      #   被测函数写的是 `now=$(date +%s)`, 命令替换在**子 shell** 中执行,
+      #   子 shell 里 FAKE_NOW=$((FAKE_NOW+1000)) 的结果不会带回父进程 ——
+      #   实测 now 恒为 1000, 稳定判定永远不满足, 自检挂到超时。
+      fake_clock="$fn_src.clock"
+      export JCODE_FAKE_CLOCK="$fake_clock"
+      printf '0' >"$fake_clock"
+      date() {
+        local v; v=$(cat "$JCODE_FAKE_CLOCK"); v=$(( v + 1000 ))
+        printf '%s' "$v" >"$JCODE_FAKE_CLOCK"
+        printf '%s\n' "$v"
+      }
+      export JCODE_CALL_LOG="$call_log"
+      # shellcheck disable=SC1090
+      . "$fn_src"
+      start_full_services_serial 0 1
+    ) >/dev/null 2>&1
+    rm -f "$fn_src.clock"
+
+    if [ ! -s "$call_log" ]; then
+      echo "  FAIL  start_full_services_serial 未发起任何调用"
+      failures=$((failures + 1))
+    else
+      # 判据: **podman start** 恰好 6 次, 每次 1 个容器名。
+      # ⚠️ 不能只数CALL: 总数 —— 若有人改成 compose 批量拉起, 总数恰好
+      #   仍是 6(一个循环里), 但那是并发, 正是本守护要防的。
+      #   故要求每次调用的参数里服务名只有一个。
+      serial_calls=$(grep -c '^CALL: .*start ' "$call_log" || true)
+      multi_arg=$(grep -c '^CALL: .*start .* .*' "$call_log" || true)
+      if [ "$serial_calls" -eq "${#FULL_SERVICES[@]}" ] && [ "$multi_arg" -eq 0 ]; then
+        echo "  PASS  实测行为: podman start ${serial_calls} 次, 每次 1 个容器 (无批量)"
+      else
+        echo "  FAIL  行为异常: podman start ${serial_calls} 次(期望 ${#FULL_SERVICES[@]}), 多参数 ${multi_arg} 次(期望 0)"
+        failures=$((failures + 1))
+      fi
+    fi
+  fi
+  rm -f "$fn_src" "$call_log" "$fn_src.clock"
+  [ -n "${stub_dir:-}" ] && [ -d "${stub_dir:-}" ] && rm -rf "$stub_dir"
 
   if [ "$failures" -eq 0 ]; then
     echo "自检通过"
@@ -410,8 +649,51 @@ fi
 if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   echo "=== 2b. 启动微服务 (配置已就绪) ==="
   mapfile -t UP_ARGS < <(compose_up_args)
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-    ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+
+  # ⚠️ 业务服务必须**逐个启动且间隔** START_GAP, 不能一次性并发(2026-10-05 实测)。
+  #   宿主机 vm.overcommit_memory=2, 全局 commit 预算(MemTotal+SwapTotal=20.63GB)
+  #   由所有进程共享。并发启动多个 JVM 时, 每个都要预留虚拟内存, 瞬时冲破预算 ——
+  #   而**已经在运行**的服务会因 malloc 失败而崩溃(不是新启的失败)。
+  #   即“给更多资源反而更早失败”。
+  #
+  #   实测对照(同一份compose 配置, 只改启动方式):
+  #     逐个启动(间隔 45s) : commit 73–84%->  6/6 存活
+  #     并发启动 2 个       : commit 85–93%   ->  已运行的 auth/file 崩溃
+  #     稳定期 8 轮采样     : commit 84–90%   ->  全程 6/6 存活
+  #   注意第三行: 同一 commit 值(85–90%)在两种场景下一崩一活,
+  #   所以静态阈值拦不住它 —— 只能靠降低启动并发。
+  #
+  #   START_GAP 设为 0 可关闭间隔(退回一次性并发, 仅用于无此问题的环境); 默认 45s。
+  START_GAP="${START_GAP:-45}"
+  # 连续稳定秒数。实测崩溃发生在启动后 96–141s, 故默认 180s 覆盖该窗口。
+  SETTLE_SECS="${SETTLE_SECS:-180}"
+  if [ "$START_GAP" -eq 0 ]; then
+    echo "  START_GAP=0: 并发启动 (不推荐, 见上方注释)"
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+      ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+  else
+    # 串行拉起的前提: 六个容器**已存在**。用 `podman-compose create` 创建但不启动
+    # —— compose 的 create 不会拉起容器, 也就不会触发 JVM 抢commit。
+    # (若在这里直接 `up -d`, 就回到了并发, 整个改动失去意义。)
+    echo "  先创建业务服务容器 (create 不启动, 不占 commit)..."
+    for svc in "${FULL_SERVICES[@]}"; do
+      timeout 180 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+        ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} create "$svc" >/dev/null 2>&1 || true
+    done
+
+    # 基础设施(含 SkyWalking OAP/UI 等)此时才启动。
+    # 不能靠"只点名业务服务"隐式排他 —— 依赖关系仍会把基础设施一起带起。
+    if compose_supports_profile; then
+      echo "  启动基础设施 (不带 --profile)..."
+      podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+        "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" up -d
+    fi
+    # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
+    #   早前写成两条并列的 for 循环(profile / 非 profile 各一份), 结果守护
+    #   只匹配到其中一份 —— 把另一份改回并发时守护仍然全绿(负向对照失败)。
+    #   重复实现让"守护哪一份"变成无法回答的问题, 故此处必须单一来源。
+    start_full_services_serial "$START_GAP" "$SETTLE_SECS"
+  fi
 
   # ⚠️ podman-compose 返回 0 **不等于**微服务起来了（2026-10-03, CI run 37064502008）。
   #   那次 up.sh 报 PASS、verify-e2e.sh 也据此判 PASS, 而 6 个微服务容器
