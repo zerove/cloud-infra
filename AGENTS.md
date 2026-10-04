@@ -406,6 +406,93 @@ search 的 ES `status: 400, Expecting a response body, but none was sent` 在本
 | L3 端到端 | **真实容器**跑完整链路 | 运行时确实按预期工作 |
 | L2.5 负向对照 | 改坏 → 断言守护变红 | 守护本身有效 |
 
+### ⚠️ 第八课: 「给更多资源反而更早失败」是判别特征，不是噪声（2026-10-04）
+
+**背景**: 6 个业务服务反复崩溃, JVM 报
+`Native memory allocation (malloc) failed to allocate 112 bytes` /
+`pthread_create failed (EAGAIN)`, 而 cgroup 侧 `memory.events oom=0`、
+`OOMKilled=false`、宿主机仍有约 10GB `MemAvailable`。所有"内存不够"的假设都被证据否定。
+
+真因在**宿主机全局**: `vm.overcommit_memory = 2`（严格模式）使所有进程共享
+`CommitLimit = MemTotal + SwapTotal = 20.63 GB`。元凶是一个 13 小时前实验遗留的
+孤儿 JVM（`VmSize 40.62 GB` / `RSS 0.07 GB`，`cgroup` 在 `session-*.scope`
+而非 `libpod-*`，**`podman ps` 根本看不到它**）。
+
+受控实验给出的最干净证据:
+
+```text
+Committed_AS  20.54 / 20.63 GB (100%)
+MemAvailable  4.14 GB                        ← 物理内存充足
+mmap 256MB    FAIL errno=12 (ENOMEM)         ← 但 256MB 都分不出
+```
+
+**三条可直接执行的规则**:
+
+1. **"资源越多越早失败" = 共享配额的签名, 不是矛盾。**
+   普通资源不足永远表现相反（给更多就变慢）。所以一旦观测到反向相关,
+   就该怀疑**配额/预算/限额是全局共享的**, 而不是"参数调错了"。
+   本例中提高 `mem_limit` 或 `-Xmx` 只会**更快**耗尽全局 commit 预算。
+
+2. **判据要选对账本。** 物理内存 (`MemAvailable`) 与提交额度 (`Committed_AS`)
+   是**两套独立账本**。本例中前者有 4GB、后者已 100%, 而"4GB 可用"毫无意义。
+   排查此类问题必须同时读两者; 只读 `free -h` 会得出"内存充足"的错误结论。
+
+3. **孤儿进程不在容器的任何清单里。** `podman ps` / `docker ps` 只列容器。
+   真正吃资源的可能是不属于任何容器的宿主进程。**必须直接扫 `/proc`**:
+
+   ```bash
+   for p in /proc/[0-9]*; do awk '/^VmSize/{print $2, FILENAME}' "$p/status"; done | sort -rn | head
+   # 再用 cgroup 区分归属: 含 libpod- 才是容器
+   awk -F: '/^0::/{print $3}' /proc/<pid>/cgroup
+   ```
+
+   ⚠️ **`VmSize` 会严重高估**:`Committed_AS` 只统计**被触碰过的页**。
+   本例孤儿进程 `VmSize 40.62 GB` 而 `RSS 0.07 GB`, 相差 580 倍。
+   故不能只看 `VmSize` 排序就下结论, 要看实际 `Committed_AS` 增量。
+
+**已加门禁**: `deploy/tests/check_commit_budget.py`（阈值 85%）+
+`deploy/tests/test_commit_budget.py`（14 项断言）+ `verify-e2e.sh` 前置门禁。
+负向对照: hog 进程占满 commit 至 `mmap ENOMEM`, 门禁 3 秒内 `exit 1`。
+
+### ⚠️ 第八课补记: 探针自己坏掉时, 会把被测系统判成失败（2026-10-04）
+
+同一轮排查里, **我自己的观测脚本连续两次给出与事实相反的结论**:
+
+| 探针缺陷 | 观测到的现象 | 真实状态 |
+| :--- | :--- | :--- |
+| `podman inspect` 密集轮询超时 | `存活=0/6` | 6/6 存活 |
+| 统计脚本子 shell 变量丢失 | `VmSize 之和 = 0.00 GB` | 5.48 GB |
+
+**根因是同一件事: 探针把"取不到值"当成了"取到假值"。**
+`$([ "$(timeout 10 podman inspect ...)" = "true" ])` 在超时时得到空串,
+空串 ≠ `true` 于是判"已退出" —— **探针失效被读成了被测对象失败**。
+
+同一缺陷在生产脚本里也存在, 已修:
+
+```bash
+# ❌ 原写法: 两件本质不同的事被混为一谈
+state=$(podman inspect --format '{{.State.Health.Status}}' "$c" 2>/dev/null || echo absent)
+#   探针超时/Podman 卡住 -> 应重试
+#   容器真的没被创建     -> 才是故障(问题在 podman-compose 那一步)
+
+# ✅ 修复后: 显式区分, 且探针失败不消耗判定预算
+state=$(timeout 15 podman inspect --format '{{.State.Health.Status}}' "$c" 2>/dev/null)
+if [ "$?" -ne 0 ] || [ -z "$state" ]; then
+  state="probe-timeout"; round_fail=1      # continue 重试, 不计入 600s 预算
+fi
+```
+
+**通用规则**:
+
+1. **探针必须带 `timeout`, 且必须区分三态**: 成功取到值 / 取不到值 / 取到假值。
+   只区分"等于期望值"与"不等于期望值"的探针, 必然在自身失效时说谎。
+2. **`存活=0` 与 `失败=0` 同时出现时, 先怀疑探针**。两个计数互斥却同时为 0,
+   在数学上就说明**至少有一个计数的输入是空值**。
+3. **守护静态断言时, 被检字面量不能出现在断言自身附近。**
+   本项目实测连踩 6 次（见 `verify-e2e.sh` 的 `run_gate_selftest` 注释）:
+   污染源从**注释**一路升级到**断言代码自己**。
+   正解: 先算出函数体行区间, 搜索限定在该区间之外。
+
 
 ## 🚫 框架能力准入原则 (2026-09-29 新增, 强制)
 
