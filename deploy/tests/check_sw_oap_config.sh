@@ -26,8 +26,14 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE_FILE="$REPO_ROOT/deploy/compose.yaml"
-CONFIG_FILE="$REPO_ROOT/deploy/skywalking/config/application.yml"
+# ⚠️ 这两个路径曾**写死**, 导致守护测试只能改真实 deploy/compose.yaml。
+#   于是: (a) 测试中途崩溃会把仓库留在被改坏的状态(靠 trap 兜底, 仍不可靠);
+#   (b) 各用例必须手动 cp 还原, 一旦漏掉就**串味** —— 本次就真的串了:
+#       用例 4 跑在用例 3 未还原的副本上, 变成"两个 elasticsearch-sw",
+#       awk 取到第一个, 于是本该报红的"双 ES 9"报了绿。
+#   正确做法: 被测脚本接受路径覆盖, 测试在临时目录里各用各的副本, 永不碰真实文件。
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/deploy/compose.yaml}"
+CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/deploy/skywalking/config/application.yml}"
 IMAGE_REPO="apache/skywalking-oap-server"
 
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
@@ -200,11 +206,16 @@ if [[ -f "$COMPOSE_FILE" ]]; then
         svc && /^    container_name:/ {cn=$2; if (cn==h) {print svc; exit}}
       ' "$COMPOSE_FILE")"
       if [[ -n "$SW_TARGET_SVC" ]]; then
+        # ⚠️ 这里曾 `| sed 's/.*://'` 只留 tag, 于是镜像名被丢弃 ——
+        #   `elasticseach:8.18.0`(拼写错) 与 `es:8`(另一个镜像) 提取出的
+        #   都是"8.x", 同样通过白名单。**tag 合法 ≠ 镜像正确。**
+        #   正解: 保留完整引用, 只在解析失败时报错; 判定时同时看镜像名与 tag。
         SW_TARGET_IMAGE="$(awk -v s="  $SW_TARGET_SVC:" '
           $0==s {inblk=1; next}
           inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
           inblk && $1=="image:" {print $2; exit}
-        ' "$COMPOSE_FILE" | sed 's/.*://')"
+        ' "$COMPOSE_FILE")"
+        SW_TARGET_TAG="${SW_TARGET_IMAGE##*:}"
       fi
     fi
 
@@ -246,6 +257,26 @@ if [[ -f "$COMPOSE_FILE" ]]; then
       red "   目标服务 : $SW_TARGET_SVC ($SW_ES_HOST)"
       red "   镜像     : $SW_TARGET_IMAGE"
       red "   ⇒ '分离'了, 但两边都是 ES 9, 版本冲突依旧存在。"
+      ES_OK=0
+    elif ! [[ "$SW_TARGET_IMAGE" =~ ^elasticsearch:(7|8)(\.|$) ]]; then
+      # ⚠️ 这里曾只排除 ^9\. —— 那是**黑名单**, 不是白名单。
+      #   后果: `opensearch:2.11`(OpenSearch 源自 ES 7.10 但协议不同)、
+      #   `elasticsearch:latest`(tag 缺失, 未来可能是 9/10)、
+      #   以及任何拼写错误, 全部**静默放行**。
+      #   与"扫描到 0 个目标却判绿"同型: 不知道的东西被当成了对的东西。
+      #
+      # 正解: 白名单。官方文档(Backend storage / Elasticsearch+)明确写的是
+      #   "ElasticSearch 7 and 8", 故只接受 elasticsearch 镜像的 7.x / 8.x。
+      #   镜像名也必须在白名单里 —— 否则 `elasticseach:8.18.0` 这种
+      #   "tag 对、镜像名错"会被放行, 而它在部署时根本拉不到/不是 ES。
+      #   引用: https://skywalking.apache.org/docs/main/next/en/setup/backend/backend-storage/
+      red "❌ OAP 指向的独立实例用的是 '$SW_TARGET_IMAGE' —— 不在 SkyWalking 支持范围内。"
+      red "   目标服务 : $SW_TARGET_SVC ($SW_ES_HOST)"
+      red "   镜像     : $SW_TARGET_IMAGE"
+      red "   ⇒ 白名单要求 elasticsearch:7.x 或 elasticsearch:8.x。"
+      red "      OpenSearch 虽源自 ES 7.10.2, 但协议/插件不兼容, 不等于 ES 7;"
+      red "      无 tag 的 :latest 亦不可接受(未来可能解析到 9.x);"
+      red "      镜像名拼错则更简单 —— 它根本不是 ES。"
       ES_OK=0
     else
       green "✅ ES 版本冲突已通过双实例分离:"
