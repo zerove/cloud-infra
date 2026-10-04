@@ -763,7 +763,33 @@ echo "[5/7] 等待 ${#MICROSERVICES[@]} 个微服务 healthy ..."
 DEADLINE=$(( $(date +%s) + 600 ))
 MISSING=""
 PROBE_FAILS=0
+# 运行期 commit 复查（2026-10-04）。
+#   为什么必须有: 启动前那一次门禁只反映**启动时刻**。实测启动时
+#   Committed_AS 仅 64%、门禁 PASS, 十几分钟后 OAP 仍死于
+#   `Native memory allocation (malloc) failed to allocate 9104 bytes`。
+#   即**通过启动门禁 ≠ 运行期不会耗尽** —— 峰值出现在
+#   mvn + 镜像构建 + 20 个容器同时起的阶段。
+#   为什么只警告不阻断: commit 高**不等于**服务已经坏了, 阻断会把
+#   “环境紧张”这个真实但次要的事实变成 E2E 的失败结论, 反而掩盖
+#   服务自身的真实状态。证据留下, 判定交给下一步。
+COMMIT_WARNED=0
+check_commit_runtime() {
+  local pct
+  # MEMINFO_PATH 仅供守护测试注入; 未设置时读真实的 /proc/meminfo。
+  # ⚠️ 不是为了可测性而改路径语义 —— 真实运行读的就是 /proc/meminfo,
+  #   注入只在测试进程内生效。
+  pct=$(awk '/^Committed_AS:/{c=$2}/^CommitLimit:/{l=$2}END{if(l>0)printf "%d", c*100/l}' "${MEMINFO_PATH:-/proc/meminfo}")
+  [ -n "$pct" ] || return 0                       # 取不到就 SKIP, 不当通过
+  [ "$pct" -ge 85 ] 2>/dev/null || return 0
+  if [ "$COMMIT_WARNED" -eq 0 ]; then
+    COMMIT_WARNED=1
+    echo "  ⚠️  [运行期] 全局 commit 预算 $pct% ≥ 85% —— 这是实测导致过 malloc 失败的账本。" >&2
+    echo "      宿主机 vm.overcommit_memory=2 下, 超额 commit 会被内核直接拒绝(malloc 返回 ENOMEM)," >&2
+    echo "      与容器 mem_limit 无关。此刻尚未导致服务失败, 但请留意下面的健康结果是否与之相关。" >&2
+  fi
+}
 while :; do
+  check_commit_runtime
   MISSING=""
   round_fail=0
   for svc in "${MICROSERVICES[@]}"; do
