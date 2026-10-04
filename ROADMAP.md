@@ -364,3 +364,111 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 - **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
 - 上述前置验收完成后，执行 M7-07 性能基准更新。**M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件已冻结**（见上方“未来 M7+ 已冻结”）。当前不将设计或组件测试标记为生产交付。
 - 质量基线：`mvn -o clean test` **501 项单测 0 失败**（2026-10-01 实测, 以 surefire XML 为准）。历史值 422（2026-09-29）/ 474（2026-09-30）已过时
+
+---
+
+## 📌 2026-10-04 现状审计与下一阶段计划
+
+本节是**当前唯一的行动依据**，上方历史里程碑仅作背景。
+
+### 一、本轮实测量到的真实状态
+
+| 项 | 真实状态 | 证据 |
+| :--- | :--- | :--- |
+| 宿主机三本账 | 健康（`Committed_AS` 64%、load 2.28、`MemAvailable` 13GB） | 直接读 `/proc/meminfo` / `uptime` |
+| CI（E2E） | ⛔ **`BILLING_BLOCKED`**，最新 run `37182409630` steps=0 | `./deploy/tests/classify_gh_run.sh --workflow e2e.yml` |
+| SkyWalking OAP | ✅ 首次真正可用（PG 存储，`/healthcheck` 200） | 本轮实测 + `b32a95da` |
+| agent 日志 | ✅ 刷屏已消除（255 行 → 0） | 三组容器对照 A/B/C |
+| **6 个业务服务** | ✅ **全部 healthy**（本项目首次完整拉起） | 逐服务 `podman inspect` |
+| **端到端登录** | ✅ 拿到真实 JWT | `POST /auth/login` |
+| **带鉴权业务接口** | ✅ 返回真实数据 + 权限列表 | `GET /system/user/list` |
+| **SkyWalking trace** | ✅ `segment_20261004` = **4401 条**，6 个服务名全部在列 | 直查 OAP 的 PostgreSQL 存储 |
+
+> 下文的 B2/B3 已据此更新；B1（CI 计费）仍未解除。
+
+### 二、三个必须先处理的阻塞
+
+**B1. CI 计费阻塞（非代码问题，需人工）**
+`GitHub Settings → Billing & plans` 未处理前，本仓库 E2E **一次都不会真正执行**。
+在此之前，任何“CI 绿/红”的观察都无效。判据用 `classify_gh_run.sh`，不要靠看 `conclusion`。
+
+**B2. ~~全链路运行时验证缺失~~ ✅ 已于 2026-10-04 关闭**
+本轮本地拉起 6 个服务，完成 `登录 → JWT → 带 token 查用户列表` 闭环，
+并确认 SkyWalking 收到 4401 条 trace。**E2E 在 CI 侧仍因 B1 未跑过一次**，
+故本地证据不能代替 CI 证据 —— 缺口从“无任何运行时验证”变为“缺 CI 侧交叉验证”。
+
+**B3. commit 预算是拉起全栈的真实瓶颈（而非宿主机内存不足）**
+`Committed_AS` 曾达 18.3GB / 20.63GB（89%），4 个服务因此以
+`Native memory allocation (malloc) failed` 崩溃，而 `oom 0` / `OOMKilled=false`
+—— **内核从未 OOM-kill，是 JVM 分配被直接拒绝**。
+停掉 4 个本项目可选组件（`redisinsight` / `jaeger` / `promtail` / `loki`，
+`Committed_AS` 18.3GB → 12.15GB）后，全部服务稳定 healthy。
+
+> ⚠️ `redisinsight` 的 `VmSize=21262MB`（21GB）而 `RSS` 仅 149MB。
+> 它不占多少物理内存，但在 `overcommit_memory=2` 下会**预留 commit 额度**。
+> ⇒ 排查此类问题时，**“它值不值得停”看 `VmSize` 而不是 `RSS`**。
+> 这修正了第八课“`VmSize` 严重高估、不能只看它”的适用边界：
+> 高估说的是**它未被触碰的部分**，但**预留本身仍是真实成本**。
+
+**B4. 非本项目进程反复挤占宿主机**
+`/proc` 实测多个 `session-*.scope`（`ai_developer_growth` 的 python、rustc 等）
+各占 160MB+，高 CPU 时 `load` 冲到 21。**不得擅自终止**（可能是用户正在跑的任务）。
+但它会让每次本地验证结果不可信 —— 每轮验证前先读三本账。
+
+### 三、下一阶段计划（按"完成 = 被业务使用"排序）
+
+| 优先级 | 事项 | 完成判据（L3） | 备注 |
+| :--- | :--- | :--- | :--- |
+| ~~P0~~ | ~~消除 B2：本地全栈拉起并验收~~ | 6 个服务 healthy + 登录链路 | ✅ **本轮完成** |
+| ~~P0~~ | ~~SkyWalking trace 首次真实查询~~ | 收到真实 trace | ✅ **本轮完成**（4401 条，含 6 个服务名） |
+| **P0** | 把本地验收脚本化 | 一条命令完成拉起+登录+trace 校验 | 本轮全是手工步骤，下个会话要重来一遍 |
+| **P1** | B1 人工解除后首次真跑 E2E | run 的 steps > 0 且给出真实失败清单 | 改代码无效 |
+| **P1** | 把“OAP 可用”变成守护 | 守护覆盖 agent 日志目录 + 存储分派 | ✅ 本轮已做 |
+| **P1** | 降低全栈内存占用 | `Committed_AS` 峰值 < 80% | 当前靠停 4 个可选组件，属临时手段 |
+| **P2** | M7 验收缺口（见 2026-09-29 段） | 第二业务模块接入 gRPC | 仍适用，但不得在 P0 未完成前开工 |
+
+### 三之二、本轮验收的具体证据（可复现）
+
+```bash
+# 启动（**必须带 --profile full** —— 6 个业务服务都带 profiles: ["full"]）
+podman-compose --profile full -f deploy/compose.yaml up -d \
+  gateway auth system file notification search
+
+# 登录：字段名是 captcha（不是 code），且 uuid 必须非空
+CFG=$(grep '^AUTH_CAPTCHA_FIXED_CODE' .env | cut -d= -f2-)
+curl -s -X POST http://localhost:9000/auth/login -H 'Content-Type: application/json' \
+  -d "{\"username\":\"admin\",\"password\":\"admin123\",\"captcha\":\"$CFG\",\"uuid\":\"p1\"}"
+
+# SkyWalking 是否真收到 trace（表名带日期后缀，列名是 service_traffic_name）
+podman exec cloud-postgres psql -U postgres -d skywalking -t -A \
+  -c "SELECT count(*) FROM segment_20261004;"
+```
+
+> **首次登录必然超时**（网关报 `Read timed out` / HTTP 500），第二次即 267ms 成功。
+> 原因是首次调用要初始化 Nacos 服务发现 + Feign 客户端。
+> **这不是缺陷**，但它长得非常像缺陷 —— 且网关返回的是 Spring Boot 默认 500 格式，
+> 而非本项目统一的 `Result` 格式，很容易被误判成“网关连不上 auth”。
+> ⇒ **凡看到网关侧 500，先去下游容器日志确认它到底处理成功没有**：
+> 下游 `Status: 200 | Duration: 10249ms` 就是这类误判的决定性反证。
+>
+> 同理，本次踩到的另外三个“看起来像 bug 的真相”：
+> - **业务服务全部 `missing services`** → 它们带 `profiles: ["full"]`，不加 `--profile full` 不会被启动。
+>   而 `podman-compose config --services` 不加 profile 时**同样不列出它们**，
+>   看起来像“compose 文件坏了”。
+> - **登录报 `captcha=null`** → 真实字段名是 `captcha`，我按直觉写了 `code`。
+>   这就是第五课那条：字段名不能靠命名直觉推断，要从日志/代码里读。
+> - **容器状态 `exited|healthy`** → 健康检查是**缓存的旧值**，退出时间 `FinishedAt` 才是真的。
+>   `exited` 且 `healthy` 同时出现，说明容器根本没被纳入本轮重启。
+
+> **一条新增的原则（来自本轮）**：本轮两处缺陷的共性是
+> **“修好一处，忘了另一处依赖它的地方”**——
+> 存储改了但门禁的判据没跟着改；日志目录在镜像里缺失但没人验证过非 root 能否创建。
+> ⇒ **凡改动某个“被多方依赖的配置/契约”，必须同时列出并核对所有依赖方**，
+> 包括**门禁与守护测试**。它们也会因为你的改动而失效，且失效时通常表现为“测试自己报错”而非“红”。
+
+### 四、本轮新增守护
+
+| 守护 | 防护什么 | 负向对照 |
+| :--- | :--- | :--- |
+| `check_sw_oap_config.sh` 按 `SW_STORAGE` 分派 | 非 ES 存储误报红 / 缺失 `SW_STORAGE` 误放行 | 已验证：删文案 → 命中 case9；缺失放行 → 命中 case10 |
+| `agent-entrypoint.sh` 默认 `SW_LOGGING_OUTPUT=CONSOLE` | 非 root 容器内 agent 日志写失败刷屏 | 已验证：不设 255 行 → 设后 0 行 |
