@@ -139,18 +139,39 @@ Podman 实际容器状态、真实 HTTP/JWT 接口、SkyWalking PostgreSQL 里�
 
 ### 真实接口链路
 
-    POST /auth/captchaImage  -> 200 (真实 base64 PNG)
-    POST /auth/login         -> 200, 签发真实 JWT
-                                payload: userId=1 roleId=1 tenantId=default
+    POST /auth/captchaImage  -> 200 (真实 base64 PNG, 带 uuid)
+    POST /auth/login         -> 200, 签发真实 JWT (264 字符)
+                                payload: sub=admin userId=1 roleId=1
+                                         tenantId=default jti=<uuid>
     GET  :9000/system/user/list (Bearer JWT) -> 200 真实数据 (admin 用户)
     GET  :9000/system/dept/list (Bearer JWT) -> 200 真实数据 (总公司)
     GET  :9000/system/menu/list (Bearer JWT) -> 200 真实数据 (系统管理)
     GET  :9000/system/user/list (无 token)     -> 401 拒绝   ← 负向对照
 
+账号来源: `sys_user` 里 admin 的密码是 BCrypt 哈希, 明文在
+`docs/perf/2026-09-01-v1.0.0-deploy-verify.md` 记录为 `admin123`
+(与仓库里既有的两个 IT 脚本一致)。验证码是固定值 `1234` 且**一次性** ——
+复用上一次拿到的验证码会得到 `验证码错误或已过期` (code 1004),
+该错误与密码错误 (code 400) 不同, 可据此区分是哪一步失败。
+
 ### SkyWalking 真实 segment (PostgreSQL)
 
-    file-service 7537 / cloud-infra-auth 7113 / search-service 5827
-    notification-service 5598 / system-module 3836 / cloud-infra-gateway 3552
+`segment_20261005` 共 36,740 条, 六服务全部有数据:
+
+| 服务 | segment |
+| :--- | ---: |
+| file-service | 8,148 |
+| cloud-infra-auth | 7,729 |
+| search-service | 6,441 |
+| notification-service | 6,251 |
+| system-module | 4,381 |
+| cloud-infra-gateway | 3,783 |
+
+> 服务名的取法: `segment.service_id` 是 `base64(name).instanceId`,
+> 直接 `select service_id` 看到的是 `ZmlsZS1zZXJ2aWNl.1` 这类值。
+> 解码才得到服务名 —— **不存在 `service` / `service_id` / `service_traffic` 这三张表**
+> (真实表名带日期后缀, 如 `service_traffic_20261005`),
+> 且它不含服务名, 靠它 join 反而查不出结果。
 
 ### 根因: 全局 commit 预算被 JVM 的 native 预留吃光
 
@@ -180,8 +201,12 @@ JVM 默认 `Compressed class space reserved 1GB` + `Metaspace reserved 1.15GB`
    容器压根没创建。受控实验五档全"失败"其实全是**探针失效被读成被测失败**。
 2. **函数外的 `return` 会终止整个脚本**, `local` 只是伴随报错。日志停在
    `create` 那行, 看起来像 podman-compose 卡住。
-3. **空的 healthcheck.log 让 `podman ps`/`inspect` 全面失败**, 稳定观察循环把
-   "取不到值" 读成 "未稳定"。一个循环内就产生了 8 个空文件。
+3. **空的 healthcheck.log 让 `podman ps` / `container ls` / `inspect` 全部失败**,
+   稳定观察循环把"取不到值" 读成 "未稳定"。一个循环内就产生了 8 个空文件。
+   **且它是全局性的**: 24 个容器里只要**一个**的该文件损坏, **所有** ps 类命令
+   一起报错 —— 我因此一度找不到 `cloud-postgres` 容器, 误以为它不存在。
+   修复格式也有坑: `[]` 仍不合法, podman 要的是单个 JSON **对象**
+   (从健康容器取样得知): `{"Status":"healthy","FailingStreak":0,"Log":[]}`。
 4. **`/actuator/health` 不是健康端点** —— 真实路径是
    `9301/management/health/readiness`。用错端点会得到业务 `code:1000`,
    看起来像服务故障。
