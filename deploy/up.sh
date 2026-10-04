@@ -458,6 +458,68 @@ STUB
   rm -f "$fn_src" "$call_log" "$fn_src.clock"
   [ -n "${stub_dir:-}" ] && [ -d "${stub_dir:-}" ] && rm -rf "$stub_dir"
 
+  # ⚠️ 自检 4/4 存在的原因（2026-10-05 实测）:
+  #   上面三项全部只测**函数**start_full_services_serial, 于是 main 流程里的
+  #   错误一个都测不到。真实运行恰好连续踩了两个:
+  #     ① local create_failed=""  —— 该段不在函数内
+  #     ② return 1               —— 同上, bash 的 return 在函数外**终止整个脚本**
+  #   ①只是报错, ②是真会中断 —— 而当时日志最后一行停在那句之前,
+  #   看起来像 podman-compose 卡住, 差点归因到错误的方向(第八课: 假线索)。
+  #
+  # 判据: main 流程(self_test 之后到脚本末尾)中不得出现
+  #   ① 不在函数内的 local
+  #   ② 用 return 做"终止脚本"
+  # 方法: 抽出 self_test 之后的全部代码(那才是 main 流程), 逐行判断。
+  # ⚠️ 判据自身也在脚本里 -> 模式串必须用变量传入, 否则扫到自己。
+  main_lo=$(grep -n '^self_test() {' "$SCRIPT_DIR/up.sh" | head -1 | cut -d: -f1)
+  if [ -z "$main_lo" ]; then
+    echo "  FAIL  无法定位 self_test 区间"
+    failures=$((failures + 1))
+  else
+    main_src=$(mktemp)
+    tail -n "+$main_lo" "$SCRIPT_DIR/up.sh" >"$main_src"
+    # main 流程 = self_test 之后 + 它自身。剥掉 self_test 函数体再扫。
+    st_hi=$(awk 'NR > 1 && $0 ~ /^}/ { print NR; exit }' "$main_src")
+    if [ -z "$st_hi" ]; then
+      echo "  FAIL  无法定位 self_test 函数体 —— 本次不判定"
+      failures=$((failures + 1))
+    else
+      real_main=$(mktemp)
+      { sed -n "1,1p" "$main_src"; sed -n "$((st_hi + 1)),\$p" "$main_src"; } >"$real_main"
+      # 在 main 流程里, local 只能出现在函数定义内部。
+      # 粗判: 每行出现 local 时, 必须位于某个 `name() {` 之后且尚未闭合。
+      # 用 awk 跟踪缩进层级比逐行跟踪可靠: 函数体统一缩进 2 空格。
+      bad_local=$(awk '
+        /^[_a-zA-Z][_a-zA-Z0-9]*\(\)[[:space:]]*\{/ { infn = 1; next }
+        infn && /^}/ { infn = 0; next }
+        infn { next }
+        /^[[:space:]]*local[[:space:]]/ { print NR ": " $0 }
+      ' "$real_main")
+      bad_return=$(awk '
+        /^[_a-zA-Z][_a-zA-Z0-9]*\(\)[[:space:]]*\{/ { infn = 1; next }
+        infn && /^}/ { infn = 0; next }
+        infn { next }
+        /^[[:space:]]*return[[:space:]]+[0-9]/ { print NR ": " $0 }
+      ' "$real_main")
+      if [ -n "$bad_local" ]; then
+        echo "  FAIL  main 流程(非函数内)出现 local —— bash 会报错, 且掩盖真实失败:"
+        echo "$bad_local" | head -3 | sed 's/^/          /'
+        failures=$((failures + 1))
+      else
+        echo "  PASS  main 流程无函数外 local"
+      fi
+      if [ -n "$bad_return" ]; then
+        echo "  FAIL  main 流程用 return 终止脚本 —— bash 里函数外 return 会**静默终止整个脚本**:"
+        echo "$bad_return" | head -3 | sed 's/^/          /'
+        failures=$((failures + 1))
+      else
+        echo "  PASS  main 流程未用 return 终止脚本"
+      fi
+      rm -f "$real_main"
+    fi
+    rm -f "$main_src"
+  fi
+
   if [ "$failures" -eq 0 ]; then
     echo "自检通过"
     return 0
@@ -745,7 +807,12 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
     if [ -n "$create_failed" ]; then
       echo "  ✗ 以下业务服务容器创建失败:$create_failed" >&2
       echo "    (串行拉起依赖容器已存在, 继续下去必然在 podman start 阶段报 'no such container')" >&2
-      return 1
+      # ⚠️ 这里必须用 exit 而非 return: 该段在 main 流程里(非函数),
+      #   bash 的 `return` 在函数外会**终止整个脚本**(与 local 同类问题)。
+      #   实测 2026-10-05: 用 return 时脚本恰好在这里静默停住,
+      #   日志最后一行是 create 那行, 看起来像 podman-compose 卡住 ——
+      #   实际是提前返回了, 属于**假线索**。
+      exit 1
     fi
 
     # 基础设施(含 SkyWalking OAP/UI 等)此时才启动。
