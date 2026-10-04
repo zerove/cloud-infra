@@ -584,3 +584,122 @@ oom=false  exit=1
 2. 用 `strace -f -e trace=mmap,madvise` 记录失败的那次系统调用及其参数
 3. 对照 podman 版本 / cgroup 版本：同一镜像在 `cgroup v1` 与 `v2` 下各跑一轮
 4. 先解决 podman 状态反复损坏（它已让至少3 轮实验作废）
+
+---
+
+## 第七节：根因闭环 —— `vm.overcommit_memory=2` + 全局 commit 预算耗尽
+
+**结论：不是容器内存不足，不是 cgroup OOM，不是 CPU/JIT。**
+根因在**宿主机全局**：`vm.overcommit_memory=2`（严格模式）使所有进程共享
+`CommitLimit = MemTotal + SwapTotal = 20.63 GB` 的提交预算，该预算被耗尽后，
+内核**拒绝任何新的 commit**，无需实际物理内存即失败。
+
+### 12.1 关键证据
+
+```text
+vm/overcommit_memory = 2          # 严格模式
+vm/overcommit_ratio  = 80
+MemTotal  = 19.53 GB
+SwapTotal =  5.00 GB
+CommitLimit  = 20.63 GB           # 实测 = MemTotal + SwapTotal
+Committed_AS = 18.14 GB           # 崩溃当时
+→ 剩余仅 2.49 GB，但单进程 VmSize 之和仅 5.48 GB
+```
+
+**决定性线索：分配失败量级极小。**
+
+| 日志原文 | 含义 |
+| :--- | :--- |
+| `Native memory allocation (malloc) failed to allocate 112 bytes` | 剩 112 字节都分不出 |
+| `failed to allocate 336 bytes. Error detail: nmethod` | JVM 内部代码缓存 |
+| `pthread_create failed (EAGAIN)` + `stacksize: 1024k` | 新线程栈需 1MB commit |
+
+物理内存充足时不可能出现这种失败 —— 这**只能是提交预算耗尽**。
+
+### 12.2 元凶：40.62 GB 的孤儿 Java 进程
+
+```text
+pid=1337788  VmSize=40.62 GB  RSS=0.07 GB
+cmd: java -cp .../elasticsearch-java-8.12.1.jar ...
+cgroup: /user.slice/user-1000.slice/session-c4.scope   ← 不属于任何容器
+elapsed: 13:41:46                                        ← 13 小时前的实验遗留
+```
+
+它只申请虚拟内存不实际使用（RSS 0.07GB），却独占 40.62 GB 的 commit 额度，
+**是宿主 CommitLimit 的 2 倍**。单它一个就让全局预算永久性超额。
+
+清理后立即回落：
+
+```text
+清理前: Committed_AS 18.22 GB / 20.63 GB (88%)
+清理后: Committed_AS  6.74 GB / 20.63 GB (33%)   剩余 13.88 GB
+```
+
+### 12.3 正向验证（真实 Compose，全 agent）
+
+清理后按**生产同路径**（`deploy/compose.yaml --profile full`，SkyWalking agent 真实启用）重跑：
+
+```text
+[infra] ✅ 就绪                     commit 6.24/20.63 (30%)
+[t] 启动 6 服务 11:52:28
+[skywalking] agent enabled: service=system-module oap=cloud-skywalking-oap:11800
+
+cloud-auth          Up 24 minutes (healthy)   崩溃=0
+cloud-file          Up 24 minutes (healthy)   崩溃=0
+cloud-gateway       Up 24 minutes (healthy)   崩溃=0
+cloud-notification  Up 23 minutes (healthy)   崩溃=0
+cloud-search        Up 24 minutes (healthy)   崩溃=0
+cloud-system        Up 24 minutes (healthy)   崩溃=0
+```
+
+**运行 24 分钟、0 崩溃**，远超历史最长 338 秒崩溃窗口。
+这是本项目首次在真实 Compose + 全 SkyWalking 装配下六服务同时健康。
+
+### 12.4 这一根因解释全部历史反常现象
+
+| 历史现象 | 解释 |
+| :--- | :--- |
+| `mem_limit: 2g` + `-Xmx1536m` → 338s 崩 | 额度大 → 更快消耗全局 commit |
+| `mem_limit: 1200m` + `-Xmx640m` → 75s 崩 | 额度小 → 崩得早是**巧合**，非因果 |
+| 完全移除 `mem_limit` → 25s 崩 | 无上限约束 → 立即超额，最快崩 |
+| **给更多内存反而更早崩溃** | commit 预算是**全局共享**的，与单容器上限无关 |
+| `memory.events oom=0` / `OOMKilled=false` | 从未触发 cgroup OOM，与本问题正交 |
+| 元空间 `reserved 1114112K` 但未耗尽 | reserved 不计入 commit，只有 commit 才受限 |
+| 宿主机崩溃时仍有约 10GB available | `available` 是**物理内存**，与 commit 预算是两套账 |
+| CPU/JIT 限制后仍六服务全崩 | 两者都不是 commit 消耗的主因 |
+
+**「给更多内存反而更早崩溃」是本问题最强的判别特征** ——
+普通内存不足永远表现相反。这也是此前所有排查方向被误导的原因。
+
+### 12.5 被推翻的假设（不得复活）
+
+| 假设 | 否定证据 |
+| :--- | :--- |
+| 容器/cgroup 内存不足 | `memory.events oom=0`，且 cgroup 内存合计仅 5.48GB |
+| 内核 OOM killer | `OOMKilled=false` |
+| 元空间耗尽 | `used 23962K` vs `reserved 1114112K`，差 45 倍 |
+| 映射数耗尽 | `mappings=289` vs `max_map_count=10485760` |
+| SkyWalking agent 耗尽分配 | 关 agent 后 390s 仍在 t=420s 崩溃（仅推迟） |
+| CPU 核数 / C2 JIT arena | `-XX:ActiveProcessorCount=2 -XX:CICompilerCount=2` 下**六服务仍同时崩溃** |
+| 宿主机 `/proc/meminfo` 异常 | 该现象真实但只是**症状的伴随物**，非根因 |
+
+### 12.6 探针自身的错误（本轮两次自摆乌龙）
+
+按 AGENTS.md 第五课，必须记录**取证手段本身出错**的情形：
+
+1. **`podman inspect --format '{{.State.Status}}'` 在密集轮询下返回空**
+   → 脚本判定 `存活=0/6`，但同一时刻单独执行返回 `running`，实为 6/6 存活。
+   探针超时被当成"服务全死"。**结论**：轮询必须加 `timeout` 并区分"取不到值"与"取到非真值"。
+
+2. **统计脚本的子 shell 变量丢失**
+   → `VmSize 之和 = 0.00 GB`，因 `T` 在管道子 shell 中累加丢失且 `&&` 优先级误用。
+   该错误一度让我误判"容器合计远小于 Committed_AS"。
+
+**教训**：`存活=0/6` 与 `崩溃=0` 同时出现时，**先怀疑探针**，再怀疑被测系统。
+
+### 12.7 后续动作
+
+- [ ] 负向对照：重新制造 commit 耗尽，确认守护能复现崩溃（防止"从未失败"的假稳定）
+- [ ] 新增 commit 预算守护测试，纳入 E2E 早期步骤
+- [ ] 排查并清理其他潜在孤儿进程（`podman wait` / `rootlessport` 各占 1.7–2.2 GB）
+- [ ] 完整 `verify-e2e.sh` 连续多轮通过
