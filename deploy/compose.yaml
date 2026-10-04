@@ -564,7 +564,7 @@ services:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -623,7 +623,7 @@ services:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -688,7 +688,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx1536m -Xms512m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx1024m -Xms256m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -750,7 +750,7 @@ services:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -811,7 +811,7 @@ services:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -872,7 +872,7 @@ services:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
