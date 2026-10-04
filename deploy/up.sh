@@ -714,14 +714,37 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
     podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
       ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
   else
-    # 串行拉起的前提: 六个容器**已存在**。用 `podman-compose create` 创建但不启动
-    # —— compose 的 create 不会拉起容器, 也就不会触发 JVM 抢commit。
-    # (若在这里直接 `up -d`, 就回到了并发, 整个改动失去意义。)
-    echo "  先创建业务服务容器 (create 不启动, 不占 commit)..."
+    # 串行拉起的前提: 六个容器**已存在**。但**不能用 `podman-compose create`** ——
+    # 本机 podman-compose 1.0.6 的合法子命令里**没有** create
+    # (只有 help/version/wait/systemd/pull/push/build/up/down/ps/run/exec/
+    #  start/stop/restart/logs/config/port/pause/unpause/kill/stats/images),
+    # 它会报 `invalid choice: 'create'` 并 exit 2。
+    #
+    # ⚠️ 这里原先写的是 `create "$svc" >/dev/null 2>&1 || true` ——
+    #   那个 `|| true` 把上面这个错误**静默吞掉**了, 于是容器压根没被创建,
+    #   而脚本继续往下走, 看起来一切正常。2026-10-05 做 Metaspace 受控实验时
+    #   才暴露: 连续五档"启动失败"其实全是**容器不存在**,
+    #   差点据此得出错误的调参结论 (探针失效被读成被测对象失败)。
+    #
+    # 正确写法: `up --no-start <svc>` —— 创建容器但不起进程, 不触发 JVM 抢 commit。
+    # (若在这里直接 `up -d`, 就回到了并发, 整个串行改动失去意义。)
+    #
+    # 关键: 创建后必须**断言容器真的存在**, 而不是只看 podman-compose 的退出码。
+    # 退出码 0 与"容器已创建"不是一回事 (见下方验证)。
+    echo "  先创建业务服务容器 (只创建不启动, 不占 commit)..."
+    local create_failed=""
     for svc in "${FULL_SERVICES[@]}"; do
       timeout 180 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-        ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} create "$svc" >/dev/null 2>&1 || true
+        ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} up --no-start "$svc" >/dev/null 2>&1 || true
+      if ! timeout 30 podman inspect "cloud-$svc" >/dev/null 2>&1; then
+        create_failed="$create_failed $svc"
+      fi
     done
+    if [ -n "$create_failed" ]; then
+      echo "  ✗ 以下业务服务容器创建失败:$create_failed" >&2
+      echo "    (串行拉起依赖容器已存在, 继续下去必然在 podman start 阶段报 'no such container')" >&2
+      return 1
+    fi
 
     # 基础设施(含 SkyWalking OAP/UI 等)此时才启动。
     # 不能靠"只点名业务服务"隐式排他 —— 依赖关系仍会把基础设施一起带起。
