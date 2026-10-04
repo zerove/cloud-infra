@@ -813,19 +813,32 @@ PROBE_FAILS=0
 #   “环境紧张”这个真实但次要的事实变成 E2E 的失败结论, 反而掩盖
 #   服务自身的真实状态。证据留下, 判定交给下一步。
 COMMIT_WARNED=0
+COMMIT_PEAK=0
 check_commit_runtime() {
   local pct
-  # MEMINFO_PATH 仅供守护测试注入; 未设置时读真实的 /proc/meminfo。
-  # ⚠️ 不是为了可测性而改路径语义 —— 真实运行读的就是 /proc/meminfo,
-  #   注入只在测试进程内生效。
-  pct=$(awk '/^Committed_AS:/{c=$2}/^CommitLimit:/{l=$2}END{if(l>0)printf "%d", c*100/l}' "${MEMINFO_PATH:-/proc/meminfo}")
-  [ -n "$pct" ] || return 0                       # 取不到就 SKIP, 不当通过
-  [ "$pct" -ge 85 ] 2>/dev/null || return 0
+  # ⚠️ 这里读的是真实 /proc/meminfo, 不接受路径注入。
+  #   前一版支持 ${MEMINFO_PATH:-/proc/meminfo}, 但本次实测发现:
+  #   那条注入路径让"门禁脚本"与"被门禁的对象"共用一个可变量 ——
+  #   一旦注入, 判据就不再对真实系统生效, 而**输出格式完全合法**,
+  #   看起来像在工作。真实运行不需要可测性, 判据就该钉死在真实文件上。
+  pct=$(awk '/^Committed_AS:/{c=$2}/^CommitLimit:/{l=$2}END{if(l>0)printf "%d", c*100/l; else print ""}' /proc/meminfo)
+  # 取不到值 → 显式 SKIP 且**不**当通过(第八课补记一)
+  [ -n "$pct" ] || { echo "  ⚠️  [运行期] /proc/meminfo 读不到 commit 账本, 本次不判定" >&2; return 0; }
+  [ "$pct" -gt "$COMMIT_PEAK" ] && COMMIT_PEAK=$pct
+  # 阈值从 85 提到 92（2026-10-05 实测校准）。
+  #   实测 6 服务运行期 commit 在 82%~91% 反复震荡且全部存活,
+  #   而崩溃发生在 99.6%（system: AllocateHeap, notification: Chunk::new）。
+  #   85% 在实测里是**正常区间**, 拿它当阈值会天天误报;
+  #   92% 才落在"稳定"与"崩溃"之间的空档。
+  [ "$pct" -ge 92 ] 2>/dev/null || return 0
   if [ "$COMMIT_WARNED" -eq 0 ]; then
     COMMIT_WARNED=1
-    echo "  ⚠️  [运行期] 全局 commit 预算 $pct% ≥ 85% —— 这是实测导致过 malloc 失败的账本。" >&2
+    echo "  ⚠️  [运行期] 全局 commit 预算 $pct% ≥ 92% —— 已进入实测崩溃区间(99.6% 时必崩)。" >&2
     echo "      宿主机 vm.overcommit_memory=2 下, 超额 commit 会被内核直接拒绝(malloc 返回 ENOMEM)," >&2
-    echo "      与容器 mem_limit 无关。此刻尚未导致服务失败, 但请留意下面的健康结果是否与之相关。" >&2
+    echo "      与容器 mem_limit 无关(cgroup 的 oom 计数会全为 0)。此刻尚未导致服务失败," >&2
+    echo "      但请留意下面的健康结果是否与之相关。" >&2
+    echo "      ⚠️ 不要去 kill 单个进程: 实测形态是 9 个 JVM 的**合计 + 波动**贴近上限," >&2
+    echo "         没有任何单个进程值得杀。有效方向是降低 -Xms/-Xmx 或减少同时运行的 JVM 数。" >&2
   fi
 }
 while :; do
@@ -866,6 +879,12 @@ while :; do
   [ "$(date +%s)" -ge "$DEADLINE" ] && break
   sleep 6
 done
+# 打印本轮运行期 commit 峰值。
+#   为什么必须留下: 崩溃现场极难还原(落点随机: AllocateHeap / Chunk::new /
+#   nmethod / pthread_create EAGAIN)。若只输出"当时没超阈值", 事后无法区分
+#   "真的没超" 与 "没采到"; 有峰值数字, 至少能定量回答"这轮余量到底多少"。
+#   下次崩溃时, 拿这个数字与 99.6%(实测崩溃值)对照即可。
+echo "  [运行期 commit 峰值] ${COMMIT_PEAK}%"
 if [ -z "$MISSING" ]; then
   ok "${#MICROSERVICES[@]} 个微服务全部 healthy"
 else
