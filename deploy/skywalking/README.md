@@ -4,25 +4,45 @@
 
 SkyWalking 10.1.0 作为可选 APM 平台, 与现有 Prometheus + Jaeger + Grafana 共存。
 
-**当前状态 (2026-08-30, 最终)**:
-- ✅ OAP 10.1.0 + H2 存储 **Up 1+ 小时 listen 中**
-  - gRPC 11800 (业务 agent 上报) - `nc 11800` 显示 `0 bytes sent` (TCP accept)
-  - HTTP 12800 (业务查 trace) - 返回 `Status: 404` (HTTP 响应)
-  - application.yml 用 SW 10.1.0 完整默认 (582 行) + ES 段作模板
-  - 启用 storage selector 默认 h2 (内置, ES 兼容性回避)
-  - 字段名: `core.default.gRPCHost` (10.x 字段, 不是 9.x 的 SW_NODE_IP)
-- ✅ 6/6 业务模块 Dockerfile agent 框架就位 (改 ENTRYPOINT 即可)
-- ⚠️ UI 10.3.0 镜像 Up 但 HTTP 拒绝连接 (10.x UI 与 10.1 OAP hostname 兼容 issue)
-- ⚠️ **业务模块 agent 默认未启用** — 需 `SW_AGENT_ENABLED=true` 重启容器
+**当前状态 (2026-10-04 实测, 取代此前所有"最终"结论)**:
 
-## ES 集成限制 (本会话实测)
+> ⚠️ **本文件此前记载的状态全部是错的** —— 尤其标题写着"最终"。
+> 下面是逐条纠正, 保留原文以免后人重犯同样的误判。
 
-- SW 10.1.0 + ES 8.18.0 (本项目 ES 集群) 实际**端到端不可用**:
-  - OAP 启动 ES 连接超时 (`ResponseTimeoutException`)
-  - 推测: 10.1.0 client 与 ES 8.18 协议不兼容
-- 解决方案: 改用 H2 内置存储 (已 work), 或降 ES 到 7.17 (SW 10.1 官方支持)
-  - 降 ES: 修改 compose `elasticsearch:8.18.0` -> `elasticsearch:7.17.28`, 同步 V1-V12 SQL migration
-- 当前用 H2 (零依赖) 是务实选择
+- ✅ **OAP 10.1.0 + PostgreSQL 存储, 首次真正启动成功**
+  - gRPC 11800 监听 (业务 agent 上报)
+  - `/healthcheck` 200 (需同时 `SW_HEALTH_CHECKER=default`)
+  - 建表 64 张, 冷启动约 100s
+- ❌ **原记载"Up 1+ 小时 listen 中"不成立**: 当时的 healthcheck 探的是
+  `/public/graph`, 该路径在 SkyWalking 10.x **恒 404**, 于是**永远 unhealthy**;
+  而 `depends_on` 又是 `service_healthy` ⇒ **6 个业务服务全部起不来**。
+  "进程在跑"被当成了"服务可用", 而真实状态是崩溃循环 + 全站不可用。
+- ❌ **原记载"HTTP 12800 返回 Status: 404"被当成正常**: 那不是"探活成功但无数据",
+  而是**路径本身不存在**(已移除的 Deprecated API)。文档记了现象,
+  却没把它和 compose 的 healthcheck 对上 —— 文档写了, 配置没改。
+- ❌ **原记载"改用 H2 内置存储(已 work)"不成立**: 镜像里**没有**
+  `storage-h2-plugin`(只有 h2 驱动 jar), 启动即
+  `ProviderNotFoundException: no provider found for module storage`。
+- ❌ **原记载"ES 8.18 协议不兼容, 推测"已被实测推翻**: 不是协议问题, 是
+  OAP 的 `responseTimeout` 硬编码 15000ms, 建 `sw_segment-*` 索引时超时。
+- ✅ **6/6 业务模块 agent 注入已就位且默认启用**
+  (`ENTRYPOINT ["/app/agent-entrypoint.sh"]` + compose `SW_AGENT_ENABLED=true`)
+
+## 存储选型 (2026-10-04 定案)
+
+| 方案 | 结论 | 依据 |
+| :--- | :--- | :--- |
+| ES 9(与 search 共用) | ❌ 不可行 | SkyWalking 全系不支持 ES 9 → `Unsupported version: ElasticSearch 9.0` |
+| 单开一个 ES 8 | ❌ 不可行 | 版本冲突消除, 但建索引撞 15000ms 硬超时; 预热后复测仍超时 |
+| **PostgreSQL** | ✅ **采用** | 实测 64 表建齐 + `/healthcheck` 200; **复用已在跑的 postgres, 不新增容器** |
+| BanyanDB | 未采用 | SkyWalking 原生推荐, 但需新增容器, 当前零业务查询不值得 |
+
+**为什么 ES 版本冲突无解**: 本仓库 ES 必须为 9.x(对齐 Spring Boot 4.1.0 BOM 的
+`elasticsearch-client.version=9.4.2`, 9.x 客户端发 `compatible-with=9` 头,
+ES 8 服务端直接 400), 而 SkyWalking 只吃 7/8 ⇒ **两个需求互斥且都不能让步**。
+
+**代价**: trace/log 全文检索走 PostgreSQL 会比 ES 慢。当前 SkyWalking
+**零业务查询**, 代价为零; 若将来接入查询且出现性能问题, 再评估 BanyanDB。
 
 ## 11.0.0 升级实测记录 (本轮 2026-08-30)
 

@@ -101,17 +101,44 @@ else
 fi
 echo
 
-# ---- 1. 当前仓库状态: OAP 与 search 共用 ES 9 → 必须 exit 1 ----
-echo "[1] 真实仓库状态（OAP 与 search 共用 ES 9）应硬失败"
+# ---- 1. 共享 ES 的场景必须硬失败 ----
+# ⚠️ 用例描述已从「真实仓库共用 ES 9」改为「共享 ES 的场景」——
+#   真实 compose 自 2026-10-04 起用 postgresql 存储, 共用 ES 已不再是仓库现状。
+#   但**这条判据本身不能跟着现状一起丢**: 它是双实例分离逻辑的负向对照,
+#   删掉用例就等于没人再验证「指向同一个 ES 会被拦住」。
+#   所以做法是: 显式把副本切成 ES 存储, 再让 OAP 与 search 共用它。
+echo "[1] OAP 与 search 共用 ES 9（临时切成 ES 存储）应硬失败"
 fresh
+sed -i 's#^      - SW_STORAGE=postgresql$#      - SW_STORAGE=elasticsearch#' "$COMPOSE"
+python3 - "$COMPOSE" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+assert '      - SW_STORAGE=elasticsearch' in s, "存储切换未生效"
+s = s.replace('      - SW_JDBC_URL=jdbc:postgresql://cloud-postgres:5432/skywalking',
+              '      - SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:9200')
+open(p,'w',encoding='utf-8').write(s)
+PY
 assert_rc "共用 ES 9" 1
 assert_output "共用 ES 9" "SkyWalking 仅支持 ES 7/8"
 assert_not_passing "共用 ES 9" "已通过双实例分离"
+fresh
 echo
 
 # ---- 2. 负向对照: 指向不存在的服务（旧版会假绿） ----
 echo "[2] 指向不存在的服务名 → 必须 exit 1（旧版此处报绿）"
-sed -i 's#SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:#SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:#' "$COMPOSE"
+fresh
+sed -i 's#^      - SW_STORAGE=postgresql$#      - SW_STORAGE=elasticsearch#' "$COMPOSE"
+python3 - "$COMPOSE" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+s = s.replace('      - SW_JDBC_URL=jdbc:postgresql://cloud-postgres:5432/skywalking',
+              '      - SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:9200')
+s = s.replace('SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:',
+              'SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:')
+open(p,'w',encoding='utf-8').write(s)
+PY
 assert_rc "不存在的服务" 1
 assert_output "不存在的服务" "不存在对应服务"
 assert_not_passing "不存在的服务" "已通过双实例分离"
@@ -132,10 +159,31 @@ inject_separate_es() { # 版本标签
   #    下游 awk 取到**第一个**(旧版本) 而不是刚注入的 → 该红的不红。
   #    即"函数假定自己被调用的初始状态", 而调用方没保证。
   fresh
+  # ⚠️ 2026-10-04 新增: 必须先把存储切回 elasticsearch。
+  #   真实 compose 的 OAP 存储已是 postgresql, 而被测脚本按 SW_STORAGE 分派
+  #   (非 ES 存储直接跳过 ES 检查)。不切回来的话, 这些用例根本不进 ES 分支,
+  #   注入的 ES 服务块形同虚设 —— 上一版就因此在用例 3 报
+  #   「OAP 未指向新实例 —— 测试自身失效」。
+  #   即: **改被测对象时, 必须把使判据生效的前提一起改掉**。
+  sed -i 's#^      - SW_STORAGE=postgresql$#      - SW_STORAGE=elasticsearch#' "$COMPOSE"
+  # ⚠️ 必须把 JDBC 配置行换成 ES 节点行。
+  #   上一版只 `replace('SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:', ...)`,
+  #   而真实 compose 里**已不存在**该字面量(存储已切 postgresql) ⇒ 替换无目标、
+  #   静默无操作 ⇒ 自检「OAP 未指向新实例」报错。
+  #   这正是第八课补记第 4 条: **注入有前置条件时, 不能靠替换一个当前不存在的字面量**。
+  #   正解: 先删掉 JDBC 行, 再**结构化插入** ES 节点行, 且插入后自检。
+  sed -i '/^      - SW_JDBC_URL=jdbc:postgresql/d' "$COMPOSE"
   python3 - "$COMPOSE" "$1" <<'PY'
 import sys
 p, tag = sys.argv[1], sys.argv[2]
 s = open(p, encoding='utf-8').read()
+
+# 1) 结构化插入 ES 节点行 (紧跟 SW_STORAGE 之后), 而不是替换一个可能不存在的字面量
+anchor = '      - SW_STORAGE=elasticsearch\n'
+assert anchor in s, "未找到 SW_STORAGE=elasticsearch, 插入锚点不存在"
+s = s.replace(anchor, anchor + '      - SW_STORAGE_ES_CLUSTER_NODES=PLACEHOLDER:9200\n', 1)
+
+# 2) 插入独立的 ES 8 服务块
 i = s.index('\n  elasticsearch:')
 s = s[:i] + f'''
 
@@ -146,15 +194,20 @@ s = s[:i] + f'''
       - discovery.type=single-node
       - xpack.security.enabled=false
 ''' + s[i:]
-s = s.replace('SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:',
-              'SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:')
+
+# 3) 最后再把占位符换成真实主机名
+s = s.replace('SW_STORAGE_ES_CLUSTER_NODES=PLACEHOLDER:9200',
+              'SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:9200')
 open(p, 'w', encoding='utf-8').write(s)
 PY
-  # 注入后自检: 注入失败就立刻失败, 不能带着未生效的副本去断言被测行为
+  # 注入后自检: 注入失败就立刻失败, 不能带着未生效的副本去断言被测行为。
+  # ⚠️ 三条自检缺一不可 —— 上一版缺了存储切换那条, 于是"注入成功"却仍未生效。
   grep -q "image: elasticsearch:$1" "$COMPOSE" || {
     red "❌ inject_separate_es($1) 未生效 —— 测试自身失效"; exit 2; }
   grep -q "cloud-elasticsearch-sw:9200" "$COMPOSE" || {
     red "❌ OAP 未指向新实例 —— 测试自身失效"; exit 2; }
+  grep -qE '^      - SW_STORAGE=elasticsearch$' "$COMPOSE" || {
+    red "❌ 存储未切回 elasticsearch, ES 分支不会被执行 —— 测试自身失效"; exit 2; }
 }
 
 # ---- 3. 正向: 独立 ES 8 实例 → 必须 exit 0 ----
@@ -208,10 +261,16 @@ echo
 echo "[7] 白名单: 非 7/8 的 OAP ES 镜像必须 exit 1"
 for bad in "opensearch:2.11.1" "elasticsearch:latest" "elasticseach:8.18.0" "es:8"; do
   fresh
+  # 同 inject_separate_es: 先切回 ES 存储, 否则白名单分支根本不会被走到。
+  sed -i 's#^      - SW_STORAGE=postgresql$#      - SW_STORAGE=elasticsearch#' "$COMPOSE"
+  sed -i '/^      - SW_JDBC_URL=jdbc:postgresql/d' "$COMPOSE"
   python3 - "$COMPOSE" "$bad" <<'PY'
 import sys
 p, img = sys.argv[1], sys.argv[2]
 s = open(p, encoding='utf-8').read()
+anchor = '      - SW_STORAGE=elasticsearch\n'
+assert anchor in s, "未找到 SW_STORAGE=elasticsearch, 插入锚点不存在"
+s = s.replace(anchor, anchor + '      - SW_STORAGE_ES_CLUSTER_NODES=PLACEHOLDER:9200\n', 1)
 i = s.index('\n  elasticsearch:')
 s = s[:i] + f'''
 
@@ -219,13 +278,16 @@ s = s[:i] + f'''
     image: {img}
     container_name: cloud-elasticsearch-sw
 ''' + s[i:]
-s = s.replace('SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:',
-              'SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:')
+s = s.replace('SW_STORAGE_ES_CLUSTER_NODES=PLACEHOLDER:9200',
+              'SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch-sw:9200')
 open(p, 'w', encoding='utf-8').write(s)
 PY
   # 注入未生效即判测试自身失效 —— 不得带着未生效的副本去断言被测行为
   if ! grep -q "image: $bad" "$COMPOSE"; then
     red "  ❌ 未能注入 '$bad' —— 测试自身失效, 不能当作被测行为"; FAIL=$((FAIL+1)); continue
+  fi
+  if ! grep -qE '^      - SW_STORAGE=elasticsearch$' "$COMPOSE"; then
+    red "  ❌ 存储未切回 elasticsearch —— 测试自身失效"; FAIL=$((FAIL+1)); continue
   fi
   assert_rc "白名单 $bad" 1
   assert_not_passing "白名单 $bad" "已通过双实例分离"
@@ -240,6 +302,29 @@ inject_separate_es 7.17.28
 assert_rc "ES 7.x 放行" 0
 assert_output "ES 7.x 放行" "已通过双实例分离"
 fresh
+echo
+
+# ---- 9. 非 ES 存储: 必须跳过 ES 检查而**不报红** ----
+# ⚠️ 这是 2026-10-04 那次真实假红的守护。
+#   当时 OAP 存储已切到 postgresql, 而被测脚本仍无条件要求
+#   SW_STORAGE_ES_CLUSTER_NODES, 于是**完全正确的配置**被判 exit 1。
+#   漏掉本用例 = 下一个人把存储改回 ES 时, 没人验证过"跳过"这条路是通的。
+echo "[9] OAP 用 postgresql 存储 → 不得因缺 ES 变量而报红（2026-10-04 假红回归）"
+fresh
+assert_rc "postgresql 存储" 0
+assert_output "postgresql 存储" "跳过 ES 版本检查"
+assert_not_passing "postgresql 存储" "已通过双实例分离"
+echo
+
+# ---- 10. SW_STORAGE 缺失/非法 → 必须 exit 1（防"跳过"变成无条件放行） ----
+# ⚠️ 跳过必须**有条件**。若实现退化成"找不到 SW_STORAGE 就当不适用", 又会回到
+#   上一版的假绿形态 —— 只是方向相反。
+echo "[10] SW_STORAGE 缺失 → 必须 exit 1（跳过的前提没了就不能跳过）"
+fresh
+sed -i '/^      - SW_STORAGE=postgresql$/d' "$COMPOSE"
+assert_rc "SW_STORAGE 缺失" 1
+assert_output "SW_STORAGE 缺失" "未解析出 SW_STORAGE"
+assert_not_passing "SW_STORAGE 缺失" "跳过 ES 版本检查"
 echo
 
 echo "══════════════════════════════════════"

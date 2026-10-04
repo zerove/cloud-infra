@@ -92,6 +92,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # 首次初始化时建 SkyWalking 存储库 (OAP 自 2026-10-04 用 postgresql 存储)。
+      #   ⚠️ 该目录**只在数据目录为空时**执行一次 —— 已有 pgdata 卷的环境不会补跑。
+      #     本机 pgdata 里 skywalking 库是手工建的, 与本脚本等价。
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
       - cloud-infra
     logging: *default-logging
@@ -366,26 +370,33 @@ services:
   # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
-    # ⚠️ 版本选择受 ES 版本钳制, 且当前存在**未解冲突** (2026-10-03 实测)。
+    # ✅ 2026-10-04: 存储从 elasticsearch 改为 **postgresql**, OAP 首次真正启动成功。
     #
-    #   已确认的事实:
-    #     OAP 10.1.0 + ES 9.0.3 → java.lang.UnsupportedOperationException:
-    #                                Unsupported version: ElasticSearch 9.0
-    #     官方文档(main 分支)明确写: "ElasticSearch 7 and 8"
-    #     即 **SkyWalking 全系不支持 ES 9**, 与 OAP 版本无关。
+    #   为什么必须换存储 (不是 OAP 版本问题):
+    #     SkyWalking 官方文档(main)明确写 "ElasticSearch 7 and 8", **全系不支持 ES 9**。
+    #     实测 OAP 10.1.0 + ES 9.0.3 → UnsupportedOperationException:
+    #          Unsupported version: ElasticSearch 9.0
+    #     而本仓库 ES 必须是 9.x: Spring Boot 4.1.0 的 BOM 指定
+    #     elasticsearch-client.version=9.4.2, 9.x 客户端默认发
+    #     `compatible-with=9` 头, ES 8.x 服务端直接报 400 media_type_header_exception。
+    #     ⇒ **两个需求在版本上互斥**, 且都不能让步(search 降级客户端 = 改业务代码)。
     #
-    #   冲突面: 本仓库 ES 升到 9.0.3 是为了对齐 search 服务的
-    #   Spring Data ES 9.x 客户端(探针实测发 compatible-with=9, 对 ES 8 报 400),
-    #   而 SkyWalking 只吃 ES 7/8 —— **两者无法共用同一个 ES 实例**。
+    #   为什么选 PostgreSQL 而不是方案 b (给 SkyWalking 单开一个 ES 8):
+    #     方案 b 实测**不可用**(2026-10-04 复测, 推翻 10-03 记录的"技术前提成立"):
+    #       OAP 连 ES 8 后版本冲突确实消除(日志 `ElasticSearch version is:
+    #       ElasticSearch 8.18`), 但紧接着建 sw_segment-YYYYMMDD 索引时
+    #       ResponseTimeoutException —— OAP 的 responseTimeout 是**硬编码 15000ms**,
+    #       同一台机器上 load 已降到 5.68、iowait 0%、ES 无线程池拒绝、
+    #       磁盘余 652GB, 直连 curl 建索引只要 3~6s (远小于 15s)。
+    #       ⇒ 不是"机器慢", 是 OAP 连续 ~10 次模板/映射更新后紧接着的大 PUT
+    #         超出了它的超时预算; 预热索引后重启复测**仍然超时**, 排除冷启动。
+    #     PostgreSQL 方案实测 100% 通过: 64 张表建齐、gRPC 11800 监听、
+    #     /healthcheck 200。且它复用已在运行的 postgres, **不新增容器与内存**。
     #
-    #   ⚠️ 不要仅凭本注释下调镜像 tag 试: 9.7.0 实测同样抛该异常
-    #   (先前有"9.7.0 报错、10.1.0 不报错"的中间结论, 后被用 10.1.0 官方配置
-    #   复测推翻 —— 差异来自配置文件版本, 不是 OAP 版本)。
-    #
-    #   解法需在以下三者中选一, 见 docs/decisions/ 下的 ES 版本决策记录:
-    #     a) SkyWalking 改用非 ES 存储 (BanyanDB / PostgreSQL)
-    #     b) search 与 SkyWalking 各用一个 ES 实例
-    #     c) search 降级到 ES 8 客户端
+    #   代价(如实记录): OAP 的 trace/log 全文检索走 PostgreSQL 会比 ES 慢。
+    #   本项目 SkyWalking 目前**零业务查询**(agent 注入已生效, 但没有任何人
+    #   查过 trace), 该代价当前为零; 若将来接入 trace 查询且出现性能问题,
+    #   再评估 BanyanDB(SkyWalking 原生推荐, 但需新增容器)。
     image: apache/skywalking-oap-server:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
@@ -396,62 +407,65 @@ services:
       - "12800:12800"  # HTTP REST query
     volumes:
       - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
-    # ⚠️ 这个 healthcheck 不能省 (2026-10-03)。
-    #   6 个业务服务全部用 SW_AGENT_OAP=cloud-skywalking-oap:11800 连 OAP,
-    #   而它们对 oap 的依赖原先只写 `condition: service_started` ——
-    #   那只保证**进程存在**, 不保证 gRPC 11800 已在监听。
-    #   容器一多(system/file/search/notification/auth 同时起)就会踩到启动竞争:
-    #     Caused by: java.net.UnknownHostException: cloud-skywalking-oap: Name does not resolve
-    #   报错发生在业务服务自己的日志里, 且**间歇出现**(gateway/search 常常正常),
-    #   很容易被误判成"偶发环境问题"而不去查依赖条件。
+    # ✅ healthcheck 修正为 /healthcheck (2026-10-04)。
+    #   原值 `/public/graph` 在 SkyWalking 10.x **恒返回 404** —— 该路径属于
+    #   已被移除的 Deprecated GraphQL API。所以这个 healthcheck 从加上的
+    #   第一天起就永远失败, 与 ES 冲突无关, 是**独立的第二处缺陷**。
+    #   (deploy/skywalking/README.md 早就写着"返回 Status: 404",
+    #    但没人把它和 compose 的 healthcheck 对上 —— 文档写了, 配置没改。)
     #
-    #   判据用 12800(HTTP query 端口)而不是 11800: OAP 镜像里 curl 不可靠,
-    #   而 12800 走 HTTP, wget 即可探活。探活失败重试 30 次 × 5s = 150s,
-    #   覆盖 OAP 首次初始化(连 ES 建索引)的耗时。
+    #   `/healthcheck` 来自官方文档 (api/health-check):
+    #     "make sure to set necessary configurations required by the health checker
+    #      before using this endpoint, otherwise 404 will be returned."
+    #   即**必须**同时把 health-checker 模块打开(SW_HEALTH_CHECKER=default),
+    #   否则同样 404 —— 这是链上的第三处缺陷, 三个条件缺一不可:
+    #       ① 路径是 /healthcheck   ② SW_HEALTH_CHECKER 已启用   ③ 端口 12800
+    #   实测: 三者齐备 → 200; 缺 ② → 404。
+    #
+    #   ⚠️ 这是一个**浅层**探活: 停掉 postgres 后 OAP 日志确实打出
+    #      `Health check fails`, 但 HTTP 仍返回 200(score=0 表示"无故障项",
+    #      而非"全部检查通过")。故它能证明 **OAP 进程与 HTTP 服务已就绪**,
+    #      **不能**证明存储持续可用。存储可用性由 postgres 自己的 healthcheck 负责。
+    #      —— 依赖链上是 postgres(healthy) → oap(healthy), 两层各管一段。
+    #
+    #   探活失败重试 30 次 × 5s = 150s, 覆盖 OAP 首次初始化(建 64 张表)的耗时
+    #   (实测冷启动约 100s)。
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12800/public/graph || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12800/healthcheck || exit 1"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 30
-      start_period: 20s
+      start_period: 30s
     environment:
       # SW 10.x 字段名: SW_CORE_GRPC_HOST (替换 9.6 的 SW_NODE_IP)
-      # ⚠️ SW_STORAGE 必须是 elasticsearch, **不能是 h2** (2026-10-03 实测)。
-      #   原值 h2 一直配在这里, 但镜像 apache/skywalking-oap-server:9.7.0 里
-      #   只有 h2-2.1.212.jar(驱动), **没有** storage-h2-plugin(provider),
-      #   于是启动直接失败:
-      #     ProviderNotFoundException: no provider found for module storage,
-      #     if you're sure it's not required module and want to remove it,
-      #     set the selector to -
-      #   崩溃循环, restarts 一路涨到 51。
+      # ⚠️ SW_STORAGE 的取值是**存储实现名**, 不是通用词。
+      #   曾试 `SW_STORAGE=jdbc` → ProviderNotFoundException:
+      #     "no provider found for module storage"。
+      #   合法值: elasticsearch / postgresql / mysql / h2(镜像无 provider) / banyandb。
+      - SW_STORAGE=postgresql
+      - SW_JDBC_URL=jdbc:postgresql://cloud-postgres:5432/skywalking
+      - SW_DATA_SOURCE_USER=${POSTGRES_USER:-postgres}
+      - SW_DATA_SOURCE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
+      # 必须显式给地址: application.yml 里 postgresql 的默认值是
+      #   jdbc:postgresql://localhost:5432/skywalking —— 那是**官方单机默认**,
+      # 在 compose 网络里会连到自己容器内的 5432 → Connection refused。
+      # 与 ES 的 SW_STORAGE_ES_CLUSTER_NODES 是同一类坑, 不能靠"默认值刚好对"。
       #
-      #   为什么此前一直没暴露: OAP 容器从未被真正重建过 —— 本机上跑的是
-      #   几个月前的旧镜像。而 depends_on 用 service_started,
-      #   只等进程存在, 不等它健康, 于是依赖它的 6 个业务服务照样"启动成功"。
-      #   即 **一个从未成功运行的服务, 被当成了已就绪的依赖**。
-      #   这次给 OAP 补上 healthcheck 并把 6 处依赖改成 service_healthy,
-      #   才把它暴露出来 —— 门禁变严后立刻抓到既有缺陷, 这是预期行为。
-      - SW_STORAGE=elasticsearch
-      # ⚠️ 必须显式给 ES 地址。application.yml 的默认值是 localhost:9200,
-      #   那是**官方单机默认**, 在 compose 网络里会连到自己容器内的 9200 →
-      #   Connection refused: localhost/127.0.0.1:9200, OAP 起不来。
-      #   实测: 同一份配置, 传 SW_STORAGE_ES_CLUSTER_NODES 时正常 listening 11800,
-      #        不传则必崩 —— 所以不能靠"配置默认值刚好对"。
-      - SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:9200
       # 注: 曾试过用 SW_ADMIN_SERVER= / SW_STATUS= ... 禁用 9.7.0 没有的
-      # 6 个模块(admin-server/status/inspect/ui-management/dsl-debugging/
-      # receiver-runtime-rule), **实测无效** —— 空值会让 ${VAR:default} 回落
-      # default 而非置空, 仍报 "no provider found for module admin-server"。
+      # 6 个模块, **实测无效** —— 空值会让 ${VAR:default} 回落 default 而非置空。
       # 真正解法不是禁用, 而是让配置与镜像版本对齐(已改为官方 10.1.0 原版
       # application.yml), 故这些变量已删除。留在这里只会让人以为"配了就能禁用"。
       #
-      # 该 6 个模块本项目零业务引用; 若将来确需 admin API, 应升级到含
-      # 这些 provider 的镜像版本, 而不是靠环境变量硬压。
+      # 打开 health-checker 模块, 否则 /healthcheck 恒 404(见上方 healthcheck 注释)。
+      - SW_HEALTH_CHECKER=default
       - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
       - JAVA_OPTS=-Xms512m -Xmx1024m
     depends_on:
-      elasticsearch:
+      # ⚠️ 依赖对象已随存储切换改为 postgres。
+      #   保留指向 elasticsearch 会让 OAP 在 ES 慢启动时白等,
+      #   而它的存储根本不碰 ES —— 依赖必须指向**它真正使用**的服务。
+      postgres:
         condition: service_healthy
     networks:
       - cloud-infra
@@ -470,11 +484,22 @@ services:
     ports:
       - "18080:8080"   # SkyWalking UI
     environment:
-      - SW_OAP_ADDRESS=cloud-skywalking-oap:12800
+      # ⚠️ 必须带 http:// 前缀 (2026-10-04 实测)。
+      #   原值 `cloud-skywalking-oap:12800` 让 UI 启动即崩:
+      #     Exception in thread "main" java.lang.NullPointerException: authority
+      #   即 UI 用 URI 解析这个地址, 无 scheme ⇒ host 为 null ⇒ NPE。
+      #   README 早前记的"UI 镜像 Up 但 HTTP 拒绝连接"就是这件事,
+      #   当时误判为 "10.x UI 与 10.1 OAP hostname 兼容 issue"。
+      #   单变量对照实测: 加 http:// → HTTP 200 / restarts=0;
+      #                   不加      → NullPointerException: authority。
+      - SW_OAP_ADDRESS=http://cloud-skywalking-oap:12800
       - SW_SERVER_LISTEN_IP=0.0.0.0
       - TZ=Asia/Shanghai
     depends_on:
-      - skywalking-oap
+      skywalking-oap:
+        # 由 started 收紧为 healthy: UI 只有 OAP 的 /healthcheck 通过才有意义,
+        # 否则会在 OAP 尚未就绪时启动失败并进入重启循环。
+        condition: service_healthy
     networks:
       - cloud-infra
     logging: *default-logging

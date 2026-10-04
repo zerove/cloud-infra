@@ -172,14 +172,54 @@ ES_OK=1
 # 两者冲突时 OAP 启动抛:
 #   java.lang.UnsupportedOperationException: Unsupported version: ElasticSearch 9.0
 # 该检查只做**静态预警**, 不代替真实启动验证。
+#
+# ⚠️ 2026-10-04: 本节整体改为**先看 SW_STORAGE 再决定查什么**。
+#   起因是一次真实的假红: OAP 存储已从 elasticsearch 换成 postgresql
+#   (SkyWalking 全系不支持 ES 9, 与本仓库 ES 必需 9.x 互斥), 但本节
+#   仍无条件要求解析 SW_STORAGE_ES_CLUSTER_NODES, 于是 OAP 配置完全正确时
+#   报 `❌ 未解析出 SW_STORAGE_ES_CLUSTER_NODES` 并 exit 1。
+#   ⇒ 门禁把"不适用"当成了"错误"。这与第五课同型:
+#     **判据没跟着被测对象的变化走**, 于是改对的地方反而被自己的门禁拦住。
+#   现在: 非 ES 存储 → 跳过 ES 专属检查并**打印跳过的理由**(不静默),
+#         ES 存储 → 走原有的双实例/白名单判据。
 if [[ -f "$COMPOSE_FILE" ]]; then
+  # OAP 实际使用的存储实现名 (不是通用词, 见 compose 注释里的实测)。
+  #
+  # ⚠️ 必须只认 environment 里的**列表项**, 不能匹配到注释行。
+  #   首版写成 `/SW_STORAGE=/` (子串匹配), 结果抓到的是注释里那句
+  #   `曾试过 SW_STORAGE=jdbc → ProviderNotFoundException` —— 于是门禁读到
+  #   `jdbc\` → ProviderNotFoundException:` 这种垃圾值, 还判了绿。
+  #   即"因为错误的原因通过", 与第五课同型。
+  #   正解: 两条硬约束 ——
+  #     ① 行首必须是 `      - SW_STORAGE=` (compose 的列表项缩进);
+  #     ② 值的部分是行尾**到行尾**, 不允许跨行拼接注释里的文字。
+  SW_STORAGE="$(awk '
+    /^  skywalking-oap:/ {inblk=1; next}
+    inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
+    inblk && /^      - SW_STORAGE=/ {
+      v=$0; sub(/^      - SW_STORAGE=/, "", v); sub(/[[:space:]]*#.*$/, "", v);
+      gsub(/[[:space:]]/, "", v); print v; exit
+    }
+  ' "$COMPOSE_FILE")"
+
   ES_IMAGE="$(awk '
     /^  elasticsearch:/ {inblk=1; next}
     inblk && /^  [a-zA-Z0-9_-]+:/ {inblk=0}
     inblk && $1=="image:" {print $2; exit}
   ' "$COMPOSE_FILE" | sed 's/.*://')"
 
-  if [[ "$ES_IMAGE" =~ ^9\. ]]; then
+  if [[ -z "$SW_STORAGE" ]]; then
+    red "❌ 未解析出 SW_STORAGE —— 无法判断 OAP 用的是哪种存储。"
+    red "   合法值(实测): elasticsearch / postgresql / mysql / banyandb"
+    red "   曾经踩过的坑: 'jdbc' 不是合法值, 会抛"
+    red "     ProviderNotFoundException: no provider found for module storage"
+    ES_OK=0
+  elif [[ "$SW_STORAGE" != "elasticsearch" ]]; then
+    yellow "ℹ️  OAP 存储为 '$SW_STORAGE' 而非 elasticsearch —— 跳过 ES 版本检查。"
+    yellow "   该检查只对 ES 存储有意义(SkyWalking 仅支持 ES 7/8)。"
+    yellow "   PostgreSQL 存储的版本冲突在 compose 注释里已有完整记录。"
+    ES_OK=1
+  elif [[ "$ES_IMAGE" =~ ^9\. ]]; then
     # OAP 实际连的是哪个 ES, 取决于 SW_STORAGE_ES_CLUSTER_NODES 指向的服务名。
     # 若该变量指向的就是这个 ES 9 实例, 则是真冲突; 若指向另一个 (ES 7/8)
     # 实例, 则是**已正确分离**的双 ES 布局 —— 不能一律报红。

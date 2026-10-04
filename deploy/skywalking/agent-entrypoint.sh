@@ -12,6 +12,24 @@
 # 两种启动模式自动适配:
 # 1. 标准 java -jar: 有 /app/app.jar, 无 /app/entrypoint.sh
 # 2. 自定义 entrypoint: 有 /app/entrypoint.sh (如 search-service 的 SERVICE_HOST_MAP)
+#
+# ⚠️ 关于 agent 自身日志 (2026-10-04 实测修复):
+#   agent.config 的 `logging.dir` 默认空 ⇒ 日志落 /skywalking/agent/logs。
+#   该目录**镜像里不存在**, 且容器以非 root (uid=100 cloudinfra) 运行, 无法创建。
+#   后果: agent 的日志线程每 5s 抛一次
+#     java.io.FileNotFoundException: /skywalking/agent/logs/skywalking-api.log
+#     (No such file or directory)
+#   实测 45s 内刷 255 行, 持续了整个容器生命周期。业务不受影响
+#   (agent 日志线程是 daemon), 但**日志会把真正的错误淹没在里面**。
+#
+#   修法选 CONSOLE 而非"创建目录", 因为:
+#     · 日志已由 podman 收集到 stdout/stderr, 再落一份文件是重复;
+#     · /skywalking/agent 属 root, 非 root 进程无法在里面建目录,
+#       要么改 COPY 的属主, 要么挂可写卷 —— 两者都要动 Dockerfile 的用户模型。
+#   CONSOLE 的合法性不是猜的: 反编译 LogOutput.class 确认枚举只有
+#   {FILE, CONSOLE} 两个值(2026-10-04 实测), 写别的值会
+#   IllegalArgumentException: No enum constant。
+#   负向对照: 不设 → 45s 255 行异常; 设 CONSOLE → 0 行。
 
 # 检测: 有自定义 entrypoint.sh 用它, 否则 java -jar
 if [ -x /app/entrypoint.sh ]; then
@@ -35,6 +53,11 @@ if [ ! -f "$SW_AGENT_PATH" ]; then
   echo "[skywalking] WARN: agent jar not found at $SW_AGENT_PATH, falling back to no-agent"
   exec sh -c "$START_CMD"
 fi
+
+# agent 自身日志输出到 stdout (见文件头注释)。可被 SW_LOGGING_OUTPUT 覆盖,
+# 但**默认必须是 CONSOLE** —— FILE 是 agent.config 的原默认值, 而它在
+# 非 root 容器里必然写失败。
+export SW_LOGGING_OUTPUT="${SW_LOGGING_OUTPUT:-CONSOLE}"
 
 # 拼 agent opts
 SW_OPTS="-javaagent:${SW_AGENT_PATH}"
