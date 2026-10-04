@@ -272,21 +272,37 @@ dump_container_diagnostics() {
       echo "--- $c 关键错误行（ERROR/Exception/Caused by/FAILED）---" >&2
       podman logs --tail -1 "$c" 2>&1 \
         | grep -E 'ERROR|Exception|Caused by|FATAL|APPLICATION FAILED|OutOfMemory|exited|Bind|placeholder' \
-        | grep -vE 'RunnableWithExceptionProtection|skywalking-api\.log' \
+        | grep -vE 'RunnableWithExceptionProtection' \
         | sed -n '1,40p' >&2 || true
+      # ⚠️ 这里曾长期grep -v 'skywalking-api\.log' —— 那是**掩盖未修缺陷**。
+      #   2026-10-04 实测: 过滤掉之后底下的真实情况是每个业务服务仍在抛
+      #   `FileNotFoundException: /skywalking/agent/logs/skywalking-api.log`
+      #   360~815 次。过滤让日志"看起来干净", 于是缺陷被当成已修。
+      #   现已改为**显式断言**: agent 日志写不出去就是故障, 必须报出来,
+      #   而不是把它从视野里删掉。
+      SW_LOG_ERR="$(podman logs --tail -1 "$c" 2>&1 \
+        | grep -c 'skywalking-api\.log' || true)"
+      if [ "${SW_LOG_ERR:-0}" -gt 0 ]; then
+        echo "--- $c 【异常】agent 日志写不出去 ${SW_LOG_ERR} 次 ---" >&2
+        echo "    skywalking agent 默认 logging.output=FILE, 而 /skywalking/agent/logs" >&2
+        echo "    在非 root 容器里不存在且无法创建。检查 agent-entrypoint.sh 是否" >&2
+        echo "    传入了 -Dskywalking.logging.output=CONSOLE。" >&2
+        podman logs --tail -1 "$c" 2>&1 \
+          | grep 'skywalking-api\.log' | head -3 >&2 || true
+      fi
       # 首部窗口。⚠️ 过滤名单必须区分"agent 噪音"与"可能的真实异常":
       # FileNotFoundException 上一版也在名单里, 但它完全可能是真根因
       # (例如挂载卷缺失), 滤掉就等于把证据销毁 —— 只滤掉确定属于
       # SkyWalking agent 自身噪声的那几行, 且不滤异常类型行本身。
       echo "--- $c 日志首 25 行有效内容（已滤 SkyWalking agent 加载噪音）---" >&2
       podman logs --tail -1 "$c" 2>&1 \
-        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|sun\.misc\.Unsafe|Picked up JAVA_TOOL" \
+        | grep -vE "$NOISE|RunnableWithExceptionProtection|sun\.misc\.Unsafe|Picked up JAVA_TOOL" \
         | grep -vE '^\s+at |^\s*\.\.\. [0-9]+ more' \
         | sed -n '1,25p' >&2 || true
       # 尾部有效内容: Spring 的失败堆栈在末尾, 但末尾同样常被 agent 噪音污染
       echo "--- $c 日志尾 25 行有效内容 ---" >&2
       podman logs --tail -1 "$c" 2>&1 \
-        | grep -vE "$NOISE|skywalking-api\.log|RunnableWithExceptionProtection|sun\.misc\.Unsafe" \
+        | grep -vE "$NOISE|RunnableWithExceptionProtection|sun\.misc\.Unsafe" \
         | tail -25 >&2 || true
       # 启动进度信号: 只看错误行会漏掉"没报错但也没起来"这一类。
       # run 37057477434 就是这种 —— 无任何异常, 但 5/7 仍超时。
