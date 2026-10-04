@@ -139,6 +139,23 @@ start_full_services_serial() {
       # 探针必须带超时: podman 偶发卡住时会把“取不到值”读成“已退出”(第八课补记一)。
       st=$(timeout 20 podman inspect --format '{{.State.Status}}' "cloud-$svc" 2>/dev/null)
       now=$(date +%s)
+      # ⚠️ 探针失效**不等于**容器已退出（2026-10-05 实测, 又一次）。
+      #   空的 healthcheck.log 会让 podman 报
+      #     `failed to unmarshal existing healthcheck results ...
+      #      readObjectStart: expect { or n, but found <第0字节为空>`
+      #   进而让 podman inspect / podman ps 全面失败。
+      #   此时 st 为空, 而"空"同时支持两个互斥结论:
+      #     (a) 容器真的不在了
+      #     (b) 容器好好的, 但 podman 读不了它的健康日志
+      #   不区分就会把 (b) 读成 (a) —— 稳定观察被打断, up.sh 在这里提前退出,
+      #   而实测六个容器**全部running / exit=0**。
+      #
+      #   处置: 先自愈再重试, 且**不消耗** settle 判定 —— 探针失败不是被测对象失败。
+      if [ -z "$st" ]; then
+        repair_healthcheck_logs >/dev/null 2>&1 || true
+        sleep 2
+        st=$(timeout 20 podman inspect --format '{{.State.Status}}' "cloud-$svc" 2>/dev/null)
+      fi
       if [ "$st" != "running" ]; then
         stable_since=0
         if [ "$now" -ge "$deadline" ]; then
