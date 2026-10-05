@@ -1195,6 +1195,52 @@ vm.min_free_kbytes   = 131072 # 注释写的是「让内核更早、更平滑地
 > **逐模块串行仍是有效手段**（37 分钟 vs 4m36s, 且不依赖宿主机配置）,
 > 但它现在是**绕过手段**, 不再是"正解"。全量 `mvn test` 现在一次跑通。
 
+### ⚠️ 第八课补记五: 全量 IT 的失败是**容器资源竞争**, 且我先怀疑错了方向（2026-10-05）
+
+全量 IT（`mvn -o verify -DskipITs=false -DskipUnitTests=true -Dfailsafe.runOrder=reversealphabetical`）
+在 `mode=0` 下仍然 **BUILD FAILURE**, 14m57s, 中断于 `framework-mybatis` 与 `cloud-infra-gateway`。
+**零 ENOMEM** ⇒ overcommit 问题确已解决, 剩下的是另一类问题。
+
+按 **failsafe XML** 核实: 12 个报告 / 35 项 / **3 errors / 0 failures** / 1 skipped。
+三个错误的根因**全部**是 Testcontainers 拉不起容器, 不是断言失败:
+
+| IT | 镜像 | 超时等待的日志 |
+| :--- | :--- | :--- |
+| `TenantInsertIntegrationTest` | `postgres:16-alpine` | `database system is ready to accept connections` |
+| `OutboxIntegrationTest` | `postgres:16-alpine` | 同上 |
+| `CrossServiceFeignChainIntegrationTest` | `rabbitmq:3.13-management-alpine` | `Server startup complete` |
+
+#### 我先怀疑的方向是错的: 差点把锅算到 `mode=0` 头上
+
+第一反应是"会不会是我刚改的 overcommit 导致容器启动变慢"。用**同一个 IT、同一命令**做双向对照:
+
+| mode | 命令 | 结果 |
+| :--- | :--- | :--- |
+| `0` | `mvn -o -pl framework-mybatis verify -Dit.test=TenantInsertIntegrationTest` | **2 项全绿**, 83.87s |
+| `2` | **完全相同的命令** | **1 项 ERROR**, 容器启动失败, 71.18s |
+
+⇒ **`mode=0` 不是失败原因, 反而是它的必要条件**。若没有这次对照,
+我会把"改配置后出现的问题"记成配置引入的回归 —— 这正是本项目反复警告的
+**"环境差异伪装成被测系统缺陷"**（见第六课补记二）的同型。
+
+#### 真实原因: 20 个业务容器与 Testcontainers 容器同时竞争
+
+| 场景 | `Committed_AS` 峰值 | `MemAvailable` 最低 |
+| :--- | :--- | :--- |
+| 全量 IT（20 容器在跑） | **23,265,832 kB** | 8,775 MB |
+| 单跑 IT（容器仍在跑, 但无并发） | 18,151,000 kB | 10,862 MB |
+
+全量期间 `Committed_AS` **冲过 `CommitLimit`(21,629,724 kB)** —— 在 `mode=0` 下这是允许的
+（内核先回收再拒绝, 不会立刻失败), 但意味着**回收压力已经拉满**, 新容器启动期间的
+内存申请就会在超时窗口内拿不到稳定供给。
+
+**尚未验证的关键一步**: 停掉 20 个业务容器后重跑全量 IT。
+**这一步需要人工确认后再做** —— 停容器不可逆, 且本机还运行着其他项目的工作负载。
+
+> 📌 **本条的方法论价值**: 全量 IT 失败有**两个候选原因**（配置改动 / 资源竞争）,
+> 二者都能解释"失败"这个现象。只有**受控对照**能区分, 而我的第一直觉是错的。
+> 若跳过对照直接改配置, 就会把一次环境竞争固化成一个错误的"配置修复"。
+
 **逐模块串行（保留, 作为不依赖宿主机配置的兜底）**
 
 **实测结果（2026-10-05）**: 24 个模块 **23 PASS + 1 FAIL, 零 ENOMEM**。
