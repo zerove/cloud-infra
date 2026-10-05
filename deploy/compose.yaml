@@ -70,17 +70,35 @@ services:
       #   实测 Committed_AS 顶到 99.7% 时六个业务服务同秒崩溃,
       #   cgroup 的 oom 计数全为 0, 所以调 mem_limit 治不了。
       #
-      # ⚠️【2026-10-05 修正】原写的是 JVM_ADJUST —— **该变量在本镜像里
-      #   根本不被读取, 参数一个都没进去**。实测证据: 容器内
-      #   `tr '\0' '\n' < /proc/<pid>/cmdline` 只有 `-Xms1g -Xmx2g -Xmn512m`,
-      #   没有任何 -XX:MaxMetaspaceSize; 而 nacos 当时的 VmSize 是 10.51GB。
+      # ⚠️【2026-10-05 二次修正】上一版注释写的是"真实可用的扩展点是
+      #   JAVA_OPT_EXT" —— **那仍然只验证到"脚本引用了这个变量", 没验证
+      #   参数真进了 JVM**。第二次踩的是同一个坑(第三课)。
       #
-      #   真实可用的扩展点是 **JAVA_OPT_EXT**(读 nacos 镜像里的
-      #   /home/nacos/bin/docker-startup.sh 确认)。该脚本引用的全部变量:
-      #   JAVA_OPT / JAVA_OPT_EXT / JAVA_OPT_EXT_FIX / JVM_XMS / JVM_XMX /
-      #   JVM_XMN / JVM_MS / JVM_MMS / XX_MS / XX_MMS ... —— 没有 JVM_ADJUST。
-      #   ⇒ 判据来自**读镜像里的启动脚本**, 不是按官方文档猜的(第五课)。
-      JAVA_OPT_EXT: "-XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
+      #   JAVA_OPT_EXT 确实被 docker-startup.sh 第 152 行读取:
+      #     JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"
+      #   参数也确实出现在 /proc/1/cmdline 里。但**位置在 -jar 之后**,
+      #   而 JVM 遇到 -jar 即停止解析选项 —— 其后参数被当作传给
+      #   main() 的应用参数, 不是 VM flag。
+      #
+      #   决定性证据 (-XX:+PrintFlagsFinal 打印真实生效值):
+      #     参数在 -jar 之后:  MaxMetaspaceSize = 18446744073709551615 {default}
+      #                        CompressedClassSpaceSize = 1073741824    {default}
+      #     参数在 -jar 之前:  MaxMetaspaceSize = 268435456 {command line}
+      #   标记从 {default} 变 {command line} 才是生效, 光看 cmdline 不算。
+      #   旁证: VmSize 只从 10.28GB 降到 10.19GB —— 默认 Metaspace 上限
+      #   远大于 256m, 真生效应显著下降。
+      #
+      #   ⚠️ 为什么不能用报错判定: `java -XX:MaxMetaspaceSize=256m -jar
+      #   x.jar` **不报** Unrecognized option, 只报 jarfile 不存在,
+      #   即静默接受并丢弃。"没报错" 在这里是假信号。
+      #
+      #   ✅ 正解是 **JAVA_TOOL_OPTIONS** —— 由 JVM 自己解析, 与命令行
+      #   位置无关。受控实验已验证: 同样的 flag 经它注入后标记为
+      #   {environment} 且值为 268435456 / 134217728, 真实生效。
+      #
+      #   故断言必须建立在**数据流**上(compose env → 容器 env →
+      #   JVM 生效值), 而不是"脚本里能不能搜到这个变量名"。
+      JAVA_TOOL_OPTIONS: "-XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
     volumes:
       - ./nacos/data:/home/nacos/data
     networks:
@@ -954,6 +972,22 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: cloud-redisinsight
+    # ⚠️ 必须标 profiles: ["full"]（2026-10-05 实测）。
+    #   它是纯调试 UI，零业务引用、零 depends_on，但**预留 20.76 GiB 虚拟地址空间**
+    #   （实测 pid 946577 `node redisinsight/api/dist/src/main`，
+    #     VmSize 20.76GB 而 RSS 仅 127MB —— 典型 Node V8 预留）。
+    #   这已**单独超过**全局 commit 预算的一半（CommitLimit 20.63GB），
+    #   而 vm.overcommit_memory=2 下预留即计入预算。
+    #
+    #   `mem_limit: 256m` 对它**无效** —— 已实测: cgroup 内存限额管的是
+    #   实际使用量，管不住 V8 的虚拟地址空间预留（同第八课:
+    #   "提高 mem_limit 只会更快耗尽全局预算"的反面 —— 这里根本调不动）。
+    #
+    #   业务服务（gateway/auth/system/...）都用 profiles: ["full"] 隔离,
+    #   但它没有，于是每次 `podman-compose up -d` 都会被拉起 ——
+    #   包括只想启动基础设施时。隔离对它失效的形态与"没人调用"一致：
+    #   机制在（同一套 profiles 约定），但没接上。
+    profiles: ["full"]
     mem_limit: 256m
     ports:
       - "5540:5540"

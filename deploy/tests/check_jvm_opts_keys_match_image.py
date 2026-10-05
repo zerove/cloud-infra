@@ -87,10 +87,17 @@ IGNORE_KEYS = {"JAVA_TOOL_OPTIONS"}
 #
 #   ⇒ 正解: 在镜像的 **bin 目录下搜全部脚本**, 而不是赌某一个文件会引用它。
 #   这是第五课「探针的对象必须从被测系统里提取」的直接应用。
+# ⚠️【2026-10-05 修正】ES 那一条原来写的是 ("/usr/share/elasticsearch/bin", "*"),
+#   即 cat 目录下**所有东西** —— 含 libjvm.so 等二进制, 后果有二:
+#     1) 输出混入非 UTF-8 字节, 严格解码直接抛 UnicodeDecodeError;
+#     2) `ls ... || true` 在目录读不到时输出字面量 "cat", 随后被当成
+#        文件名 cat 下去 → "cat: cat: No such file or directory"。
+#   即**探针坏了的信号被当成了"镜像里没有脚本"**, 于是走 SKIP 而非 FAIL。
+#   第五课补记一: 扫描器坏了 ≠ 通过。这里改为只匹配 shell 脚本。
 SCRIPT_GLOBS = (
     # (目录, 该目录下的通配模式)
     ("/home/nacos/bin", "*.sh"),
-    ("/usr/share/elasticsearch/bin", "*"),
+    ("/usr/share/elasticsearch/bin", "*.sh"),
 )
 
 _VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
@@ -152,6 +159,12 @@ def script_vars(image: str) -> tuple[set[str] | None, str]:
                 ["podman", "run", "--rm", "--entrypoint", "sh", image, "-c",
                  f"ls -1 {directory}/{pattern} 2>/dev/null || true"],
                 capture_output=True, text=True, timeout=180,
+                # ⚠️ errors="replace" 不是装饰性的: ES 的 bin/ 下有**二进制文件**
+                #   (如 libjvm.so 等), 拼接 cat 后输出含非 UTF-8 字节,
+                #   默认 strict 解码会抛 UnicodeDecodeError 直接崩掉整个门禁。
+                #   真实踩到: position 10123 byte 0xb1。
+                #   探针崩溃比探针给假答案更隐蔽 —— 它连 SKIP 都不是。
+                errors="replace",
             )
         except (OSError, subprocess.SubprocessError) as e:
             return None, f"podman 调用失败({type(e).__name__}): {e}"
@@ -165,7 +178,7 @@ def script_vars(image: str) -> tuple[set[str] | None, str]:
             cat = subprocess.run(
                 ["podman", "run", "--rm", "--entrypoint", "sh", image, "-c",
                  " ".join(f"cat {p}" for p in paths)],
-                capture_output=True, text=True, timeout=180,
+                capture_output=True, text=True, timeout=180, errors="replace",
             )
         except (OSError, subprocess.SubprocessError) as e:
             return None, f"podman cat 失败({type(e).__name__}): {e}"
