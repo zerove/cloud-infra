@@ -42,11 +42,21 @@ COMPOSE = "deploy/compose.yaml"
 
 # 这两个键都可能承载 JVM 参数: 映射形式(environment:)与列表形式(- KEY=VAL)。
 #
-# ⚠️ JVM_ADJUST 必须包含在内: nacos 官方 start-up.sh 只认 JVM_XMS/JVM_XMX/
-#   JVM_XMN 与 **JVM_ADJUST**(追加额外 JVM 参数的官方变量)。
-#   漏掉它 = nacos 这个 RSS 最大的 JVM 完全不受本门禁保护,
-#   而它恰恰是实测里VmSize 10.5GB 的那个。
-JVM_KEYS = ("JAVA_OPTS", "ES_JAVA_OPTS", "JAVA_TOOL_OPTIONS", "JVM_ADJUST")
+# ⚠️【2026-10-05 变量名修正】原来写的是 JVM_ADJUST, **该变量在本镜像的
+#   nacos 启动脚本里根本不被读取** —— 于是本门禁一直在检查一个
+#   podman/nacos 压根不看的键, 9/9 全绿却是假绿(第五课: 守护假装通过)。
+#   实测证据: 容器内 `/proc/<pid>/cmdline` 只有 `-Xms1g -Xmx2g -Xmn512m`,
+#   没有任何 -XX:MaxMetaspaceSize, 而 nacos 的 VmSize 实测 10.51GB。
+#
+#   正确变量是 **JAVA_OPT_EXT**, 由读镜像内的
+#   /home/nacos/bin/docker-startup.sh 确认(该脚本引用了
+#   JAVA_OPT/JAVA_OPT_EXT/JAVA_OPT_EXT_FIX/JVM_XMS/JVM_XMX/JVM_XMN/
+#   JVM_MS/JVM_MMS/XX_MS/XX_MMS, 没有 JVM_ADJUST)。
+#
+#   教训: **变量名不能按官方文档猜, 要读镜像里那个启动脚本。**
+#   本条判据本身也由 test_jvm_opts_keys_match_image.py 守护 ——
+#   即"配置里的键"必须与"镜像启动脚本引用的键"一致, 否则再次悄悄失效。
+JVM_KEYS = ("JAVA_OPTS", "ES_JAVA_OPTS", "JAVA_TOOL_OPTIONS", "JAVA_OPT_EXT")
 REQUIRED_FLAG = "-XX:MaxMetaspaceSize"
 
 
@@ -55,8 +65,12 @@ def collect_jvm_opts(services: dict) -> dict[str, str]:
 
     ⚠️ 必须**按服务合并**而不是按键分别判定: nacos 同时有
     `JAVA_TOOL_OPTIONS=-Dnacos.core.auth.admin.enabled=false`(无内存参数)
-    和 `JVM_ADJUST=-XX:MaxMetaspaceSize=...`(有限制)。若按键分开判,
+    和 `JAVA_OPT_EXT=-XX:MaxMetaspaceSize=...`(有限制)。若按键分开判,
     前者会被当成"这个 JVM 没设上限"而误报, 或让实现忽略掉真正的载体。
+
+    ⚠️ 但"合并"不能掩盖"键写错": 若某服务只在**无人读取的键**里写了参数,
+    合并后照样能通过。所以另有一道负向对照(见 test_jvm_native_memory_bounds.py):
+    把承载参数的那个键换成另一个不存在的键, 守护必须报红。
     """
     found: dict[str, str] = {}
     for name, svc in services.items():
