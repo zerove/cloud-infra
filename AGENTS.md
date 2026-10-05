@@ -1479,6 +1479,66 @@ if [[ "$IMG" =~ ^9\. ]]; then 判红; else 判绿; fi
 `| sed 's/.*://'` 丢掉了镜像名, 于是 `elasticseach:8.18.0` 提取出 `8` 就通过了 ——
 **tag 合法不等于镜像正确**。白名单要覆盖你要校验的**整个标识**, 而不是它的尾部。
 
+### ⚠️ 第十课: 「停止运行」不等于「不存在」（2026-10-06 新增）
+
+重建 `cloud-nacos` 时实测到的三处, 都不是配置写错, 而是**判据的边界选错了**。
+
+#### 1. pod 依赖只认「容器存在」, 不认「是否运行」
+
+`podman rm` 拒绝移除 nacos 的报错列出 6 个依赖者。逐一排查后**真相与推断相反**:
+
+| 我以为 | 实测 (`podman inspect --format '{{.Config.Requires}}'`) |
+| :--- | :--- |
+| compose 的 `depends_on` 变成了 podman 依赖 | **7 个容器全为空** —— 依赖不是 `--requires` 声明的 |
+| 依赖是运行时关系 | 是 **pod 成员关系**: 同一 pod 内的容器互为依赖 |
+
+所以我在隔离 pod 里复现后, 只移走了 5 个**运行中**的业务容器, 再次 `rm nacos` 仍被拒:
+
+```
+Error: container 5338f58a... has dependent containers which must be removed before it:
+  31d9b74c...: container already exists     ← cloud-notification, 早在 6 小时前就 exited
+```
+
+**规则**: 判"还有谁依赖它"时, **必须枚举容器全集（含 exited）, 而不是运行集**。
+"停止运行"在 podman 眼里与"运行中"没有区别 —— 已退出的容器依然是依赖者。
+本次差点把它记成"方案不可行", 实际只差一个已停止的容器。
+
+#### 2. 「missing services」不是拼错, 是 profile 未激活
+
+6 个业务服务全部有 `profiles: ["full"]`。不激活 profile 时 `podman-compose` 视其不存在:
+
+```bash
+podman-compose up -d auth        # WARNING: missing services [auth]
+podman-compose --profile full up -d auth   # 正常
+```
+
+**已实测**: 本机 podman-compose **支持** `--profile`（`up.sh:49` 的 `compose_supports_profile`
+探测过; 注意 CI 的 apt 版 1.0.6 **不支持**, 故 `up.sh` 有两条路径）。
+
+**规则**: 出现 `missing services` 且服务名**确实在 compose 里**时,
+先查 `profiles`, 再怀疑名字。服务名对不对, 与服务存不存在, 是两个不同的问题。
+
+#### 3. 停容器时会 SIGKILL 兜底, 不是优雅退出
+
+隔离实验里 `podman stop` 的真实输出:
+
+```text
+StopSignal SIGTERM failed to stop container exp_main in 10 seconds, resorting to SIGKILL
+```
+
+⇒ 重建窗口内业务请求被**硬断**。这属于要事先告知的影响面, 不能默认"停容器是温和的"。
+
+### ⚠️ 第十课补记: 「mem_limit 已改」要看 GiB 还是 GB
+
+`mem_limit: 3g` 在 compose 里被解析为 **3 GiB**:
+
+| | 字节数 |
+| :--- | :--- |
+| 重建前 (4g) | `4294967296` = 4 GiB |
+| 重建后 (3g) | `3221225472` = 3 GiB（**不是** `3072000000`） |
+
+判据若写死 `3072000000` 会假红。门禁 `check_resource_optimization.py` 按 **MiB** 统一折算
+（最坏情形 2861MB ≤ 3072MB）, 与 compose 的 GiB 口径一致, 故无误。
 
 ## 🚫 框架能力准入原则 (2026-09-29 新增, 强制)
 
