@@ -627,6 +627,58 @@ STUB
     echo "  PASS commit 门禁前置 (门禁行 $gate_line < build_images 调用行 $build_line)"
   fi
 
+  # ---- 2026-10-05 新增: 守护本轮接线的两个 check 门禁 ----
+  #
+  # 为什么需要: 本轮查出 check_commit_runtime_guard.py 与
+  # check_sw_oap_config.sh **全仓无任何调用点**, 而它们各自都有守护测试且全绿。
+  # 接线之后若无自检, 下一个人删掉调用行时同样会静默失效 ——
+  # 那正是本轮修复的同一个缺陷, 不能只修一次。
+  #
+  # ⚠️ 搜索一律排除本函数区间(第 6 次污染: 断言代码自身含被检字面量)。
+  # ⚠️ 同样排除**注释行**: 本函数上方那段说明里就写着这两个文件名。
+  #
+  # ⚠️⚠️ 必须匹配**调用形态**而不是"名字出现过" —— 第 7 次同型缺陷:
+  #   第一版用 index($0, g), 于是 `check_commit_runtime_guard() {` 这个
+  #   **函数定义**也会命中。负向对照实测: 删掉调用行 `check_... || true` 后,
+  #   自检仍报 PASS —— 定义还在, 机制"存在", 但**从未被调用**。
+  #   这正是本轮修的那个缺陷在自检层的重演。
+  #
+  #   两种真实调用形态都要认(实测二者并存):
+  #     check_commit_runtime_guard || true            # 裸调用
+  #     { ...; check_sw_oap_config; } then            # 嵌在 if 条件里
+  #   排除的: 函数定义 `name() {`、变量赋值 `name=...`、注释。
+  for _gate in check_sw_oap_config check_commit_runtime_guard; do
+    _hit="$(awk -v s="$self_start" -v e="$self_end" -v g="$_gate" '
+      NR >= s && NR <= e { next }
+      { line=$0; sub(/^[[:space:]]+/, "", line) }
+      line ~ /^#/ { next }
+      line ~ /\(\)[ \t]*\{/ { next }          # 函数定义, 不是调用
+      line ~ /^[a-zA-Z_]+=/ { next }          # 变量赋值
+      line == g || line == g " || true" { print NR; nextfile }
+      # 嵌在 if 条件里: `...; g; } then`
+      line ~ ("[;[:space:]]" g "[;[:space:]]") { print NR; nextfile }
+    ' "$SCRIPT_DIR/verify-e2e.sh")"
+    if [ -z "$_hit" ]; then
+      # 扫不到 = 调用被删或形态变了, 不能假定它仍被调用(AGENTS.md: 扫到 0 个必须判红)
+      echo "  FAIL 找不到 $_gate 的**调用点** —— 定义还在但从未被调用, 门禁会静默失效" >&2
+      failures=$((failures+1))
+    else
+      echo "  PASS $_gate 在第 $_hit 行被调用"
+    fi
+  done
+
+  # OAP 门禁是**阻断**型, 必须真被执行(不能被 || true 吞掉)。
+  if awk -v s="$self_start" -v e="$self_end" '
+      NR >= s && NR <= e { next }
+      /check_sw_oap_config; \};/ { found=1 }
+      END { exit found ? 0 : 1 }
+    ' "$SCRIPT_DIR/verify-e2e.sh"; then
+    echo "  PASS check_sw_oap_config 以阻断方式执行 (未被 || true 吞掉)"
+  else
+    echo "  FAIL check_sw_oap_config 不是阻断执行 —— OAP 错配将不再中止 E2E" >&2
+    failures=$((failures+1))
+  fi
+
   if [ "$failures" -ne 0 ]; then
     echo "  => $failures 项自检未通过" >&2
     return 1
