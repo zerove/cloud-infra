@@ -50,7 +50,7 @@ compose_supports_profile() {
   podman-compose --help 2>&1 | grep -q -- '--profile'
 }
 
-# 自愈: 修复被强停容器留下的 0 字节 healthcheck.log。
+# 自愈: 修复 podman 无法解析的 healthcheck.log。
 #
 # ⚠️ 这是本项目最阴的一类环境故障(2026-10-05 实测, 当天踩了两次)。
 #   podman 在容器停止时会 truncate healthcheck.log 再写新记录; 若进程在写入前
@@ -62,28 +62,68 @@ compose_supports_profile() {
 #     rc=125, 且 stdout 完全为空
 #
 #   一个坏文件会让**所有** podman ps / podman-compose 调用失败 ——
-#   实测中 podman-compose 因此直接抛 CalledProcessError 而无法执行。
+#   实测中 podman-compose 因此直接抛 CalledProcessError 而无法执行,
+#   连"这个容器还在不在"都查不出来(我一度误判 cloud-postgres 不存在)。
 #
 # ⚠️ rc=125 是 podman 的错误信号, **不是**超时(124)。本次我先把它当成超时,
 #   去找"为什么这么慢", 方向完全错了(第八课: 探针失效被读成别的问题)。
 #
-# 修法: 写入合法 JSON。正常内容形如:
-#   {"Status":"reset","FailingStreak":0,"Log":null}
-# 这是**回退自身故障**的修复, 不丢任何数据(空文件本来就没有数据)。
+# ⚠️【2026-10-05 修正】损坏**不止 0 字节**一种形态。实测我先按直觉写了
+#   `[]` 想修复, podman 报错变成:
+#     `readObjectStart: expect { or n, but found [`
+#   即它要的是**单个 JSON 对象**。该文件非空, 而原实现有
+#   `[ -s "$f" ] && continue`(非空就跳), 于是**恰好跳过了要修的文件** ——
+#   守护测试当时全绿, 因为它只造 0 字节文件(见 tests/test_repair_healthcheck_logs.sh 场景 1b)。
+#
+#   判据因此改为「能否解析」而非「是否为空」。合法内容取自**真实健康容器样本**
+#   (不是猜的格式, 第五课):
+#     {"Status":"healthy","FailingStreak":0,"Log":[...]}
+#   且**必须先验证 JSON 完整**再决定不动: 用 python3 解析, 解析失败才算坏。
+#   只看首字符会被 `{"Status":"healthy"`(截断的合法 JSON)骗过。
+#
+# 修法: 写入合法的空记录。这是**回退自身故障**的修复, 不丢有效数据 ——
+#   坏文件本来就没有可解析的数据。
 repair_healthcheck_logs() {
   local root d f fixed=0
   root="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/overlay-containers"
   [ -d "$root" ] || return 0
   for d in "$root"/*/; do
     f="$d/healthcheck.log"
-    # 只碰 **存在且为 0 字节** 的; 非空的一律不碰(那是有效记录)
     [ -f "$f" ] || continue
-    [ -s "$f" ] && continue
+    # 判据: 是否是 **podman 能解析的内容**。
+    #
+    # ⚠️ 这里**不能只用 `json.load` 判断合法性**(2026-10-05 实测踩到):
+    #   `[]` 是**合法 JSON**, json.load 成功 -> 会被判为"有效, 不碰";
+    #   但 podman 恰恰拒绝它:
+    #     readObjectStart: expect { or n, but found [
+    #   即 podman 要的是**对象({)或 null(n)**, 不是任意合法 JSON。
+    #   守护测试里"非空但格式非法([])"这项就是靠这条判据才能报红。
+    #
+    # 所以判据 = json.load 成功 **且** 顶层是 dict 或 None。
+    # 依据来自 podman 的报错原文, 不是推测(第五课)。
+    #
+    # 空文件也在这里被覆盖(json.load 对空文件直接失败)。
+    # python3 缺失时退回保守行为: 只修 0 字节, 不动非空文件(宁可漏修不可误伤)。
+    if command -v python3 >/dev/null 2>&1; then
+      if python3 -c '
+import json, sys
+try:
+    v = json.load(open(sys.argv[1], "rb"))
+except Exception:
+    sys.exit(1)
+# podman 的 readObjectStart 只接受对象或 null(报错: expect { or n)
+sys.exit(0 if isinstance(v, (dict, type(None))) else 1)
+' "$f" 2>/dev/null; then
+        continue  # podman 能解析, 不碰
+      fi
+    else
+      [ -s "$f" ] && continue
+    fi
     if printf '{"Status":"reset","FailingStreak":0,"Log":null}' >"$f" 2>/dev/null; then
       fixed=$((fixed+1))
     fi
   done
-  [ "$fixed" -gt 0 ] && echo "  ✓ 已修复 $fixed 个空的 healthcheck.log (podman ps 本会因此全面失败)"
+  [ "$fixed" -gt 0 ] && echo "  ✓ 已修复 $fixed 个 podman 无法解析的 healthcheck.log (podman ps 本会因此全面失败)"
   return 0
 }
 
