@@ -1195,51 +1195,65 @@ vm.min_free_kbytes   = 131072 # 注释写的是「让内核更早、更平滑地
 > **逐模块串行仍是有效手段**（37 分钟 vs 4m36s, 且不依赖宿主机配置）,
 > 但它现在是**绕过手段**, 不再是"正解"。全量 `mvn test` 现在一次跑通。
 
-### ⚠️ 第八课补记五: 全量 IT 的失败是**容器资源竞争**, 且我先怀疑错了方向（2026-10-05）
+### ⚠️ 第八课补记五: 全量 IT 的失败是**宿主机 I/O 饥饿**, 而非 overcommit 或夹具污染（2026-10-05）
 
 全量 IT（`mvn -o verify -DskipITs=false -DskipUnitTests=true -Dfailsafe.runOrder=reversealphabetical`）
-在 `mode=0` 下仍然 **BUILD FAILURE**, 14m57s, 中断于 `framework-mybatis` 与 `cloud-infra-gateway`。
+在 `mode=0` 下仍 **BUILD FAILURE**, 14m57s, 中断于 `framework-mybatis` 与 `cloud-infra-gateway`。
 **零 ENOMEM** ⇒ overcommit 问题确已解决, 剩下的是另一类问题。
 
-按 **failsafe XML** 核实: 12 个报告 / 35 项 / **3 errors / 0 failures** / 1 skipped。
-三个错误的根因**全部**是 Testcontainers 拉不起容器, 不是断言失败:
+#### ⚠️ 先更正一处我自己的统计错误: 是 **1 个 error, 不是 3 个**
 
-| IT | 镜像 | 超时等待的日志 |
-| :--- | :--- | :--- |
-| `TenantInsertIntegrationTest` | `postgres:16-alpine` | `database system is ready to accept connections` |
-| `OutboxIntegrationTest` | `postgres:16-alpine` | 同上 |
-| `CrossServiceFeignChainIntegrationTest` | `rabbitmq:3.13-management-alpine` | `Server startup complete` |
+我最初报"3 errors(TenantInsert + Outbox + CrossServiceFeign)", 依据是
+"本次基线时间戳之后产生的 XML"。**该口径是错的**:
 
-#### 我先怀疑的方向是错的: 差点把锅算到 `mode=0` 头上
+| 事实 | 说明 |
+| :--- | :--- |
+| 基线时间戳记录于全量**开始之前** | 它不能区分"上一次遗留"与"本次产生" |
+| b7 单模块复现随后**覆盖**了两个 postgres 的 XML | 覆盖后 `err=0`, 时间戳变成 21:41–21:42 |
+| 按全量时段(21:17–21:32)重建时间线 | **9 个报告, 仅 1 个 error** |
 
-第一反应是"会不会是我刚改的 overcommit 导致容器启动变慢"。用**同一个 IT、同一命令**做双向对照:
+**真实的全量失败只有 `CrossServiceFeignChainIntegrationTest`(rabbitmq 启动超时, 218.4s)**。
+另两个 postgres IT 在全量中确实失败过, 但证据已被后续运行覆盖, 无法自证。
+
+> 📌 **判据缺陷**: "比某个时间戳新" ≠ "属于本次运行" —— 该时间戳若取自**运行之前**,
+> 就会把更早的遗留算进来; 而**报告会被后续运行覆盖**, 使得一次运行的证据**不可追溯**。
+> 正确做法是**运行前清空报告目录**(本次因删除操作被安全网关拦下而改用时间戳, 正是踩到这个)。
+
+#### 我先怀疑的方向也是错的
+
+第一反应是"会不会是我刚改的 `mode=0` 导致容器启动变慢"。双向对照:
 
 | mode | 命令 | 结果 |
 | :--- | :--- | :--- |
 | `0` | `mvn -o -pl framework-mybatis verify -Dit.test=TenantInsertIntegrationTest` | **2 项全绿**, 83.87s |
 | `2` | **完全相同的命令** | **1 项 ERROR**, 容器启动失败, 71.18s |
 
-⇒ **`mode=0` 不是失败原因, 反而是它的必要条件**。若没有这次对照,
-我会把"改配置后出现的问题"记成配置引入的回归 —— 这正是本项目反复警告的
-**"环境差异伪装成被测系统缺陷"**（见第六课补记二）的同型。
+⇒ `mode=0` **不是**失败原因, 反而是其**必要条件**。
 
-#### 真实原因: 20 个业务容器与 Testcontainers 容器同时竞争
+#### 模块粒度复现: 失败不在模块内, 是跨模块累积
 
-| 场景 | `Committed_AS` 峰值 | `MemAvailable` 最低 |
-| :--- | :--- | :--- |
-| 全量 IT（20 容器在跑） | **23,265,832 kB** | 8,775 MB |
-| 单跑 IT（容器仍在跑, 但无并发） | 18,151,000 kB | 10,862 MB |
+只跑 `framework-mybatis`(3 个 IT / 12 项) → **BUILD SUCCESS**, 3m04s, 零错误。
+⇒ 三个 IT 本身无缺陷, 单模块内也不触发。
 
-全量期间 `Committed_AS` **冲过 `CommitLimit`(21,629,724 kB)** —— 在 `mode=0` 下这是允许的
-（内核先回收再拒绝, 不会立刻失败), 但意味着**回收压力已经拉满**, 新容器启动期间的
-内存申请就会在超时窗口内拿不到稳定供给。
+同期 `vmstat` 显示 **I/O 等待(`wa`) 常年 20–54%, 峰值 54%**:
 
-**尚未验证的关键一步**: 停掉 20 个业务容器后重跑全量 IT。
-**这一步需要人工确认后再做** —— 停容器不可逆, 且本机还运行着其他项目的工作负载。
+```
+0  us=3  sy=3  id=41  wa=54     ← 最差
+2  us=4  sy=7  id=46  wa=44
+2  us=3  sy=6  id=52  wa=40
+```
 
-> 📌 **本条的方法论价值**: 全量 IT 失败有**两个候选原因**（配置改动 / 资源竞争）,
-> 二者都能解释"失败"这个现象。只有**受控对照**能区分, 而我的第一直觉是错的。
-> 若跳过对照直接改配置, 就会把一次环境竞争固化成一个错误的"配置修复"。
+这与第八课补记二"Nacos Derby `Login timeout exceeded`"同型 ——
+**报错来自被测系统, 成因在系统之外**, 而容器启动超时正是 I/O 饥饿的典型表现
+(postgres 需 fsync 初始化数据目录)。
+
+> **尚未验证**: I/O 压力主要来自**本项目 20 个容器**, 还是**本机其他工作负载**
+> (此前观测到 `ai_developer_growth` 的 pytest 曾占满 12 核)。
+> 区分二者需要停容器或停外部进程, **两者都不可逆且影响他人, 未执行**。
+
+> 📌 **本条的方法论价值**: 同一次失败有**三个候选原因**（配置改动 / 夹具污染 / 环境 I/O）,
+> 都能解释"失败"。我前两个直觉**都错了**, 只有逐个受控对照才能区分。
+> 若跳过对照直接改配置, 就会把环境竞争固化成一个错误的"配置修复"。
 
 **逐模块串行（保留, 作为不依赖宿主机配置的兜底）**
 
