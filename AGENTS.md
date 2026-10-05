@@ -1230,12 +1230,36 @@ vm.min_free_kbytes   = 131072 # 注释写的是「让内核更早、更平滑地
 
 ⇒ `mode=0` **不是**失败原因, 反而是其**必要条件**。
 
+#### 执行顺序对照: **不是**夹具污染（这一条原先是我的未测推断, 现已实测）
+
+文档此前写"反向顺序下 mybatis 全绿 ⇒ 不是夹具污染" —— **该推断当时并未验证**,
+因为只跑了反向顺序, 缺少默认顺序的对照。已补测:
+
+| 顺序 | 结果 | 耗时 | 失败模块 | 容器类错误 |
+| :--- | :--- | :--- | :--- | :--- |
+| `reversealphabetical` | FAILURE | 14m57s | `framework-mybatis`, `cloud-infra-gateway` | postgres ×2, rabbitmq ×1 |
+| **默认** | FAILURE | 13m20s | **完全相同** | postgres ×2, rabbitmq ×2 |
+
+⇒ **两种顺序失败模块完全一致 ⇒ 与执行顺序无关, 夹具污染假设被否证。**
+且默认顺序下错误**更多**(`OutboxIntegrationTest` 也失败), 说明这不是顺序带来的偶发。
+
+顺带核实了 AGENTS.md 记载的历史污染源**确已修复**:
+`WebSocketIdentityTrustIT` / `SystemGrpcSecurityBoundaryTest` 的 `@AfterEach`
+均为**条件还原**(仅当原值为 `null` 才 `clear`), 而非无条件抹除;
+`GatewayTenantPropagationIT` / `TenantFilterWiringTest` 同样合规。
+
+> 📌 **这条本身是一次"推断先于证据"的纠正**: 我先写了"不是夹具污染",
+> 依据是"反向顺序下该模块全绿", 但**单方向的结果不能否定另一方向的原因** ——
+> 全绿也可能只是因为失败发生在别的环节。补了对照才成立。
+> 与第八课补记一的"探针失效被读成被测对象失败"同族:
+> **一次观测支持某个结论, 不等于它排除了其他结论**。
+
 #### 模块粒度复现: 失败不在模块内, 是跨模块累积
 
 只跑 `framework-mybatis`(3 个 IT / 12 项) → **BUILD SUCCESS**, 3m04s, 零错误。
-⇒ 三个 IT 本身无缺陷, 单模块内也不触发。
+⇒ 该模块的 IT 本身无缺陷, 单模块内也不触发。
 
-同期 `vmstat` 显示 **I/O 等待(`wa`) 常年 20–54%, 峰值 54%**:
+同期 `vmstat` 显示 **I/O 等待(`wa`) 常年 20–63%**:
 
 ```
 0  us=3  sy=3  id=41  wa=54     ← 最差
