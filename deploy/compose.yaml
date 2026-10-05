@@ -587,6 +587,21 @@ services:
       dockerfile: cloud-infra-gateway/Dockerfile
     image: localhost/cloud-infra-gateway:latest
     container_name: cloud-gateway
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     mem_limit: 640m
     ports:
       - "9000:9000"
@@ -646,6 +661,21 @@ services:
       dockerfile: cloud-infra-auth/Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     mem_limit: 768m
     ports:
       - "8081:8081"
@@ -709,6 +739,21 @@ services:
       dockerfile: cloud-infra-modules/system-module/Dockerfile
     image: localhost/cloud-infra-system:latest
     container_name: cloud-system
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     # 2026-09-01 P0-3b 验证: 768m 触发 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁
     # 2GB heap + --enable-native-access=ALL-UNNAMED 实测 86.19s 启动成功
     # 详见 docs/perf/2026-09-01-p0-3b-verify.md
@@ -773,6 +818,21 @@ services:
       dockerfile: cloud-infra-modules/file-service/Dockerfile
     image: localhost/cloud-infra-file:latest
     container_name: cloud-file
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     mem_limit: 640m
     ports:
       - "8083:8083"
@@ -834,6 +894,21 @@ services:
       dockerfile: cloud-infra-modules/notification-service/Dockerfile
     image: localhost/cloud-infra-notification:latest
     container_name: cloud-notification
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     mem_limit: 640m
     ports:
       - "8084:8084"
@@ -895,6 +970,21 @@ services:
       dockerfile: cloud-infra-modules/search-service/Dockerfile
     image: localhost/cloud-infra-search:latest
     container_name: cloud-search
+    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
+    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
+    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
+    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
+    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
+    #
+    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
+    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
+    #   「服务凭空消失」而无任何日志线索。
+    #
+    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
+    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
+    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
+    #   后者的正解仍是降低同时运行的服务数。
+    restart: unless-stopped
     mem_limit: 640m
     ports:
       - "8085:8085"
