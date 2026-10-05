@@ -1872,3 +1872,42 @@ Standard triage labels are used. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context layout. See `docs/agents/domain.md`.
+
+---
+
+### ⚠️ 第八课补记五: `vm.overcommit_memory` 已不是 2 —— 上述三处根因描述对当前环境**不成立**（2026-10-06 实测）
+
+第八课把根因归到 `vm.overcommit_memory = 2`（严格模式）。**2026-10-06 实测该值现为 `0`**:
+
+```bash
+cat /proc/sys/vm/overcommit_memory    # → 0（启发式）, 非 2
+```
+
+`0` 与 `2` 的差别不是措辞问题, 它直接改变风险性质:
+
+| 模式 | Committed_AS 超过 CommitLimit 时 |
+| :--- | :--- |
+| `2`（严格） | 内核**直接拒绝**新 commit ⇒ JVM 报 `malloc failed` / `pthread_create EAGAIN` |
+| `0`（启发式） | 内核仍尝试满足 ⇒ 表现为**变慢**, 而非立刻失败 |
+
+因此上面三段（`真因在宿主机全局: vm.overcommit_memory = 2`、`真正的变量只有…overcommit=2`、
+`真正的根因: vm.overcommit_memory = 2`）记录的是**事故当时**的环境, **不可当作当前前提**。
+读它们做判断前必须重测该值。
+
+**同一时刻的实测对照**（说明"超限"与"崩溃"不是一回事）:
+
+```text
+Committed_AS 20.71 / CommitLimit 20.63 GB  = 100%  ← 已超
+MemAvailable 8.97 GB                              ← 物理内存充足
+dmesg | grep -c commit                    = 0      ← 内核未拒绝过任何 commit
+nacos / notification / file 容器内 malloc 失败 = 0/0/0
+8 个业务/基础服务 health 全部 healthy
+```
+
+即 **commit 超限 ≠ 已在崩溃**。这正是第八课"两套账"那条的延伸:
+物理内存(`MemAvailable`)充足时, commit 超限只是一个**预警信号**,
+判断是否真出事要看 `dmesg` 有无拒绝记录与容器日志有无 malloc 失败, 不能只看百分比。
+
+**门禁行为说明**: `check_commit_budget.py` 在 96% 时**确实报红**(阈值 85%),
+但 shell 里 `timeout … | sed` 会让 `$?` 取到 `sed` 的退出码(0), 掩盖门禁的 exit=1。
+实测踩到过 —— **判门禁结果必须用 `PIPESTATUS` 或先落盘再读, 不能用管道后的 `$?`**。
