@@ -722,6 +722,70 @@ check_jvm_native_bounds || true
 check_jvm_opts_keys || true
 echo
 
+# ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------
+#
+# ⚠️ 本门禁此前**从未被调用**, 与 2026-10-05 修好的那两个 JVM 门禁同型
+#   ("守护全绿, 但没人跑") —— 且更隐蔽: 它有自己的守护测试
+#   test_check_sw_oap_config.sh, 守护测试只测脚本本身, 不证明它被接线。
+#
+#   真实后果已经有记录 (2026-10-03 实测): compose 用 OAP 9.7.0,
+#   而 deploy/skywalking/config/application.yml 是从 10.1.0/11.x 抄来手工删减的
+#   (官方 9.7.0 有 37 个模块块, 本文件曾只剩 23 个), 于是 OAP **从未成功启动过**,
+#   崩溃循环 restarts=51, 却因 depends_on 只等 service_started 被当成"已就绪"。
+#
+#   为什么放在这里**阻断**: 它是纯静态比对(compose tag vs 仓库内 yml vs 镜像内官方
+#   yml), 不碰容器、不依赖网络 —— 与 check_jvm_opts_keys 不同, 它的 rc=1 是
+#   **配置错配**而非环境紧张, 阻断是对的。
+#   (镜像未拉取时第 2 项会 SKIP, 此时只比对前两项, 不影响阻断语义。)
+check_sw_oap_config() {
+  local out rc
+  out=$(bash "$SCRIPT_DIR/deploy/tests/check_sw_oap_config.sh" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  # rc=2 是用法/环境错误(如 python3 缺失), 不是错配 —— 不该按错配阻断。
+  if [ "$rc" -eq 1 ]; then
+    fail "SkyWalking OAP 的 application.yml 与 compose 镜像 tag 错配 —— OAP 会崩溃循环"
+    return 1
+  fi
+  if [ "$rc" -eq 2 ]; then
+    # ⚠️ 不静默: 探针自身失效与"通过"必须区分(第五课补记一)。
+    fail "check_sw_oap_config.sh 以 rc=2 退出(用法/环境错误) —— 本次未判定, 不是通过"
+    return 1
+  fi
+  ok "SkyWalking OAP 配置与镜像 tag 对齐"
+  return 0
+}
+
+if ! { echo "[前置] 检查 SkyWalking OAP 配置对齐 ..."; check_sw_oap_config; }; then
+  echo
+  echo "!! OAP 配置与镜像错配, 继续跑只会得到 SkyWalking 崩溃循环的假象。" >&2
+  echo "!! 详见 deploy/skywalking/config/application.yml 与 deploy/compose.yaml 的 OAP tag。" >&2
+  exit 1
+fi
+
+# ---- 运行期 commit 预算 (2026-10-05 接线) ---------------------------------
+#
+# ⚠️ 同样**从未被调用**。check_commit_budget 只在启动前查一次, 而实测崩溃发生在
+#   运行期 (启动前 81% PASS → 运行期 99.6% → system/notification malloc 失败)。
+#
+#   为什么**只警告不阻断**: 与 check_jvm_opts_keys 同一个理由 ——
+#   commit 高不等于服务已坏, 阻断会把"环境紧张"这个次要事实变成 E2E 的失败结论,
+#   反而掩盖真实状态。阈值 92% 落在实测正常区间 (82%~91%) 与崩溃点 (99.6%) 之间。
+check_commit_runtime_guard() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_runtime_guard.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "运行期 commit 预算吃紧 —— 6 服务可能随机崩溃(非阻断, 仅记录)"
+    return 1
+  fi
+  ok "运行期 commit 预算有余量"
+  return 0
+}
+
+echo "[前置] 检查运行期 commit 预算 (仅告警) ..."
+check_commit_runtime_guard || true
+echo
+
 # ⚠️ 已删除的“堆外余量门禁” (2026-10-05) —— 记录它的错误与正确结论,
 #    避免下一个人把它重新加回来。
 #
