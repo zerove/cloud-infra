@@ -43,8 +43,15 @@ services:
     #
     # 即**堆太小, Derby 建库在超时内完不成**。镜像脚本自己拼的是
     # `-Xms256m -Xmx512m -Xmn512m`(见容器日志), 官方默认 -Xms1g —— 本项目此前配的
-    # 恰好只有官方的 1/4。mem_limit 必须 >= Xmx + metaspace + 线程栈, 故取 4g。
-    mem_limit: 4g
+    # 恰好只有官方的 1/4。
+    #
+    # 2026-10-05 实测: JVM RSS 1570MB / RssAnon 1541MB, Xmx=2048m 是主体且未打满。
+    #   下界由**实测**钉住: 堆不能低于 1g(否则 Derby 建库超时, 见上)。
+    #   上界需求 = Xmx(2048m) + Metaspace(镜像内置 JVM_MMS=320m) + 线程栈/Native
+    #            ≈ 2.5GB, 故 3g 已留足余量, 由 4g 降为 3g。
+    #   ⚠️ 只降 mem_limit(cgroup 上限)不会降低实际占用 —— 实测仍是 ~1.6GB。
+    #     真正能降的是 Xmx, 而它已被上面的实测下界钉住。这是**预留**优化, 不是占用优化。
+    mem_limit: 3g
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -126,8 +133,56 @@ services:
       POSTGRES_DB: cloud_infra
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
+      # ⚠️ 刻意**不改** PGDATA: 现有数据在 /var/lib/postgresql/data 下,
+      #   改路径会让容器看不见旧数据并当成空库重新初始化 = 丢数据。
+    # ⚠️ 2026-10-05 刷盘调优: **性能参数走 apply-postgres-tuning.sh 的
+    #   ALTER SYSTEM, 不是 compose 的 command 段**（详见 volumes 处的说明）。
+    #
+    # 【踩坑记录 —— 两种更直观的方式都试过且都无效】
+    #   1. compose `command: [postgres, -c, shared_buffers=192MB, ...]`
+    #      容器实际 Cmd = ["postgres"], 5 个 -c **全被丢弃**。
+    #   2. 环境变量 `PG_SHARED_BUFFERS=192MB`(官方文档说支持)
+    #      实测**同样无效**, 读回仍是 128MB。该镜像 entrypoint 不做这个转换。
+    #   ⇒ 两者都是"配置写了但运行时没生效"的假绿(第三条硬规则)。
+    #
+    # ⚠️ 关于第 1 条的**归因尚未查清, 别再沿用旧说法**:
+    #   隔离测试证明 podman-compose 1.6.0 **是支持 `command` 的**(新起容器实测
+    #   Cmd 正确带上了参数)。所以"该工具丢弃 command"这个解释**不成立**,
+    #   本项目 compose 里参数丢失另有原因、尚未定位。
+    #   ⚠️ 教训: 记踩坑记录时, **实测现象与推测原因必须分开写** ——
+    #   我把"丢弃"当成了已验证的根因写进注释, 下一个信它的人会去改工具版本。
+    #
+    # 【根因（这才是已验证的）】postgresql.conf 里是**非注释的**
+    #   `shared_buffers = 128MB`, 它在文件内的优先级高于任何外部传入。
+    #   所以必须能改到最终生效的那份配置 ⇒ ALTER SYSTEM 最可靠。
+    #
+    # 【实测依据】两本账分离, 瓶颈在 I/O 不在内存:
+    #   MemAvailable 常年 10.4GB; 而 /proc/diskstats 设备忙 48% 饱和,
+    #   15 秒却只写 5.1MB → 平均单次写 9.5KB / 每秒 35 次 = 小块同步写。
+    #   pg_stat_activity 有会话卡在 wait_event=IO|WALSync,
+    #   且 checkpoint_sync_time 三次采样**完全不变** → 元凶是 WAL 同步提交。
+    #
+    # 【⚠️ 刻意不动 fsync / synchronous_commit】
+    #   synchronous_commit=off 能把提交延迟降一个数量级, 但它**允许提交后
+    #   立即断电丢数据**。这是耐久性取舍, 属用户决策, 不代选。
+    #   需要时在 tuning-postgres.conf 追加一行即可(需 reload 或重启)。
+    #
+    # 【为什么 shared_buffers 只到 192MB 而不是 512MB】
+    #   容器 mem_limit 是 512m, 而 shared_buffers 是**独占**内存。
+    #   512m 会吃掉整个容器上限, 堆外(Native/线程栈)无处安放。
+    #   192MB 让工作集装得下, 又留足余量。
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # ⚠️ postgres-tuning.conf **刻意不挂载进容器**（2026-10-05 运行时纠正）。
+      #   它原先挂载在 /etc/postgresql/tuning.conf, 但 postgresql.conf 与
+      #   postgresql.auto.conf 里**没有任何 include 指令**（容器内 grep 确认
+      #   无输出）⇒ 那个挂载永远不会被读取, 属"机制存在但从未生效"。
+      #   上面那句"以 include 方式挂载"是错的, 已删除。
+      #
+      #   唯一真实生效路径:
+      #     up.sh → apply-postgres-tuning.sh → ALTER SYSTEM → postgresql.auto.conf
+      #   要改调优参数, 请改 apply-postgres-tuning.sh 的期望值, 改这里无效。
+      #   该文件保留为 apply 脚本的**输入源**(单一数据源), 不再是运行时配置。
       # 首次初始化时建 SkyWalking 存储库 (OAP 自 2026-10-04 用 postgresql 存储)。
       #   ⚠️ 该目录**只在数据目录为空时**执行一次 —— 已有 pgdata 卷的环境不会补跑。
       #     本机 pgdata 里 skywalking 库是手工建的, 与本脚本等价。
@@ -757,6 +812,13 @@ services:
     # 2026-09-01 P0-3b 验证: 768m 触发 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁
     # 2GB heap + --enable-native-access=ALL-UNNAMED 实测 86.19s 启动成功
     # 详见 docs/perf/2026-09-01-p0-3b-verify.md
+    # ⚠️ 2026-10-05 **撤销**了下调到 1024m 的尝试, 保留 2g。理由:
+    #   实测占用只有 666MB(31%), 看似该降 —— 但那份死锁报告是**真实故障**,
+    #   且 2g 是它的**修复值**, 不是随手设的。
+    #   死锁发生在 Xmx=2g 的配置下, 现在 Xmx=256m, 根因是否已消除属**推测**。
+    #   拿生产服务赌一个未验证的推测, 违反"改坏→确认守护会红"的前置要求。
+    #   ⇒ 真正该做的是**受控对照**: 用 1024m 起一次, 观察是否复现死锁。
+    #      在那之前保持 2g —— 预留浪费 1.3GB 远小于服务反复崩溃的代价。
     mem_limit: 2g
     ports:
       - "8082:8082"

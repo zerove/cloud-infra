@@ -936,6 +936,17 @@ for i in $(seq 1 15); do
     sleep 2
 done
 
+# 应用 PostgreSQL 刷盘调优（2026-10-05）
+# ⚠️ 为什么必须在这里调, 而不是写在 compose 的 command/environment 里:
+#   那两条路都实测过**无效** —— command 的 -c 被 podman-compose 丢弃成 ["postgres"],
+#   PG_* 环境变量该镜像 entrypoint 不转换。唯一可靠入口是 ALTER SYSTEM。
+#   详见 deploy/postgres-tuning.conf 与 apply-postgres-tuning.sh 的注释。
+# ⚠️ 失败不阻断启动: 调优是性能项, 不该让整个环境起不来。
+echo "--- 应用 PostgreSQL 调优 ---"
+if ! bash "$SCRIPT_DIR/apply-postgres-tuning.sh"; then
+    echo "⚠️  PostgreSQL 调优未完全生效, 继续启动(性能项, 不阻断)"
+fi
+
 # 等待 Redis 就绪
 echo "=== 5. 等待 Redis 就绪 ==="
 for i in $(seq 1 10); do

@@ -493,17 +493,34 @@ STUB
   self_start7="$(grep -n '^run_gate_selftest()' "$SCRIPT_DIR/verify-e2e.sh" | head -1 | cut -d: -f1)"
   self_end7="$(awk -v s="$self_start7" 'NR>s && /^}/ {print NR; exit}' "$SCRIPT_DIR/verify-e2e.sh")"
 
-  for gate in check_jvm_native_memory_bounds check_jvm_opts_keys_match_image; do
+  # check_resource_optimization 于 2026-10-05 新增, 一并登记:
+  #   它查的是"优化项没被回退 + 链路没断", 与前两个同属"没人跑就等于没有"。
+  #
+  # ⚠️ 2026-10-05 负向对照**连续两次推翻了这段断言**, 记录如下:
+  #
+  #   (一) 原断言找 `tests/<脚本名>.py` 字面量, 而它出现在**被检函数自己的
+  #       定义体**内 —— 注释掉调用点后自检仍判绿。即函数名与脚本名不同时,
+  #       "定义了"就足以满足"被调用了"。第三课第六类假门禁, 三个门禁全中招。
+  #       改为断言**裸调用**: 必须有 `函数名 ...` 开头的真实执行行。
+  #
+  #   (二) 改完后前两个门禁**恒红** —— 因为 gate 列表里填的是**脚本名**
+  #       (check_jvm_native_memory_bounds.py) 而真实**函数名**是
+  #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
+  #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
+  #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
-      $0 ~ ("tests/" g "\\.py") && $0 !~ /^[ \t]*#/ { print NR; exit }
+      /^[ \t]*#/ { next }
+      { line=$0; sub(/^[ \t]+/, "", line) }
+      index(line, g) == 1 && line !~ (g "\\(\\)") { print NR; exit }
     ' "$SCRIPT_DIR/verify-e2e.sh")"
     if [ -z "$call_line" ]; then
-      echo "  FAIL $gate.py 未被调用 —— 全绿的守护没人跑, 等于没有守护" >&2
+      echo "  FAIL $gate 裸调用缺失 —— 函数定义了但没人跑, 等于没有守护" >&2
       failures=$((failures+1))
     else
-      echo "  PASS $gate.py 在第 $call_line 行被调用"
+      echo "  PASS $gate 在第 $call_line 行被真实调用"
     fi
   done
 
@@ -748,6 +765,28 @@ check_jvm_native_bounds() {
   return 0
 }
 
+# ---- 资源优化守护 (静态, 不需容器运行) ---------------------------------
+#
+# 2026-10-05 新增。守护 PostgreSQL 刷盘调优与 mem_limit 不被静默回退。
+#
+# ⚠️ 这个门禁查的**不止 compose.yaml**, 因为调优参数根本不在 compose 里:
+#   compose 的 command 段被 podman-compose 丢弃成 ["postgres"],
+#   PG_* 环境变量该镜像 entrypoint 不转换 —— 两者都实测无效。
+#   唯一可靠入口是 ALTER SYSTEM, 由 deploy/apply-postgres-tuning.sh 执行,
+#   而 up.sh 必须调用它, 否则机制存在但链路未接(第三课)。
+# ⇒ 所以门禁同时检查 conf / 脚本 / up.sh 三处, 少一处就会出现"看似有守护"。
+check_resource_optimization() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_resource_optimization.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "资源优化项被回退或链路断开（详见上方具体项）"
+    return 1
+  fi
+  ok "资源优化项完整且已接线"
+  return 0
+}
+
 # 判定 compose 里的 JVM 参数键**确实是镜像启动脚本会读的**。
 # 静态解析 compose 的守护无法发现"配置写在没人读的键上"(第三课在守护层的重演)。
 #
@@ -772,6 +811,10 @@ check_jvm_opts_keys() {
 echo "[前置] 检查 JVM native 内存边界 ..."
 check_jvm_native_bounds || true
 check_jvm_opts_keys || true
+echo
+
+echo "[前置] 检查资源优化项未被回退 ..."
+check_resource_optimization || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------
