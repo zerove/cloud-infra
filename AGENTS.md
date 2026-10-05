@@ -1085,6 +1085,56 @@ rc=0
 > **绝不能把"全都失败"当作"这个变量无影响"** —— 前者要查装置, 后者才是结论。
 > 判别方法: 档位间应有**梯度**；完全无梯度时, 先怀疑装置。
 
+### ⚠️ 第八课补记四: 单测跑不起来时, 变量是**同时存活的 JVM 数量**, 不是任何单个 JVM 的参数（2026-10-05）
+
+`mvn test` 在本机稳定崩在 `commit_memory ... Not enough space (errno=12)`。
+三轮假设与受控对照:
+
+| 假设 | 受控对照 | 结论 |
+| :--- | :--- | :--- |
+| `-Xmx` 太大 | `-Xmx256m` 仍崩 | ✗ 否证 |
+| `MaxMetaspaceSize` 无上限（`pom.xml` 的 `argLine` 里确实没有） | `-DargLine` 加 `-XX:MaxMetaspaceSize=192m` 后**仍崩**, ENOMEM 3 次 | ✗ **否证** |
+| 某模块本身有问题 | `codegen-core` / `common` / `api -am` **单独跑全绿**, 零 ENOMEM | ✗ 否证 |
+
+真正的变量是**累积**: 崩溃点稳定落在第 8~10 个模块（`[10/23] cloud-infra-api` 附近），
+而任何 ≤3 个模块的组合都通过。
+
+**正解是逐模块串行**（`for m in $(find . -name pom.xml); do mvn -o -pl "$m" test; sleep 3; done`）——
+每模块结束即释放 JVM, 峰值只承载 1~2 个。
+
+**实测结果（2026-10-05）**: 24 个模块 **23 PASS + 1 FAIL, 零 ENOMEM**。
+那 1 个 FAIL **不是测试失败** —— `cloud-infra-modules/demo-service` 不在根 `pom.xml` 的
+`<modules>` 里, 故 `-pl` 选不中（`Could not find the selected project in the reactor`）。
+改用 `mvn -f cloud-infra-modules/demo-service/pom.xml test` 后 **BUILD SUCCESS**。
+⇒ **24/24 模块通过**。
+
+按 **surefire XML** 核实（不信控制台汇总行）: **505 项, 0 失败, 0 错误, 1 跳过**。
+另 4 个模块 XML=0, 已核实其 `src/test` **确实无测试源文件**（非漏跑）。
+
+> ⚠️ **本条本身踩了两个探针坑, 都记在此处**:
+>
+> | 坑 | 现象 | 正解 |
+> | :--- | :--- | :--- |
+> | 脚本用**目录名**当 `-pl` 参数 | `codegen-core` / `demo-service` 报 "Could not find the selected project" | 目录名 ≠ artifactId, 且**不在根 Reactor 的模块根本选不中** |
+> | `nohup mvn ... &` 让后台任务"12 秒完成" | 实际 12 秒后就崩了 | **后台工具的 exit code 只反映启动是否成功**, 必须查日志与产物 |
+>
+> 第二条与第五课补记一同型: **"命令返回 0"不等于"事情做成了"**。
+
+> **两条通用规则**:
+>
+> 1. **`MAVEN_OPTS` 只作用于 Maven 自身 JVM, surefire `fork` 出的测试 JVM 不继承它**
+>    （它只认 `argLine`）。想给测试 JVM 限内存必须改 `argLine`。
+>    本次正是先误以为 `-DargLine` 覆盖成功、据此得出"Metaspace 是根因"的错误结论。
+> 2. **两本账的背离程度就是诊断信号**: 崩溃时 `Committed_AS` 只有 17.03 GB / 83%,
+>    而 `MemAvailable` 有 **10.25 GB**。物理内存充裕、commit 额度将尽 ——
+>    这个组合**只可能**指向"全局共享配额", 与"内存不够"无关。
+
+> **VmSize 与 RSS 的量化差距（本轮实测）**: 容器 VmSize 合计 **50.39 GB**、
+> RSS 合计仅 **7.84 GB**（6 倍）；单进程最高 **87 倍**（alertmanager RSS 0.01 GB / VmSize 1.24 GB）。
+> 而 `CommitLimit` 只有 20.63 GB —— **VmSize 与它不在同一量级, 按 VmSize 排序找"大户"必然错**。
+> 进程侧 Private+Shared 页合计 9.92 GB, 仍与 `Committed_AS` 18.01 GB 差 8 GB
+> （后者还计入 hugetlb、内核模块与每 task 内核栈）, 故**逐进程加总也无法完全对齐** Committed_AS。
+
 ### ⚠️ 黑名单 vs 白名单: 判据的"取反"往往才是正确的（2026-10-04）
 
 SkyWalking 的 ES 兼容性判据原本是**排除 9.x**:
