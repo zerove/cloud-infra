@@ -21,6 +21,7 @@
       运行时证据是"表真的出现在数据库里", 由 test_schema_init_wiring.py 补充。
     - 扫到 0 个目标必须判红: 扫描器坏了 != 通过。
 """
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,55 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "cloud-infra-modules"
 CONFIG = ROOT / "deploy" / "config"
+
+# Flyway 管理的表集合 —— 由 system-module 的 db/migration/ 定义。
+# 任何**其他**服务都不该在自己的 schema*.sql 里重建它们。
+FLYWAY_OWNER = "system-module"
+FLYWAY_DIR = "db/migration"
+
+
+def executable_statements(sql_text: str):
+    """剥掉注释, 只留下**真正会执行**的语句。
+
+    ⚠️ 踩过的坑: 直接 grep "CREATE TABLE" 会命中注释里的说明文字。
+    实测本次修复后 `grep -n sys_user schema.sql` 仍有 5 处命中 ——
+    全部是我自己写的归属说明注释, 而判据据此报出"删了还在"。
+    解析器同样有这个问题: 注释里的 `CREATE TABLE x` 会被当成真实建表语句。
+    故先逐行去注释(行注释 --、块注释 /* */), 再匹配。
+    """
+    no_block = re.sub(r"/\*.*?\*/", "", sql_text, flags=re.S)
+    lines = []
+    for line in no_block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            continue
+        # 去掉行尾注释(避免 URL 里的 // 被误当注释, 故只按 -- 且不在引号内处理)
+        lines.append(re.sub(r"--.*$", "", line))
+    return "\n".join(lines)
+
+
+def created_tables(sql_text: str):
+    """返回该文件**实际会创建**的表名集合(已剔除注释)。"""
+    body = executable_statements(sql_text)
+    return {
+        m.lower()
+        for m in re.findall(
+            r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[\"`]?(\w+)",
+            body,
+            flags=re.I,
+        )
+    }
+
+
+def flyway_owned_tables():
+    """Flyway migration 会创建的表集合 —— 这些表不应被其他服务重复定义。"""
+    out = set()
+    mdir = MODULES / FLYWAY_OWNER / "src" / "main" / "resources" / FLYWAY_DIR
+    if not mdir.is_dir():
+        return out
+    for f in mdir.glob("*.sql"):
+        out |= created_tables(f.read_text(encoding="utf-8", errors="replace"))
+    return out
 
 # 按**服务**声明豁免（不连业务库, 其 schema.sql 无需被执行）
 NO_SCHEMA_NEEDED = {"skywalking"}
@@ -136,6 +186,30 @@ def main():
 
     failures = []
     notes = []
+
+    # 表归属检查: 除 Flyway 管理者自身外, 任何服务都不应在 schema*.sql 里
+    # 重建 Flyway 管理的表。
+    #
+    # 缺陷背景(2026-10-05 实测): notification 的 schema.sql 带着 sys_user /
+    # sys_notification / sys_notification_preference 三张表的过时副本
+    # (sys_user 只 7 列, Flyway 已 18 列)。因写的是 CREATE TABLE IF NOT EXISTS,
+    # 表不存在时会被副本抢先建出, 随后 Flyway V1 报
+    # `column "user_id" of relation "sys_user" does not exist`,
+    # 连锁导致其后 10 个 migration 全部失败(实测 11/17 失败)。
+    # 生产未触发纯属 FULL_SERVICES 的顺序巧合, 非设计保证。
+    flyway_tables = flyway_owned_tables()
+    # 扫描器坏了 != 通过: 扫到 0 张 Flyway 表说明路径或解析失效, 须判红。
+    if not flyway_tables:
+        print(
+            f"FAIL: 未从 {FLYWAY_OWNER}/{FLYWAY_DIR} 解析出任何 CREATE TABLE —— "
+            "表归属检查的扫描器失效, 不能当作通过"
+        )
+        return 1
+    notes.append(
+        f"[表归属] Flyway 管理 {len(flyway_tables)} 张表, "
+        "其余服务不得在自己的 schema*.sql 中重建"
+    )
+
     for service, sql_files in services:
         for sql_path in sql_files:
             rel = str(sql_path.relative_to(MODULES / service / "src" / "main" / "resources"))
@@ -145,9 +219,21 @@ def main():
                 continue
             if rel.startswith("db/migration/") and service in NO_SCHEMA_NEEDED:
                 continue
-            n_tables = sql_path.read_text(encoding="utf-8", errors="replace").upper().count(
-                "CREATE TABLE"
-            )
+
+            text = sql_path.read_text(encoding="utf-8", errors="replace")
+            tables = created_tables(text)
+            n_tables = len(tables)
+
+            # 表归属重叠检查 (仅对非 Flyway 管理者自身)
+            if service != FLYWAY_OWNER:
+                overlap = sorted(tables & flyway_tables)
+                if overlap:
+                    failures.append(
+                        f"{key}: 重复定义了 Flyway 管理的表 {overlap} —— "
+                        "两份定义会竞争建表权, 先执行的一方留下过时结构, "
+                        "导致另一方的 migration 校验失败"
+                    )
+
             mechanism, reason = declared_mechanism(service, rel)
             if mechanism:
                 notes.append(f"{key}: {n_tables} 张表 ← {mechanism} ({reason})  ✓")
