@@ -34,10 +34,30 @@ sibling module (notification/file/search) 默认不在 test classpath,
 ## 判定方式
 
 扫 `src/main/java` 下所有 `.java`, 找出 `AsyncTaskExecutor` / `TaskExecutor` /
-`ThreadPoolTaskExecutor` 的**字段或构造参数**注入点, 断言其上一行有
-`@Qualifier`。
+`ThreadPoolTaskExecutor` / `AsyncTaskScheduler` 的**注入点**, 断言有 `@Qualifier`。
 
-跳过: 注释、import、Bean 方法签名 (那是定义不是注入)。
+**注入点有两类, 必须分别处理（2026-10-05 实测踩到）**：
+
+1. **字段声明** `private final AsyncTaskExecutor x;` —— `@Qualifier` 在字段上
+   （仅当类用 `@RequiredArgsConstructor` 时才有效, 见 `LombokQualifierPropagationTest`）。
+2. **构造器参数** —— `@Qualifier` 必须**直接标在参数上**。
+
+⚠️ 本守护曾**只扫第 1 类**且只在字段上方 3 行找注解, 于是对
+`NotificationServiceImpl` 报假阳性: 那个类的 `AsyncTaskExecutor taskExecutor`
+字段**本来就不该带** `@Qualifier`（Lombok 不复制字段注解到构造参数, 加了反而误导）,
+真正的限定名在显式构造器的第 9 个参数上:
+
+    @Qualifier("applicationTaskExecutor") AsyncTaskExecutor taskExecutor) {
+
+两个守护各扫一半、互相覆盖不到, 结果是"两个都绿, 真实缺陷从中间漏过去"。
+**字段带 @Qualifier 但构造参数没带**才是要抓的形态 —— 那是"看起来修过、实际无效"
+（CI run 37074048182 的真因）。
+
+## 跳过
+
+- 注释、import 行
+- Bean 定义方法签名（返回执行器）—— 那是**生产**候选, 不是注入
+- **字段声明**（只作定位锚点, 真正判定看构造参数）
 
 ## 负向对照
 
@@ -66,12 +86,9 @@ SCAN_GLOBS = (
     "cloud-infra-starter/src/main/java",
 )
 
-# 构造参数注入的形态: final AsyncTaskExecutor xxx,
+# 字段声明: 只作**定位锚点**（找到所属类与构造器）, 本身不参与判定。
 FIELD_RE = re.compile(
-    r"\b(?:private|protected|public)\s+(?:final\s+)?(" + "|".join(AMBIGUOUS_TYPES) + r")\b\s+\w+\s*;"
-)
-CTOR_PARAM_RE = re.compile(
-    r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(" + "|".join(AMBIGUOUS_TYPES) + r")\s+(\w+)\s*[,)]"
+    r"\b(?:private|protected|public)\s+(?:final\s+)?(" + "|".join(AMBIGUOUS_TYPES) + r")\b\s+(\w+)\s*;"
 )
 
 
@@ -90,8 +107,76 @@ def java_files() -> list[Path]:
     return out
 
 
+def is_bean_definition(line: str) -> bool:
+    """Bean 定义方法（返回执行器）是**生产**候选, 不是注入。"""
+    return bool(re.search(r"\b(?:public|private|protected)\s+\w[\w<>\[\],\s.]*\s"
+                          r"(?:" + "|".join(AMBIGUOUS_TYPES) + r")\s+\w+\s*\(", line))
+
+
+def _class_body(lines: list[str], field_idx: int) -> tuple[int, int]:
+    """返回字段所在类的 body 区间 [start, end)（0-based 行号索引）。
+
+    用途: 从字段声明反查它对应的构造器。Spring 注入看的是**构造参数**,
+    而字段与构造参数在源码上往往相隔几十行（中间是 javadoc）,
+    只在字段附近找注解必然漏 —— 这正是本守护先前的假阳性来源。
+    """
+    start = -1
+    for k in range(field_idx, -1, -1):
+        if re.search(r"\b(?:class|record|enum)\s+\w+", strip_comment(lines[k])):
+            start = k
+            break
+    if start < 0:
+        return -1, -1
+
+    i = start
+    while i < len(lines) and "{" not in strip_comment(lines[i]):
+        i += 1
+    if i >= len(lines):
+        return -1, -1
+    depth = 0
+    for j in range(i, len(lines)):
+        stripped = strip_comment(lines[j])
+        depth += stripped.count("{") - stripped.count("}")
+        if depth == 0:
+            return i + 1, j
+    return -1, -1
+
+
+def _find_ctor_params(lines: list[str], lo: int, hi: int, type_name: str,
+                      field_name: str) -> list[int]:
+    """在 [lo, hi) 内找出构造器里 `type_name field_name` 这个参数所在的行号。
+
+    ⚠️ 判据必须**只认含类型+字段名的那一行**，不能用「长得像方法调用」。
+    先前用 `\b\w+\s+\w+\s*\(\s*$` 兜底，结果把两样无关的东西算成参数：
+      - 构造器**头行** `public NotificationServiceImpl(`（那是形参列表的起点, 不是某个参数）
+      - 方法体里任意 `throw new IllegalArgumentException(`（单行里有 `new X(` 就匹配）
+    即「找参数」这件事本身的判据太宽, 会把修复变成制造新缺陷（第五课）。
+    """
+    hits: list[int] = []
+    pattern = re.compile(r"\b" + re.escape(type_name) + r"\s+" + re.escape(field_name)
+                         + r"\s*[,)]")
+    for j in range(lo, hi):
+        if not pattern.search(strip_comment(lines[j])):
+            continue
+        # @Bean 工厂方法返回执行器, 那是**生产**候选不是注入
+        if is_bean_definition(strip_comment(lines[j])):
+            continue
+        hits.append(j)
+    return hits
+
+
+def _qualifier_present(lines: list[str], idx: int) -> bool:
+    """参数处是否带 @Qualifier: 同行, 或紧邻的上一行（跳过空行）。"""
+    if "@Qualifier" in strip_comment(lines[idx]):
+        return True
+    k = idx - 1
+    while k >= 0 and not strip_comment(lines[k]).strip():
+        k -= 1
+    return k >= 0 and "@Qualifier" in strip_comment(lines[k])
+
+
 def find_violations() -> list[tuple[str, int, str]]:
-    violations = []
+    violations: list[tuple[str, int, str]] = []
     for f in java_files():
         try:
             lines = f.read_text(encoding="utf-8").splitlines()
@@ -101,29 +186,32 @@ def find_violations() -> list[tuple[str, int, str]]:
 
         for i, raw in enumerate(lines):
             line = strip_comment(raw)
-            if not line.strip():
-                continue
-            # import 行不是注入点
-            if line.strip().startswith("import "):
-                continue
-            # Bean 定义方法 (返回执行器) 是**生产**候选, 不是注入, 跳过。
-            if re.search(r"\b(?:public|private|protected)\s+\w[\w<>\[\],\s.]*\s"
-                         r"(?:" + "|".join(AMBIGUOUS_TYPES) + r")\s+\w+\s*\(", line):
+            if not line.strip() or line.strip().startswith("import "):
                 continue
 
             m_field = FIELD_RE.search(line)
-            m_ctor = CTOR_PARAM_RE.match(line) if line.lstrip().startswith("@") is False else None
+            if not m_field:
+                continue
+            field_name = m_field.group(2)
 
-            hit = m_field or m_ctor
-            if not hit:
+            lo, hi = _class_body(lines, i)
+            if lo < 0:
+                # 找不到所属类（异常排版）—— 不得静默跳过
+                violations.append((str(rel), i + 1,
+                                   line.strip() + "   [无法定位所属类, 需人工确认]"))
                 continue
 
-            # 向上找最近的注解行。字段注入时 @Qualifier 通常紧贴上一行,
-            # 也可能与其它注解同行。留 3 行窗口足够。
-            window = lines[max(0, i - 3):i]
-            has_qualifier = any("@Qualifier" in strip_comment(w) for w in window)
-            if not has_qualifier:
-                violations.append((str(rel), i + 1, line.strip()))
+            params = _find_ctor_params(lines, lo, hi, m_field.group(1), field_name)
+            if not params:
+                # 没有显式构造器 —— 用的是 @RequiredArgsConstructor 等。
+                # 此时字段上的 @Qualifier 是唯一入口, 但它对 Lombok **不生效**
+                # （不复制到构造参数）, 由 LombokQualifierPropagationTest 守护。
+                # 本守护不重复报, 否则就是对"已用显式构造器"的类误判。
+                continue
+
+            for j in params:
+                if not _qualifier_present(lines, j):
+                    violations.append((str(rel), j + 1, strip_comment(lines[j]).strip()))
     return violations
 
 
