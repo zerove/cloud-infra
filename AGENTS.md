@@ -1357,6 +1357,100 @@ CPU 大户 Top10 中 7 个是容器内 Java 进程; 宿主侧最大的是 `podma
 > 进程侧 Private+Shared 页合计 9.92 GB, 仍与 `Committed_AS` 18.01 GB 差 8 GB
 > （后者还计入 hugetlb、内核模块与每 task 内核栈）, 故**逐进程加总也无法完全对齐** Committed_AS。
 
+### ⚠️ 第九课: 「读取进程参数的命令」自身可能就是错的探针（2026-10-05）
+
+第五课补记五确立了「用 `-XX:+PrintFlagsFinal` 的**来源标记**判断参数是否生效」,
+本次正是靠它确认 `JAVA_TOOL_OPTIONS` 生效（`{environment}`）而 `JAVA_OPT_EXT` 未生效。
+**但这个判据本身有个未被记录的适用范围**, 踩中时得到的不是"读不出", 而是**一个语法正常、
+语义错误的答案** —— 与第五课同型, 但形态更隐蔽。
+
+**`java -XX:+PrintFlagsFinal -version` 读的是「你此刻启动的那个新 java」,
+不是「容器里正在跑的那个 java」。** 二者参数集不同, 标记可以完全相反。
+
+本次实测（`cloud-nacos`, 已运行中）:
+
+| 读法 | 读到的 MaxHeapSize | 标记 | 真实情况 |
+| :--- | --- | :--- | :--- |
+| `podman exec … java -XX:+PrintFlagsFinal -version` | **1 GB** | `{ergonomic}` | ❌ 错 |
+| `/proc/1/cmdline` 解析 `-Xmx` | **2 GB** | — | ✅ 对 |
+
+差异来源: `exec` 起的这个新进程**没有** `-Xmx2g`（那是镜像脚本传给 PID 1 的）,
+于是它按" ergonomics"从机器规格推出 1 GB, 标记是 `{ergonomic}` 而非 `{environment}`。
+**若照抄第五课补记五的判据去读它, 会得出「`-Xmx2g` 根本没生效」**——
+恰好与事实完全相反。
+
+**两条可直接执行的规则**:
+
+1. **探针启动的进程 ≠ 被探测的进程**。凡是用「起一个新进程读参数」来验证
+   「老进程的实际状态」, 都必须确认新进程**继承了同一套参数**。
+   判据是**两者读出的值是否一致**, 而不是「新进程读出来了没有」。
+   `JAVA_TOOL_OPTIONS` 是例外 —— 它来自环境变量, `podman exec` 默认继承容器 env,
+   故 `-XX` 四项能被读到; 但 `-Xmx`/`-Xms` 来自镜像脚本的 `JAVA_OPT` 拼接, **不会**被继承。
+2. **同一批参数要分两处读, 交叉验证才成立**:
+   ```bash
+   # ① 来自环境变量的 -XX（JAVA_TOOL_OPTIONS）—— exec 能读到, 标记 {environment}
+   podman exec $C sh -c 'java -XX:+PrintFlagsFinal -version 2>&1 | grep MaxMetaspaceSize'
+   # ② 来自启动脚本的 -Xmx/-Xms —— 只能读 PID 1 自己的 cmdline
+   tr '\0' ' ' < /proc/$(podman inspect $C --format '{{.State.Pid}}')/cmdline
+   ```
+   本次两处都读、发现不一致, 才避免了上述误判。**只读一处就是两种错误之一。**
+
+> **与第五课补记五的关系**: 那一课说「标记从 `{default}` 变成 `{command line}`/`{environment}`
+> 才是生效」—— 这话本身没错, 但它**默认了你读的是同一个进程**。
+> 补记五遗漏的前提正是本节补上的。**一个探针的正确性, 依赖它是否在正确的对象上运行。**
+
+### ⚠️ 第九课补记一: 「唯一漏配的一项」比「配错了的项」更难发现（2026-10-05）
+
+查 nacos 内存配置时顺手发现它**没有**在 compose 里显式清空代理变量,
+于是从宿主 shell 继承了 `http_proxy=http://127.0.0.1:7890`。
+**我起初把它写成「9 个业务服务都清了, 唯独 nacos 漏了」——这个概括是错的**,
+下面三次修正都是这次误判逼出来的。
+
+#### 实测的三次修正
+
+| # | 我的初始判断 | 实测结果 | 错在哪 |
+| :--- | :--- | :--- | :--- |
+| 1 | 「只有 nacos 漏配」 | compose 23 个服务中 **12 个声明清空、11 个完全没写**; 没写的全是**基础设施**(postgres/redis/rabbitmq/es/nacos/minio/grafana/jaeger/skywalking×2/redisinsight) | 把**分类**当成了**疏漏** |
+| 2 | 「日志有 10 行代理相关内容」 | 实际是 `Bean ... is not eligible for ... all BeanPostProcessors` 的 WARN —— grep 的 `proxy` 匹配到的是 `PostProcessor` | **假证据**: 关键词命中 ≠ 内容相关 |
+| 3 | 「容器 env 里 `no_proxy` 含 `127.*`, 会豁免对 `127.0.0.1:7890` 的访问」 | **不成立**。同容器对照: 默认(走代理) `rc=7` 失败, 而 `--noproxy "*"` 直连 `code=200` | `curl` 的 `no_proxy` **不认** `127.*` 通配(只认 `127.0.0.1` 或 `.1`; `*` 只在位置参数 `--noproxy '*'` 有效) |
+
+第 3 条尤其值得记: 我是在**已经看到 `no_proxy` 里有 `127.*` 之后**才下的结论,
+「证据存在」与「证据支持结论」是两回事 —— 必须做**改变单一变量的对照**
+(`--noproxy "*"` vs 默认), 而不是读一眼配置就下判断。
+
+#### 真实故障范围
+
+```bash
+podman exec cloud-nacos curl -x http://127.0.0.1:7890 http://example.com   # → rc=7
+podman exec cloud-nacos curl --noproxy '*' http://127.0.0.1:8848/nacos/     # → code=200 (nacos 自身正常)
+ss -ltnp | grep 7890                                                        # → 宿主机无监听
+```
+
+即 nacos **自身正常**, 缺陷仅在「任何走 HTTP 客户端的外网请求会被导向不存在的代理」。
+已声明 `''` 的 gateway 实测 `HTTP_PROXY=`(空值)、`no_proxy=*`, 才是正确形态。
+
+#### 规则
+
+1. **「同类配置项在别处都有」是最强线索, 也最容易被跳过**。
+   检查某项配置要做**跨服务横向对比**(`yaml` 里谁有谁没有),
+   而不只是纵向看这一个服务写得对不对。
+   **但横向对比出「两群」时, 先问「这是设计分类还是疏漏」** ——
+   本次正是把「基础设施不需要外网 / 业务服务需要」当成了「nacos 漏配」。
+2. **grep 命中关键词 ≠ 内容相关**。判据要读**整行**,
+   尤其是匹配串是别的词的子串时(`proxy` ⊂ `PostProcessor`)。
+3. **判断「配了没有」要区分「compose 显式声明」与「容器里碰巧有」**。
+   前者可复现, 后者取决于**宿主机当时的环境** —— 换一台无代理变量的宿主机,
+   现象会消失并变成"偶发"。
+   本项目第六课补记二已记录过同源现象（rootless podman 从宿主补齐继承变量）。
+
+> **落地**: 门禁 `deploy/tests/check_resource_optimization.py` 第 7 项
+> 断言的是「**已声明代理变量的服务, 值必须为空串**」——
+> **不是**「每个服务都必须声明」。后者会把 11 个基础设施服务一次性全报红,
+> 噪声淹没真信号; 前者只对**真正的配置错误**判红。
+> 未声明的 11 个服务只作 `⚠️` 提示, 因为补齐它们需重建容器
+> （会中断 auth / file / gateway / notification / search / system
+> 六个业务服务对配置中心的访问）, 按约定**先问再动**。
+
 ### ⚠️ 黑名单 vs 白名单: 判据的"取反"往往才是正确的（2026-10-04）
 
 SkyWalking 的 ES 兼容性判据原本是**排除 9.x**:

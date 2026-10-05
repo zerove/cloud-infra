@@ -58,16 +58,25 @@ EXPECTED_TUNING = {
 #     /proc/1/cmdline 实测: -Xmx2g -Xms1g -Xmn512m
 #     JAVA_TOOL_OPTIONS: MaxMetaspace=256m CCS=128m CodeCache=128m Direct=128m
 #     GC 日志实测 Metaspace 驻留 104MB (远低于 256m 上限)
-#     最坏 = 堆满 2048 + 堆外四项全满 640 + file/kernel/pgtables 144
-#          = 2832 MB, 距 3g 上限仍余 240 MB
+#     最坏 = 堆满 2048 + 堆外四项全满 640 + (file+kernel_stack+pagetables=144)×1.2
+#          = 2048 + 640 + 173 = 2861 MB, 距 3g(3072) 上限仍余 211 MB
+#
+# ⚠️ 这段注释与下面的可执行逻辑必须一致, 否则就是"报错文案本身是探针的一部分"
+#    (第五课补记四)。我第一版注释写 2832/余240, 逻辑算 2861/余211,
+#    两者并存了整整一个提交 —— 判据与文案不一致时, 读注释的人会被带错方向。
 #
 # ⚠️ **我在这里犯过一次反向错误, 别重犯**:
 #     第一版算成"堆外余量仅 384MB < 四项上限 640MB ⇒ 不安全", 并据此
 #     一度想撤回 3g。错在**重复计数** —— 那四项本来就住在 anon 里,
 #     不是叠加在 anon 之上的新增部分。判据必须先分清
 #     "这个内存已经算过了吗", 再做加减(第五课补记: 先确认被检对象的真实范围)。
+#
+# ⚠️ 另一次同源错误: 报错文本里把堆算进了"堆外"(sum() 求和时 heap 还在 dict 里),
+#     报出"堆2048 + 堆外2688"。**报错的数字本身错了比不报错更糟**, 因为它
+#     语法正常、会被当成事实继续推理。现已改为先 pop 掉 heap 再求和,
+#     并加了数字自洽性检查(解析报错文本, 验算 堆+堆外+固定 == 总需)。
 EXPECTED_LIMITS = {
-    "nacos": ("3g", "最坏情形 2832MB 距 3g 仍余 240MB; 瞬时 peak 1739MB"),
+    "nacos": ("3g", "最坏情形 2861MB 距 3g 余 211MB; 瞬时 peak 1739MB"),
     "system": ("2g", "768m 有已证实的 Caffeine ClassLoader 死锁, 2g 是修复值"),
 }
 
@@ -307,6 +316,46 @@ def main():
                     f"nacos 最坏情形 {need_mb:.0f}MB ≤ {limit_mb:.0f}MB "
                     f"(余 {headroom:.0f}MB)  ✓"
                 )
+
+    # --- 7. 代理变量必须在**同类服务之间**保持一致 ---
+    #
+    # ⚠️ 判据是**横向对比**, 不是"每个服务都必须清空"。后者是错的:
+    #   实测 compose 23 个服务分两类 —— 12 个显式清空(gateway/auth/system/…,
+    #   值确为空串), 11 个**根本没写**(postgres/redis/nacos/es/minio/…),
+    #   于是从宿主 shell 继承到 http://127.0.0.1:7890。
+    #   若按"全部要清"判红, 会把 11 个服务一次性全报出来, 噪声淹没真信号。
+    #
+    # ⚠️ 更关键的实测修正: 我先前以为容器 env 里的 no_proxy(含 127.*)
+    #   会豁免对 127.0.0.1:7890 的代理访问 —— **不成立**。
+    #   同一容器内对照: 默认(走代理) rc=7 失败, 而 --noproxy "*" 直连 code=200。
+    #   curl 的 no_proxy 不认 "127.*" 这种通配(只认 127.0.0.1 或 .1;
+    #   "*" 仅在位置参数 --noproxy '*' 有效)。故继承来的代理是**真故障**,
+    #   不是无害噪声。检查项因此只对"已声明者"断言值非空。
+    PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+    declared_count = 0
+    dirty_declared = []
+    undeclared = []
+    for svc, cfg in services.items():
+        env = (cfg or {}).get("environment") or {}
+        if not any(k in env for k in PROXY_KEYS):
+            undeclared.append(svc)
+            continue
+        declared_count += 1
+        bad = [f"{k}={env[k]!r}" for k in PROXY_KEYS if env.get(k)]
+        if bad:
+            dirty_declared.append(f"{svc}({','.join(bad)})")
+    if dirty_declared:
+        failures.append(
+            f"{len(dirty_declared)} 个服务声明了代理变量但**值非空**, 会把请求导向代理: "
+            f"{'; '.join(sorted(dirty_declared))} ⇒ 改为 \"\""
+        )
+    else:
+        notes.append(f"已声明代理变量的 {declared_count} 个服务值均为空串  ✓")
+    if undeclared:
+        notes.append(
+            f"⚠️ {len(undeclared)} 个服务未声明代理变量, 将继承宿主环境: "
+            f"{', '.join(sorted(undeclared))}"
+        )
 
     for n in notes:
         print(f"  {n}")
