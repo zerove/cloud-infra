@@ -162,6 +162,43 @@ jobs:
         run: python3 deploy/tests/test_image_tag_expansion.py
         shell: bash
 
+      - name: Gate self-tests (deploy/tests/test_*)
+        # 2026-10-05 实测缺口: 21 个 deploy/tests 脚本里**只有 6 个**在 CI 里被调用,
+        # 其余 15 个从未执行 —— 包括守护"执行器注入二义"那个缺陷的
+        # test_executor_injection_qualifier.py。
+        #
+        # 这**直接解释了**一个长期 puzzled 现象: CI 反复以
+        #   "Parameter N of constructor ... required a single bean, but 2 were found"
+        # 报同一个根因（AGENTS.md 第五课补记二）, 每次只报一个类, 逐个修。
+        # 若那个守护在 CI 里跑过, 第一轮就会把**全仓**的注入点报出来。
+        #
+        # ⚠️ 本步骤**不放** check_*.py（判定门禁, 由 verify-e2e.sh 在运行期调）,
+        #   也不放 classify_gh_run.sh（需 gh 登录, 属诊断工具）。
+        #   这里跑的是 test_*.{sh,py} —— 守护的守护, 全部纯静态/桩数据, 不碰容器。
+        #
+        # ⚠️ 逐个写 run: 步骤的代价是**漏接**时完全无声 —— 那正是本次缺口的成因。
+        #   故改为"聚合执行 + 清单由 test_gate_wiring.py 反查", 后者会因漏接而报红。
+        run: |
+          set -euo pipefail
+          for t in deploy/tests/test_*.sh deploy/tests/test_*.py; do
+            echo "::group::$(basename "$t")"
+            case "$t" in
+              *.sh) bash "$t" ;;
+              *.py) python3 "$t" ;;
+            esac
+            echo "::endgroup::"
+          done
+        shell: bash
+
+      - name: Guard gate wiring (no unreferenced gate scripts)
+        # 守护上面那个聚合步骤: 若将来新增 test_* 而忘了纳入, 或反过来
+        # 脚本存在却无人调用, 都在这里报红。
+        #
+        # 判据方向用**白名单**: 「正确的一侧可枚举」。反过来用黑名单
+        # （排除已知的几个）无法枚举"未知的漏接"（AGENTS.md 黑名单 vs 白名单）。
+        run: python3 deploy/tests/test_gate_wiring.py
+        shell: bash
+
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
