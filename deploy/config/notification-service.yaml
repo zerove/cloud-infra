@@ -38,6 +38,18 @@ spring:
       idle-timeout: 30000
       max-lifetime: 600000
       connection-timeout: 30000
+  # 本服务的 schema.sql 此前从未被执行 —— 全仓只有 system-module 配了 Flyway,
+  # 而 src/main/resources/schema.sql 里的 7 张表(含 sys_notification_schedule)
+  # 无人引用。后果: @Scheduled 定时扫描每轮抛
+  # `relation "sys_notification_schedule" does not exist`(实测 39 次),
+  # 定时调度功能实际不可用, 但容器 healthcheck 仍报 healthy。
+  #
+  # 该文件全部为 `CREATE TABLE IF NOT EXISTS`, 且无 DROP/TRUNCATE/ALTER
+  # (已实测 0 处), 故 mode: always 可安全重复执行, 不会破坏既有数据。
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
   threads:
     virtual:
       enabled: true

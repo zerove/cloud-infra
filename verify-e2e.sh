@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -787,6 +787,22 @@ check_resource_optimization() {
   return 0
 }
 
+# 判定各服务的 schema.sql **真的会被执行**, 而不是"文件存在但无人引用"。
+# 2026-10-06 实测: notification-service 与 file-service 的 schema.sql 从未执行,
+# 前者导致 @Scheduled 定时扫描每轮抛 `relation ... does not exist`(实测 39 次),
+# 后者 4 张表全缺但容器 healthcheck 仍报 healthy —— 第三课同型, 在 DDL 层重演。
+check_schema_init_wiring() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_init_wiring.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "存在 schema.sql 从未被执行的服务（详见上方具体项）"
+    return 1
+  fi
+  ok "各服务 schema.sql 均有执行机制"
+  return 0
+}
+
 # 判定 compose 里的 JVM 参数键**确实是镜像启动脚本会读的**。
 # 静态解析 compose 的守护无法发现"配置写在没人读的键上"(第三课在守护层的重演)。
 #
@@ -815,6 +831,14 @@ echo
 
 echo "[前置] 检查资源优化项未被回退 ..."
 check_resource_optimization || true
+echo
+
+# ---- schema.sql 执行机制 (2026-10-06 接线) ------------------------------
+# 位置放在资源门禁之后、业务服务启动之前: 它是纯静态检查, 不依赖运行中的容器,
+# 但必须在服务起来之前判红 —— 否则缺表会被 healthcheck 掩盖(实测 file-service
+# 4 张表全缺, 容器仍是 healthy)。
+echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
+check_schema_init_wiring || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------
