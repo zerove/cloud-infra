@@ -1085,22 +1085,95 @@ rc=0
 > **绝不能把"全都失败"当作"这个变量无影响"** —— 前者要查装置, 后者才是结论。
 > 判别方法: 档位间应有**梯度**；完全无梯度时, 先怀疑装置。
 
-### ⚠️ 第八课补记四: 单测跑不起来时, 变量是**同时存活的 JVM 数量**, 不是任何单个 JVM 的参数（2026-10-05）
+### ⚠️ 第八课补记四: 单测 ENOMEM 的**根因是宿主机 overcommit 模式**, 不是 JVM 参数也不是模块数量（2026-10-05）
 
 `mvn test` 在本机稳定崩在 `commit_memory ... Not enough space (errno=12)`。
-三轮假设与受控对照:
+我曾把根因写成"同时存活的 JVM 数量", **该结论是错的** —— 它只是掩盖了真实机制。
+下面是完整的否证链, 保留是因为它记录了**如何一步步走到正确结论**。
 
 | 假设 | 受控对照 | 结论 |
 | :--- | :--- | :--- |
 | `-Xmx` 太大 | `-Xmx256m` 仍崩 | ✗ 否证 |
 | `MaxMetaspaceSize` 无上限（`pom.xml` 的 `argLine` 里确实没有） | `-DargLine` 加 `-XX:MaxMetaspaceSize=192m` 后**仍崩**, ENOMEM 3 次 | ✗ **否证** |
 | 某模块本身有问题 | `codegen-core` / `common` / `api -am` **单独跑全绿**, 零 ENOMEM | ✗ 否证 |
+| 同时存活的 JVM 数量（累积效应） | 逐模块串行 24/24 通过 —— 但这只说明**降低峰值可绕过**, 未触及根因 | ✗ **降级为"绕过手段"** |
 
-真正的变量是**累积**: 崩溃点稳定落在第 8~10 个模块（`[10/23] cloud-infra-api` 附近），
-而任何 ≤3 个模块的组合都通过。
+#### 真正的根因: `vm.overcommit_memory = 2`（严格模式）
 
-**正解是逐模块串行**（`for m in $(find . -name pom.xml); do mvn -o -pl "$m" test; sleep 3; done`）——
-每模块结束即释放 JVM, 峰值只承载 1~2 个。
+宿主机配置（`/etc/sysctl.d/99-watermark.conf`）同时写着:
+
+```conf
+vm.overcommit_memory = 2      # 不允许超发
+vm.overcommit_ratio  = 80
+vm.min_free_kbytes   = 131072 # 注释写的是「让内核更早、更平滑地回收内存」
+```
+
+**第 3 条的注释写的是目标, 第 1 行选的机制与目标相反**:
+
+| mode | 超过 `CommitLimit` 时的行为 | 符合「平滑回收」吗 |
+| :--- | :--- | :--- |
+| `0` 启发式（**Linux 默认**） | 先回收内存、必要时换出, 仍不足才拒绝 | ✅ 正是第 3 行的目标 |
+| `1` 完全允许 | 任意超发, 靠 OOM Killer 兜底 | ❌ |
+| **`2` 严格（本机原值）** | **立即返回 `ENOMEM`, 内核不尝试回收** | ❌ |
+
+#### 受控对照（唯一变量 = `vm.overcommit_memory`）
+
+| 配置 | 命令 | 结果 |
+| :--- | :--- | :--- |
+| `mode=0` | `mvn -o -T1 clean test` | **BUILD SUCCESS**, 23/23 模块, **4m36s**, 505 项测试, 0 ENOMEM |
+| `mode=2` | **完全相同的命令** | **BUILD FAILURE**, 2m14s, 59 个 ERROR, `os::commit_memory ... errno=12`, 崩溃于 `[20/23] system-module` |
+
+反向对照是必需的 —— 只跑 `mode=0` 成功无法排除"本来就不崩"。
+
+> ⚠️ **我曾两次在日志未写完时就下结论, 均被自己纠正**:
+> 1. 看到 ENOMEM 出现就跳出等待循环, 读到的 "ERROR 0 行 / 耗时空" 是**日志未写完**;
+>    等进程真正退出后重读, 实际是 59 ERROR / 2m14s。⇒ **判据必须确认被测进程已终止**。
+> 2. 把 AGENTS.md 里历史记录的 `errno=12` 当成本轮 `mode=2` 实测数据引用。
+>    本轮实测该现象**并不立即出现** —— `mode=2` 下 256MB mmap 也成功。
+>    ⇒ **mmap 成败是 commit 余量的函数, 不是 mode 的固有特征**; 余量充足时两种 mode 都不失败。
+
+#### 落地配置（已生效, 跨重启稳定）
+
+`/etc/sysctl.d/99-watermark.conf` 改为 `vm.overcommit_memory = 0`, 并附上本次对照数据。
+验证走 systemd 真实加载路径: `systemctl restart systemd-sysctl` 后
+`overcommit_memory=0` / `overcommit_ratio=80` / `min_free_kbytes=131072`, 20 个容器全部健康, 0 次 OOM。
+
+#### ⚠️ 遗留隐患: 同一参数存在**三个来源**, 当前只靠字典序取胜
+
+```conf
+/etc/sysctl.conf              :11  vm.overcommit_memory = 2   ← 不被 systemd 加载
+/etc/sysctl.d/99-sysctl.conf  :11  vm.overcommit_memory = 2   ← 较早晨, 被覆盖
+/etc/sysctl.d/99-watermark.conf:15 vm.overcommit_memory = 0   ← 字典序最后, 实际生效
+```
+
+已实测确认加载规则（**不是靠读文档推断**）:
+
+| 对照 | 操作 | 结果 |
+| :--- | :--- | :--- |
+| 正向 | `sysctl -p 99-sysctl.conf` | 内核值 → `2` |
+| 反向 | 紧接着 `sysctl -p 99-watermark.conf` | 内核值 → `0` |
+| 同规则换源 | 把 `/etc/sysctl.conf` 改成 `37`, 重启 `systemd-sysctl` | 内核值仍是 `80` ⇒ **该文件不被加载** |
+
+⇒ `0` 能生效**只是因为它的文件名字典序最大**。若有人新增一个字典序更后的
+`sysctl.d/*.conf`, 或调整排序, 会静默回到 `2`, 而一切测试结果照常"正常"。
+**收敛双源需要改 `/etc/sysctl.d/99-sysctl.conf` 与 `/etc/sysctl.conf`, 属系统级变更, 尚未执行。**
+
+#### 这条为什么值得单独记
+
+| 表象 | 指向 | 实际 |
+| :--- | :--- | :--- |
+| 崩溃点在第 8~10 或第 20 个模块 | 某模块有问题 | 与模块无关; 换 `mode` 后同一模块通过 |
+| 逐模块串行能过 | 是"数量"问题 | 只是把峰值压到上限以下, 根因未动 |
+| `MemAvailable` 仍有 10 GB 却 ENOMEM | 内存够 | 两本账背离, 原因是**全局 commit 配额** |
+
+**通用规则**: 遇到"资源明明够却报 `ENOMEM`", 先看**全局配额**(`vm.overcommit_*`、cgroup、ulimit)
+再看物理内存; 找到配额来源后, **先确认它的加载顺序与覆盖关系**——
+本例中同一参数有 3 个来源, 只改其中一个能生效纯属文件名巧合。
+
+> **逐模块串行仍是有效手段**（37 分钟 vs 4m36s, 且不依赖宿主机配置）,
+> 但它现在是**绕过手段**, 不再是"正解"。全量 `mvn test` 现在一次跑通。
+
+**逐模块串行（保留, 作为不依赖宿主机配置的兜底）**
 
 **实测结果（2026-10-05）**: 24 个模块 **23 PASS + 1 FAIL, 零 ENOMEM**。
 那 1 个 FAIL **不是测试失败** —— `cloud-infra-modules/demo-service` 不在根 `pom.xml` 的
