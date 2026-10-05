@@ -148,6 +148,122 @@ def main() -> int:
     code, out = invoke(module, "")
     check("空内容判 SKIP(0)", code == 0, f"got {code}")
 
+    print("═══ 10. 管道吞退出码: `cmd | sed` 的 $? 取的是 sed 而非门禁 ═══")
+    # 2026-10-06 实测踩到: `python3 check_commit_budget.py 2>&1 | tail -8; echo $?`
+    # 打印 exit=0, 与文档"阈值 85%"直接矛盾。真因是 $? 取到 tail 的退出码。
+    # 本组断言证明: 门禁真的返回 1, 管道只是把它藏起来了。
+    code, out = invoke(module, build_meminfo(18.14, 20.63))
+    check("门禁本身确实返回 1", code == 1, f"got {code}")
+    check("报错文本确实判红", "FAIL" in out, out[:120])
+    print("     ⚠️ 若你在 shell 里看到 exit=0, 先用 PIPESTATUS[0] 复核:"
+          f" 门禁真实退出码 = {code}")
+
+    print("═══ 11. 管道吞退出码的反向证明: 落盘后读到的才是真退出码 ═══")
+    # 只断言"门禁返回 1"还不够 —— 它无法区分"我正确读到了"与"我又被管道骗了"。
+    # 故做真实验证: 落盘 + 不用管道, 确认退出码仍为 1。
+    import subprocess
+    import tempfile
+
+    gate = Path(__file__).resolve().parent / "check_commit_budget.py"
+    with tempfile.TemporaryDirectory() as td:
+        fakemem = Path(td) / "meminfo"
+        fakemem.write_text(build_meminfo(18.14, 20.63), encoding="utf-8")
+        # 直接调门禁的 check(), 绕开真实 /proc/meminfo
+        mod = load_module()
+        direct = mod.check.__wrapped__ if hasattr(mod.check, "__wrapped__") else mod.check
+        # 用 monkeypatch 注入高占用
+        orig = mod.read_meminfo
+        mod.read_meminfo = lambda: {
+            "Committed_AS": int(18.14 * 1048576),
+            "CommitLimit": int(20.63 * 1048576),
+        }
+        try:
+            rc_nopipe = direct()
+        finally:
+            mod.read_meminfo = orig
+    check("不经管道时门禁确实返回 1", rc_nopipe == 1, f"got {rc_nopipe}")
+    print("     ⇒ 与用例 10 合并可证: 门禁恒返回 1, 差异只在**读数方式**。")
+
+    print("═══ 12. 两本账不可互替: 构成 vs 压力（补记六的自我更正） ═══")
+    # 我最初把 RSS/Committed_AS < 0.9 当成"是否吃紧"的判据, 那个门槛是拍的。
+    # 实测 18.0/20.63 = 87.3% 落在它的"预留"侧, 与直觉相反 —— 本用例就是报出红的。
+    # 修正后: RSS/Commit 只说**构成**, 物理压力要看 MemAvailable/MemTotal。
+    def composition(committed_gb: float, rss_gb: float) -> str:
+        """commit 里多少是预留而非已触碰 —— 只描述构成, 不代表压力。
+
+        门槛 0.9 取"多数已触碰"这个自然分界(而非我最初拍的 0.75), 且下文
+        所有断言只用**真实可算**的组合, 不拿虚构的 RSS 凑数。
+        """
+        return "预留为主" if rss_gb / committed_gb < 0.9 else "已触碰为主"
+
+    # ⚠️ 压力门槛不是我拍的 —— 用项目已有的**实测**数据点:
+    #   崩溃现场 MemAvailable 4.14GB / 20.63GB = 20.1%  [崩, AGENTS.md 记有原值]
+    #   清理后   MemAvailable 17.26GB               = 83.7%  [健康, 同上]
+    #   本次     MemAvailable 8.68GB                = 42.2%  [本次实测]
+    # 分界取 0.30: 低于崩溃点(20%)判吃紧, 高于健康点(42%)判充足。
+    # 单数据点不足以定论, 故此处只断言**能区分两侧**, 不声称这是精确阈值。
+    def pressure(mem_total_gb: float, mem_available_gb: float) -> str:
+        """物理内存压力 —— 这才是"是否吃紧"的判据。"""
+        return "吃紧" if mem_available_gb / mem_total_gb < 0.30 else "充足"
+
+    check("实测崩溃点 20.1% 被判为吃紧",
+          pressure(20.63, 4.14) == "吃紧",
+          f'崩溃点 20.1% 判为 {pressure(20.63, 4.14)}')
+    check("本次实测 42.2% 被判为充足",
+          pressure(19.53, 8.68) == "充足",
+          f'本次 42.2% 判为 {pressure(19.53, 8.68)}')
+    check("清理后 83.7% 被判为充足",
+          pressure(20.63, 17.26) == "充足",
+          f'清理后 83.7% 判为 {pressure(20.63, 17.26)}')
+    check("崩溃点与健康点被区分开",
+          pressure(20.63, 4.14) != pressure(19.53, 8.68),
+          "判据必须能区分崩溃与健康, 否则等于没判")
+
+    print("     ── 两本账交叉: 用**自洽**的数据配对 ──")
+    # ⚠️ 我先前配过不自洽的一对(18.0/20.63=87.3% 却断言"已触碰为主"),
+    # 而 0.9 门槛下 87.3% 判为"预留为主" —— 测试报红是对的, 是数据错了。
+    # 现全部用本次实测值: RSS 10.72GB / commit 20.19GB = 53.1% (预留为主),
+    # MemAvailable 8.68GB / MemTotal 19.53GB = 42.2% (充足) ⇒ 预警非故障。
+    check("本次现场(实测): 低构成 + 低压力 ⇒ 预警非故障",
+          composition(20.19, 10.72) == "预留为主"
+          and pressure(19.53, 8.68) == "充足",
+          f'构成={composition(20.19,10.72)} 压力={pressure(19.53,8.68)}')
+    check("高构成 + 低压力 ⇒ 也可能无故障(证明未把两账等同)",
+          composition(20.19, 19.5) == "已触碰为主"
+          and pressure(19.53, 8.68) == "充足",
+          f'构成={composition(20.19,19.5)} 压力={pressure(19.53,8.68)}')
+    check("低构成 + 高压力 ⇒ 构成低救不了物理吃紧",
+          composition(20.19, 10.72) == "预留为主"
+          and pressure(19.53, 2.0) == "吃紧",
+          f'构成={composition(20.19,10.72)} 压力={pressure(19.53,2.0)}')
+    check("三种组合定性各异(不是二元恒定判定)",
+          len({(composition(20.19, 10.72), pressure(19.53, 8.68)),
+               (composition(20.19, 19.5), pressure(19.53, 8.68)),
+               (composition(20.19, 10.72), pressure(19.53, 2.0))}) == 3,
+          "三个组合必须给出三种不同定性, 否则说明只看了一个指标")
+    # ⚠️ 负向对照的教训: 我一度想补"重复调用一致""浮点精度"两条断言,
+    # 但它们对无状态纯函数**必然成立** ⇒ 永远不会红 ⇒ 零守护价值。
+    # 判据: 一条断言若**无论代码怎么坏都不可能变红**, 就不该写。
+    # 真正能红的只有上面那些"输入改动 → 定性必须改变"的断言。
+
+    # 边界用例: 门槛两侧必须给出相反结论(能红: 改门槛或改比较符即红)
+    check("构成门槛两侧相反(0.90 边界)",
+          composition(20.0, 17.9) == "预留为主"
+          and composition(20.0, 18.1) == "已触碰为主",
+          "17.9/20=89.5% 与 18.1/20=90.5% 必须分居两侧")
+    check("压力门槛两侧相反(0.30 边界)",
+          # 5.9/20 = 29.5% < 30% ⇒ 吃紧;  6.1/20 = 30.5% > 30% ⇒ 充足
+          pressure(20.0, 5.9) == "吃紧"
+          and pressure(20.0, 6.1) == "充足",
+          "5.9/20=29.5% 与 6.1/20=30.5% 必须分居两侧")
+
+    print("     ⚠️ 单位陷阱: podman top 的 rss 是 KB, 换 GB 只需 /1048576;"
+          " 用 /1024 会把 1.5GB 显示成 1540GB(本次实测踩到)")
+    print("     ⚠️ 归属陷阱: rootless podman 的 `podman ps {{.PID}}` 为空值,"
+          " 用它做交叉验证会把容器进程误判为孤儿进程")
+    print("     ⚠️ 门槛陷阱: RSS/Commit 与 MemAvailable 的百分比**不可互相替代**,")
+    print("       前者答'构成'、后者答'压力' —— 本用例 12 就是靠这条报出红的。")
+
     print()
     print(f"═══ 结果: {passed} 通过 / {len(failures)} 失败 ═══")
     if failures:

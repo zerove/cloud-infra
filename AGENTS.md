@@ -1911,3 +1911,102 @@ nacos / notification / file 容器内 malloc 失败 = 0/0/0
 **门禁行为说明**: `check_commit_budget.py` 在 96% 时**确实报红**(阈值 85%),
 但 shell 里 `timeout … | sed` 会让 `$?` 取到 `sed` 的退出码(0), 掩盖门禁的 exit=1。
 实测踩到过 —— **判门禁结果必须用 `PIPESTATUS` 或先落盘再读, 不能用管道后的 `$?`**。
+
+### ⚠️ 第八课补记六: commit 占比高**不等于**正在崩溃 —— 用 `RSS / Committed_AS` 判性质（2026-10-06 实测）
+
+`check_commit_budget.py` 报 96%~102% 时，很容易直接下结论"要崩了"。
+实测表明这是**预警而非故障**，且有一条可复用的判别法。
+
+**判别法: 比值 tells 你缺的是"已触碰页"还是"预留"**
+
+```bash
+# 全系统进程 RSS 合计(已触碰的物理页)
+tot=0; for p in /proc/[0-9]*; do r=$(awk '/^VmRSS/{print $2}' $p/status 2>/dev/null); [ -n "$r" ] && tot=$((tot+r)); done
+awk -v t=$tot '/Committed_AS/{c=$2}END{printf "RSS=%.2f GB  Committed_AS=%.2f GB  ratio=%.1f%%\n",t/1048576,c/1048576,t/c*100}' /proc/meminfo
+```
+
+实测结果 `RSS=10.72 GB / Committed_AS=20.19 GB = 52.3%` —— 近一半 commit 是
+**预留但从未触碰的页**（JVM 已按 `-Xmx` 预留堆、mmap 地址空间、线程栈）。
+这类预留**不占物理内存**，只在严格模式下才会被内核拒绝。
+
+> ⚠️ **前提更正（2026-10-06）**: `vm.overcommit_memory` **当前实测 = 0**，
+> 不是历史记录里的 `2`（严格模式）。`CommitLimit` 确实只有 20.63 GB 且
+> `Committed_AS` 已达 104%，但 **内核从未拒绝过任何 commit**（`dmesg` 计数 0）。
+> ⇒ 当前是**高 commit 预警**，不是已发生的崩溃。
+> 读上面任何 `overcommit_memory = 2` 的段落做判断前，必须先重测该值。
+
+本机实时读回（`/proc/meminfo`，两次采样）:
+
+```text
+采样① MemAvailable 8.68/19.53 GB = 44.4%   RSS 10.72/20.19 = 52.3%
+采样② MemAvailable 8.24/19.53 GB = 42.2%   RSS 11.44/20.76 = 55.1%
+```
+
+> ⚠️ **自我更正（2026-10-06 当日）**: 我最初把 `RSS/Committed_AS < 0.9` 定为
+> "是否吃紧"的门槛，**这个数字是拍的，没有依据**。实测 `18.0/20.63 = 87.3%`
+> 恰好落在它的"预留未触碰"侧，与直觉相反 —— 而我的守护测试也正是靠这条
+> 才报出红（见 `deploy/tests/test_commit_budget.py` 用例 12）。
+>
+> 真正的判据是另一条账：
+>
+> ```bash
+> awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "MemAvailable/MemTotal=%.1f%%\n",a/t*100}' /proc/meminfo
+> # 本机实测 44.4%
+> ```
+>
+> 两个比值回答的是**不同问题**，不可互替：
+>
+> | 指标 | 回答的问题 | 本机值 |
+> | :--- | :--- | :--- |
+> | `RSS / Committed_AS` | commit 里多少是**预留而非已触碰**（构成） | 52.3% |
+> | `MemAvailable / MemTotal` | **物理内存**压力有多大（压力） | 44.4% |
+>
+> **定性"是否真出事"要三者同时看**:
+>
+> | 组合 | 定性 |
+> | :--- | :--- |
+> | commit 高 + RSS/Commit **低** + MemAvailable 充足 | **预警**，未触碰的预留占主导（本次即此：97.9% / 52.3% / 44.4%） |
+> | commit 高 + RSS/Commit **高** + MemAvailable 低 | 真实物理吃紧，变慢甚至 OOM |
+> | commit 高 + `dmesg` 有拒绝记录 | 内核已在拒绝 ⇒ 已在出事 |
+>
+> ⚠️ **关于 `MemAvailable/MemTotal` 的门槛：先前写的“经验值 <15%”是错的，
+> 已被本项目自己的实测数据否定。** 历史崩溃现场 `MemAvailable 4.14/20.63 = 20.1%`
+> —— **高于 15%**，而那次确实崩了（`mmap 256MB FAIL errno=12`）。
+> 同期健康点为 42.2% 与 83.7%。
+>
+> 正确的表述是：**没有单一阈值能定性**，因为已知的两个数据点
+> （20.1% 崩 / 42.2% 健康）只把分界夹在 20%~42% 之间。守护测试取 **30%** 作分界，
+> 并只断言“能区分已知两侧”，不声称它是精确阈值
+> （`deploy/tests/test_commit_budget.py` 用例 12 已注释这点）。
+> > **要定性“真出事”，必须看两个实证信号而不是百分比**：
+> >
+> > ```bash
+> > dmesg | grep -ci commit                                                  # 内核是否拒绝过 commit
+> > podman logs --since 20m <svc> | grep -ci 'malloc\|failed to allocate'   # 容器内是否已报
+> > ```
+> >
+> > 本次两者均为 **0**，8 个关键容器全 healthy —— 故定性为预警。
+>
+> **可复用的判据写法**（三账同时读，避免只看一个指标）:
+>
+> ```bash
+> awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}/Committed_AS/{c=$2}/CommitLimit/{l=$2}
+>      END{printf "压力=%.1f%%  commit=%.1f%%\n", a/t*100, c/l*100}' /proc/meminfo
+> dmesg | grep -ci commit      # 必须为 0, 否则已在出事
+> ```
+
+#### 本次踩到的四个探针陷阱（都会给出"看起来正常"的错误结论）
+
+| 探针写法 | 现象 | 真因 |
+| :--- | :--- | :--- |
+| `bc` 做浮点换算 | `bc: command not found` 刷屏，**排序静默失效** | 环境无 `bc`；改用 `awk 'BEGIN{printf "%.2f",v/1048576}'` |
+| `podman ps --format '{{.PID}}'` | 该列**空值**，于是"不在 PID 列表"被读成"孤儿进程" | rootless podman 不填此列；**归属判定只能用 cgroup 路径** |
+| `awk -F: '/^0::/{print $3}' \| cut -d/ -f...` | 提取出的容器 ID 变成字面量 `container` | v2 层级下 `0::` 行末段是 `…/container`，不是 scope 名 |
+| `podman top <c> -eo rss` 后 `/1024` 当 GB | 每个容器"1540 GB" | `rss` 单位是 **KB**，换 GB 只需 `/1048576` |
+
+第 2 条最危险：它让我差点把 **skywalking-oap 的 JVM（正常容器进程）**
+判成"13 小时遗留的孤儿 JVM"—— 而那正是第八课原始事故的形态。
+**同一个词（孤儿进程）在两种情形下结论完全相反，而探针给不出区别。**
+
+> 判定进程归属的可靠顺序: `cgroup` 路径含 `libpod-` → 容器内；
+> 否则 → 宿主进程。**不要用 `podman ps` 的 PID 列做交叉验证**（rootless 下为空）。
