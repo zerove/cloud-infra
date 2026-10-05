@@ -85,6 +85,16 @@ def run_block(block: str, port: int, configs: list[str]) -> subprocess.Completed
 
         script = f"""#!/bin/bash
 set -u
+# ⚠️ 必须清空代理变量(2026-10-05 实测)。本脚本访问的是 127.0.0.1 的临时
+#   端口, 而宿主常设 http_proxy=http://127.0.0.1:7890 —— curl 会把回环
+#   请求也交给代理, 于是本地临时服务收到 502 Bad Gateway。
+#   实测对照: 带代理 exit=1 (502), env -u http_proxy 后 exit=0 (4 场景全过)。
+#   即这是**测试自身缺隔离**, 与被测的 readback 块无关。
+#   ⚠️ 宿主 no_proxy 常见写法 "127.*" 对 curl 无效(它只认 127.0.0.1 或 .1),
+#   不能依赖 no_proxy, 必须显式清空。
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
+export no_proxy='*' NO_PROXY='*'
+
 NACOS_URL="http://127.0.0.1:{port}/nacos"
 CONFIG_DIR="{cfgdir}"
 
@@ -168,7 +178,18 @@ def main() -> int:
     # 这里单独确认桩本身确实返回 200:
     import urllib.request
 
-    with urllib.request.urlopen(
+    # ⚠️ 必须用显式 ProxyHandler({}) 关闭代理(2026-10-05 实测)。
+    #   裸 urlopen 会走 urllib 的**全局默认 opener**, 它读环境里的
+    #   http_proxy —— 而本测试访问 127.0.0.1 的临时端口, 于是回环请求
+    #   也被交给代理, 直接 502 Bad Gateway。
+    #
+    #   ⚠️ 我第一版修错了位置: 只在生成的 bash 子脚本里 unset 代理变量,
+    #      而 502 实际来自**本行**的 Python 父进程请求 ⇒ 修复完全无效
+    #      (实测带代理仍 exit=1)。判据必须指向 traceback 指出的真实请求点。
+    #   ⚠️ 也不能依赖 no_proxy="127.*": curl/urllib 只认 127.0.0.1 或 .1。
+    _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    with _opener.open(
         f"http://127.0.0.1:{port}/nacos/v3/client/cs/config?dataId=nope.yaml"
         f"&groupName=DEFAULT_GROUP&namespaceId=public"
     ) as resp:
