@@ -50,11 +50,58 @@ EXPECTED_TUNING = {
     "random_page_cost": "1.1",
 }
 
-# 服务名 -> (mem_limit 字符串, 实测依据)
+# 服务名 -> (mem_limit 字符串, 判定依据)
+#
+# ⚠️ nacos 3g 的依据是**最坏情形推算**, 不是瞬时读数。推算过程:
+#     memory.stat 实测: anon=1573MB(已含堆+Metaspace+CodeCache+Direct)
+#                       file=129MB kernel_stack=10MB pagetables=5MB
+#     /proc/1/cmdline 实测: -Xmx2g -Xms1g -Xmn512m
+#     JAVA_TOOL_OPTIONS: MaxMetaspace=256m CCS=128m CodeCache=128m Direct=128m
+#     GC 日志实测 Metaspace 驻留 104MB (远低于 256m 上限)
+#     最坏 = 堆满 2048 + 堆外四项全满 640 + file/kernel/pgtables 144
+#          = 2832 MB, 距 3g 上限仍余 240 MB
+#
+# ⚠️ **我在这里犯过一次反向错误, 别重犯**:
+#     第一版算成"堆外余量仅 384MB < 四项上限 640MB ⇒ 不安全", 并据此
+#     一度想撤回 3g。错在**重复计数** —— 那四项本来就住在 anon 里,
+#     不是叠加在 anon 之上的新增部分。判据必须先分清
+#     "这个内存已经算过了吗", 再做加减(第五课补记: 先确认被检对象的真实范围)。
 EXPECTED_LIMITS = {
-    "nacos": ("3g", "实测 JVM RSS 1570MB; 堆下界 1g 由 Derby 建库超时钉住"),
+    "nacos": ("3g", "最坏情形 2832MB 距 3g 仍余 240MB; 瞬时 peak 1739MB"),
     "system": ("2g", "768m 有已证实的 Caffeine ClassLoader 死锁, 2g 是修复值"),
 }
+
+# ⚠️ 上面 nacos 的依据必须能被**重算**, 否则注释会腐烂成谎言。
+#   这里把最坏情形的算式显式写下来: 若有人调大 -Xmx 或某个 -XX 上限,
+#   而 mem_limit 没跟着调, 这个断言会报红。
+#
+#   注意 anon 已在 memory.stat 里**包含**堆与四项堆外空间,
+#   但"最坏情形"是问**上限能到多少**, 不是当前占多少 ——
+#   两者是不同的问题: 前者决定 mem_limit 够不够, 后者只说明当下闲不闲。
+NACOS_WORST_CASE_MB = {
+    "heap": 2048,          # -Xmx2g
+    "metaspace": 256,      # -XX:MaxMetaspaceSize=256m
+    "ccs": 128,            # -XX:CompressedClassSpaceSize=128m
+    "code_cache": 128,     # -XX:ReservedCodeCacheSize=128m
+    "direct": 128,         # -XX:MaxDirectMemorySize=128m
+    # 以下三项来自 memory.stat 实测的**当前**值; 它们不随 JVM 参数增长,
+    # 但保留 20% 余量以吸收 mapped 文件的自然增长。
+    "fixed": 144,          # file 129 + kernel_stack 10 + pagetables 5
+}
+NACOS_MARGIN_RATIO = 1.2  # fixed 部分留 20% 余量
+
+
+def parse_size_mb(text):
+    """'3g' / '512m' -> MiB 数值。无法解析时返回 None（由调用方判红）。"""
+    if not isinstance(text, str):
+        return None
+    t = text.strip().lower()
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([kmg])", t)
+    if not m:
+        return None
+    num, unit = float(m.group(1)), m.group(2)
+    scale = {"k": 1 / 1024, "m": 1, "g": 1024}[unit]
+    return num * scale
 
 
 def parse_tuning(path):
@@ -215,6 +262,51 @@ def main():
             failures.append(f"{svc} mem_limit = {got}，期望 {want}（{why}）")
         else:
             notes.append(f"{svc} mem_limit = {got}  ✓")
+
+    # --- 6. nacos: mem_limit 必须能容下 JVM 的最坏情形 ---
+    #
+    # ⚠️ 这一项守护的是**两个配置之间的一致性**, 不是单个值:
+    #   有人调大 JVM_XMX 却忘了调 mem_limit, 容器就会被 cgroup OOM-kill,
+    #   而现象是"Nacos 莫名启动失败", 排查时极难联想到内存上限。
+    nacos_cfg = services.get("nacos") or {}
+    nacos_env = nacos_cfg.get("environment") or {}
+    xmx = parse_size_mb(nacos_env.get("JVM_XMX"))
+    xms = parse_size_mb(nacos_env.get("JVM_XMS"))
+    if xmx is None:
+        failures.append(
+            "nacos 缺少可解析的 JVM_XMX —— 无法校验 mem_limit 是否够用"
+        )
+    else:
+        limit_mb = parse_size_mb(nacos_cfg.get("mem_limit"))
+        if limit_mb is None:
+            failures.append("nacos mem_limit 无法解析为内存大小")
+        else:
+            worst = dict(NACOS_WORST_CASE_MB)
+            # 堆上限以 compose 的 JVM_XMX 为准, 不写死 ——
+            # 否则调大 XMX 时这个断言会拿旧值算, 变成又处假绿。
+            worst["heap"] = xmx
+            fixed_mb = worst.pop("fixed") * NACOS_MARGIN_RATIO
+            # ⚠️ 必须**先把 heap 弹掉**再求和, 否则堆会被算进"堆外"。
+            #   我第一版写成 sum(worst.values()) 而 heap 还在 dict 里,
+            #   报出"堆2048 + 堆外2688"(=2048+640) 这种重复计数的数字,
+            #   连正向都判红。报错的数字本身错了, 比不报错更糟。
+            heap_mb = worst.pop("heap")
+            nonheap_mb = sum(worst.values())
+            need_mb = heap_mb + nonheap_mb + fixed_mb
+            headroom = limit_mb - need_mb
+            if xms is not None and xms > xmx:
+                failures.append(f"nacos JVM_XMS({xms:.0f}MB) > JVM_XMX({xmx:.0f}MB)")
+            if headroom < 0:
+                failures.append(
+                    f"nacos mem_limit {nacos_cfg.get('mem_limit')} 装不下 JVM 最坏情形: "
+                    f"需 {need_mb:.0f}MB = 堆{heap_mb:.0f} + 堆外上限{nonheap_mb:.0f} "
+                    f"+ 固定{fixed_mb:.0f}, 超出 {-headroom:.0f}MB ⇒ 会被 cgroup OOM-kill"
+                )
+            else:
+                notes.append(
+                    f"nacos 最坏情形 {need_mb:.0f}MB ≤ {limit_mb:.0f}MB "
+                    f"(余 {headroom:.0f}MB)  ✓"
+                )
 
     for n in notes:
         print(f"  {n}")
