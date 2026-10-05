@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -765,6 +765,27 @@ check_jvm_native_bounds() {
   return 0
 }
 
+# ---- 文档判据脚本可执行性 (静态, 不需容器运行) ----------------------------
+#
+# ⚠️ 为什么需要这个门禁: AGENTS.md 第八课补记六把"两本账"写成了可直接
+# 复制的 shell 片段, 并用它得出"预警非故障"的定性。但**文档里的脚本坏了,
+# 结论仍会被当作成立** —— 这是第五课最隐蔽的一种形态: 全绿、自洽、只是错了。
+#
+# 该守护把文档当被测对象: 从 AGENTS.md 抽取代码块并**原样执行**,
+# 断言退出码 0、无 stderr、输出格式与文档承诺一致。
+# 抽取而非复制是关键 —— 若复制, 文档改了守护不改就会形成漂移。
+check_docs_probe_scripts() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/test_docs_probe_scripts.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "文档里的 commit/meminfo 判据脚本已不可执行或输出格式漂移（详见上方）"
+    return 1
+  fi
+  ok "文档判据脚本可原样执行且格式一致"
+  return 0
+}
+
 # ---- 资源优化守护 (静态, 不需容器运行) ---------------------------------
 #
 # 2026-10-05 新增。守护 PostgreSQL 刷盘调优与 mem_limit 不被静默回退。
@@ -831,6 +852,12 @@ echo
 
 echo "[前置] 检查资源优化项未被回退 ..."
 check_resource_optimization || true
+
+# 文档判据脚本可执行性（2026-10-06 新增）。
+# 与 check_resource_optimization 一样是 `|| true` 只警告不阻断：
+# 它守护的是**文档可信度**而非运行时健康，不该成为 E2E 的失败原因。
+# 但登记进 run_gate_selftest —— 不登记就等于没人跑（第三课）。
+check_docs_probe_scripts || true
 echo
 
 # ---- schema.sql 执行机制 (2026-10-06 接线) ------------------------------
