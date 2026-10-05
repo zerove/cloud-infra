@@ -84,11 +84,18 @@ services:
       #   容器内 127.0.0.1 指向自己 ⇒ 任何走 HTTP 客户端的外网请求都会失败。
       #   ⚠️ 别被 no_proxy 里那串 "127.*" 骗了: curl 不认这种通配写法,
       #   实测同容器内默认走代理 rc=7 失败, 而 --noproxy "*" 直连 code=200。
+      # ⚠️ 6 个代理键**必须写全**(2026-10-06 实测): 早先只写了 5 个、漏了 NO_PROXY,
+      #   而 rootless podman 会把宿主的 NO_PROXY 补进来 —— 实测容器内同时存在
+      #   `no_proxy=*`(本文件设的) 与 `NO_PROXY=172.31.*,...`(继承的)。
+      #   危害分级: 漏 http_proxy 是**有害**(会去连无监听的代理);
+      #   漏 NO_PROXY 只是状态不干净(没有代理可用时排除表不会被读)。
+      #   守护 deploy/tests/check_proxy_env.py 会把两者分别报出。
       http_proxy: ''
       https_proxy: ''
       HTTP_PROXY: ''
       HTTPS_PROXY: ''
       no_proxy: '*'
+      NO_PROXY: '*'
       # ⚠️ 必须限制 Metaspace 等 native 预留（2026-10-05 实测）。
       #   未加限时 JVM 默认: CompressedClassSpace reserved 1GB + Metaspace 1.15GB。
       #   nacos 是 9 个 JVM 里预留最大的(实测 VmSize 10.5GB), 而
@@ -157,6 +164,17 @@ services:
       POSTGRES_DB: cloud_infra
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
+      # ⚠️ 必须显式清空代理变量(2026-10-06 实测补齐)。宿主 shell 带
+      #   http_proxy=http://127.0.0.1:7890 而该端口无监听; rootless podman 会把它
+      #   注入容器, 于是任何走 HTTP 客户端的请求都会指向一个不存在的代理。
+      #   本服务当前日志里没有相关报错(客户端不走 http_proxy), 但"没报错"
+      #   不是"配置正确" —— 依赖的是客户端实现细节, 换库就可能失效。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
       # ⚠️ 刻意**不改** PGDATA: 现有数据在 /var/lib/postgresql/data 下,
       #   改路径会让容器看不见旧数据并当成空库重新初始化 = 丢数据。
     # ⚠️ 2026-10-05 刷盘调优: **性能参数走 apply-postgres-tuning.sh 的
@@ -229,6 +247,16 @@ services:
     mem_limit: 256m
     ports:
       - "6379:6379"
+    # ⚠️ 清空代理变量(2026-10-06 实测): 宿主 http_proxy 会被 rootless podman
+    #   注入容器, 而该端口无监听。redis 自身不用它, 但哨兵/集群模式下的
+    #   节点互联代码路径可能读得到 —— 依赖"恰好没用"不构成配置正确。
+    environment:
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
     volumes:
       - redisdata:/data
     networks:
@@ -253,6 +281,14 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER 必须在 .env 中设置}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS 必须在 .env 中设置}
+      # ⚠️ 清空代理变量(2026-10-06 实测)。management UI 的部分前端请求
+      #   会走 HTTP 客户端, 继承了无监听的代理就会失败。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
     networks:
@@ -291,6 +327,14 @@ services:
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
+      # ⚠️ 清空代理变量(2026-10-06 实测)。ES 的 Java 客户端读 http_proxy,
+      #   继承宿主那个无监听的 127.0.0.1:7890 会让跨节点/插件请求失败。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
       ES_JAVA_OPTS: "-Xms512m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m"
     volumes:
       - esdata:/usr/share/elasticsearch/data
@@ -561,6 +605,14 @@ services:
       retries: 30
       start_period: 30s
     environment:
+      # ⚠️ 清空代理变量(2026-10-06 实测)。OAP 上报 gRPC/HTTP 与访问
+      #   PostgreSQL 都可能经过 HTTP 客户端; 宿主那个无监听的代理是隐患。
+      - http_proxy=
+      - https_proxy=
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - no_proxy=*
+      - NO_PROXY=*
       # SW 10.x 字段名: SW_CORE_GRPC_HOST (替换 9.6 的 SW_NODE_IP)
       # ⚠️ SW_STORAGE 的取值是**存储实现名**, 不是通用词。
       #   曾试 `SW_STORAGE=jdbc` → ProviderNotFoundException:
@@ -609,6 +661,14 @@ services:
     ports:
       - "18080:8080"   # SkyWalking UI
     environment:
+      # ⚠️ 清空代理变量(2026-10-06 实测)。UI 通过 HTTP 访问 OAP,
+      #   继承宿主那个无监听的代理会直接请求失败。
+      - http_proxy=
+      - https_proxy=
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - no_proxy=*
+      - NO_PROXY=*
       # ⚠️ 必须带 http:// 前缀 (2026-10-04 实测)。
       #   原值 `cloud-skywalking-oap:12800` 让 UI 启动即崩:
       #     Exception in thread "main" java.lang.NullPointerException: authority
@@ -1133,6 +1193,14 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 必须在 .env 中设置}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 必须在 .env 中设置}
+      # ⚠️ 清空代理变量(2026-10-06 实测)。MinIO 的 S3 客户端对 http_proxy
+      #   敏感, 继承无监听的代理会让签名/请求路径出错。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
     command: server /data --console-address ":9001"
     volumes:
       - miniodata:/data

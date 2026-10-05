@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -786,6 +786,28 @@ check_docs_probe_scripts() {
   return 0
 }
 
+# ---- 容器代理变量泄漏 (运行时, 不需重启任何容器) ------------------------
+#
+# ⚠️ 判据必须是**运行时**而非 compose 文件, 也不是 `podman-compose config`
+# 的渲染结果 —— 2026-10-06 实测: 改完 compose 后渲染层已全部正确,
+# 而运行中的容器仍带着宿主那个无监听的 http_proxy=http://127.0.0.1:7890。
+# 即"配置已修好"与"已生效"之间隔着一次重启。
+#
+# 只警告不阻断: 泄漏的实际影响取决于各客户端是否读 http_proxy,
+# 而"当前日志无代理报错"不等于配置正确 —— 阻断会把环境问题
+# 变成 E2E 的失败结论, 反而掩盖真实状态。
+check_proxy_env() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_proxy_env.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "有容器继承了宿主的 http_proxy 等代理变量（宿主该端口无监听）"
+    return 1
+  fi
+  ok "无容器继承宿主代理变量"
+  return 0
+}
+
 # ---- 资源优化守护 (静态, 不需容器运行) ---------------------------------
 #
 # 2026-10-05 新增。守护 PostgreSQL 刷盘调优与 mem_limit 不被静默回退。
@@ -858,6 +880,12 @@ check_resource_optimization || true
 # 它守护的是**文档可信度**而非运行时健康，不该成为 E2E 的失败原因。
 # 但登记进 run_gate_selftest —— 不登记就等于没人跑（第三课）。
 check_docs_probe_scripts || true
+
+# 容器代理变量泄漏（2026-10-06 新增）。
+# ⚠️ 只警告不阻断, 且**必须在 compose 同步前跑** —— 它的作用是
+#    告诉你"哪些容器需要重启才能生效", 而不是判定环境可用。
+echo "[前置] 检查容器是否继承宿主代理变量 ..."
+check_proxy_env || true
 echo
 
 # ---- schema.sql 执行机制 (2026-10-06 接线) ------------------------------
