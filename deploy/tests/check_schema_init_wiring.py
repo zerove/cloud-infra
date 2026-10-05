@@ -30,24 +30,54 @@ ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "cloud-infra-modules"
 CONFIG = ROOT / "deploy" / "config"
 
-# 这些服务不连业务库, 其 schema.sql 无需被执行
+# 按**服务**声明豁免（不连业务库, 其 schema.sql 无需被执行）
 NO_SCHEMA_NEEDED = {"skywalking"}
+
+# 按**文件**声明豁免 —— 每条必须写明理由, 因为"豁免"本身也是判据,
+# 无理由的豁免等于把检查关掉(AGENTS.md「黑名单 vs 白名单」: 正确一侧要可枚举)。
+#
+# ⚠️ 不要把"当前没执行"直接写成豁免: 那会让任何漏执行都变得可接受。
+# 这里的豁免依据是"**对应的功能已被显式移除**", 可被独立核验。
+EXEMPT_FILES: dict[str, str] = {
+    "system-module/schema-seata.sql": (
+        "Seata 已在 system-module 配置中显式排除"
+        "(`spring.autoconfigure.exclude: ...SeataAutoConfiguration`,"
+        "注释写明「无 Seata Server 部署」), compose 无 seata 服务, "
+        "运行时容器数 0, undo_log 表不存在且业务正常。"
+        "该文件属已废弃功能的遗留物, 建表无意义。"
+    ),
+}
 
 
 def find_schema_services():
-    """返回 [(service_dir_name, schema.sql 路径), ...]"""
+    """返回 [(service_dir_name, sql 文件列表), ...] —— 含 schema*.sql 全部变体。
+
+    ⚠️ 2026-10-06 修正: 原实现只找 `schema.sql`, 于是 `schema-seata.sql`
+    这类**变体文件完全不在扫描范围内** —— 即"扫到 0 个坏"不等于"没有坏的"。
+    (第五课补记一: 没验到 ≠ 验过了。)
+    """
     out = []
     for svc_dir in sorted(MODULES.iterdir()):
         if not svc_dir.is_dir():
             continue
-        schema = svc_dir / "src" / "main" / "resources" / "schema.sql"
-        if schema.is_file():
-            out.append((svc_dir.name, schema))
+        res = svc_dir / "src" / "main" / "resources"
+        if not res.is_dir():
+            continue
+        sqls = sorted(p for p in res.glob("*.sql"))
+        if sqls:
+            out.append((svc_dir.name, sqls))
     return out
 
 
-def declared_mechanism(service: str):
-    """返回 (机制名, 说明) 之一; 都没配则返回 (None, 原因)。"""
+def declared_mechanism(service: str, sql_file: str):
+    """返回 (机制名, 说明) 之一; 都没配则返回 (None, 原因)。
+
+    ⚠️ 关键: **Flyway 只执行 `db/migration/` 下的文件**, 它不会执行
+    资源根目录的 `schema*.sql`。早期版本把"该服务配了 Flyway"当作
+    "该服务的每个 sql 文件都会被执行", 对 `schema-seata.sql` 给出假绿 ——
+    第三课那条"能力存在 ≠ 能力在运行", 在守护自身的实现里重演了一次。
+    故这里必须**按文件路径**判定, 不能按服务粗判。
+    """
     cfg_path = CONFIG / f"{service}.yaml"
     if not cfg_path.is_file():
         return None, f"deploy/config/{service}.yaml 不存在"
@@ -59,19 +89,41 @@ def declared_mechanism(service: str):
 
     spring = doc.get("spring") or {}
 
-    # 路径一: spring.sql.init
+    # 路径一: spring.sql.init —— 需覆盖到**这个具体文件**
     sql_init = ((spring.get("sql") or {}).get("init")) or {}
     mode = sql_init.get("mode")
     if mode and str(mode).lower() != "never":
-        return "spring.sql.init", f"mode={mode}"
+        locations = sql_init.get("schema-locations")
+        if locations:
+            # 显式收窄时, 只有落在列表里的文件才算被覆盖
+            names = {loc.strip() for loc in str(locations).split(",")}
+            wanted = f"classpath:{sql_file}"
+            # 支持 classpath*: 前缀与通配
+            covered = any(
+                wanted == n
+                or n.rstrip("*") == "classpath:"
+                or sql_file in n
+                for n in names
+            )
+            if covered:
+                return "spring.sql.init", f"mode={mode}, schema-locations 覆盖本文件"
+        else:
+            # 未收窄 => 用 Spring 默认位置, 根目录 schema*.sql 会被执行
+            return "spring.sql.init", f"mode={mode}（默认位置, 覆盖根目录 schema*.sql）"
 
-    # 路径二: Flyway (执行 db/migration, 不依赖 schema.sql, 但同样能建表)
+    # 路径二: Flyway —— 仅当文件位于 db/migration/ 下才算
     if spring.get("flyway"):
         enabled = spring["flyway"].get("enabled")
-        if enabled is not False:
-            return "spring.flyway", "由 Flyway 执行 db/migration"
+        if enabled is not False and sql_file.startswith("db/migration/"):
+            loc = (spring["flyway"] or {}).get("locations") or "classpath:db/migration"
+            if "db/migration" in str(loc):
+                return "spring.flyway", f"由 Flyway 执行（{loc}）"
 
-    return None, "既未配 spring.sql.init 也未配 spring.flyway"
+    return None, (
+        "既无覆盖本文件的 spring.sql.init, 也不在 Flyway 的 locations 范围内"
+        if spring.get("flyway")
+        else "既未配 spring.sql.init 也未配 spring.flyway"
+    )
 
 
 def main():
@@ -84,21 +136,26 @@ def main():
 
     failures = []
     notes = []
-    for service, schema in services:
-        if service in NO_SCHEMA_NEEDED:
-            notes.append(f"{service}: 无需建表(已列入豁免)  ⊘")
-            continue
-        n_tables = schema.read_text(encoding="utf-8", errors="replace").upper().count(
-            "CREATE TABLE"
-        )
-        mechanism, reason = declared_mechanism(service)
-        if mechanism:
-            notes.append(f"{service}: {n_tables} 张表 ← {mechanism} ({reason})  ✓")
-        else:
-            failures.append(
-                f"{service}: schema.sql 有 {n_tables} 张表但 {reason} —— "
-                f"该文件从未被执行, 相关功能实际不可用"
+    for service, sql_files in services:
+        for sql_path in sql_files:
+            rel = str(sql_path.relative_to(MODULES / service / "src" / "main" / "resources"))
+            key = f"{service}/{rel}"
+            if key in EXEMPT_FILES:
+                notes.append(f"{key}: 已豁免 —— {EXEMPT_FILES[key]}  ⊘")
+                continue
+            if rel.startswith("db/migration/") and service in NO_SCHEMA_NEEDED:
+                continue
+            n_tables = sql_path.read_text(encoding="utf-8", errors="replace").upper().count(
+                "CREATE TABLE"
             )
+            mechanism, reason = declared_mechanism(service, rel)
+            if mechanism:
+                notes.append(f"{key}: {n_tables} 张表 ← {mechanism} ({reason})  ✓")
+            else:
+                failures.append(
+                    f"{key}: 含 {n_tables} 张表但 {reason} —— "
+                    f"该文件从未被执行, 相关功能实际不可用"
+                )
 
     for n in notes:
         print(f"  {n}")
