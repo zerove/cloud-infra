@@ -67,9 +67,28 @@ services:
       # 启用 v1/v2 客户端 API 兼容 (up.sh 配置同步与运维脚本依赖 v1 API)
       # 注: NACOS_CORE_API_* 环境变量不在 docker-startup.sh 白名单, 用 JAVA_TOOL_OPTIONS 注入
       # - 认证关闭时 admin API 仍需登录, 本地开发禁用便于 up.sh 脚本同步配置
-      JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false"
+      #
+      # ⚠️【2026-10-05 P0 修正】这两个 JAVA_TOOL_OPTIONS 曾是**两个独立键**,
+      #   YAML 重复键**后者静默覆盖前者** —— 语法合法、不报错、结果与意图相反(第五课)。
+      #   实际后果已实测: `-Dnacos.core.auth.admin.enabled=false` 从未生效,
+      #   而 deploy/up.sh 的配置同步走 v3 admin API:
+      #     GET  /nacos/v3/admin/cs/config → 200 {"code":10001,"message":"access denied",
+      #                                              "data":"Code: 401, ... User not found! ..."}
+      #   即 **./deploy/up.sh --sync 一直是坏的**, 且现象与因果相隔三层。
+      #   今后新增任何 env 键前必须先确认它在本段内**唯一**。
+      JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
       JVM_XMS: 1g
       JVM_XMX: 2g
+      # ⚠️ 必须显式清空代理变量(2026-10-05)。不写则 rootless podman 会从宿主
+      #   shell 继承 http_proxy=http://127.0.0.1:7890, 而宿主该端口无监听,
+      #   容器内 127.0.0.1 指向自己 ⇒ 任何走 HTTP 客户端的外网请求都会失败。
+      #   ⚠️ 别被 no_proxy 里那串 "127.*" 骗了: curl 不认这种通配写法,
+      #   实测同容器内默认走代理 rc=7 失败, 而 --noproxy "*" 直连 code=200。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
       # ⚠️ 必须限制 Metaspace 等 native 预留（2026-10-05 实测）。
       #   未加限时 JVM 默认: CompressedClassSpace reserved 1GB + Metaspace 1.15GB。
       #   nacos 是 9 个 JVM 里预留最大的(实测 VmSize 10.5GB), 而
@@ -105,7 +124,12 @@ services:
       #
       #   故断言必须建立在**数据流**上(compose env → 容器 env →
       #   JVM 生效值), 而不是"脚本里能不能搜到这个变量名"。
-      JAVA_TOOL_OPTIONS: "-XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
+      #
+      #   ⚠️【2026-10-05 补记】上述四个 -XX 曾单独占一个 JAVA_TOOL_OPTIONS 键,
+      #   与上面那个 admin 开关**并存**。YAML 重复键静默取后者, 于是 admin
+      #   开关被吞掉。现已合并为**唯一一个**键, 两个用途都在同一行。
+      #   ⚠️ 新增 env 键时必须用结构化扫描确认唯一(见
+      #   deploy/tests/check_resource_optimization.py 第 8 项)。
     volumes:
       - ./nacos/data:/home/nacos/data
     networks:

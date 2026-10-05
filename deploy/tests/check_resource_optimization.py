@@ -129,6 +129,44 @@ def parse_tuning(path):
     return out
 
 
+def _dup_scan(path, out):
+    """收集 YAML 中所有重复键 (行号, 键名)。
+
+    ⚠️ 必须走**结构化**扫描, 不能用 grep -c:
+      注释里提到键名会让 grep 误判, 而本次就先被 grep 误导过一轮
+      (改完仍报 2, 真实原因是旧键压根没删掉)。
+
+    ⚠️ 实现注意两点, 都是这次踩过的:
+      1. 要**自己数出现次数**并保留原始行号 —— 直接用 yaml.safe_load
+         会因重复键静默丢值, 什么都发现不了。
+      2. 遍历必须覆盖所有嵌套层级(服务 → 容器 → env → volumes …),
+         只扫顶层会漏掉 services.nacos.environment 这种真实案例。
+    """
+    import collections
+
+    class _Loader(yaml.SafeLoader):
+        pass
+
+    def _mapping(loader, node):
+        keys = []
+        for key_node, _ in node.value:
+            try:
+                keys.append(loader.construct_object(key_node, deep=True))
+            except yaml.YAMLError:
+                keys.append(None)
+        counts = collections.Counter(k for k in keys if isinstance(k, str))
+        for key, n in counts.items():
+            if n > 1:
+                out.append((node.start_mark.line + 1, key))
+        return loader.construct_mapping(node)
+
+    _Loader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _mapping
+    )
+    with open(path, encoding="utf-8") as fh:
+        yaml.load(fh, _Loader)
+
+
 def main():
     args = sys.argv[1:]
     path = os.path.join(ROOT, "deploy", "compose.yaml")
@@ -356,6 +394,28 @@ def main():
             f"⚠️ {len(undeclared)} 个服务未声明代理变量, 将继承宿主环境: "
             f"{', '.join(sorted(undeclared))}"
         )
+
+    # --- 8. compose 不得有重复键（YAML 静默取后者, 不报错）---
+    #
+    # ⚠️ 这是 2026-10-05 实测的 P0: nacos 段有**两个** JAVA_TOOL_OPTIONS,
+    #   前者 `-Dnacos.core.auth.admin.enabled=false` 被后者(四个 -XX)覆盖,
+    #   语法完全合法、无任何告警。而后果是 deploy/up.sh --sync 一直失败
+    #   (admin API 返回 code=10001 "User not found!"), 现象与因果隔三层。
+    #
+    # ⚠️ **不能用 grep -c 判重**: 注释里提到键名会造成假阳性/假阴性,
+    #   必须用**结构化扫描**(遍历映射节点、比较 key 出现次数)。
+    #   本次正是先 grep 得 2、以为没修好, 改完再 grep 仍是 2 ——
+    #   真实情况是第一次编辑把注释插错了位置, 旧键根本没删。
+    dups = []
+    _dup_scan(path, dups)
+    if dups:
+        for line, key in dups:
+            failures.append(
+                f"compose 第 {line} 行有重复键 {key!r} —— YAML 静默取最后一个, "
+                f"先前的值被无声丢弃且无任何告警"
+            )
+    else:
+        notes.append("compose 无重复键  ✓")
 
     for n in notes:
         print(f"  {n}")
