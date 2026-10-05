@@ -477,6 +477,54 @@ STUB
     failures=$((failures+1))
   fi
 
+  # ---- 覆盖 7: JVM 内存边界门禁必须真的被调用 (2026-10-05) --------------
+  # 起因: check_jvm_native_memory_bounds.py 自己长期 9/9 全绿, 但
+  # `grep -c` 显示它在本脚本里被调用 **0 次** —— 没人跑的门禁等于没有门禁。
+  # 而它的假绿已造成真实后果 (nacos 的边界写在无人读取的 JVM_ADJUST 上)。
+  #
+  # 这里断言两件事:
+  #   a) 两个门禁脚本都被**函数定义之外**的地方调用（即真的被调用）
+  #   b) 调用发生在 build_images / compose up 之前
+  #
+  # ⚠️ 搜索必须排除 run_gate_selftest 函数体 —— 否则本函数里
+  #   打印这些文件名的 echo 行会把自己当成被检对象。
+  #   这已是本函数第 7 次踩同一类坑（"被检字面量污染自己的断言"）。
+  local self_start7 self_end7
+  self_start7="$(grep -n '^run_gate_selftest()' "$SCRIPT_DIR/verify-e2e.sh" | head -1 | cut -d: -f1)"
+  self_end7="$(awk -v s="$self_start7" 'NR>s && /^}/ {print NR; exit}' "$SCRIPT_DIR/verify-e2e.sh")"
+
+  for gate in check_jvm_native_memory_bounds check_jvm_opts_keys_match_image; do
+    local call_line
+    call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
+      NR >= s && NR <= e { next }
+      $0 ~ ("tests/" g "\\.py") && $0 !~ /^[ \t]*#/ { print NR; exit }
+    ' "$SCRIPT_DIR/verify-e2e.sh")"
+    if [ -z "$call_line" ]; then
+      echo "  FAIL $gate.py 未被调用 —— 全绿的守护没人跑, 等于没有守护" >&2
+      failures=$((failures+1))
+    else
+      echo "  PASS $gate.py 在第 $call_line 行被调用"
+    fi
+  done
+
+  # b) 位置: 必须早于首个 build_images 调用
+  local jvm_line build_line2
+  jvm_line="$(awk -v s="$self_start7" -v e="$self_end7" '
+    NR >= s && NR <= e { next }
+    /tests\/check_jvm_native_memory_bounds\.py/ && $0 !~ /^[ \t]*#/ { print NR; exit }
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
+  build_line2="$(awk -v s="$self_start7" -v e="$self_end7" '
+    NR >= s && NR <= e { next }
+    { line=$0; sub(/^[ \t]+/, "", line) }
+    line ~ /^if build_images; then$/ { print NR; exit }
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
+  if [ -n "$jvm_line" ] && [ -n "$build_line2" ] && [ "$jvm_line" -lt "$build_line2" ]; then
+    echo "  PASS JVM 边界门禁前置 (行 $jvm_line < build_images 行 $build_line2)"
+  else
+    echo "  FAIL JVM 边界门禁位置不对 (jvm=$jvm_line build=$build_line2)" >&2
+    failures=$((failures+1))
+  fi
+
   # ---- 覆盖 5: 关键判定不能被管道吞掉退出码 -----------------------------
   # bash 经典陷阱: cmd | head 会让 $? 变成 head 的退出码。
   # 本脚本大量使用 `curl ... | head`, 故显式断言关键 build 判定不走管道。
@@ -626,6 +674,52 @@ if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; t
   echo "!! 请先清理宿主上的孤儿进程 (不属于任何容器, podman ps 看不到)。" >&2
   exit 1
 fi
+echo
+
+# ---- JVM native 内存边界 (静态, 不需容器运行) ---------------------------
+#
+# ⚠️ 这两个门禁此前**从未被本脚本调用** (2026-10-05 实测):
+#   grep 统计显示 check_jvm_native_memory_bounds.py 被调用 0 次。
+#   它们自己全绿, 但没人跑 —— 与"上游坏掉 → 自己伪装成从未验证过"同型。
+#   而 check_jvm_native_memory_bounds 的假绿已经被证实造成了真实后果:
+#   nacos 的四个 -XX 边界写在 JVM_ADJUST 上, 镜像脚本从不读它,
+#   VmSize 实测 10.51GB, 而该守护报 9/9 PASS。
+check_jvm_native_bounds() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_jvm_native_memory_bounds.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "有 JVM 未设置 -XX:MaxMetaspaceSize —— 未受限的 Metaspace/CompressedClassSpace 预留会吃满全局 commit 预算"
+    return 1
+  fi
+  ok "全部 JVM 已设置 -XX:MaxMetaspaceSize"
+  return 0
+}
+
+# 判定 compose 里的 JVM 参数键**确实是镜像启动脚本会读的**。
+# 静态解析 compose 的守护无法发现"配置写在没人读的键上"(第三课在守护层的重演)。
+#
+# 需要 podman 与镜像, 所以**失败时只记录不阻断**（调用处用 `|| true`）:
+# 它要跑 podman, 而 podman 在 commit 紧张时自身就会崩 —— 那时它返回 1
+# 是**环境问题**, 不是配置问题。阻断会把"环境紧张"变成"E2E 配置错误",
+# 反而掩盖真实状态（同 check_commit_runtime 的处理理由）。
+# ⚠️ 用 fail 而非 warn: 本脚本只定义了 ok/fail（见第 31-32 行）,
+#   写 warn 会在 set -e 下变成 "command not found" 而中断整个脚本。
+check_jvm_opts_keys() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_jvm_opts_keys_match_image.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "JVM 参数键未被镜像启动脚本读取 —— 那些参数不会生效(假绿)"
+    return 1
+  fi
+  ok "JVM 参数键均被镜像启动脚本读取"
+  return 0
+}
+
+echo "[前置] 检查 JVM native 内存边界 ..."
+check_jvm_native_bounds || true
+check_jvm_opts_keys || true
 echo
 
 # ⚠️ 已删除的“堆外余量门禁” (2026-10-05) —— 记录它的错误与正确结论,
