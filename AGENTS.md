@@ -1138,25 +1138,47 @@ vm.min_free_kbytes   = 131072 # 注释写的是「让内核更早、更平滑地
 验证走 systemd 真实加载路径: `systemctl restart systemd-sysctl` 后
 `overcommit_memory=0` / `overcommit_ratio=80` / `min_free_kbytes=131072`, 20 个容器全部健康, 0 次 OOM。
 
-#### ⚠️ 遗留隐患: 同一参数存在**三个来源**, 当前只靠字典序取胜
+#### ✅ 已收敛: 三个来源现已一致, 且不再依赖文件名巧合
 
 ```conf
-/etc/sysctl.conf              :11  vm.overcommit_memory = 2   ← 不被 systemd 加载
-/etc/sysctl.d/99-sysctl.conf  :11  vm.overcommit_memory = 2   ← 较早晨, 被覆盖
-/etc/sysctl.d/99-watermark.conf:15 vm.overcommit_memory = 0   ← 字典序最后, 实际生效
+/etc/sysctl.conf               :11  vm.overcommit_memory = 0
+/etc/sysctl.d/99-sysctl.conf   :11  vm.overcommit_memory = 0
+/etc/sysctl.d/99-watermark.conf:15  vm.overcommit_memory = 0
 ```
 
 已实测确认加载规则（**不是靠读文档推断**）:
 
 | 对照 | 操作 | 结果 |
 | :--- | :--- | :--- |
-| 正向 | `sysctl -p 99-sysctl.conf` | 内核值 → `2` |
+| 正向 | `sysctl -p 99-sysctl.conf` | 内核值 → `2`（当时该文件尚写 2） |
 | 反向 | 紧接着 `sysctl -p 99-watermark.conf` | 内核值 → `0` |
-| 同规则换源 | 把 `/etc/sysctl.conf` 改成 `37`, 重启 `systemd-sysctl` | 内核值仍是 `80` ⇒ **该文件不被加载** |
+| 同规则换源 | 把 `/etc/sysctl.conf` 改成 `37`, 重启 `systemd-sysctl` | 内核值仍是 `80` ⇒ **该文件不被 systemd 加载** |
 
-⇒ `0` 能生效**只是因为它的文件名字典序最大**。若有人新增一个字典序更后的
-`sysctl.d/*.conf`, 或调整排序, 会静默回到 `2`, 而一切测试结果照常"正常"。
-**收敛双源需要改 `/etc/sysctl.d/99-sysctl.conf` 与 `/etc/sysctl.conf`, 属系统级变更, 尚未执行。**
+⇒ 加载顺序 = **文件名字典序**, 后者覆盖前者。原先 `0` 能生效**纯粹因为它的字典序最大**。
+现三处取值一致, 谁先加载已不影响结果。
+
+> ⚠️ **收敛过程中实测到的一件事: 决定胜负的是后缀, 不是字典序**。
+> 我把备份写成 `99-watermark.conf.bak-<ts>` 留在 `sysctl.d/` 内, 按字典序它排在
+> `.conf` **之后**（`b` > `c`）, 推理上应会覆盖回 `2`。实测 `systemctl restart
+> systemd-sysctl` 后仍是 `0` ⇒ **systemd 只加载 `.conf` 后缀**。
+> 即**上面那条字典序规则本身有前提条件, 我先前把它说得过宽了**。
+> 备份已移出该目录至 `~/sysctl-backups-20261005/` —— 该目录现在只放会被加载的文件。
+
+**收敛的安全性论证**（避免把风险说大或说小）:
+- 改动方向 `2 → 0`, 即**从严格变宽松**, 是 Linux 默认模式,
+  **不会让任何现有程序更受限**; 且生效值本就是 `0`, 其他工作负载已在该模式下运行。
+- 属**可逆**变更（改回 `2` 即恢复原状）, 不触碰任何业务数据或容器配置。
+- `99-sysctl.conf` 与 `/etc/sysctl.conf` 的有效行原本**完全相同** ⇒ 前者是后者的副本。
+
+> 📌 **"静默"仅限于配置漂移本身, 后果并不沉默**: 本轮实测 `mode=2` 下
+> 全量构建是 **BUILD FAILURE + 59 ERROR + `errno=12`**, 属响亮崩溃。
+> 即"没人察觉配置被改回去"与"故障不可见"是两件事 —— 前者才是真正的隐患。
+
+> **一条工具层面的教训**: 收敛 `/etc/sysctl.conf` 时, 我用 `assert new != s`
+> 做"改动真的发生了"的自检, 它**如期报红** —— 因为该文件其实已是 `0`
+> （此前做加载验证时我把它改成 `37` 再从副本还原, 而副本取自当时已是 `0` 的文件）。
+> **若没有这条断言, 这次就是一次"静默无操作", 而我会以为改过了。**
+> 与本项目 `run_gate_selftest` 记的"`sed` 没匹配上不报错 = 恒假绿"完全同型。
 
 #### 这条为什么值得单独记
 
