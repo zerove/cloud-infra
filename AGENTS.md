@@ -266,7 +266,7 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 > 三条路径全部验证:
 > | 对照 | 期望 | 实测 |
 > | :--- | :--- | :--- |
-> | 正向 | rc=0 | rc=0（19 项全绿） |
+> | 正向 | rc=0 | rc=0（15 项全绿：原 12 + 新增 3） |
 > | 删调用行（保留定义） | rc=1 | rc=1, 报"定义还在但从未被调用" |
 > | 阻断改 `\|\| true` | rc=1 | rc=1, 报"不再是阻断执行" |
 >
