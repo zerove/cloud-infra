@@ -1273,6 +1273,24 @@ services:
     #   机制在（同一套 profiles 约定），但没接上。
     profiles: ["full"]
     mem_limit: 256m
+    # 显式清空代理变量 (2026-10-06 补)。
+    #
+    # 理由与其它 18 个服务完全一致, 但此前**漏了本服务** ——
+    # deploy/tests/check_proxy_env.py 的配置侧统计因此是 18/19 而非 全量。
+    # 该服务属 profiles: ["full"] 且当前未运行, 所以运行侧看不出来,
+    # 但配置缺口是真的: 一旦有人带 full profile 启动它, 就会继承宿主 shell
+    # 的 http_proxy(AGENTS.md 第六课补记二: rootless podman 会从宿主补齐变量),
+    # 而 127.0.0.1:7890 在容器网络里指向容器自身, 必然不可达。
+    #
+    # no_proxy: '*' 之外的四个必须清空 —— 只设 no_proxy 不够,
+    # 因为它只影响"哪些地址不过代理", 不影响"存在代理"。
+    environment:
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      http_proxy: ''
+      https_proxy: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
     ports:
       - "5540:5540"
     networks:
