@@ -730,17 +730,31 @@ check_commit_budget() {
   out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_budget.py" 2>&1); rc=$?
   printf '%s\n' "$out" | sed 's/^/  /'
   if [ "$rc" -eq 1 ]; then
-    fail "全局 commit 预算不足 —— 6 服务必然崩溃 (详见上方排查指引)"
+    # 只在**严格模式**下会走到这里: 非严格模式门禁返回 0(告警)。
+    # 即本分支成立时, "超额 commit 会被内核拒绝" 是已被实测证实的前提。
+    fail "严格 overcommit 模式下 commit 预算不足 —— 服务会在分配时崩溃"
     return 1
   fi
-  ok "全局 commit 预算充足"
+  # ⚠️ 不能无脑报"充足": 非严格模式下门禁对超阈值只告警并返回 0,
+  # 此时这句"充足"是**假的** —— 比例已不预测分配失败(见 check_commit_budget.py
+  # 顶部注释的受控实验)。曾把这句无条件打印, 是第五课「看起来正常的结论」的
+  # 同型: 输出格式合法, 语义错误。
+  if printf '%s' "$out" | grep -q '^WARN:'; then
+    # 本脚本只有 ok/fail 两种标记(无 warn), 故用 ok 但**改变文案**。
+    # 报"充足"是假的; 报"充足"以外的中性提示才是真的。
+    ok "commit 占用超阈值, 但当前非严格 overcommit 模式, 该比例不预测崩溃(详见上方)"
+  else
+    ok "全局 commit 预算充足"
+  fi
   return 0
 }
 
 if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; then
   echo
-  echo "!! commit 预算不足, 继续跑只会得到 6 个服务随机崩溃的假象。" >&2
-  echo "!! 请先清理宿主上的孤儿进程 (不属于任何容器, podman ps 看不到)。" >&2
+  echo "!! 严格 overcommit 模式(vm.overcommit_memory=2)下 commit 预算不足。" >&2
+  echo "!! 此时内核会直接拒绝新的 commit, 继续跑只会得到服务随机崩溃的假象。" >&2
+  echo "!! 处置方向: 降低同时运行的 JVM 数 / 调低 -Xmx(见上方指引)。" >&2
+  echo "!! 提高单容器 mem_limit **无效** —— 那只会让该容器更快耗尽全局预算。" >&2
   exit 1
 fi
 echo

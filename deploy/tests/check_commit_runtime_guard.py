@@ -79,6 +79,27 @@ def read_overcommit_mode() -> str | None:
         return None
 
 
+# 2026-10-06 复核: 宿主 `vm.overcommit_memory` 已从 2 变为 0(启发式)。
+# 受控实验证据 —— 在 Committed_AS 达到 CommitLimit 的 **109%** 时连续 8 次
+# 256MB mmap 全部成功; 而同一操作在 overcommit=2 时曾返回 errno=12 (ENOMEM)。
+#
+# 本门禁的阈值只在**严格模式**下有意义: 严格模式里超额 commit 被内核直接拒绝,
+# 比例是真实且唯一的约束; 非严格模式下内核不拒绝, 该比例不再预测分配失败。
+# 若在非严格模式仍按 92% 判红, 那是误报源 —— 且它会阻断 E2E 并让用户去清理
+# **当前并不存在**的孤儿进程(实测 13GB 孤儿已不在, 22 容器全 healthy)。
+#
+# 【为什么不给非严格模式编新阈值】本项目已因编造静态预测器踩坑:
+# `check_heap_headroom.py` 假设"mem_limit 1024m 恰等于 -Xmx 1024m ⇒ 必然失败",
+# 被实测证伪(堆外余量 384MB 时照样 malloc 失败), 该门禁已删除。
+# 非严格模式下崩溃取决于启动并发等**动态**因素, 没有可靠的静态预测器。
+STRICT_OVERCOMMIT = "2"
+
+
+def is_strict_mode(overcommit: str | None) -> bool:
+    """是否处于严格 overcommit 模式 —— 决定比例阈值是否还有判据意义。"""
+    return overcommit == STRICT_OVERCOMMIT
+
+
 def sample_once() -> tuple[float, float, float] | None:
     """返回 (committed_GiB, limit_GiB, ratio); 取不到值时返回 None。"""
     meminfo = read_meminfo()
@@ -91,16 +112,26 @@ def sample_once() -> tuple[float, float, float] | None:
 
 def check(watch_seconds: int) -> int:
     overcommit = read_overcommit_mode()
-    if overcommit == "2":
+    strict = is_strict_mode(overcommit)
+    if strict:
         print("vm.overcommit_memory = 2 (严格模式): 超额 commit 会被内核直接拒绝")
         print("  此时 cgroup 计数 oom=0 / memory.events 全 0, 但 JVM 仍会 malloc 失败 ——")
         print("  这类失败极易被误判为'容器内存不足'。")
+        print()
+    else:
+        # 非严格模式: 比例不再是有效预测指标(见上方注释的实测证据)。
+        # 仍采样并陈述事实, 但不判红 —— 它只告警不阻断, 且不应假装能预测。
+        print(f"vm.overcommit_memory = {overcommit}: 非严格模式, 内核不拒绝超额 commit")
+        print(f"  实测依据: overcommit=0 时 Committed_AS 达 CommitLimit 的 109%,")
+        print(f"            连续 8 次 256MB 分配仍全部成功; =2 时同一操作返回 ENOMEM。")
+        print(f"  故 {MAX_COMMIT_RATIO:.0%} 阈值在当前模式下**不预测**分配失败, 仅作事实陈述。")
         print()
 
     deadline = time.time() + watch_seconds
     worst = 0.0
     worst_gb = (0.0, 0.0)
     count = 0
+    peak_exceeded = False
     while True:
         result = sample_once()
         if result is None:
@@ -116,25 +147,37 @@ def check(watch_seconds: int) -> int:
             marker = "  <== 本轮峰值"
         print(f"  采样 {count}: commit={committed:6.2f} / {limit:.2f} GiB ({ratio:.0%}){marker}")
         if ratio > MAX_COMMIT_RATIO:
-            print()
-            print(f"FAIL: 运行期 commit 占用 {ratio:.0%} 超过阈值 {MAX_COMMIT_RATIO:.0%}")
-            print(f"      峰值 {worst_gb[0]:.2f} / {worst_gb[1]:.2f} GiB, 仅剩 "
-                  f"{worst_gb[1] - worst_gb[0]:.2f} GiB 余量。")
-            print()
-            print("      此时的形态是**总量贴近上限**(不是某个进程占额):")
-            print("      各 JVM 单独看都不大, 但合计 + 分配/释放的波动峰值会撞线。")
-            print("      实测 9 个 JVM 在峰值时刻: nacos 1.4G / oap 1.2G / system 0.9G /")
-            print("      elasticsearch 0.86G / 其余各 0.6G, 合计约 5.7GiB。")
-            print()
-            print("      处置方向(不要走错):")
-            print("        - 不要去 kill 单个进程 —— 没有任何一个值得杀, 杀了会被别的补上")
-            print("        - 降低同时运行的 JVM 数, 或调低 -Xms/-Xmx")
-            print("          (注意 -Xms 是启动即预留, 在严格模式下**预留即计费**)")
-            print("        - 提高单容器 mem_limit 无效: 那只是让该容器更快耗尽全局预算")
-            return 1
+            peak_exceeded = True
         if time.time() >= deadline:
             break
         time.sleep(INTERVAL_SECONDS)
+
+    if peak_exceeded and not strict:
+        print()
+        print(f"WARN: 运行期 commit 峰值 {worst:.0%} 超过 {MAX_COMMIT_RATIO:.0%}, "
+              f"但当前为非严格 overcommit 模式。")
+        print("      该比例不预测分配失败, 故不判红。真正的约束是物理内存:")
+        print("      grep -E 'MemAvailable|MemTotal' /proc/meminfo")
+        print("      若宿主改为 overcommit=2, 本门禁会恢复为硬判定。")
+        return 0
+
+    if worst > MAX_COMMIT_RATIO:
+        print()
+        print(f"FAIL: 运行期 commit 占用 {worst:.0%} 超过阈值 {MAX_COMMIT_RATIO:.0%}")
+        print(f"      峰值 {worst_gb[0]:.2f} / {worst_gb[1]:.2f} GiB, 仅剩 "
+              f"{worst_gb[1] - worst_gb[0]:.2f} GiB 余量。")
+        print()
+        print("      此时的形态是**总量贴近上限**(不是某个进程占额):")
+        print("      各 JVM 单独看都不大, 但合计 + 分配/释放的波动峰值会撞线。")
+        print("      实测 9 个 JVM 在峰值时刻: nacos 1.4G / oap 1.2G / system 0.9G /")
+        print("      elasticsearch 0.86G / 其余各 0.6G, 合计约 5.7GiB。")
+        print()
+        print("      处置方向(不要走错):")
+        print("        - 不要去 kill 单个进程 —— 没有任何一个值得杀, 杀了会被别的补上")
+        print("        - 降低同时运行的 JVM 数, 或调低 -Xms/-Xmx")
+        print("          (注意 -Xms 是启动即预留, 在严格模式下**预留即计费**)")
+        print("        - 提高单容器 mem_limit 无效: 那只是让该容器更快耗尽全局预算")
+        return 1
 
     print(f"PASS: {count} 次采样, 最高 {worst:.0%} (阈值 {MAX_COMMIT_RATIO:.0%}), "
           f"余量 {worst_gb[1] - worst_gb[0]:.2f} GiB")

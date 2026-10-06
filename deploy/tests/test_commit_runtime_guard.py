@@ -71,6 +71,7 @@ def run_with_stub(committed_ratio: float, limit_kb: int = 21629724) -> tuple[int
     """
     stub = meminfo_text(int(limit_kb * committed_ratio), limit_kb)
     original = guard.read_meminfo
+    original_oc = guard.read_overcommit_mode
 
     def fake_read() -> dict[str, int]:
         values: dict[str, int] = {}
@@ -81,12 +82,21 @@ def run_with_stub(committed_ratio: float, limit_kb: int = 21629724) -> tuple[int
         return values
 
     guard.read_meminfo = fake_read
+    # ⚠️ 必须一并固定为严格模式 "2"。
+    # 门禁自 2026-10-06 起按 overcommit 模式分流: 比例阈值只在严格模式下
+    # 才是有效约束。若只替换 meminfo, 本文件所有"应判红"用例会继承**跑测试
+    # 那台机器**的 overcommit 值 —— 在 overcommit=0 的宿主上它们会假红,
+    # 而测试自身看不出原因(与 test_commit_budget.py 的同类问题同源)。
+    # 默认 "2" 而非真实值: 阈值相关断言要测的是严格模式这条真实防线,
+    # 而不是随宿主环境漂移。
+    guard.read_overcommit_mode = lambda: "2"
     buf = io.StringIO()
     try:
         with redirect_stdout(buf):
             code = guard.check(0.0)  # 0 秒 = 只采一次
     finally:
         guard.read_meminfo = original
+        guard.read_overcommit_mode = original_oc
     return code, buf.getvalue()
 
 

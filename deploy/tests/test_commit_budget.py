@@ -55,12 +55,21 @@ def build_meminfo(committed_gb: float, limit_gb: float) -> str:
     )
 
 
-def invoke(module, meminfo: str) -> tuple[int, str]:
+def invoke(module, meminfo: str, overcommit: str = "2") -> tuple[int, str]:
     """把 module.read_meminfo 换成返回构造数据, 捕获 check() 的退出码与输出。
 
     必须真的替换数据源: 只重定向 stdout 而不替换 meminfo, 会让所有断言
     都读到真实的 /proc/meminfo —— 那种"守护"在本项目已被负向对照证伪过
     (TenantFilterSecretWiringTest 用 p.startsWith 判扫描范围, 改坏后不红)。
+
+    ⚠️ `overcommit` 必须**一并**替换, 且默认为严格模式 "2"。
+    原因: 门禁自 2026-10-06 起按 overcommit 模式分流(比例阈值只在严格模式下
+    才是有效约束)。若只替换 meminfo 而不替换模式, 全部用例会继承**运行本测试
+    的那台机器**的 overcommit 值 —— 在 overcommit=0 的宿主上, "88% 判红"这类
+    断言会假红, 而测试自身看不出原因(与第五课「探针取不到值」、补记五
+    「参数出现在命令行里不等于生效」同型)。
+    默认 "2" 而非真实值, 是为了让阈值相关断言在任何宿主上都测的是**严格模式**
+    这条真实存在的防线, 而不是随宿主环境漂移。
     """
     import io
     from contextlib import redirect_stdout
@@ -76,14 +85,17 @@ def invoke(module, meminfo: str) -> tuple[int, str]:
                 values[key.strip()] = int(parts[0])
         return values
 
-    original = module.read_meminfo
+    original_meminfo = module.read_meminfo
+    original_overcommit = module.read_overcommit_mode
     module.read_meminfo = fake_read_meminfo
+    module.read_overcommit_mode = lambda: overcommit
     buffer = io.StringIO()
     try:
         with redirect_stdout(buffer):
             code = module.check()
     finally:
-        module.read_meminfo = original
+        module.read_meminfo = original_meminfo
+        module.read_overcommit_mode = original_overcommit
     return code, buffer.getvalue()
 
 
@@ -173,14 +185,19 @@ def main() -> int:
         direct = mod.check.__wrapped__ if hasattr(mod.check, "__wrapped__") else mod.check
         # 用 monkeypatch 注入高占用
         orig = mod.read_meminfo
+        orig_oc = mod.read_overcommit_mode
         mod.read_meminfo = lambda: {
             "Committed_AS": int(18.14 * 1048576),
             "CommitLimit": int(20.63 * 1048576),
         }
+        # 同 invoke(): 必须一并固定为严格模式, 否则本用例会随**跑测试那台机器**
+        # 的 overcommit 值漂移 —— 在 overcommit=0 上它会假红, 且看不出原因。
+        mod.read_overcommit_mode = lambda: "2"
         try:
             rc_nopipe = direct()
         finally:
             mod.read_meminfo = orig
+            mod.read_overcommit_mode = orig_oc
     check("不经管道时门禁确实返回 1", rc_nopipe == 1, f"got {rc_nopipe}")
     print("     ⇒ 与用例 10 合并可证: 门禁恒返回 1, 差异只在**读数方式**。")
 

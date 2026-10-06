@@ -30,6 +30,19 @@ compose 里每一处 JVM 参数(`JAVA_OPTS` / `ES_JAVA_OPTS`)都必须含
 且其余两项(CodeCache / CompressedClassSpace)同批加入。
 
 负向对照: 删掉任一服务的 `MaxMetaspaceSize`, 本门禁必须报红。
+
+## 2026-10-06 复核: 本门禁**不受** overcommit 模式变化影响, 不要删它
+
+宿主 `vm.overcommit_memory` 已从 2 变为 0, 导致 `check_commit_budget.py` 与
+`check_commit_runtime_guard.py` 两个**比例型**门禁被重新定性(见那两个文件的注释)。
+
+本门禁不同: 它是**静态配置断言**(compose 里是否写了 `-XX:MaxMetaspaceSize`),
+与内核当前处于哪种 overcommit 模式**无关**。在 strict 与非 strict 下
+"未设上限的 JVM 默认预留约 2.15GB" 这个事实都成立。
+
+⚠️ 不要因为"现在不是严格模式了"就把本门禁当作已失效而删除 —— 那是把
+一个**跨模式都成立**的真约束, 误当作**只在某模式下成立**的临时防护。
+若宿主切回 `overcommit=2`, 它立即重新成为硬约束。
 """
 
 from __future__ import annotations
