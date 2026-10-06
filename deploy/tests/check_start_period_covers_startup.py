@@ -35,9 +35,14 @@ Docker/podman 的 healthcheck 语义:
 
 即"启动期至少要等于实测值", 不要求余量 —— 余量是运维决策, 不是正确性。
 
-实测值来源: 运行中容器日志的 `Started ...Application in N seconds`,
-本文件内的常量是 2026-10-06 的读数。**换机器/换 JDK 后要重新测**,
-届时更新常量即可, 判据逻辑不变。
+实测值来源: 运行中容器日志的 `Started ...Application in N seconds`。
+**该值随宿主负载显著波动**（实测 notification 两次相差 2.3 倍: 130.9s / 304.3s）,
+故常量取最坏观测值。重新测量:
+
+    podman logs <容器> | grep -oE 'Started .* in [0-9.]+ seconds'
+
+注意此时容器必须已就绪 —— 若它的start_period 覆盖不住实测启动,
+health 会先被判 unhealthy, 但**服务仍会最终启动**, 日志仍可读。
 
 ## 为什么是白名单式的显式清单
 
@@ -67,6 +72,13 @@ COMPOSE = Path(os.environ.get("COMPOSE_FILE") or (Path(__file__).resolve().paren
 BUSINESS_SERVICES = ("gateway", "auth", "system", "file", "notification", "search")
 
 #: 2026-10-06 从运行中容器日志读回的实测启动耗时（秒）
+#:
+#: ⚠️ 这是**单次采样**, 不是稳定值。实测波动很大: notification 两次重建
+#:    分别为 304.3s（当时宿主 commit ~99%, load 19+）与 130.9s（负载较低）,
+#:    相差 2.3 倍。因此常量取**观测到的最坏值**, 配置也按最坏值留余量——
+#:    少配了会误判, 多配只是让健康判定晚一点开始, 方向上没有代价。
+#:
+#:    换机器 / 换 JDK / 宿主负载特征变化后应重新测量并更新这里。
 STARTUP_MEASURED = {
     "gateway": 128.1,
     "auth": 147.5,

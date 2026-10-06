@@ -773,6 +773,8 @@ services:
       # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
       # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
       # 此值 = 实测 128.1s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
+      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 180s
     networks:
       - cloud-infra
@@ -855,6 +857,8 @@ services:
       # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
       # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
       # 此值 = 实测 147.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
+      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 210s
     networks:
       - cloud-infra
@@ -1023,6 +1027,8 @@ services:
       # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
       # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
       # 此值 = 实测 108.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
+      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 160s
     networks:
       - cloud-infra
@@ -1105,6 +1111,8 @@ services:
       # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
       # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
       # 此值 = 实测 304.3s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
+      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 360s
     networks:
       - cloud-infra
@@ -1187,6 +1195,8 @@ services:
       # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
       # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
       # 此值 = 实测 255.7s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
+      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 330s
     networks:
       - cloud-infra
