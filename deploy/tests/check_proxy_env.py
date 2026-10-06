@@ -286,7 +286,18 @@ def main() -> int:
         print("    HTTPS_PROXY: ''")
         print("    no_proxy: '*'")
         print("    NO_PROXY: '*'")
-        print("  改完必须**重启该容器** —— 继承发生在启动后, 改文件不生效。")
+        print("  改完必须**重建容器**(`podman rm` + 重新 create, 或 "
+              "podman-compose up -d --force-recreate <服务>), 改文件本身不生效。")
+        print()
+        print("  ⚠️ 实测: `podman restart` / stop+start **无效** —— 它不重建容器,")
+        print("     .Config.Env 仍是创建时的旧值。受控实验(临时容器)实测:")
+        print("       重建后          → 非空代理变量清零 ✅")
+        print("       stop + start 后 → 泄漏仍在     ❌")
+        print("     门禁早前只写「重启该容器」, 照做会得到「配了但没生效」的假象。")
+        print()
+        print("  另注: 本项目 `no_proxy` 已覆盖 10.*/172.*/192.168.*/127.*/localhost,")
+        print("        故容器间通信不走代理 —— 泄漏只影响**外网出站**,")
+        print("        判危害时不要夸大成「服务间不可用」。")
         return 1
     return 0
 
