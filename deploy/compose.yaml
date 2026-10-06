@@ -767,7 +767,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 20s
+      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # 实测 gateway 启动 128.1s(含 SkyWalking agent 装 transformer),
+      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
+      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
+      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 此值 = 实测 128.1s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      start_period: 180s
     networks:
       - cloud-infra
     depends_on:
@@ -843,7 +849,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 20s
+      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # 实测 auth 启动 147.5s(含 SkyWalking agent 装 transformer),
+      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
+      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
+      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 此值 = 实测 147.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      start_period: 210s
     networks:
       - cloud-infra
     depends_on:
@@ -1005,7 +1017,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 20s
+      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # 实测 file 启动 108.5s(含 SkyWalking agent 装 transformer),
+      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
+      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
+      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 此值 = 实测 108.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      start_period: 160s
     networks:
       - cloud-infra
     depends_on:
@@ -1081,7 +1099,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 20s
+      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # 实测 notification 启动 304.3s(含 SkyWalking agent 装 transformer),
+      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
+      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
+      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 此值 = 实测 304.3s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      start_period: 360s
     networks:
       - cloud-infra
     depends_on:
@@ -1157,7 +1181,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      start_period: 20s
+      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # 实测 search 启动 255.7s(含 SkyWalking agent 装 transformer),
+      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
+      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
+      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 此值 = 实测 255.7s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
+      start_period: 330s
     networks:
       - cloud-infra
     depends_on:

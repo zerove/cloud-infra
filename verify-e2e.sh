@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -846,6 +846,28 @@ check_schema_init_wiring() {
   return 0
 }
 
+# start_period 必须覆盖实测启动耗时（2026-10-06 实测缺陷）。
+#
+#   机制: Docker healthcheck 在 start_period 期间**不计数**失败, 之后连续失败
+#   retries 次即锁定 unhealthy 且**不会**因应用就绪而回 healthy。
+#   实测 6 个业务服务里**5 个**的 start_period(20s) + interval(5s)*retries(5)
+#   = 45s 判定窗口, 远小于实测启动 108s~304s —— 即服务完全可用却永远 unhealthy。
+#
+#   为什么这不只是"状态显示难看": verify-e2e.sh 的等待预算只有 600s
+#   (第 1135 行 DEADLINE), 而最慢服务实测启动 304s —— 两者叠加会把
+#   "服务正常" 报成 E2E 失败。
+check_start_period_covers_startup() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_start_period_covers_startup.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "业务服务 start_period 覆盖不住实测启动耗时（详见上方具体项）"
+    return 1
+  fi
+  ok "各业务服务 start_period 均覆盖实测启动耗时"
+  return 0
+}
+
 # 判定 compose 里的 JVM 参数键**确实是镜像启动脚本会读的**。
 # 静态解析 compose 的守护无法发现"配置写在没人读的键上"(第三课在守护层的重演)。
 #
@@ -894,6 +916,8 @@ echo
 # 4 张表全缺, 容器仍是 healthy)。
 echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
 check_schema_init_wiring || true
+echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
+check_start_period_covers_startup || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------
