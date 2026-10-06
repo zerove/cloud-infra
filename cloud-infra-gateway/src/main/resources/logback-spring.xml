@@ -51,8 +51,25 @@
     <logger name="org.springframework.web.servlet.DispatcherServlet" level="DEBUG"/>
     <logger name="org.springframework.web.reactive" level="DEBUG"/>
     <logger name="org.springframework.http.client" level="DEBUG"/>
-    <logger name="org.apache.hc.client5" level="DEBUG"/>
-    <logger name="org.apache.hc.client5.http" level="DEBUG"/>
+    <!-- ⚠️ org.apache.hc.client5 不能开 DEBUG(2026-10-06 实测)。
+         HttpClient5 的 wire logger 会把**整个 HTTP 报文逐字节**喂给
+         ch.qos.logback 的 PatternLayout, 实测栈为:
+           StreamUtils.copy → LoggingOutputStream.write → Wire.output
+             → Wire.wire → Logger.debug → PatternLayout.doLayout
+               → StringBuilder.append → Arrays.copyOf → OOM
+         即每个 body 字节都被扩成一个 char(2B) 再加上 StringBuilder
+         扩容时的多次数组拷贝, 实测约 37 倍放大。
+
+         后果是**经网关上传超过 6MB 的文件必然打崩网关**
+         (干净基线逐级实测: 4MB/6MB 成功, 7MB/8MB 必崩),
+         日志仅一行 `java.lang.OutOfMemoryError: Java heap space`。
+
+         ⚠️ 这里必须区分两个日志包 —— 它们完全不是一回事:
+           org.apache.hc.client5.http.wire / .headers  = 逐字节报文日志, 必须关
+           org.apache.hc.core5.http.wire                = 连接级摘要, 无害
+         所以下面只关 client5 的 wire/headers, 不动 core5。 -->
+    <logger name="org.apache.hc.client5.http.wire" level="INFO"/>
+    <logger name="org.apache.hc.client5.http.headers" level="INFO"/>
     <logger name="org.apache.hc.core5" level="DEBUG"/>
     <logger name="org.springframework.cloud.client.loadbalancer" level="DEBUG"/>
     <logger name="org.springframework.retry" level="DEBUG"/>
