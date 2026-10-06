@@ -29,23 +29,27 @@ public class GatewayClientConfig {
 
     private static final Duration CONNECT_TIMEOUT = java.time.Duration.ofSeconds(3);
     private static final Duration CONNECTION_REQUEST_TIMEOUT = java.time.Duration.ofSeconds(3);
-    private static final Duration READ_TIMEOUT = java.time.Duration.ofSeconds(10);
 
     /**
      * 创建配置好的 ClientHttpRequestFactory
      * 配置跳过代理，直接连接目标服务（内网服务间调用不需要代理）
+     *
+     * <p>超时值来自 {@link GatewayHttpTimeoutProperties}，而非本类常量。
+     * 此前这里声明过 {@code READ_TIMEOUT = ofSeconds(10)} 并在 {@code RequestConfig} 里
+     * 另写了一份字面量 {@code ofSeconds(10)}，两份互不引用：改常量不会有任何效果，
+     * 而字面量才是实际生效的那个。已统一改为读取配置项。
      */
     @Bean
     @Primary
-    public ClientHttpRequestFactory clientHttpRequestFactory() {
+    public ClientHttpRequestFactory clientHttpRequestFactory(GatewayHttpTimeoutProperties timeouts) {
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(2000);
         cm.setDefaultMaxPerRoute(500);
 
         RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.of(Duration.ofSeconds(3)))
-                .setConnectTimeout(Timeout.of(Duration.ofSeconds(3)))
-                .setResponseTimeout(Timeout.of(Duration.ofSeconds(10)))
+                .setConnectionRequestTimeout(Timeout.of(timeouts.getConnectionRequest()))
+                .setConnectTimeout(Timeout.of(timeouts.getConnect()))
+                .setResponseTimeout(Timeout.of(timeouts.getRead()))
                 .setProxy(null)
                 .build();
 
