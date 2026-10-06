@@ -767,11 +767,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
       # 实测 gateway 启动 128.1s(含 SkyWalking agent 装 transformer),
       # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
-      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
+      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
+      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
+      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
+      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
       # 此值 = 实测 128.1s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
@@ -851,11 +854,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
       # 实测 auth 启动 147.5s(含 SkyWalking agent 装 transformer),
       # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
-      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
+      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
+      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
+      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
+      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
       # 此值 = 实测 147.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
@@ -1021,11 +1027,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
       # 实测 file 启动 108.5s(含 SkyWalking agent 装 transformer),
       # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
-      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
+      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
+      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
+      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
+      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
       # 此值 = 实测 108.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
@@ -1105,11 +1114,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
       # 实测 notification 启动 304.3s(含 SkyWalking agent 装 transformer),
       # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
-      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
+      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
+      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
+      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
+      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
       # 此值 = 实测 304.3s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
@@ -1189,11 +1201,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**永久误判 unhealthy**。
+      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
       # 实测 search 启动 255.7s(含 SkyWalking agent 装 transformer),
       # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 之后连续失败即锁定 unhealthy,
-      # 即使应用随后已就绪也不会回 healthy(实测 notification 304s > 45s, 正是此形态)。
+      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
+      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
+      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
+      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
+      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
       # 此值 = 实测 255.7s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
