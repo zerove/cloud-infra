@@ -175,7 +175,7 @@ class FileServiceImplTest {
 
         given(metadataMapper.selectById(fileId)).willReturn(metadata);
         given(permissionService.hasAccess(userId, fileId, "READ")).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.download(metadata.getFilePath())).willReturn(new ByteArrayInputStream("pdf content".getBytes()));
 
         // when
@@ -224,7 +224,7 @@ class FileServiceImplTest {
 
         given(metadataMapper.selectById(fileId)).willReturn(metadata);
         given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.delete(metadata.getFilePath())).willReturn(true);
         given(metadataMapper.deleteById(fileId)).willReturn(1);
 
@@ -367,7 +367,7 @@ class FileServiceImplTest {
 
         given(permissionService.hasAccess(userId, fileId, "READ")).willReturn(true);
         given(versionMapper.selectOne(any())).willReturn(version);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.download("/uploads/v2.txt")).willReturn(new ByteArrayInputStream("v2 content".getBytes()));
 
         // when
@@ -440,7 +440,7 @@ class FileServiceImplTest {
         metadata.setFilePath("/uploads/doc.pdf");
         given(metadataMapper.selectById(1L)).willReturn(metadata);
         given(permissionService.hasAccess(anyLong(), anyLong(), eq("WRITE"))).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.delete("/uploads/doc.pdf")).willReturn(false);
 
         // when
@@ -461,7 +461,7 @@ class FileServiceImplTest {
         metadata.setUploader("not-a-number");
         given(metadataMapper.selectById(1L)).willReturn(metadata);
         given(permissionService.hasAccess(anyLong(), anyLong(), eq("WRITE"))).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.delete("/uploads/doc.pdf")).willReturn(true);
         given(metadataMapper.deleteById(1L)).willReturn(1);
 

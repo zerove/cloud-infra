@@ -187,7 +187,8 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to download this file");
         }
 
-        StorageStrategy strategy = storageFactory.getStrategy();
+        // 按实际存放位置解析, 而非用 getStrategy() 恒定返回 local(2026-10-06 实测缺陷)
+        StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
         return strategy.download(metadata.getFilePath());
     }
 
@@ -207,7 +208,8 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "File version not found");
         }
 
-        StorageStrategy strategy = storageFactory.getStrategy();
+        // 按实际存放位置解析(同上, 避免大文件版本读不到)
+        StorageStrategy strategy = storageFactory.resolveForRead(versionEntity.getStoragePath());
         return strategy.download(versionEntity.getStoragePath());
     }
 
@@ -233,7 +235,8 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to delete this file");
         }
 
-        StorageStrategy strategy = storageFactory.getStrategy();
+        // 删除同样必须命中真实存储后, 否则 MinIO 上的大文件删不掉且会残留配额占用
+        StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
         boolean deleted = strategy.delete(metadata.getFilePath());
         
         if (deleted) {
