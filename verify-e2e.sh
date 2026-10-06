@@ -998,6 +998,42 @@ echo "[前置] 检查运行期 commit 预算 (仅告警) ..."
 check_commit_runtime_guard || true
 echo
 
+# ---- 实证信号门禁 (2026-10-06 新增) --------------------------------------
+# 为什么需要它: 上面两个 commit 门禁在非严格 overcommit 模式下已改为**只告警**
+# (比例不再预测分配失败)。于是"那现在到底有没有出事"没有任何自动回答 ——
+# 而两者的输出都只让用户自己去 grep MemAvailable, 全仓无人读该指标。
+#
+# 本门禁回答的是**已发生的事实**, 不是预测: 容器日志里有没有 native 分配失败。
+# 退出码三态:
+#   0 = 已探测且无失败 -> PASS
+#   1 = 有容器报过失败 -> 阻断(这是实证, 不是猜测)
+#   2 = 探针失效       -> **不阻断也不判绿**(取不到 != 健康)
+check_native_alloc_evidence() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_native_alloc_evidence.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1)
+      fail "已有容器报告 native 内存分配失败 (实证, 非预测)"
+      return 1
+      ;;
+    2)
+      # ⚠️ 不能归入 ok: "没测到"说成"测了没事"是第六类假门禁。
+      # 也不能归入 fail: 那会把探针故障说成系统故障。二者都只记录。
+      ok "实证信号探针失效, 本次未完成判定(既非 PASS 也非 FAIL, 不阻断)"
+      return 0
+      ;;
+    *)
+      ok "近 24h 无容器报告 native 内存分配失败"
+      return 0
+      ;;
+  esac
+}
+
+echo "[前置] 检查 native 分配失败的实证信号 ..."
+check_native_alloc_evidence || true
+echo
+
 # ⚠️ 已删除的“堆外余量门禁” (2026-10-05) —— 记录它的错误与正确结论,
 #    避免下一个人把它重新加回来。
 #

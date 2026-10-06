@@ -109,28 +109,195 @@ CALLER_SCRIPTS = ("verify-e2e.sh", "deploy/verify-e2e.sh",
 
 
 def _caller_text() -> str:
-    """拼起所有可能的调用方脚本正文（缺失不算错, 只是没有调用点）。"""
+    """拼起所有可能的调用方脚本正文（缺失不算错, 只是没有调用点）。
+
+    ⚠️ 2026-10-06 修正 —— 必须剥离**注释行**, 否则被注释掉的调用仍算接线。
+    实测: 把 `check_native_alloc_evidence || true` 注释掉后,
+    本守护仍报 PASS —— 因为函数定义那一行仍然包含该名字。
+
+    这与 workflow_texts() 2026-10-05 的修正是**同一个缺陷的两处**:
+    那边修的是工作流(剥离 YAML 注释), 这边漏了调用方脚本(剥离 shell 注释)。
+    只修一处 ⇒ 假阴性从工作流搬到了 shell。
+
+    ⚠️ 剥离注释用的是「行首 #」判据, 存在已知局限: 被注释掉的**多行**片段
+    中若后续行不以 # 开头(heredoc / 续行), 仍可能被误算作接线。
+    本次实测覆盖的是「整行注释」这一形态, 也是本项目实际用过的形态。
+    """
     parts: list[str] = []
     for rel in CALLER_SCRIPTS:
         p = REPO / rel
         if p.is_file():
             try:
-                parts.append(p.read_text(encoding="utf-8"))
+                text = p.read_text(encoding="utf-8")
             except OSError:
                 continue
+            parts.append(_strip_shell_comments(text))
     return "\n".join(parts)
+
+
+def _strip_shell_comments(text: str) -> str:
+    """剥掉 shell 注释行, 只保留可执行内容。
+
+    刻意**不**做「引号感知」的解析: 那会把 here-doc 里的 `#` 也当注释,
+    反而制造新的假阴性。本守护只需要判「有没有被注释掉的调用点」,
+    行首 `#` 判据对实际用法足够, 且不会误伤。
+    """
+    kept: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        # 注释行 / 纯注释(可能带 shebang) / 空行直接丢。
+        if stripped.startswith("#"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _is_invoked(name: str, caller: str) -> bool:
+    """该门禁是否被**真实调用**（而非仅仅被提到）。
+
+    ⚠️ 2026-10-06 修正 —— 「名字出现在文件里」不等于「被调用」。实测:
+    把 `check_native_alloc_evidence || true` 注释掉后, 旧判据仍报 PASS,
+    因为该名字还出现在两处**非调用点**:
+
+        1011: check_native_alloc_evidence() {                     <- 函数**定义**
+        1013:   out=$(python3 ".../check_native_alloc_evidence.py")  <- 函数体内的路径
+
+    所以光剔除注释行**不够** —— 函数定义与函数体让名字必然存在。
+    这与本项目已踩多次的形态同源: 判据必须指向**被检对象本身**,
+    而「这个名字在文件里」指向的是「文本中存在」, 不是「被执行」。
+
+    判据: 必须存在一行, 它**调用**这个名字且**不是**定义。
+    即: 名字后面**不能**紧跟 `(`（定义形式 `name() {`）, 且该名字必须
+    站在**命令位置**（行首, 或 `&&`/`||`/`;`/`|`/`$(` 之后）。
+
+    ⚠️ 第二版反面教材（同日）: 第一版用「名字前引号计数奇偶」判断是否在引号内,
+    结果**误伤了 4 个真实接线**。原因是判据取的名字带扩展名
+    (`check_commit_budget.py`), 而真实调用形如:
+
+        out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_budget.py" 2>&1)
+
+    名字前紧邻的是 `"`, 但那引号属于**外层 $()** 与路径字符串, 名字本身站在
+    **闭引号之后** —— 引号奇偶判定在这里没有任何信息量, 纯属噪声。
+
+    正解: 不猜引号状态, 只问「这个名字是被当作**参数**传给了某个执行器」。
+    真实的调用形态统一是 `<解释器> "<路径>/<名字>"`, 即名字永远出现在
+    **路径末尾**（紧邻扩展名）而前面是 `/`。
+
+    ⚠️ 第三版反面教材（同日, 两次）:
+      · 第一版用引号奇偶 → 误伤 4 个真实接线;
+      · 第二版要求名字站在命令位置（行首 / `&&` 之后）→ **一个都判不出**,
+        因为真实形态是 `python3 "$DIR/check_xxx.py"` —— 名字前面是 `/`。
+    两次都是**把判据建在"看起来像调用"的语法特征上**, 而不是问
+    「这个名字有没有被交给执行器」。语法特征会随写法变, 是否执行不会。
+
+    故最终判据 —— **先看有没有同名 wrapper, 再决定用哪个判据**:
+
+      若存在 wrapper (`name() {`):
+        必须**该 wrapper 真被调用**。wrapper 函数体里那句
+        `python3 ".../name.py"` 只是**函数体**, wrapper 没被调用时
+        它根本不执行 —— 这正是本次负向对照①（注释掉调用点）曾漏过的形态。
+      若不存在 wrapper:
+        直接要求该门禁的**路径**出现在非注释行。
+        实测 10 个 check_* 门禁里有 2 个
+        (`check_jvm_native_memory_bounds.py` / `check_jvm_opts_keys_match_image.py`)
+        属这一类 —— 被 `check_jvm_native_bounds` 这类**不同名**函数间接调用。
+
+    ⚠️ 为什么不能用「A 或 B」: 两分支是**互斥择一**而非并存。
+    早期版本写成 `if A: return True` 再 `return B`, 于是注释掉调用点后,
+    A 分支在 wrapper 函数体里找到了那句 `python3 ".../name.py"` 而返回 True,
+    守护报 PASS —— 函数体存在 ≠ 函数被调用（第三类假门禁的又一形态）。
+    """
+    stem = name.rsplit(".", 1)[0]
+    if _has_wrapper_definition(stem, caller):
+        return _called_outside_definition(stem, caller)
+    return _referenced_outside_definition(name, caller)
+
+
+def _has_wrapper_definition(stem: str, caller: str) -> bool:
+    """是否存在 `name() {` 形式的 wrapper 定义。"""
+    pattern = re.compile(r"^\s*" + re.escape(stem) + r"\s*\(\)\s*\{", re.M)
+    return bool(pattern.search(caller))
+
+
+def _referenced_outside_definition(name: str, caller: str) -> bool:
+    """名字是否在非注释行里以**非函数定义**的形态出现过。
+
+    ⚠️ 必须同时剔除**行尾注释**: 实测负向对照③里,
+    往 `if ! { ...; check_commit_budget; }; then` 中间插一个 `#` 会得到
+
+        if ! # { echo "..."; check_commit_budget; }; then
+
+    这行**不是**注释行(行首没有 #), 但 `#` 之后全是注释 ——
+    若只看行首, 名字仍被判成「在命令位置」, 守护于是报 PASS。
+    即「行首 #」是**不完整**的注释判据, 与本项目已记录的
+    「被检字面量出现在断言自身附近」同族。
+
+    做法: 取第一个 `#` 之后的内容(不处理引号内的 #, 见下方说明)。
+    引号内的 `#` 误伤风险已知但可接受: 真实调用行里引号内几乎不会出现
+    「`#` 之后还有门禁名」这种形态, 而误伤方向是**判为未接线**(安全侧)。
+    """
+    for raw in caller.splitlines():
+        line = _strip_trailing_comment(raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        start = 0
+        while True:
+            pos = line.find(name, start)
+            if pos < 0:
+                break
+            start = pos + 1
+            if line[pos + len(name):].lstrip().startswith("("):
+                continue  # 函数定义形式 name() {
+            return True
+    return False
+
+
+def _strip_trailing_comment(line: str) -> str:
+    """去掉 `#` 及其之后的内容。
+
+    ⚠️ 刻意不做引号感知: 代价是 `echo "a # b"` 会被截成 `echo "a `,
+    但本判据只关心「门禁名出现在可执行部分」, 而门禁名不会被写在
+    纯注释性字符串里。误伤方向为**保守**(判为未接线), 可接受。
+    """
+    idx = line.find("#")
+    return line if idx < 0 else line[:idx]
+
+
+def _called_outside_definition(stem: str, caller: str) -> bool:
+    """同名 wrapper 是否真被调用（`name() {` 与 `name` 直接跟 `(` 都不算）。
+
+    命令位置判据: 名字前要么是行首, 要么是 `;` `&&` `||` `|` `!` `(` 等分隔符。
+    实测真实形态: `check_commit_budget || true`、`if ! check_commit_runtime_guard`。
+    """
+    marks = (";", "&&", "||", "|", "!", "(", "{", "}", "\t")
+    for raw in caller.splitlines():
+        line = _strip_trailing_comment(raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        start = 0
+        while True:
+            pos = line.find(stem, start)
+            if pos < 0:
+                break
+            start = pos + 1
+            if line[pos + len(stem):].lstrip().startswith("("):
+                continue  # 定义 name() {  或  name(...)
+            before = line[:pos].rstrip()
+            if before == "" or before.endswith(marks):
+                return True
+    return False
 
 
 def is_exempt(name: str) -> str | None:
     """返回豁免理由; 不豁免则返回 None。
 
-    `check_*` 的豁免是**有条件**的: 必须真能在调用方脚本里找到引用。
+    `check_*` 的豁免是**有条件**的: 必须真能在调用方脚本里找到调用点。
     """
     if name in EXEMPT_CATEGORIES:
         return EXEMPT_CATEGORIES[name]
     if name.startswith("check_"):
-        if name in _caller_text():
-            return f"判定门禁, 已被调用方脚本引用({CALLER_SCRIPTS[0]})"
+        if _is_invoked(name, _caller_text()):
+            return f"判定门禁, 已被调用方脚本调用({CALLER_SCRIPTS[0]})"
         # 条件不成立 → 不豁免, 交由 main() 当作未接线报红。
         return None
     for prefix, reason in EXEMPT_CATEGORIES.items():
