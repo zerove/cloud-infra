@@ -222,12 +222,26 @@ public class FileServiceImpl implements IFileService {
         );
     }
 
+    /**
+     * 删除文件（硬删除，不可恢复）。
+     *
+     * <p><b>2026-10-07 语义收紧</b>: 本方法原先对「元数据不存在」与「存储删除失败」
+     * 都返回 {@code false}。该端点开放后，HTTP 层无法对这两种情况给出正确语义 ——
+     * 若都映射为 404，调用方会认为「文件已消失」，而实际上存储对象与配额都还在。
+     * 故改为分别抛出可区分的异常：
+     * <ul>
+     *   <li>元数据不存在 → {@code RESOURCE_NOT_FOUND} (1006)</li>
+     *   <li>存储删除失败 → {@code SYSTEM_ERROR} (1000)，且<b>不</b>删元数据</li>
+     *   <li>无写权限 → {@code NO_PERMISSION} (1005)</li>
+     * </ul>
+     * 保留 {@code boolean} 返回值以兼容既有调用方，成功时恒为 true。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean delete(Long fileId, Long userId) {
         FileMetadata metadata = metadataMapper.selectById(fileId);
         if (metadata == null) {
-            return false;
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在");
         }
 
         // 写权限校验（含上传者本人或授权用户）
@@ -237,24 +251,26 @@ public class FileServiceImpl implements IFileService {
 
         // 删除同样必须命中真实存储后, 否则 MinIO 上的大文件删不掉且会残留配额占用
         StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
-        boolean deleted = strategy.delete(metadata.getFilePath());
-        
-        if (deleted) {
-            // 释放配额：优先使用元数据中的真实上传者，回退到当前操作者
-            Long ownerId = parseUploader(metadata.getUploader());
-            if (ownerId == null) {
-                ownerId = userId;
-            }
-            if (metadata.getFileSize() != null) {
-                quotaService.release(ownerId, metadata.getFileSize());
-            }
-
-            versionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
-                .eq(FileVersion::getFileId, fileId));
-            return metadataMapper.deleteById(fileId) > 0;
+        if (!strategy.delete(metadata.getFilePath())) {
+            // 存储仍持有对象: 抛错并回滚, 避免留下"记录没了、文件还在"的幽灵文件
+            // (且配额不会被错误释放)
+            log.warn("存储删除失败, 保留元数据以免产生幽灵文件 [fileId={}, path={}]",
+                    fileId, metadata.getFilePath());
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "存储删除失败，文件未被删除");
         }
-        
-        return false;
+
+        // 释放配额：优先使用元数据中的真实上传者，回退到当前操作者
+        Long ownerId = parseUploader(metadata.getUploader());
+        if (ownerId == null) {
+            ownerId = userId;
+        }
+        if (metadata.getFileSize() != null) {
+            quotaService.release(ownerId, metadata.getFileSize());
+        }
+
+        versionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
+            .eq(FileVersion::getFileId, fileId));
+        return metadataMapper.deleteById(fileId) > 0;
     }
 
     /**

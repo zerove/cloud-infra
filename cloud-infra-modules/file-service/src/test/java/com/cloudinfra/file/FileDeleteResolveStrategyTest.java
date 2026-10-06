@@ -137,9 +137,14 @@ class FileDeleteResolveStrategyTest {
 
         FileServiceImpl service = serviceWith(meta, metadataMapper, minio);
 
-        boolean result = service.delete(42L, 1L);
+        // 2026-10-07: 原先断言 isFalse()。"文件不存在"与"存储删除失败"都返回 false,
+        // HTTP 层无法区分 —— 调用方会把仍在存储里的文件当成已删除。
+        // 现改为抛 SYSTEM_ERROR, 元数据保留。
+        assertThatThrownBy(() -> service.delete(42L, 1L))
+                .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+                .extracting(e -> ((com.cloudinfra.common.core.exception.BusinessException) e).getCode())
+                .isEqualTo(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode());
 
-        assertThat(result).as("存储删除失败时整体应失败").isFalse();
         verify(metadataMapper, never()).deleteById(anyLong());
     }
 

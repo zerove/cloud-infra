@@ -89,7 +89,7 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
 
     private static final Set<String> FILE_PERMS = Set.of(
             "file:file:upload", "file:file:update", "file:file:download",
-            "file:file:history", "file:file:search");
+            "file:file:history", "file:file:search", "file:file:remove");
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -352,6 +352,90 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(true)
                 .jsonPath("$.data[0].versionNumber").isEqualTo(1);
+    }
+
+    /**
+     * 删除端点（issue 34, 2026-10-07）端到端覆盖。
+     *
+     * <p>用真实 PostgreSQL 容器 + 真实 SecurityFilterChain + 真实 @PreAuthorize +
+     * 真实 LocalStorageStrategy，验证三层防护与端点可达性 —— 服务层单测无法证明
+     * 端点真的注册、权限点真的被拦截。</p>
+     */
+    @Test
+    @Order(4)
+    void unauthenticatedDeleteIsRejectedWith401() {
+        client.delete().uri("/file/{fileId}", 1L)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(401);
+    }
+
+    @Test
+    @Order(5)
+    void userWithoutRemovePermissionGets403() {
+        client.delete().uri("/file/{fileId}", 1L)
+                .header("X-User-Id", USER_NO_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_NO_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(403);
+    }
+
+    @Test
+    @Order(6)
+    void ownerCanDeleteUploadedFileAndItDisappearsFromSearch() {
+        // 上传 → 拿到 fileId
+        byte[] resp = client.post().uri("/file/upload")
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .body(BodyInserters.fromMultipartData(textFile("to-delete.txt").build()))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .returnResult().getResponseBody();
+        long fileId = fileIdOf(resp);
+
+        // 删除前：搜索能命中
+        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "to-delete").build())
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data.records[0].fileName").isEqualTo("to-delete.txt");
+
+        // 删除 → 成功
+        client.delete().uri("/file/{fileId}", fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true);
+
+        // 删除后：元数据真的消失（不是"返回成功但记录还在"）
+        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "to-delete").build())
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data.records").isEmpty();
+
+        // 再次删除同一 id → 404（资源确实没了，而非幂等返回成功）
+        client.delete().uri("/file/{fileId}", fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(404);
     }
 
     /** 从上传响应 JSON 提取 fileId（避免引入完整反序列化依赖）。 */

@@ -3,6 +3,8 @@ package com.cloudinfra.file.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.api.file.dto.FileVersion;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.exception.BusinessException;
+import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
 import com.cloudinfra.file.service.IFileService;
@@ -23,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -357,6 +360,34 @@ public class FileController {
         } catch (Exception e) {
             log.error("获取版本历史失败", e);
             return Result.fail(500, "获取版本历史失败");
+        }
+    }
+
+    @Operation(summary = "删除文件（硬删除，不可恢复）")
+    @PreAuthorize("@ss.hasPermi('file:file:remove')")
+    @DeleteMapping("/{fileId}")
+    public Result<Void> remove(
+            @PathVariable Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+        Long userId = resolveUserId(requestUserId);
+        // service 层抛 BusinessException 时由 GlobalExceptionHandler 统一转 Result,
+        // 但其 getSuggestedHttpStatus() 恒为 500 —— 权限/不存在这类语义失败
+        // 不该被读成"服务故障"。故在此显式映射, 保持与 @PreAuthorize 的 401/403 一致的语义层。
+        try {
+            fileService.delete(fileId, userId);
+            return Result.success();
+        } catch (BusinessException e) {
+            // 按 ErrorCode 枚举比对, 不用裸数字: 1005/1006 一旦错误码调整,
+            // 裸数字会静默失配并退化成 500(第四课: 判据必须指向被检对象本身)
+            if (ErrorCode.NO_PERMISSION.getCode().equals(e.getCode())) {
+                return Result.fail(403, e.getMessage());
+            }
+            if (ErrorCode.RESOURCE_NOT_FOUND.getCode().equals(e.getCode())) {
+                return Result.fail(404, e.getMessage());
+            }
+            // 其余(含存储删除失败 SYSTEM_ERROR): 保留可读原因, 不吞掉
+            log.error("文件删除失败 [fileId={}]: {}", fileId, e.getMessage());
+            return Result.fail(ErrorCode.SYSTEM_ERROR.getCode(), e.getMessage());
         }
     }
 

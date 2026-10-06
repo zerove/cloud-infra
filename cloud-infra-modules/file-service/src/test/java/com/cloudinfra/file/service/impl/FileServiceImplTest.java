@@ -237,15 +237,91 @@ class FileServiceImplTest {
     }
 
     @Test
-    void delete_nonExistentFile_shouldReturnFalse() {
+    void delete_nonExistentFile_shouldThrowResourceNotFound() {
         // given
         given(metadataMapper.selectById(anyLong())).willReturn(null);
 
-        // when
-        boolean result = fileService.delete(99L, 1L);
+        // when / then
+        // 2026-10-07: 原先返回 false, 但 HTTP 层无法区分"文件不存在"与
+        // "存储删除失败" —— 都会变成 404, 让调用方误以为文件已消失。
+        assertThatThrownBy(() -> fileService.delete(99L, 1L))
+            .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+            .extracting(e -> ((com.cloudinfra.common.core.exception.BusinessException) e).getCode())
+            .isEqualTo(com.cloudinfra.common.core.exception.ErrorCode.RESOURCE_NOT_FOUND.getCode());
+    }
 
-        // then
-        assertThat(result).isFalse();
+    @Test
+    void delete_withoutWritePermission_shouldThrowAndNotTouchStorage() {
+        // given: 文件存在但无写权限
+        Long fileId = 1L, userId = 10L;
+        FileMetadata metadata = new FileMetadata();
+        metadata.setId(fileId);
+        metadata.setFilePath("/uploads/doc.pdf");
+        metadata.setFileSize(200L);
+        given(metadataMapper.selectById(fileId)).willReturn(metadata);
+        given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(false);
+
+        // when / then
+        assertThatThrownBy(() -> fileService.delete(fileId, userId))
+            .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+            .extracting(e -> ((com.cloudinfra.common.core.exception.BusinessException) e).getCode())
+            .isEqualTo(com.cloudinfra.common.core.exception.ErrorCode.NO_PERMISSION.getCode());
+
+        // 关键: 无权限时绝不触碰存储、绝不删元数据、绝不释放配额
+        then(storageFactory).should(never()).resolveForRead(anyString());
+        then(metadataMapper).should(never()).deleteById(anyLong());
+        then(quotaService).should(never()).release(anyLong(), anyLong());
+    }
+
+    @Test
+    void delete_whenStorageDeleteFails_shouldKeepMetadataAndNotReleaseQuota() {
+        // given: 权限通过但存储删除失败
+        Long fileId = 1L, userId = 10L;
+        FileMetadata metadata = new FileMetadata();
+        metadata.setId(fileId);
+        metadata.setFilePath("/uploads/doc.pdf");
+        metadata.setFileSize(200L);
+        metadata.setUploader("10");
+        given(metadataMapper.selectById(fileId)).willReturn(metadata);
+        given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(true);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
+        given(storageStrategy.delete(metadata.getFilePath())).willReturn(false);
+
+        // when / then
+        // 2026-10-07: 原先返回 false, HTTP 层同样无法与"不存在"区分。
+        assertThatThrownBy(() -> fileService.delete(fileId, userId))
+            .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+            .extracting(e -> ((com.cloudinfra.common.core.exception.BusinessException) e).getCode())
+            .isEqualTo(com.cloudinfra.common.core.exception.ErrorCode.SYSTEM_ERROR.getCode());
+
+        // 关键: 存储仍持有对象, 元数据必须保留(否则产生幽灵文件), 配额不得释放
+        then(metadataMapper).should(never()).deleteById(anyLong());
+        then(versionMapper).should(never()).delete(any());
+        then(quotaService).should(never()).release(anyLong(), anyLong());
+    }
+
+    @Test
+    void delete_shouldReleaseQuotaForOriginalUploaderNotOperator() {
+        // given: 文件由 user 7 上传, 但由 user 10 执行删除 (被授权 WRITE)
+        Long fileId = 1L, operatorId = 10L;
+        FileMetadata metadata = new FileMetadata();
+        metadata.setId(fileId);
+        metadata.setFilePath("/uploads/doc.pdf");
+        metadata.setFileSize(200L);
+        metadata.setUploader("7");
+        given(metadataMapper.selectById(fileId)).willReturn(metadata);
+        given(permissionService.hasAccess(operatorId, fileId, "WRITE")).willReturn(true);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
+        given(storageStrategy.delete(metadata.getFilePath())).willReturn(true);
+        given(metadataMapper.deleteById(fileId)).willReturn(1);
+
+        // when
+        boolean result = fileService.delete(fileId, operatorId);
+
+        // then: 配额必须从真实上传者账户扣减, 否则他的配额被永久占用
+        assertThat(result).isTrue();
+        then(quotaService).should().release(7L, 200L);
+        then(quotaService).should(never()).release(eq(operatorId), anyLong());
     }
 
     @Test
@@ -430,25 +506,6 @@ class FileServiceImplTest {
         assertThatThrownBy(() -> fileService.delete(1L, 1L))
             .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
             .hasMessageContaining("permission");
-    }
-
-    @Test
-    void delete_whenStorageDeleteFails_shouldReturnFalse() {
-        // given
-        FileMetadata metadata = new FileMetadata();
-        metadata.setId(1L);
-        metadata.setFilePath("/uploads/doc.pdf");
-        given(metadataMapper.selectById(1L)).willReturn(metadata);
-        given(permissionService.hasAccess(anyLong(), anyLong(), eq("WRITE"))).willReturn(true);
-        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
-        given(storageStrategy.delete("/uploads/doc.pdf")).willReturn(false);
-
-        // when
-        boolean result = fileService.delete(1L, 1L);
-
-        // then
-        assertThat(result).isFalse();
-        then(metadataMapper).should(never()).deleteById(anyLong());
     }
 
     @Test
