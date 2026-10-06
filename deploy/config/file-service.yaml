@@ -92,13 +92,22 @@ auth:
 file:
   storage:
     type: auto
+    local:
+      # ⚠️ 键名必须与 LocalStorageStrategy 的 @Value 逐字一致 (2026-10-06 实测缺陷)。
+      #   代码读的是 `${file.storage.local.path:...}`, 而此前配置写的是
+      #   `upload.dir` —— 那个键**没有任何代码读取**, 于是服务一直静默使用
+      #   代码默认值 /tmp/cloud-infra/uploads。
+      #   证据: 运行时 /data 在容器内不存在, 而 /tmp/cloud-infra/uploads 存在。
+      #   教训: 配了 ≠ 生效(第三条硬规则), 配置键必须与读取处逐字对齐。
+      path: /data/uploads
     minio:
       endpoint: ${MINIO_ENDPOINT:http://cloud-minio:9000}
       access-key: ${MINIO_ACCESS_KEY:minio-dev-user}
       secret-key: ${MINIO_SECRET_KEY:minio-dev-secret-12345678}
-      bucket: ${MINIO_BUCKET:cloud-infra}
-  upload:
-    dir: /data/uploads
+      # 桶名必须与 FileController 签名直传硬编码的 "cloud-infra-files" 一致。
+      # 2026-10-06 实测: 不一致时常规上传报 NoSuchBucket; 小文件走本地故不受影响,
+      # 于是缺陷长期只在大文件路径上暴露。
+      bucket: ${MINIO_BUCKET:cloud-infra-files}
 
 management:
   server:

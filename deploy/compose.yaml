@@ -1039,6 +1039,17 @@ services:
       # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
       #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
       start_period: 160s
+    volumes:
+      # ⚠️ 本地存储策略的目录必须挂持久卷 (2026-10-06 实测缺陷)。
+      #   此前 cloud-file **没有任何 volumes**, /tmp/cloud-infra/uploads
+      #   位于容器可写层 —— 容器重建后文件全部丢失, 而 file_metadata /
+      #   file_version 元数据仍在库里, 形成"有记录无文件"的孤儿。
+      #   本轮实测正是这个形态: 3 条元数据 + 4 条版本记录, 对应文件全不存在。
+      #
+      #   挂载点必须与 file-service.yaml 的 file.storage.local.path 一致,
+      #   否则会挂到服务根本不读的位置 —— 空挂载比不挂更危险,
+      #   因为它看起来配好了。
+      - fileuploads:/data/uploads
     networks:
       - cloud-infra
     depends_on:
@@ -1320,6 +1331,7 @@ volumes:
   grafana-data:
   loki-data:
   miniodata:
+  fileuploads:
 
 networks:
   cloud-infra:
