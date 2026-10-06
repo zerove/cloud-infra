@@ -2,8 +2,8 @@ package com.cloudinfra.framework.web.monitor;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.AfterThrowing;
@@ -47,7 +47,23 @@ public class BusinessMetricAspect {
     private static final Logger log = LoggerFactory.getLogger(BusinessMetricAspect.class);
 
     private final MeterRegistry registry;
-    private final Map<String, Counter> counterCache = new HashMap<>();
+
+    /**
+     * Counter 缓存。
+     *
+     * <p>必须是 {@link ConcurrentHashMap}: 本切面拦截的是**异常路径**
+     * (以及带 resultOnSuccess 的返回路径), 高并发下多个请求会同时进入
+     * {@link #increment}。用普通 {@code HashMap} 时:
+     * <ul>
+     *   <li>并发 {@code computeIfAbsent} 可能抛 {@code ConcurrentModificationException}</li>
+     *   <li>即便不抛, resize 期间的写也可能丢失 —— 即指标被静默少计</li>
+     * </ul>
+     * 第二种后果更隐蔽: 不报错, 但告警规则的分子偏小, 可能漏报。
+     *
+     * <p>{@code computeIfAbsent} 在 ConcurrentHashMap 上对同一 key 保证只执行一次
+     * mappingFunction 并返回同一实例, 正是这里需要的语义。
+     */
+    private final Map<String, Counter> counterCache = new ConcurrentHashMap<>();
 
     @Autowired
     public BusinessMetricAspect(MeterRegistry registry) {
