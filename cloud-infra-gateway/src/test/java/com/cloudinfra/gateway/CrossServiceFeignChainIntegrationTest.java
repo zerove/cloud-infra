@@ -202,7 +202,11 @@ class CrossServiceFeignChainIntegrationTest {
                 // 无 ES 容器：指向死地址，连接失败仅影响搜索索引同步，不阻塞启动
                 // 内部调用密钥由 startProcess 以 -D 注入, 不用 --key=value:
                 // 那个形式对 InternalCallCrypto.resolveSecret() 不可见 (见 startProcess 内说明)
-                "--spring.elasticsearch.uris=http://127.0.0.1:1"));
+                "--spring.elasticsearch.uris=http://127.0.0.1:1",
+                // 与 auth 侧同一处理: system 的主配置也固定 9301, 而本机
+                // cloud-system 容器正监听该端口 -> 子进程启动即
+                // "Web server failed to start. Port 9301 was already in use."。
+                "--management.server.port=0"));
         Process sysProc = startProcess("system",
                 resolveExecJar("cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT-exec.jar"),
                 sysArgs);
