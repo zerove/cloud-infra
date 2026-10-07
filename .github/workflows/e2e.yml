@@ -270,7 +270,10 @@ jobs:
           name: e2e-logs-${{ github.run_id }}
           path: |
             /tmp/e2e.log
-            deploy/nacos/conf/
             **/target/surefire-reports/
+          # 注: 曾有 `deploy/nacos/conf/` 一行, 但该路径自 ab5baa50 引入起
+          # 从未存在过 (git log --all -- deploy/nacos/conf 无任何记录)。
+          # compose 只挂载 ./nacos/data, nacos 日志不落宿主, 因此删掉 —
+          # 否则它只是让 artifact 多一个恒为空的白名单项。
           retention-days: 7
           if-no-files-found: ignore
