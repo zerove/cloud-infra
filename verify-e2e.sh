@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -860,6 +860,28 @@ check_schema_init_wiring() {
   return 0
 }
 
+# 判定各服务的 schema.sql 能否**在空库上独立执行**, 且列与实体对齐。
+# 2026-10-07 实测: 门禁写完后**没有被本脚本调用过** —— grep 命中 0 次,
+#  即又一起"机制存在 ≠ 机制在运行"(第三课/第六例)。本函数 + 下方自检清单
+# + 实际调用三处都补上, 缺任何一处仍等于没有守护。
+#
+# 为什么阻断(不像 check_jvm_opts_keys 那样 || true):
+#   它在**真实 H2 空库**里执行 schema.sql 并读回实测列, 是纯本地判定,
+#   rc=1 意味着 schema.sql 真的不能独立建库或真的缺列 —— 属代码/配置缺陷,
+#   与环境压力无关, 没有任何理由降级。
+check_schema_standalone() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_standalone.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1) fail "schema.sql 不能在空库独立执行, 或列与实体不对齐（详见上方）"; return 1 ;;
+    2) fail "schema 空库自检**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    3) warn "本地无 H2 jar, 空库自包含性未判定（非通过）"; return 0 ;;
+    0) ok "schema.sql 均可在空库独立执行且列与实体对齐"; return 0 ;;
+    *) fail "空库自检返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
 # 判定 compose 里的 depends_on **都指向真实存在的服务**。
 #
 # 为什么需要这个门禁 (2026-10-07 实测):
@@ -983,6 +1005,8 @@ echo
 # 4 张表全缺, 容器仍是 healthy)。
 echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
 check_schema_init_wiring || true
+echo "[前置] 检查各服务 schema.sql 能在空库独立执行且列与实体对齐 ..."
+check_schema_standalone
 echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
 check_start_period_covers_startup || true
 echo "[前置] 检查 compose 依赖图无悬空引用 ..."
