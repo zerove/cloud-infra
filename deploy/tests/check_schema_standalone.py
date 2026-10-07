@@ -136,6 +136,178 @@ def execute_on_h2(sql_text: str, jar: Path) -> tuple[bool, str]:
     return ("SCHEMA_OK" in out), out.strip()
 
 
+def h2_columns(jar: Path, schema_text: str, table: str) -> set[str] | None:
+    """在真实 H2 空库建完 schema 后, 返回 table 的**实测列名集合**。
+
+    ⚠️【2026-10-07 新增】原版只验"能否执行", 于是**抓不到缺列**:
+       负向对照显示删掉 `channels` 列后门禁依旧 PASS —— 因为
+       `CREATE TABLE ... (id, user_id, ...)` 少了列**依然是合法 SQL**。
+       即它守护的正是"表缺列", 却对缺列视而不见（弱门禁）。
+       故此处**读回实测列**, 与实体声明的列比对。
+    """
+    code = strip_comments(schema_text)
+    with tempfile.TemporaryDirectory() as td:
+        runner = Path(td) / "ReadColumns.java"
+        runner.write_text(
+            "import java.sql.*;\n"
+            "import java.util.*;\n"
+            "public class ReadColumns {\n"
+            "  public static void main(String[] a) throws Exception {\n"
+            "    String sql = new String(java.nio.file.Files.readAllBytes("
+            "java.nio.file.Path.of(a[0])), java.nio.charset.StandardCharsets.UTF_8);\n"
+            "    try (Connection c = DriverManager.getConnection(\"" + H2_URL + "\", \"sa\", \"\")) {\n"
+            "      for (String stmt : sql.split(\";\")) {\n"
+            "        if (stmt.trim().isEmpty()) continue;\n"
+            "        try (Statement s = c.createStatement()) { s.execute(stmt); }\n"
+            "        catch (SQLException e) { System.out.println(\"FIRST_ERROR: \" + e.getMessage());"
+            " System.exit(1); }\n"
+            "      }\n"
+            "      List<String> cols = new ArrayList<>();\n"
+            "      try (ResultSet rs = c.getMetaData().getColumns(null, null, a[1], null)) {\n"
+            "        while (rs.next()) cols.add(rs.getString(\"COLUMN_NAME\").toLowerCase());\n"
+            "      }\n"
+            "      System.out.println(\"COLS:\" + String.join(\",\", cols));\n"
+            "    }\n"
+            "  }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        sql_file = Path(td) / "schema.sql"
+        sql_file.write_text(code, encoding="utf-8")
+        run = subprocess.run(
+            ["java", "-cp", str(jar), str(runner), str(sql_file), table],
+            capture_output=True, text=True, timeout=180,
+        )
+    out = (run.stdout or "") + (run.stderr or "")
+    m = re.search(r"^COLS:(.*)$", out, re.M)
+    if not m:
+        return None
+    return {c for c in m.group(1).split(",") if c}
+
+
+def find_entity_for_table(table: str) -> Path | None:
+    """从**实体源码**里搜 @TableName("<table>") 定位文件。
+
+    ⚠️【2026-10-07】第一版把路径写死为 `.../entity/Notification.java`,
+    实测报 `No such file or directory` —— 真实路径是 `.../domain/Notification.java`
+    (本项目实体放 domain 包)。这正是第五课记录的
+    **「类名/文件名/资源名与运行时标识符之间没有必然对应关系」**,
+    我按惯例猜了包名, 又一次。
+    正解: 由表名反查实体, 不猜包路径 —— 表名才是稳定标识符。
+    """
+    for jf in ROOT.rglob("src/main/java/**/*.java"):
+        if "target" in jf.parts:
+            continue
+        try:
+            text = jf.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if f'@TableName("{table}")' in text:
+            return jf
+    return None
+
+
+def entity_columns(entity: Path) -> set[str]:
+    """从实体源码提取列名 —— **驼峰转下划线**, 与 MyBatis-Plus 默认策略一致。
+
+    ⚠️ 来源必须是**实体**而不是手写清单: 手写清单会与实体漂移而无人察觉,
+       那正是第五课反复出现的"探针对象不是被检对象"。
+
+    ⚠️【2026-10-07 第二次修正】原实现只认**带注解**的字段:
+         r"@(TableId|TableField)[^\n]*\n\\s*private ..."
+       实测只提取到 2/11 个字段。看了实体真实内容才明白原因 ——
+       **只有 id 和 createTime 有注解, 其余 9 个字段全是裸声明**
+       （`private String title;` 前面什么都没有）,
+       因为 MyBatis-Plus 默认按驼峰转换映射全部字段, 不要求逐个加注解。
+
+       而原实现**判绿了**: 12 列里"恰好"有 2 列存在, 缺失集合为空。
+       即"提取器只认出 2 列"被读成"表列齐了" —— 与第五课
+       「探不到有两个解释」完全同形, 且**全绿**、无任何报错信号。
+
+       正解: 实体类里**所有非 static 的 private 字段**都是持久化列
+       （@Data 类, 无 @TableField(exist=false) 之类的排除项）,
+       故直接取全部 private 字段。
+    """
+    if not entity.exists():
+        return set()
+    text = entity.read_text(encoding="utf-8", errors="replace")
+    cols: set[str] = set()
+    # 类体起始（"class X {"）之后的所有 private 非 static 字段
+    m = re.search(r"^(?:public\s+)?(?:final\s+)?class\s+\w+[^{]*\{(.*)\}", text, re.S | re.M)
+    if not m:
+        return cols
+    body = m.group(1)
+    for fm in re.finditer(
+            r"^\s*private\s+(?!static)(?:final\s+)?[\w<>,\s.]+?\s+(\w+)\s*(?:=[^;]*)?;",
+            body, re.M,
+        ):
+        cols.add(re.sub(r"(?<!^)(?=[A-Z])", "_", fm.group(1)).lower())
+    return cols
+
+
+def entity_field_count(entity: Path) -> int:
+    """实体里 private 字段总数（含非持久化字段）—— 只用于判断提取器是否漏抓。
+
+    不用它做列断言（log 之类不应入库）, 仅当 `entity_columns` 的结果
+    远小于它时判定"提取器坏了"。阈值宽松(>60%), 因为确有非持久化字段。
+    """
+    text = entity.read_text(encoding="utf-8", errors="replace")
+    n = len(re.findall(r"^\s*private\s+(?!static)", text, re.M))
+    return n
+
+
+COLUMN_CHECKED_TABLES = (
+    "sys_notification",
+    "sys_notification_preference",
+)
+
+
+def check_columns(jar: Path) -> int:
+    """对每个有本地写路径的表, 比对**实体声明列**与**schema 实测列**。
+
+    覆盖多张表的原因: 补完 sys_notification 后, IT 立刻暴露出
+    `relation "sys_notification_preference" does not exist` —— 同型问题,
+    只是排在后面。只守护第一张表会让下一个同型缺陷继续漏过。
+    """
+    notif = ROOT / "cloud-infra-modules/notification-service/src/main/resources/schema.sql"
+    if not notif.exists():
+        print("FAIL: 找不到 notification schema.sql —— 探针失效, 不能判绿", file=sys.stderr)
+        return 2
+    body = notif.read_text(encoding="utf-8", errors="replace")
+    for table in COLUMN_CHECKED_TABLES:
+        entity = find_entity_for_table(table)
+        if entity is None:
+            print(f"FAIL: 全仓找不到 @TableName(\"{table}\") 的实体 —— "
+                  "探针失效, 不能判绿", file=sys.stderr)
+            return 2
+        expected = entity_columns(entity)
+        total_fields = entity_field_count(entity)
+        if total_fields and len(expected) * 10 < total_fields * 6:
+            print(f"FAIL: {table} 列提取器只认出 {len(expected)}/{total_fields} 个字段 —— "
+                  "提取器失效, 不能判绿（'只认出部分列'会被误读成'表列齐了'）",
+                  file=sys.stderr)
+            return 2
+        if not expected:
+            print(f"FAIL: 未从 {table} 实体提取到任何列 —— 提取器坏了, 不能判绿",
+                  file=sys.stderr)
+            return 2
+        actual = h2_columns(jar, body, table)
+        if actual is None:
+            print(f"FAIL: 读不回 {table} 的实测列 —— 探针失效, 不能判绿", file=sys.stderr)
+            return 2
+        missing = expected - actual
+        print(f"[列对齐] {table}: 实体声明 {len(expected)} 列, schema 实建 {len(actual)} 列")
+        if missing:
+            print(f"FAIL: {table} 缺少实体所需的列: {sorted(missing)}", file=sys.stderr)
+            print("      这些列缺失时, 集成测试会报 "
+                  'ERROR: column "<name>" does not exist,', file=sys.stderr)
+            print("      而 schema 本身**仍能执行** —— 这正是只验'能执行'的盲区。",
+                  file=sys.stderr)
+            return 1
+        print(f"  ok   无缺失列 (多余列 {sorted(actual - expected)} 不影响读取)")
+    return 0
+
+
 def main() -> int:
     files = schema_files()
     if not files:
@@ -179,7 +351,11 @@ def main() -> int:
     if failures:
         print(f"\nFAIL: {failures}/{len(files)} 个 schema.sql 不能独立初始化空库", file=sys.stderr)
         return 1
-    print(f"\nPASS: {len(files)} 个 schema.sql 均可在空库独立执行")
+
+    rc = check_columns(jar)
+    if rc:
+        return rc
+    print(f"\nPASS: {len(files)} 个 schema.sql 均可在空库独立执行, 且列与实体对齐")
     return 0
 
 

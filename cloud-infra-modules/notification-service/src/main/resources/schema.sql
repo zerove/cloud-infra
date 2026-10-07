@@ -19,24 +19,89 @@
 --      sys_notification_preference  8 列(V12 建表 + V14 tenant_id)
 --      sys_user                   18 列
 
--- ⚠️ sys_notification 由 system-module 的 Flyway 管理, 不在此创建。
---    我第一版修复曾错误地保留它, 理由是「Flyway 没有 dispatch_status/channels」。
---    那个理由是错的: V15__add_notification_dispatch_status.sql 与
---    V17__add_notification_channels.sql 早已把两列补齐 ——
---    运行库实测 12 列, 与 notification 的需求完全匹配。
---    是新加的表归属门禁抓出来的, 说明该门禁有效。
-
--- 索引：用户+状态，用于快速查询未读通知
--- ⚠️【2026-10-07 修正】以下两条索引建在 sys_notification 上, 而该表由
---    system-module 的 Flyway(V13) 管理、本文件不创建、且本服务的集成测试
---    **不运行 Flyway**。于是执行到此处必然报
---    `ERROR: relation "sys_notification" does not exist`,
---    导致 dataSourceScriptDatabaseInitializer 失败 → 整个 Spring 上下文加载失败
---    → NotificationMqFlowIntegrationTest 等 12 项全红。
+-- ⚠️【2026-10-07 重定归属】sys_notification 改为**由本文件创建**。
 --
---    与上一段注释的"不在此创建"自相矛盾: 声明了归属, 却在同一文件里使用它。
---    索引应与其表同源, 故一并交给 Flyway(V13 已含等价索引时无需重复)。
---    守护: deploy/tests/check_schema_referenced_tables.py 负向对照见该文件说明。
+--    前一版(同日早些时候)声明它由 system-module 的 Flyway 管理、不在此创建,
+--    并据此删掉了建在它上面的两条索引。删索引确实消掉了
+--    `relation "sys_notification" does not exist`, 但**没有解决真正的问题**:
+--    12 个测试仍因同一张表不存在而失败, 只是失败点从 schema 初始化
+--    后移到了 @Test 方法里 (BadSqlGrammarException)。
+--    ⇒ 上一版把"表不存在"当成了"用它的索引不该存在" —— 治标未治本。
+--
+--    为什么本文件必须建它（而不是把 schema 交给 Flyway）:
+--      1. 本服务的集成测试用 Testcontainers 起**空库**, 且**不运行 Flyway**
+--         （Flyway 迁移在 system-module 的 jar 里, 本服务测试不加载它）。
+--         故测试库里 sys_notification 永远不存在。
+--      2. notification 的 5 个 Mapper 里有 4 个直接写 sys_notification,
+--         是本服务的**核心写路径**, 不是可选依赖。
+--      3. 生产环境两者都建: 本文件先建, system 的 Flyway V13 用
+--         CREATE TABLE IF NOT EXISTS + V14/V15/V17 的
+--         ADD COLUMN IF NOT EXISTS, 均为幂等, 可安全共存。
+--         但为避免"谁的副本抢先建出"的老问题（见本文件头部关于 sys_user 的说明）,
+--         列定义必须与 Flyway 的**最终态**逐列对齐, 已按 V13+V14+V15+V17+V18 核对。
+--
+--    与 sys_user / sys_notification_preference 的区别: 那两张表本服务**不写**
+--    （只按 user_id 关联查询）, 故沿用"不创建"; 本表是**写路径依赖**, 必须自备。
+--
+--    差异点（有意为之, 已注明）: 相比 Flyway V13, 本定义**不含指向
+--    sys_user 的外键**。因为本服务测试库不建 sys_user, 带上外键会让建表
+--    直接失败 —— 即"为了满足测试而让 schema 在真实库里也不可用"。
+--    外键的真实约束由 Flyway(V13) 在 system 侧负责。
+
+-- 通知主表 (Notification 实体 @TableName("sys_notification"))
+-- 列来源: V13 建表 + V14 tenant_id + V15 dispatch_status/dispatch_attempts
+--         + V17 channels + V18 status 改 SMALLINT
+CREATE TABLE IF NOT EXISTS sys_notification (
+    id               BIGSERIAL PRIMARY KEY,
+    user_id          BIGINT       NOT NULL,
+    type             VARCHAR(20)  NOT NULL,
+    title            VARCHAR(255) NOT NULL,
+    content          TEXT         NOT NULL,
+    status           SMALLINT     NOT NULL DEFAULT 0,
+    dispatch_status  SMALLINT     NOT NULL DEFAULT 2,
+    dispatch_attempts SMALLINT    NOT NULL DEFAULT 0,
+    channels         VARCHAR(255),
+    tenant_id        VARCHAR(64),
+    create_time      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_time        TIMESTAMP
+);
+
+-- 索引：用户+状态，用于快速查询未读通知（与 V13 的两条索引等价）
+CREATE INDEX IF NOT EXISTS idx_sys_notification_user_create
+    ON sys_notification (user_id, create_time DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_notification_user_status
+    ON sys_notification (user_id, status);
+
+-- 守护: deploy/tests/check_schema_standalone.py 在**真实空库**执行本文件,
+--   负向对照见该文件说明。
+
+-- 通知偏好表 (UserNotificationPreference 实体)
+-- ⚠️【2026-10-07 补建】同 sys_notification 的理由, 且是**实测触发**的:
+--   补完上一张表后 IT 的 BadSqlGrammarException 消失, 随即暴露出
+--   `ERROR: relation "sys_notification_preference" does not exist`。
+--   我先前把它归为"本服务只读不写" —— 错的: NotificationRouter 读它做路由
+--   决策, 且有写路径 (UserNotificationPreferenceMapper)。
+--   ⇒ 判据不该是"我觉得谁在写", 而是**哪些实体在本服务里有写路径**,
+--     故与上一张表一样建。
+-- 列来源: V12 建表 + V14 tenant_id
+CREATE TABLE IF NOT EXISTS sys_notification_preference (
+    id                BIGSERIAL PRIMARY KEY,
+    user_id           BIGINT       NOT NULL,
+    notification_type VARCHAR(50)  NOT NULL,
+    channel_code      VARCHAR(50)  NOT NULL,
+    enabled           BOOLEAN      NOT NULL DEFAULT TRUE,
+    tenant_id         VARCHAR(50)  NOT NULL DEFAULT 'default',
+    create_time       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sys_notification_preference_user
+    ON sys_notification_preference (user_id);
+
+-- 注: 相比 Flyway V12, 本定义**不含**指向 sys_user 的外键, 理由同
+--     sys_notification (测试库不建 sys_user)。V12 里那条
+--     `INSERT ... SELECT u.user_id FROM sys_user` 的默认数据初始化也不引入
+--     —— 那依赖 sys_user 有数据, 属于生产侧的数据迁移而非 schema。
 
 -- 渠道发送日志表
 CREATE TABLE IF NOT EXISTS sys_notification_log (
