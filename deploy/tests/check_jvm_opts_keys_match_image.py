@@ -98,6 +98,27 @@ SCRIPT_GLOBS = (
     # (目录, 该目录下的通配模式)
     ("/home/nacos/bin", "*.sh"),
     ("/usr/share/elasticsearch/bin", "*.sh"),
+    # ⚠️【2026-10-07 修正】业务镜像的启动脚本在 /app, 此前**完全没被覆盖**,
+    #   于是 auth/gateway/file/system/search/notification 六个服务
+    #   (以及 skywalking-oap) 全部走 SKIP —— 而 rc 仍是 0, 即"没判定"
+    #   被读成"通过"。形态与上面 ES 那次相同: 探针没覆盖到目标 ⇒ 报告
+    #   "不存在" ⇒ 走 SKIP 而非 FAIL。
+    #   实测依据: `podman exec <c> ls /app/*.sh` 对 6 个业务容器均返回
+    #   /app/agent-entrypoint.sh (search 另有 /app/entrypoint.sh)。
+    #   业务镜像是本仓库**自己构建**的, 脚本位置由本仓库 Dockerfile 决定,
+    #   不随上游镜像变动 —— 故在此显式列出 /app。
+    ("/app", "*.sh"),
+    # ⚠️【2026-10-07 补】skywalking-oap 的入口在 /skywalking/docker-entrypoint.sh
+    #   (实测 `find / -name "*.sh"` 取真实位置, 非推断)。此前未覆盖 ⇒ SKIP。
+    #   受控验证: 该脚本 grep 到 JAVA_OPTS, 与 compose 里给它的键一致。
+    ("/skywalking", "*.sh"),
+    # ES 9.x 的 bin/ 下**无 .sh** (上游改成无扩展名的 elasticsearch-env 等脚本)。
+    # 这里**不**放宽模式去匹配二进制/多文件: 业务镜像的 sh 是 busybox
+    # (/bin/sh -> /bin/busybox, 实测), busybox 的 `ls` 在 glob 无匹配时会把
+    # 模式串本身打到 stdout, 于是 "cat: cat: No such file" —— 即本文件
+    # 上方注释警告过的同一个陷阱, 曾让 ES 误判为"镜像里没有脚本"。
+    # 保持 *.sh ⇒ ES 走 SKIP(明确"未判定") 而非误判。
+    ("/usr/share/elasticsearch/bin", "*.sh"),
 )
 
 _VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
@@ -177,7 +198,7 @@ def script_vars(image: str) -> tuple[set[str] | None, str]:
         try:
             cat = subprocess.run(
                 ["podman", "run", "--rm", "--entrypoint", "sh", image, "-c",
-                 " ".join(f"cat {p}" for p in paths)],
+                 "cat " + " ".join(paths)],
                 capture_output=True, text=True, timeout=180, errors="replace",
             )
         except (OSError, subprocess.SubprocessError) as e:
