@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -889,6 +889,30 @@ check_compose_dangling_deps() {
   return 0
 }
 
+# 判定 otel-collector 的 pipeline **只引用已声明的组件**。
+#
+# 起因是真实发生的一次缺陷（2026-10-07 移除 otlp/jaeger 时）:
+#   exporter **定义**被删了, 而 pipeline 仍写着 `exporters: [otlp/jaeger, debug]`。
+#   collector 会在启动时拒绝该配置 —— 报错并不明显点名被删的组件。
+#   与 check_compose_dangling_deps 同型: "被引用者是否还存在", 只是下一层。
+#
+# 阻断而非降级: 纯静态检查, 不依赖容器, rc=1 是真实配置缺陷。
+check_otel_pipeline_refs() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_otel_pipeline_refs.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "otel-collector pipeline 引用了未声明的组件（详见上方具体项）"
+    return 1
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "otel pipeline 扫描器自身损坏, 本次不判定（详见上方 SCANNER_BROKEN）"
+    return 1
+  fi
+  ok "otel-collector pipeline 引用全部可解析"
+  return 0
+}
+
 # start_period 必须覆盖实测启动耗时（2026-10-06 实测缺陷）。
 #
 #   机制: Docker healthcheck 在 start_period 期间**不计数**失败, 之后连续失败
@@ -963,6 +987,8 @@ echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
 check_start_period_covers_startup || true
 echo "[前置] 检查 compose 依赖图无悬空引用 ..."
 check_compose_dangling_deps || true
+echo "[前置] 检查 otel-collector pipeline 引用可解析 ..."
+check_otel_pipeline_refs || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------

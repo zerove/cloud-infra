@@ -503,30 +503,16 @@ services:
       - cloud-infra
     logging: *default-logging
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    restart: unless-stopped
-    stop_grace_period: 30s
-    container_name: cloud-jaeger
-    mem_limit: 512m
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "14268:14268"  # Jaeger collector HTTP
-    environment:
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - http_proxy=
-      - https_proxy=
-      - no_proxy=*
-      - NO_PROXY=*
-      - COLLECTOR_OTLP_ENABLED=true
-    networks:
-      - cloud-infra
-    logging: *default-logging
-
   # ========== SkyWalking APM (可选) ==========
   # 应用性能监控: 分布式追踪 + 慢 SQL/慢方法 + 服务拓扑 + 异常聚合
-  # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
+  # 2026-10-07 收敛: Jaeger 已下线。两条链路并非冗余而是两套独立采集机制 ——
+  #   SkyWalking = JVM -javaagent 注入, 落 PostgreSQL 分区表(重启不丢)
+  #   Jaeger    = OTLP 经 otel-collector 转发, 内存存储(重启即丢)
+  # 选留 SkyWalking 的三条实测依据:
+  #   ① 六个业务服务当日均在写入(最新 span 距查询 < 1min), 链路完整;
+  #   ② 唯一带持久化 —— 本项目 OAP 有过 malloc 失败重启记录, 内存存储扛不住;
+  #   ③ Jaeger 在业务侧零依赖(无任何 java 代码引用), otel-collector 的
+  #      otlp/jaeger exporter 与 grafana 的 jaeger 数据源均已移除。
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
     # ✅ 2026-10-04: 存储从 elasticsearch 改为 **postgresql**, OAP 首次真正启动成功。
