@@ -2,7 +2,18 @@
 
 ## 概述
 
-SkyWalking 10.1.0 作为可选 APM 平台, 与现有 Prometheus + Jaeger + Grafana 共存。
+SkyWalking 10.1.0 作为可选 APM 平台, 与现有 Prometheus + Grafana + Loki 共存。
+
+> **2026-10-07 变更**: Jaeger 已下线 (compose 服务 23 → 22)。取景观测见
+> 提交 `bf27fdc9`。**SkyWalking 与 OTLP 是两套独立采集机制**, 不是同一链路的前后端:
+>
+> | | SkyWalking | OTLP 路径 |
+> |---|---|---|
+> | 上报方式 | JVM `-javaagent` 注入 | Micrometer → otel-collector |
+> | 存储 | PostgreSQL 分区表 | 仅 collector `debug` exporter (打印到日志) |
+>
+> 即业务侧 `OTLP_TRACING_ENDPOINT` 一处未动, trace 仍在上报, 只是不再落
+> 持久化存储。将来若接 Tempo/VictoriaTraces 无需改业务配置。
 
 **当前状态 (2026-10-04 实测, 取代此前所有"最终"结论)**:
 
@@ -96,9 +107,9 @@ ES 8 服务端直接 400), 而 SkyWalking 只吃 7/8 ⇒ **两个需求互斥且
 | 工具 | 协议 | 用途 | 默认 |
 |---|---|---|---|
 | **Prometheus** | metrics scrape | 数值指标 (5xx, p99, RPS) | ✅ 已启用 |
-| **Jaeger** | OTLP | 链路追踪 (业务级 span) | ✅ 已启用 |
-| **SkyWalking** | agent gRPC | **APM 全栈**: 拓扑 + 慢SQL + 异常聚合 | ⚠️ 容器配置中, 默认禁用 |
-| **Grafana** | dashboard | SLO + 业务 dashboard | ✅ 已启用 |
+| **SkyWalking** | agent gRPC | **APM 全栈**: 拓扑 + 慢SQL + 异常聚合 | ✅ 已启用 (PostgreSQL 存储) |
+| **Grafana** | dashboard | SLO + 业务 dashboard | ✅ 已启用 (Prometheus + Loki) |
+| ~~**Jaeger**~~ | OTLP | ~~链路追踪~~ | ⛔ 2026-10-07 下线, 见 `bf27fdc9` |
 
 ## 架构
 
@@ -218,11 +229,14 @@ cloud-infra-modules/*/Dockerfile    # 已加 SW agent 启用注释 (默认 disab
 ./deploy/up.sh   # 默认全部 agent 关闭
 ```
 
-## 与现有 OTel + Jaeger 不冲突
+## 与现有 OTel 采集不冲突
 
-- **Jaeger**: 接收 OTel 协议 (Micrometer Tracing), 已有链路追踪
-- **SkyWalking**: 接收 agent gRPC 协议, 提供更深度 APM
-- 两者**并存**, 业务可选其一或两者都用
+- **OTel (Micrometer → otel-collector)**: 仍在接收上报, pipeline 只接
+  `debug` exporter。链路数据**当前不落持久化存储**。
+- **SkyWalking**: 接收 agent gRPC 协议, 提供更深度 APM, 数据落 PostgreSQL。
+
+两者是**独立**采集机制 (非同一链路的前后端), 业务可选其一或两者都用。
+本项目当前以 **SkyWalking 为唯一带持久化的链路追踪后端**。
 
 ## 参考
 
