@@ -71,10 +71,36 @@ JAVA_ROOTS = [
 # 需要 @Qualifier 消歧的类型: 这些在容器里都存在**第二个**同类型候选。
 #   applicationTaskExecutor -> VirtualThreadConfig
 #   taskScheduler           -> DefaultTaskSchedulerConfiguration
+#
+# ⚠️【2026-10-07 补入 Executor / ExecutorService】
+# 起因: 守护一度扫不到任何注入点而报 rc=1（它自己拒绝判绿, 这点正确）。
+# 排查发现: 那不是"已无风险", 而是**正则在守护之外**——全仓真实的执行器注入点
+# (`NotificationDispatcher` 的 `ExecutorService dispatchExecutor`) 不在原列表里,
+# 于是"从源码提取候选"这个原则被自己破坏了: 只列了自己能想到的类型,
+# 而不是让源码里的注入点自己进来。
+#
+# 教训同本文件整体: 判据必须指向**被检对象本身**。若判据只认某几个
+# 手写类型名, 则"它扫不到东西"有两种无法区分的解释 —— 真无风险 / 正则漏了。
+#   `ExecutorService extends Executor`, 且 notification 模块注册了
+#   `ExecutorService` 类型的 bean, 而 Boot 也可能注册 `Executor` 类型的
+#   `taskExecutor` —— 二者同时满足时按类型注入必二义, 正是本守护的目标场景。
 AMBIGUOUS = re.compile(
     r"private\s+final\s+"
-    r"(?:AsyncTaskExecutor|TaskExecutor|AsyncTaskScheduler|TaskScheduler)\s+(\w+)\s*;"
+    r"(?:AsyncTaskExecutor|TaskExecutor|AsyncTaskScheduler|TaskScheduler"
+    r"|ExecutorService|Executor)"
+    r"\s+(\w+)\s*;"
 )
+
+# Spring 管理的类才有资格被判"注入点必须带 @Qualifier"。
+# 纯 POJO（手写构造器、无 stereotype）不在此列 —— 详见 source_candidates 注释。
+SPRING_STEREOTYPE = re.compile(
+    r"^@(Component|Service|Repository|Configuration"
+    r"|RestController|Controller)\b",
+    re.M,
+)
+
+# 被判为非 Spring 管理而跳过的类, 仅用于打印原因（不是静默 SKIP）。
+SKIPPED_POJO: list[str] = []
 
 LOMBOK_CONFIG = ROOT / "lombok.config"
 QUALIFIER_ENTRY = (
@@ -103,6 +129,17 @@ def source_candidates() -> list[tuple[str, Path]]:
             pkg = re.search(r"^package\s+([\w.]+);", text, re.M)
             cls = re.search(r"^(?:public\s+)?(?:final\s+)?class\s+(\w+)", text, re.M)
             if not pkg or not cls:
+                continue
+            # ⚠️【2026-10-07 误报修正】只管 Spring 实际管理的类。
+            # 反例: WorkflowEngine 有 `private final ExecutorService executor`
+            #   却**手写**构造器、无任何 stereotype 注解 → 它不是 bean,
+            #   构造参数上的 @Qualifier 永不被解析。
+            #   把它纳入判定会对纯 POJO 报红, 而"误报"比"漏报"更坏:
+            #   下一个人会去给一个根本不会被 Spring 读取的注解加东西,
+            #   或直接把守护注释掉（项目已发生过: 见第五课"守护自己坏掉"）。
+            #   判据从源码读 stereotype, 不是靠类名或路径猜。
+            if not SPRING_STEREOTYPE.search(text):
+                SKIPPED_POJO.append(jf.name)
                 continue
             found.append((f"{pkg.group(1)}.{cls.group(1)}", jf))
     return sorted(set(found))
@@ -207,6 +244,11 @@ def main() -> int:
         print("FAIL 源码里一个注入点都没扫到 —— 扫描器本身坏了, 不能判绿")
         return 1
     print(f"INFO 扫描到 {len(cands)} 个需要消歧的注入点")
+    # 跳过必须**可见**并附原因 —— 静默 SKIP 是本项目第 6 类假门禁的温床。
+    if SKIPPED_POJO:
+        print(f"INFO 跳过 {len(SKIPPED_POJO)} 个非 Spring 管理的类"
+              f"（无 stereotype 注解，构造参数上的 @Qualifier 不会被解析）: "
+              f"{', '.join(sorted(set(SKIPPED_POJO)))}")
 
     # 预检: 先把所有 classes 路径算出来, 一个都定位不到就是推导坏了,
     # 而不是"未编译" —— 这两种必须分开, 否则退化成全 SKIP 的假门禁。

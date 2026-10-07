@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @Service
@@ -69,7 +70,7 @@ public class NotificationServiceImpl implements INotificationService {
      * <p>不要改成 {@code @Primary}：那会影响全局其他注入点，
      * 而这里只需要明确“我要的是哪一个”。
      */
-    private final AsyncTaskExecutor taskExecutor;
+    private final Executor taskExecutor;
 
     /**
      * 显式构造器 —— 不能用 Lombok 的 {@code @RequiredArgsConstructor}。
@@ -101,7 +102,7 @@ public class NotificationServiceImpl implements INotificationService {
             NotificationQuotaService quotaService,
             ObjectMapper objectMapper,
             RabbitTemplate rabbitTemplate,
-            @Qualifier("applicationTaskExecutor") AsyncTaskExecutor taskExecutor) {
+            @Qualifier("notificationAsyncExecutor") Executor taskExecutor) {
         this.notificationMapper = notificationMapper;
         this.logMapper = logMapper;
         this.templateMapper = templateMapper;

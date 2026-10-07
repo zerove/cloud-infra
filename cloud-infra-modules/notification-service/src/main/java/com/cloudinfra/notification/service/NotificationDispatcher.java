@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * 通知渠道分发器 (issue 27 决策 2)
@@ -43,6 +44,16 @@ public class NotificationDispatcher {
     private final NotificationDispatchMapper dispatchMapper;
     private final NotificationLogMapper logMapper;
     private final NotificationRouter notificationRouter;
+    /**
+     * 分发执行器。
+     *
+     * <p>必须带 {@code @Qualifier}: 上下文里可能有多个 {@link ExecutorService}
+     * (Boot 的 {@code taskExecutor}、本模块的 {@code notificationAsyncExecutor}),
+     * 只按类型会报 {@code NoUniqueBeanDefinitionException}。
+     * Lombok 已配置 {@code copyableAnnotations += Qualifier}, 故注解写在
+     * 字段上会复制到生成的构造参数 —— 生效。
+     */
+    @Qualifier("notificationAsyncExecutor")
     private final ExecutorService dispatchExecutor;
 
     /**

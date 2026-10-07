@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -72,8 +73,8 @@ public class NotificationDispatchRecoveryTask {
      * 本类由 {@code @Scheduled} 驱动，在同一上下文中被创建，
      * 因此两处必须同时修 —— 只修一处仍然起不来。
      */
-    @Qualifier("applicationTaskExecutor")
-    private final AsyncTaskExecutor taskExecutor;
+    @Qualifier("notificationAsyncExecutor")
+    private final Executor taskExecutor;
 
     /**
      * 每分钟扫描一次陈旧且未完成分发的通知并重投。
