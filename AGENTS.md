@@ -2040,3 +2040,54 @@ awk -v t=$tot '/Committed_AS/{c=$2}END{printf "RSS=%.2f GB  Committed_AS=%.2f GB
 
 > 判定进程归属的可靠顺序: `cgroup` 路径含 `libpod-` → 容器内；
 > 否则 → 宿主进程。**不要用 `podman ps` 的 PID 列做交叉验证**（rootless 下为空）。
+
+---
+
+### ⚠️ 第八课补记七: `Cannot connect to the Docker daemon at <路径>` 里的**路径本身不可信** (2026-10-07 新增)
+
+第八课补记五已确认「全量 IT 失败 = 宿主机 I/O 饥饿」, 那一节不再重复。
+本节只记我在**归因的第一步**就踩错、且该错误**差点导致一个错误的不可逆决定**
+(挂起「需安装 Docker」)的过程 —— 即第八课补记五给出的**正确结论**当时已存在,
+但我没查它就先下了结论。
+
+**当时的判据链** (每一环单看都"合理", 串起来全错):
+
+```
+报错末行: Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+  → 我: /var/run/docker.sock 不存在 ⇒ 本机无 docker daemon
+  → 我: Testcontainers 用不了 ⇒ 需装 Docker ⇒ 记为「环境阻塞, 不可解」
+```
+
+**实际**: `/run/user/1000/docker.sock` **存在且可用**, 是 `podman/podman.sock` 的符号链接,
+`curl --unix-socket … /_ping` 返回 **200**。同模块换 `mvn verify` 重跑:
+**BUILD SUCCESS, 9 tests, 0 errors** (耗时 58s)。
+
+| # | 错误判据 | 反证 | 对应既有教训 |
+| :--- | :--- | :--- | :--- |
+| 1 | 只测一个 socket 路径就断言"无 daemon" | 另有可用路径, `curl` 200 | 第五课: 探针对象须穷举而非手写 |
+| 2 | 报错的路径字面量被当成"客户端实际尝试的路径" | 客户端自报 `resolved dockerHost=/run/user/1000/docker.sock`, 与报错**不同** | 第五课补记四: 查对了名字、查错了语义 |
+| 3 | `~/.testcontainers.properties` 的 rootless 策略会**覆盖** `DOCKER_HOST` 环境变量, 我却按"环境变量优先"推断 | 不改任何环境也能连上 | 第八课补记五末尾同形 |
+| 4 | 把「瞬时失败」写成「不可解的环境阻塞」 | 失败对象两次都不同(framework→mybatis), 本就是环境漂移特征 | 第八课补记三: 受控实验无梯度先怀疑装置 |
+
+**三条规则**:
+
+1. **"缺 X" 需要穷举候选位置, 一个路径查不到不构成证据。**
+   本例可用 socket 就在 `~/.testcontainers.properties` 声明的策略旁边 —— 只要按该策略
+   去找就会命中, 而报错文本指向的是**另一条兜底默认值**。
+   ```bash
+   # 正解: 按策略而非报错文本去找
+   grep -h . ~/.testcontainers.properties
+   for s in /var/run/docker.sock "$XDG_RUNTIME_DIR/docker.sock" /run/user/$(id -u)/docker.sock; do
+     printf '%-40s ' "$s"
+     curl -s --noproxy '*' --unix-socket "$s" http://localhost/_ping -o /dev/null -w "%{http_code}\n"
+   done
+   ```
+   ⚠️ `test -S <sock>` **不可靠**: 对当前用户无权的 socket 返回假, 会被读成"不存在"。
+   必须用有权限的 `curl` 实测(本轮我就先踩了这个)。
+2. **判客户端"用了哪个端点"只能问客户端自报, 不能读错误文本。**
+   Testcontainers 启动时会打印
+   `Docker environment with … resolved dockerHost=…`, 那是权威值。
+3. **挂起任何"环境阻塞"之前, 必须先跑一次受控对照。**
+   本例对照只需 **58 秒**(单模块 `verify`)。省掉这 58 秒的代价是:
+   一个假结论被写进 todo、拿去征求"是否装 Docker"的决策。
+   ⇒ **"不可解"是最高成本的一个断言, 也是最该被证据拦住的一个。**
