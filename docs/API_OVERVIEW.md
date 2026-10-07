@@ -4,11 +4,11 @@
 
 ## 1. 网关 (端口: 9000)
 所有客户端请求的统一入口。
-- **路由 `/auth/**`** $ightarrow$ `cloud-infra-auth`
-- **路由 `/system/**`** $ightarrow$ `cloud-infra-modules:system-module`
-- **路由 `/file/**`** $ightarrow$ `cloud-infra-modules:file-service`
-- **路由 `/search/**`** $ightarrow$ `cloud-infra-modules:search-service`
-- **路由 `/notification/**`** $ightarrow$ `cloud-infra-modules:notification-service`
+- **路由 `/auth/**`** $\rightarrow$ `cloud-infra-auth`
+- **路由 `/system/**`** $\rightarrow$ `cloud-infra-modules:system-module`
+- **路由 `/file/**`** $\rightarrow$ `cloud-infra-modules:file-service`
+- **路由 `/search/**`** $\rightarrow$ `cloud-infra-modules:search-service`
+- **路由 `/notification/**`** $\rightarrow$ `cloud-infra-modules:notification-service`
 
 ## 2. 认证服务 (端口: 8081)
 处理身份识别与访问管理。

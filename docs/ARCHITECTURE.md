@@ -45,7 +45,7 @@
 ## 4. 可观测性栈
 
 - **链路追踪**: Micrometer Tracing $\rightarrow$ Zipkin/Jaeger (可选)。
-- **指标监控**: Micrometer $ightarrow$ Prometheus $ightarrow$ Grafana。
+- **指标监控**: Micrometer $\rightarrow$ Prometheus $\rightarrow$ Grafana。
 - **健康检查**: Spring Boot Actuator 提供 `/health` 和 `/info` 端点，用于 Kubernetes/Podman 编排。
 
 ## 5. WebSocket 实时推送 (M7-03)

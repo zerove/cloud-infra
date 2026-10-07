@@ -26,7 +26,7 @@
 ### MyBatis Plus
 - 所有数据库实体必须继承 `BaseMapper<T>`。
 - 使用 `LambdaQueryWrapper` 避免在查询中硬编码列名。
-- 遵循 `Service` $ightarrow$ `ServiceImpl` $ightarrow$ `Mapper` 的三层架构模式。
+- 遵循 `Service` $\rightarrow$ `ServiceImpl` $\rightarrow$ `Mapper` 的三层架构模式。
 
 ## 3. 实现新功能流程
 

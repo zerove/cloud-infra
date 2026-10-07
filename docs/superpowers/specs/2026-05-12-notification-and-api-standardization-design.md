@@ -25,7 +25,7 @@
 
 - `POST /notification/send`
   - **功能**: 异步触发通知发送。
-  - **逻辑**: 接收 `NotificationRequest` $ightarrow$ 通过 `StreamBridge` 发送至 MQ $ightarrow$ 返回成功。
+  - **逻辑**: 接收 `NotificationRequest` $\rightarrow$ 通过 `StreamBridge` 发送至 MQ $\rightarrow$ 返回成功。
 - `GET /notification/history`
   - **功能**: 分页查询当前用户的通知记录。
   - **参数**: `status` (可选), `type` (可选), `pageNum`, `pageSize`。
@@ -33,8 +33,8 @@
   - **功能**: 将指定通知标记为已读。
 
 ### 2.3 执行流程
-1. **发送流**: `Controller` $ightarrow$ `StreamBridge` $ightarrow$ `NotificationConsumer` $ightarrow$ `NotificationServiceImpl.send()` $ightarrow$ 执行实际发送 (Email/SMS) $ightarrow$ 写入 `sys_notification` 表。
-2. **消费流**: `NotificationConsumer` 解析消息 $ightarrow$ 调用 `INotificationService` 执行具体发送逻辑。
+1. **发送流**: `Controller` $\rightarrow$ `StreamBridge` $\rightarrow$ `NotificationConsumer` $\rightarrow$ `NotificationServiceImpl.send()` $\rightarrow$ 执行实际发送 (Email/SMS) $\rightarrow$ 写入 `sys_notification` 表。
+2. **消费流**: `NotificationConsumer` 解析消息 $\rightarrow$ 调用 `INotificationService` 执行具体发送逻辑。
 
 ## 3. API 标准化设计 (API Standardization)
 
@@ -70,6 +70,6 @@ cloud-infra-api/src/main/java/com/cloudinfra/api/
 - **清理**: 删除原服务模块中重复的 DTO 定义，统一引用 `cloud-infra-api` 中的类。
 
 ## 4. 测试方案
-- **集成测试**: 编写 `NotificationServiceIntegrationTest`，利用 Testcontainers 验证从 `Controller` 发送 $ightarrow$ MQ 消费 $ightarrow$ 数据库写入的完整链路。
+- **集成测试**: 编写 `NotificationServiceIntegrationTest`，利用 Testcontainers 验证从 `Controller` 发送 $\rightarrow$ MQ 消费 $\rightarrow$ 数据库写入的完整链路。
 - **接口校验**: 使用 Swagger/Postman 验证 `/history` 和 `/read` 接口的正确性。
 - **类型校验**: 验证其他模块通过 `NotificationApi` 调用通知服务时，编译通过且运行时参数传递正确。
