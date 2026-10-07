@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -860,6 +860,35 @@ check_schema_init_wiring() {
   return 0
 }
 
+# 判定 compose 里的 depends_on **都指向真实存在的服务**。
+#
+# 为什么需要这个门禁 (2026-10-07 实测):
+#   podman-compose **不校验**悬空 depends_on —— `config` 返回 rc=0、stderr 全空
+#   (本机 1.6.0 实测)。即"指向已删除服务的依赖"是一个**完全静默**的缺陷:
+#   没有任何工具会报错, 缺依赖只会在 up 时表现为不明行为。
+#   本项目依赖拆分的选项②正是"把 OAP 移出基础 compose", 一旦漏删这些
+#   depends_on, 就会正好制造出这种静默缺陷。
+#
+# 为什么阻断: 纯静态检查, 不依赖容器与网络, rc=1 是**真实的配置缺陷**
+#   (不是环境问题), 不该像 check_jvm_opts_keys 那样降级为 || true。
+check_compose_dangling_deps() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_compose_dangling_deps.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    fail "存在指向不存在服务的 depends_on（详见上方具体项）"
+    return 1
+  fi
+  if [ "$rc" -eq 2 ]; then
+    # rc=2 = 扫描器自身坏了, 不是"通过"。当"没测"报成"测了通过",
+    # 比不做这个检查更坏（第五课补记一）。
+    fail "依赖图扫描器自身损坏, 本次不判定（详见上方 SCANNER_BROKEN）"
+    return 1
+  fi
+  ok "compose 依赖图无悬空引用"
+  return 0
+}
+
 # start_period 必须覆盖实测启动耗时（2026-10-06 实测缺陷）。
 #
 #   机制: Docker healthcheck 在 start_period 期间**不计数**失败, 之后连续失败
@@ -932,6 +961,8 @@ echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
 check_schema_init_wiring || true
 echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
 check_start_period_covers_startup || true
+echo "[前置] 检查 compose 依赖图无悬空引用 ..."
+check_compose_dangling_deps || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------

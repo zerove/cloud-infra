@@ -797,7 +797,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       redis:
@@ -884,7 +885,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       postgres:
@@ -970,7 +972,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       postgres:
@@ -1068,7 +1071,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       postgres:
@@ -1155,7 +1159,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       postgres:
@@ -1242,7 +1247,8 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
+      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
       skywalking-oap:
         condition: service_started
       elasticsearch:
