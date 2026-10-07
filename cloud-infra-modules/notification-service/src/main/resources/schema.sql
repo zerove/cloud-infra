@@ -27,10 +27,16 @@
 --    是新加的表归属门禁抓出来的, 说明该门禁有效。
 
 -- 索引：用户+状态，用于快速查询未读通知
-CREATE INDEX IF NOT EXISTS idx_notification_user_status ON sys_notification(user_id, status);
-
--- 索引：补扫待分发通知（dispatch_status + create_time 联合，按状态过滤后按时间取陈旧记录）
-CREATE INDEX IF NOT EXISTS idx_notification_dispatch ON sys_notification(dispatch_status, create_time);
+-- ⚠️【2026-10-07 修正】以下两条索引建在 sys_notification 上, 而该表由
+--    system-module 的 Flyway(V13) 管理、本文件不创建、且本服务的集成测试
+--    **不运行 Flyway**。于是执行到此处必然报
+--    `ERROR: relation "sys_notification" does not exist`,
+--    导致 dataSourceScriptDatabaseInitializer 失败 → 整个 Spring 上下文加载失败
+--    → NotificationMqFlowIntegrationTest 等 12 项全红。
+--
+--    与上一段注释的"不在此创建"自相矛盾: 声明了归属, 却在同一文件里使用它。
+--    索引应与其表同源, 故一并交给 Flyway(V13 已含等价索引时无需重复)。
+--    守护: deploy/tests/check_schema_referenced_tables.py 负向对照见该文件说明。
 
 -- 渠道发送日志表
 CREATE TABLE IF NOT EXISTS sys_notification_log (
