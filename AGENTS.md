@@ -2995,16 +2995,49 @@ auth 的两个 IT 类**在隔离下从不出问题**, 因此**不能**把它们�
 | 该状态下单模块 IT | `Tests run: 4, Failures: 0` —— **全绿** |
 
 ⇒ 第八课补记三那条再次成立: **「账本看起来不合理」不等于「它是故障原因」**。
-commit 103% 只让一切**变慢**（Ryuk 从 6s 变成 84s）,
-而两模块连跑的失败原因是我给的 `timeout 900` 把它掐了:
+commit 103% 只让一切**变慢**（Ryuk 从 6s 变成 84s）。
+
+#### 四之二、「阻塞是超时预算」这个假设**被自己的对照证伪**（必须记下来）
+
+我一度认定阻塞项是「37 分钟不够, 需要放宽超时」, 于是做对照 U:
+把外层 `timeout 900 → 2400`, 跑上轮失败的 3 个模块。
+
+**结果与假设相反**:
+
+| | 全量第一轮(timeout 5400, 23 模块) | 对照 U(timeout 2400, 3 模块) |
+| :--- | :--- | :--- |
+| 失败 IT 类 | **4** | **5**（新增 `NotificationRecoveryIT`） |
+| 失败形态 | `no such container` ×2（Ryuk 被删） | `Timed out waiting for log output` ×8 |
+| 断言失败 | 0 | **0** |
+
+⇒ 放宽超时**没有减少失败, 反而多了一个**。
+所以「超时预算不足」不是根因, 只是**表现形式之一**; 真正的共同点是
+**容器在 Testcontainers 的等待策略内起不来**, 与超时长短无关。
+
+等待目标分布（决定了是哪个容器）:
+
+```text
+'.*"message":"started.*'                    ×2   ← RabbitMQ
+'.*Server startup complete.*'               ×2   ← Elasticsearch
+'.*Started.*'                               ×3   ← Ryuk
+'.*database system is ready to accept ...'  ×1   ← PostgreSQL
+```
+
+而 AGENTS.md 早已（第 652-657 行）记载过 Ryuk 的机制:
+`ryuk 是「无客户端连接→正常退出」, 不是崩溃`。
+本次观测到的 `Container exited with code 0` + `Timed out waiting for log output matching '.*Started.*'`
+与那条**完全一致** ⇒ 又是一次既有环境问题, 不是本次改动引入。
+
+⚠️ 另有一处必须同时看两个计数:
+两模块连跑那次 BUILD FAILURE 的真实原因是
 
 ```text
 Failed to execute goal ...maven-failsafe-plugin:3.5.4:verify on project system-module:
 There was a timeout in the forked process
 ```
 
-注意此时**所有 IT 断言都是绿的**, 只有外层超时 ⇒
-**「BUILD FAILURE」这个信号在此处不代表「有测试失败」**。
+此时**所有 IT 断言都是绿的** ⇒
+**「BUILD FAILURE」在此处不代表「有测试失败」**。
 
 #### 五、必须同时看两个计数才能定性（本次教训）
 
@@ -3032,5 +3065,23 @@ mvn ... -DskipITs=false ... failsafe:integration-test failsafe:verify → 正常
 | :--- | :--- | :--- |
 | Ryuk 本身 | **PASS** | 单模块/两模块对照下启动成功, 且清理了创建的容器 |
 | auth / notification / search 的 IT 类 | **PASS（隔离下）** | 三个对照共 4 次全绿 |
-| 全量 IT | **BLOCKED（超时预算）** | 断言 0 失败; 需要 > 37 分钟 + 更高并发余量 |
-| E2E 全量验收 | **BLOCKED** | 阻塞项已收敛为「超时预算」, 而非内存/负载/代码缺陷 |
+| 全量 IT | **BLOCKED（容器启动）** | 断言 **0** 失败; 失败全在容器起不来（Ryuk/RabbitMQ/ES/PG） |
+| 「超时预算不足」假设 | **已证伪** | 对照 U 放宽超时后失败 4 → **5**, 未减少 |
+| E2E 全量验收 | **BLOCKED** | 阻塞项 = Testcontainers 容器在等待策略内起不来; 非内存/负载/代码缺陷 |
+
+#### 六之二、本次同时暴露的第四种「BUILD FAILURE 但断言全绿」
+
+`BUILD FAILURE` 而 `Tests run: N, Failures: 0, Errors: 0` 有两个独立成因,
+本项目两者都遇到过, **必须靠 `[ERROR]` 段区分**:
+
+| 真实成因 | `[ERROR]` 段的关键字 |
+| :--- | :--- |
+| 外层超时掐断了 fork 进程 | `There was a timeout in the forked process` |
+| 容器在 Testcontainers 等待策略内起不来 | `Could not create/start container` / `Timed out waiting for log output matching '...'` |
+
+⚠️ 第二种**不会**被 `Total time` 或失败类名提示, 只看失败类名
+（`AuthIntegrationTest` / `SearchServiceIntegrationTest` …）
+会误判成「这些测试坏了」, 而它们在隔离下**全部通过**。
+
+**因此判据必须是**: 先按 `[ERROR]` 段定位是「超时」还是「容器」,
+再决定要不要去读 `Caused by`; 而**不是**先假定测试有缺陷。
