@@ -27,6 +27,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
@@ -68,6 +69,28 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
             .withEnv("discovery.type", "single-node")
             .withEnv("xpack.security.enabled", "false")
             .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+            // 显式声明 ready 条件, 不依赖库内置默认。
+            //
+            // ⚠️【2026-10-07 重要更正】本文件原先**没有**这个覆盖, 曾被判定为
+            // 失败原因, 经对照实验**证伪**:
+            //
+            //   我当时推断「Testcontainers 内置正则要求冒号后有空格, 而 ES 9.x
+            //   输出紧凑 JSON 无空格, 故永不匹配」。**这个推断是错的。**
+            //   从 1.21.0 jar 常量池提取库的真实正则, 用 Java Pattern 逐行匹配
+            //   真实 ES 日志, 结果是 **命中 1 行**:
+            //     库内置: .*("message":\s?"started[\s?|"].*|] started\n$)
+            //            逐行 find = 1  (整块 find = true)
+            //
+            //   反向对照更直接: 把本文件**还原成没有覆盖的 HEAD 版本**重跑,
+            //   结果同样是 **7 tests / 0 failures / 0 errors / BUILD SUCCESS**。
+            //   即修复前后结果一致 ⇒ 该覆盖**不是** Search 失败的原因。
+            //
+            // 真正的变量是**并发负载**: 全量 Reactor 跑时红 (263s),
+            //   单独跑两次都绿 (355s / 365s)。不编造根因。
+            //
+            // 保留本覆盖的理由: 它把隐式的库默认变成显式契约, 读代码即可知道
+            //   在等什么; 且不降低可维护性。但它**不构成缺陷修复**, 不要当成果。
+            .waitingFor(Wait.forLogMessage(".*\"message\":\"started.*", 1))
             .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container

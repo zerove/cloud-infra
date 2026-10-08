@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_es_wait_strategy check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -869,6 +869,27 @@ check_schema_init_wiring() {
 #   它在**真实 H2 空库**里执行 schema.sql 并读回实测列, 是纯本地判定,
 #   rc=1 意味着 schema.sql 真的不能独立建库或真的缺列 —— 属代码/配置缺陷,
 #   与环境压力无关, 没有任何理由降级。
+# 判定 Testcontainers 的 ES 等待策略在**真实 ES 日志**上确实能命中。
+#
+# 为什么阻断:
+#   它向被测系统(ES 容器)实时取证, 用 **jar 常量池里库内置的真实正则**去匹配
+#   **ES 自己产生的真实日志**。失配意味着 IT 会永远以
+#   `Timed out waiting for log output matching` 失败, 且**加大超时无效**
+#   （在等一个永不出现的模式）。那种情况最容易被读成"机器慢"而放过。
+#   rc=2 是"未判定"(探针失效/取不到日志) —— 同样阻断, 不当通过。
+check_es_wait_strategy() {
+  local out rc
+  # ⚠️ 不传 --reuse-log: 本门禁的价值就在于**每次都重新向 ES 取证**。
+  #   开发期快速迭代可用该开关, 但 verify-e2e 必须每次真跑。
+  out=$(timeout 900 python3 "$SCRIPT_DIR/deploy/tests/check_es_container_wait_strategy.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1) fail "ES 等待策略在真实 ES 日志上匹配不到（详见上方）"; return 1 ;;
+    2) fail "ES 等待策略门禁**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    0) ok "ES 等待策略在真实 ES 日志上均命中"; return 0 ;;
+    *) fail "ES 等待策略门禁返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
 check_schema_standalone() {
   local out rc
   out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_standalone.py" 2>&1); rc=$?
@@ -1007,6 +1028,8 @@ echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
 check_schema_init_wiring || true
 echo "[前置] 检查各服务 schema.sql 能在空库独立执行且列与实体对齐 ..."
 check_schema_standalone
+echo "[前置] 检查 ES 等待策略在真实 ES 日志上命中 ..."
+check_es_wait_strategy
 echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
 check_start_period_covers_startup || true
 echo "[前置] 检查 compose 依赖图无悬空引用 ..."
