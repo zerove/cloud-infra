@@ -2930,3 +2930,107 @@ except (subprocess.TimeoutExpired, OSError):
 > **【2026-10-08 18:19 更正】上面"Ryuk 根因未闭合"一句已作废** ——
 > 本轮用真实 IT 受控实验证明 Ryuk 启动与清理**均正常**。
 > 详见下方"补记八收尾更正"。
+
+---
+
+### ⚠️ 第九课补记十: **全量 IT 的失败不在测试里, 在"谁掐了它"**（2026-10-08 19:00-19:26 实测）
+
+上面两节都在治理单点, 本节把范围放到**全量 IT**
+（`mvn -o verify -DskipITs=false -DskipUnitTests=true`, 23 模块 / 26 IT 类 / 111 项）。
+
+#### 一、先把三条验证路径分开 —— 它们此前被混为一谈
+
+| 路径 | 实际做什么 | 本轮状态 |
+| :--- | :--- | :--- |
+| `verify-e2e.sh` | 门禁 + `mvn clean install -DskipTests` + 容器起停 + 探针 | **它不跑任何测试** |
+| 全量 IT | `mvn verify -DskipITs=false` | 本轮跑了, 见下 |
+| CI `e2e.yml` | GitHub Actions 远程 | 本地无对应物 |
+
+> ⚠️ 我此前把「E2E 全量验收」当成一个东西, 实际是这三个。
+> `verify-e2e.sh` 里 `mvn` 只出现 10 次, 且**唯一一次构建是 `-DskipTests`** ——
+> 也就是说**它通过与否与测试无关**。
+
+#### 二、全量 IT 实测: BUILD FAILURE, 但失败的不是断言
+
+```text
+Total time: 37:26 min (Wall Clock)
+[ERROR] BUILD FAILURE
+失败 IT 类 4 个:
+  com.cloudinfra.auth.AuthIntegrationTest                  Errors: 1 (129.3s)
+  com.cloudinfra.auth.AuthGatewayIntegrationTest           Errors: 1 (  0.8s)
+  com.cloudinfra.notification.mq.NotificationMqFlowIntegrationTest  Errors: 1 (340.0s)
+  com.cloudinfra.search.SearchServiceIntegrationTest       Errors: 1 (361.3s)
+```
+
+根因逐层读 `Caused by` 到底, 是 **Ryuk 容器在启动过程中被删**:
+
+```text
+02:31:49  Container testcontainers/ryuk:0.11.0 is starting: 969520c76c12f5a8e9...
+  ...  不到 30 秒 ...
+Caused by: InternalServerErrorException: Status 500:
+           {"cause":"no such container","message":"no container with ID 969520c76c12f5a8e9..."}
+Caused by: ContainerLaunchException: Could not create/start container
+```
+
+**同一轮里 Ryuk 启动成功 6 次**（`PT6.0S` / `PT7.2S` / `PT12.6S` / `PT20.8S` / `PT1M9.7S` / `PT1M24.6S`）,
+只有 auth 那一次中途消失。⇒ 不是「Ryuk 起不来」, 是「起了一半被删」。
+
+#### 三、受控对照: 分组越少越绿 ⇒ 变量是**并发**, 不是代码
+
+| 对照 | 命令 | 结果 |
+| :--- | :--- | :--- |
+| 全量 | 23 模块 Reactor | **4 个 IT 类失败** |
+| 单模块单类 ×2 | `-pl cloud-infra-auth -Dit.test=AuthGatewayIntegrationTest` | **6/6 绿 ×2** |
+| 两模块连跑 | `-pl system-module,cloud-infra-auth` | auth **12/12 绿**, Ryuk 启动 2 次成功 |
+
+唯一变量 = **同时存在的 Testcontainers 客户端 / 容器数量**。
+auth 的两个 IT 类**在隔离下从不出问题**, 因此**不能**把它们记成"测试缺陷"。
+
+#### 四、这轮真正的阻塞: **超时, 不是内存也不是负载**
+
+| 观测 | 数值 |
+| :--- | :--- |
+| `Committed_AS / CommitLimit` | 21.25 / 20.63 GB = **103%**（已超限） |
+| load | 18~20（12 核） |
+| 该状态下单模块 IT | `Tests run: 4, Failures: 0` —— **全绿** |
+
+⇒ 第八课补记三那条再次成立: **「账本看起来不合理」不等于「它是故障原因」**。
+commit 103% 只让一切**变慢**（Ryuk 从 6s 变成 84s）,
+而两模块连跑的失败原因是我给的 `timeout 900` 把它掐了:
+
+```text
+Failed to execute goal ...maven-failsafe-plugin:3.5.4:verify on project system-module:
+There was a timeout in the forked process
+```
+
+注意此时**所有 IT 断言都是绿的**, 只有外层超时 ⇒
+**「BUILD FAILURE」这个信号在此处不代表「有测试失败」**。
+
+#### 五、必须同时看两个计数才能定性（本次教训）
+
+```bash
+grep -E 'Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+$' log
+grep -E 'BUILD SUCCESS|BUILD FAILURE' log
+```
+
+- 两者一致 ⇒ 按 `Tests run` 里非零的 `Failures/Errors` 逐层读 `Caused by`;
+- `BUILD FAILURE` 但 `Failures/Errors` 全 0 ⇒ **是超时或插件问题**, 不是测试失败。
+
+#### 六、`-DskipITs=false` 的位置真的有影响（例外但已实测两次）
+
+```text
+mvn ... failsafe:integration-test failsafe:verify -DskipITs=false   → Tests are skipped  (BUILD SUCCESS, 空跑)
+mvn ... -DskipITs=false ... failsafe:integration-test failsafe:verify → 正常执行 4 项
+```
+
+⚠️ **空跑时 Maven 报的是 `BUILD SUCCESS`** —— 这是最不像故障的信号形态。
+判据必须要求 `Tests run: N` 且 **N > 0**, 不能只看构建结果。
+
+#### 结论
+
+| 项 | 状态 | 依据 |
+| :--- | :--- | :--- |
+| Ryuk 本身 | **PASS** | 单模块/两模块对照下启动成功, 且清理了创建的容器 |
+| auth / notification / search 的 IT 类 | **PASS（隔离下）** | 三个对照共 4 次全绿 |
+| 全量 IT | **BLOCKED（超时预算）** | 断言 0 失败; 需要 > 37 分钟 + 更高并发余量 |
+| E2E 全量验收 | **BLOCKED** | 阻塞项已收敛为「超时预算」, 而非内存/负载/代码缺陷 |
