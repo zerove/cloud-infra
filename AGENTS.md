@@ -2393,3 +2393,87 @@ awk -v t=$tot '/Committed_AS/{c=$2}END{printf "RSS=%.2f GB  Committed_AS=%.2f GB
    本例对照只需 **58 秒**(单模块 `verify`)。省掉这 58 秒的代价是:
    一个假结论被写进 todo、拿去征求"是否装 Docker"的决策。
    ⇒ **"不可解"是最高成本的一个断言, 也是最该被证据拦住的一个。**
+
+### ⚠️ 第九课补记三: 探针读到「一个值」不代表那就是**运行时**的值 (2026-10-08)
+
+追 Ryuk 根因时, 我写了个探针读 `TestcontainersConfiguration.getRyukImage()`,
+拿到 `testcontainers/ryuk:latest`; 而 199 行真实日志里清一色 `testcontainers/ryuk:0.11.0`。
+两者直接矛盾 —— 按前三课的惯性, 我立刻判"配置被覆盖 / 版本冲突", 并据此准备改配置。
+
+**两个都是错的。真相在第三条路径上**:
+
+```bash
+# 全 jar 字节码扫描: 0.11.0 硬编码在哪个类
+python3 -c "
+import zipfile
+z=zipfile.ZipFile('testcontainers-1.21.0.jar')
+print([n for n in z.namelist() if n.endswith('.class') and b'0.11.0' in z.read(n)])"
+# → ['org/testcontainers/utility/RyukContainer.class']
+
+javap -c -p org.testcontainers.utility.RyukContainer | head
+#   1: ldc #15  // String testcontainers/ryuk:0.11.0
+#   3: invokespecial GenericContainer."<init>"
+javap -c -p org.testcontainers.utility.RyukContainer | grep -c getRyukImage
+# → 0   ← 这个类根本不读那个配置项
+```
+
+即 **同一个库里有两条独立的镜像名解析路径**:
+`RyukContainer` 硬编码 `0.11.0`(实际建容器走这条),
+`TestcontainersConfiguration.getRyukImage()` 走 `parse()` 补全成 `latest`(**运行时没人调**)。
+
+| 我观察到的 | 它证明什么 | 它不证明什么 |
+| :--- | :--- | :--- |
+| 探针 `getRyukImage()` → `latest` | 该**配置方法**的返回值 | 实际建了哪个镜像 |
+| 日志 logger 名 → `0.11.0` | 该**容器类**用的镜像 | 配置能不能改它 |
+
+**三条新规则**:
+
+1. **配置项的 getter 不等于它的消费端**。`getRyukImage()` 存在 ≠ 有人调它。
+   必须用**字节码引用计数**证明调用关系: `javap -c` + `grep <getter名>` 得 0,
+   就判定"该配置项是摆设"。这正是本项目"第三课"在库内部的形态 ——
+   之前只在自家代码里查, 这次是在依赖里。
+2. **同一个量有多条解析路径时, 必须先穷举路径再取值**。
+   本例若先问"还有谁构造这个镜像", 一条 `javap` 就结束了, 不必绕到"配置冲突"。
+3. **`0 in 0 files` 与 `latest vs 0.11.0` 是同一种假信号**: 取到值 ≠ 取到真值。
+   ⇒ **凡是"我探针读到的 X"与"日志里的 X"矛盾, 第一动作是找第三条路径,
+   而不是判定其中一个被篡改。**
+
+> **附带一条关于依赖取证**: 我先前手工拼的 classpath 里混进了
+> `testcontainers-2.0.5.jar`(与 pom 声明的 `1.21.0` 并存), 差点在该版本上取证。
+> 正解是 `mvn -o dependency:tree -Dincludes='org.testcontainers:*:*'`
+> 取权威清单 —— 本次它证明**全部 1.21.0, 无第二版本**,
+> 于是"版本冲突"这条假设连前提都不存在。
+> **在错误的 jar 上反编译, 得到的字节码是自洽的、完全可信、且完全无关。**
+
+### ⚠️ 第九课补记四: API 猜测的代价是**编译期噪音**掩盖运行时结论 (2026-10-08)
+
+同一个探针脚本, 我连着三次猜错 API, 每次的失败形态都不同:
+
+| 猜的 | 实际 | 错误形态 |
+| :--- | :--- | :--- |
+| `dc.getVersion()` | 要 `versionCmd().exec()` | 编译失败 |
+| `factory.getRyukContainerId()` | 不存在, 在 `ResourceReaper` | 编译失败 |
+| `name.getVersion()` | 是 `getVersionPart()` | 编译失败 |
+
+三次都是**编译期**失败, 至少吵闹。但真正危险的是第四次:
+
+```bash
+javac ... -d classes RyukProbe.java 2>&1 | grep -E "error|symbol:" | head -6
+if [ -f classes/RyukProbe.class ]; then echo "✓ 编译成功"; ... fi
+#                                          ^^^^^^^^^^^^^^ 恒为真 —— 上一次编译留下的旧 class
+```
+
+**上一次成功编译的 `.class` 不会因为这次失败而消失**, 于是
+"编译失败"与"打印编译成功"可以同时出现, 且**退出码为 0**。
+若不是我在下一行单独查了错误输出, 我会拿着**上一次那个 API 写错的探针**去跑,
+然后把它的输出当作本次实验的结论。
+
+> 叠加第五课补记一(探针扫到 0 个目标却 `exit 0`), 同一根因的第三次现身:
+> **失败时必须走一条与成功时不同的代码路径**。
+> 这里最省事的写法是**先删产物目录再编译**:
+> ```bash
+> rm -rf classes && javac ... -d classes X.java || { echo "编译失败, 中止"; exit 2; }
+> ```
+
+**规则**: 任何"编译 → 运行"的探针, **必须能在编译失败时可靠中止**。
+判据不是 `.class` 文件存在与否(它是上一次运行的残留), 而是 **`javac` 的退出码**。
