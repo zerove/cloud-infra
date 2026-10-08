@@ -32,7 +32,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -143,16 +143,19 @@ class CrossServiceFeignChainIntegrationTest {
             .withEnv("POSTGRES_PASSWORD", "postgres")
             .withExposedPorts(5432)
             .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*", 2)
-                    .withStartupTimeout(Duration.ofSeconds(90)));
+                    // 原为 90 秒, 但受控对照实测(2026-10-08)本机 n=1 时 postgres
+                    // 就需 109 秒 —— 该预算本就不足, 本轮通过属侥幸(镜像已缓存)。
+                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Container
     static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine")
             .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1)
-                    .withStartupTimeout(Duration.ofSeconds(180)));
+                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
 
     @DynamicPropertySource
     static void gatewayProperties(DynamicPropertyRegistry registry) {

@@ -29,7 +29,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.RabbitMQContainer;
-import java.time.Duration;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -53,11 +53,14 @@ class SystemIntegrationTest extends BaseIntegrationTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
-            .withPassword("password");
+            .withPassword("password")
+            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     /**
      * RabbitMQ：Stream Rabbit binder 在上下文刷新时会建立连接，
@@ -66,7 +69,7 @@ class SystemIntegrationTest extends BaseIntegrationTest {
     @Container
     static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine")
             .waitingFor(org.testcontainers.containers.wait.strategy.Wait.forLogMessage(".*Server startup complete.*", 1)
-                    .withStartupTimeout(Duration.ofSeconds(180)));
+                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
 
     @DynamicPropertySource
     static void containerDatasource(DynamicPropertyRegistry registry) {

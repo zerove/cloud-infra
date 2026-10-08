@@ -8,6 +8,7 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.framework.redis.service.RedisService;
 import com.cloudinfra.test.BaseIntegrationTest;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -42,7 +43,9 @@ class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            // 与 AuthGatewayIntegrationTest 同理: 显式预算, 不依赖 60 秒默认。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {

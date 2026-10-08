@@ -2,6 +2,7 @@ package com.cloudinfra.gateway;
 
 import com.alibaba.cloud.nacos.NacosConfigManager;
 import com.cloudinfra.test.BaseIntegrationTest;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -27,7 +28,9 @@ public class GatewaySentinelIntegrationTest extends BaseIntegrationTest {
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            // 显式启动预算, 不依赖 Testcontainers 60 秒默认(受控对照见 auth/file 的说明)。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {

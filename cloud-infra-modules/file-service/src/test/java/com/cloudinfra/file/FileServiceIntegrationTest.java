@@ -8,6 +8,7 @@ import com.cloudinfra.file.mapper.FileMetadataMapper;
 import com.cloudinfra.file.mapper.StorageQuotaMapper;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.test.BaseIntegrationTest;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,11 +38,17 @@ public class FileServiceIntegrationTest extends BaseIntegrationTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
-            .withPassword("password");
+            .withPassword("password")
+            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
+            // n=3 并发时最长 125 秒 / 总计 173 秒。Testcontainers 默认 60 秒预算
+            // 在任何一种情况下都不够 —— fullit3/fullit5 的 postgres 启动失败即源于此。
+            // 走 InfrastructureContainers.STARTUP_TIMEOUT(3 分钟)的同类测试全部通过。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {

@@ -1,5 +1,6 @@
 package com.cloudinfra.framework.mybatis.outbox;
 
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -60,7 +61,9 @@ class OutboxIntegrationTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
-            .withPassword("password");
+            .withPassword("password")
+            // 显式启动预算, 不依赖 Testcontainers 60 秒默认。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     /**
      * 最小手工装配上下文：仅被测三件套 + JDBC 基础设施。

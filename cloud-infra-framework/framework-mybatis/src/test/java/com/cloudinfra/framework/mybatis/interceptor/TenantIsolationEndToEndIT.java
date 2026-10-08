@@ -5,6 +5,7 @@ import com.cloudinfra.common.core.annotation.TenantFilter;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import com.cloudinfra.common.core.tenant.TenantContextFilter;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import jakarta.servlet.FilterChain;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -56,7 +57,9 @@ class TenantIsolationEndToEndIT {
     private static final String SECRET = "tenant-e2e-it-secret-0123456789abcdef";
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+        // 显式启动预算, 不依赖 Testcontainers 60 秒默认。
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     private SqlSessionFactory sessions;
     private PGSimpleDataSource dataSource;

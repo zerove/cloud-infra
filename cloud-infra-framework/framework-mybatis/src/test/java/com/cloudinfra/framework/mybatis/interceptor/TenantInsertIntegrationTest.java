@@ -3,6 +3,7 @@ package com.cloudinfra.framework.mybatis.interceptor;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.cloudinfra.common.core.annotation.TenantFilter;
 import com.cloudinfra.common.core.tenant.TenantContext;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -24,7 +25,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 class TenantInsertIntegrationTest {
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+        // 显式启动预算, 不依赖 Testcontainers 60 秒默认。
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
     private SqlSessionFactory sessions;
     private PGSimpleDataSource dataSource;
 

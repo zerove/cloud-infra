@@ -4,6 +4,7 @@ import com.cloudinfra.gateway.config.GatewayConfig;
 import com.cloudinfra.gateway.config.OpenApiAggregationConfig;
 import com.cloudinfra.gateway.config.PermissionCache;
 import com.cloudinfra.test.BaseIntegrationTest;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,9 @@ class GatewayIntegrationTest extends BaseIntegrationTest {
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            // 显式启动预算, 不依赖 Testcontainers 60 秒默认(受控对照见 auth/file 的说明)。
+            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {

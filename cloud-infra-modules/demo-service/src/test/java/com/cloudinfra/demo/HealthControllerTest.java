@@ -2,6 +2,7 @@ package com.cloudinfra.demo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +23,9 @@ class HealthControllerTest {
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-        .withExposedPorts(6379);
+        .withExposedPorts(6379)
+        // 显式启动预算, 不依赖 Testcontainers 60 秒默认。
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {
