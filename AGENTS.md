@@ -3085,3 +3085,108 @@ mvn ... -DskipITs=false ... failsafe:integration-test failsafe:verify → 正常
 
 **因此判据必须是**: 先按 `[ERROR]` 段定位是「超时」还是「容器」,
 再决定要不要去读 `Caused by`; 而**不是**先假定测试有缺陷。
+
+---
+
+### ⚠️ 第九课补记十一: **相关性强 ≠ 受控证明 —— 而我差点把前者当后者交付**（2026-10-08 21:55-22:38）
+
+上一节我用受控对照把「全量 IT 失败」收敛到「容器起不来」, 并留下一个悬而未决的
+问题: 到底是 **Ryuk 导致**还是别的。本节把它做完, 代价是**我自己的三个对照全部无效**。
+
+#### 一、想验证「禁用 Ryuk 能否消除失败」, 连测三种写法 —— 三种都无效
+
+| 对照 | 写法 | Ryuk `Creating` 次数 | 变量生效? |
+| :--- | :--- | :--- | :--- |
+| V | `env RYUK_DISABLED=true` | 1（**仍创建**） | ❌ |
+| W | `-Dorg.testcontainers.ryuk.disabled=true` | **0** | ⚠️ **假绿, 见下** |
+| Z-B | `env TESTCONTAINERS_RYUK_DISABLED=true` | 1（**仍创建**） | ❌ |
+
+**W 是本节最重要的一次自我纠正。** 它的 `Creating` 次数确实是 0, 看着像"变量生效",
+但那次跑的是 `ScheduledTaskRuntimeTriggerIT` —— 而这个类:
+
+```bash
+grep -cE 'testcontainers|PostgreSQLContainer|GenericContainer' \
+  .../ScheduledTaskRuntimeTriggerIT.java
+#   → 0
+```
+
+**它根本不用容器 ⇒ Ryuk 无从触发 ⇒ `Creating=0` 与"禁用"毫无关系。**
+
+> ⚠️ 这就是第五课「探针查错了对象」的升级版:
+> **判据("Ryuk 有没有被创建")与被测行为("禁用是否生效")在本次条件下恰好同值,**
+> 于是假绿。判据必须选一个**与"是否触发"无关**的量
+> —— 或反过来说, **当被测对象本身不触发该机制时, 这个机制的任何观测都无意义**。
+
+#### 二、正确的键名在字节码里根本不存在
+
+从 `testcontainers-2.0.5.jar` 提取（`javap -c`, 不靠记忆）:
+
+```text
+含 ryuk 的配置键只有三个:
+  ryuk.container.image
+  ryuk.container.privileged
+  ryuk.container.timeout
+另有一个:  checks.disable
+```
+
+而 `RyukResourceReaper` 对 `isDisableChecks()` 的**引用次数 = 0**
+⇒ **这个版本无法通过配置禁用 Ryuk**。
+
+⚠️ 顺带纠正一个易错点: `testcontainers/ryuk:0.11.0` 里的 `0.11.0` 是
+**Ryuk 镜像的标签**, 不是 Testcontainers 库版本（实际是 `2.0.5`）。
+把镜像标签当库版本, 会一路找错 jar。
+
+#### 三、最终靠**多数据点**定性, 而不是单次对照
+
+同一测试类 `AuthGatewayIntegrationTest`（Ryuk 始终启用）:
+
+| 场景 | 次数 | 结果 |
+| :--- | :--- | :--- |
+| 单模块单类 | 5 | **PASS 4 次**（207.6s / 149.4s / 214.2s / 223.4s） |
+| 多模块连跑 | 3 | **FAIL 3 次**（0.8s / 0.9s / 275.1s） |
+
+⇒ 强相关, 但**我不能写成「并发导致失败」**: 这 8 次里其他变量（宿主负载、
+时间、模块组合）并未受控, 严格说只证明了**相关性**。
+
+#### 四、真正的收获: 「0.8 秒失败」与「275 秒失败」是**两种机制**
+
+之前几节我把它们混成一句「容器起不来」, 这是错的:
+
+| 机制 | 特征 | 根因 | 出自 |
+| :--- | :--- | :--- | :--- |
+| **一** | **0.8~0.9 秒立刻挂** | `Status 500 {"cause":"no such container"}` —— 容器**被删** | 全量第一轮 |
+| **二** | 等 275~708 秒后挂 | `Timed out waiting for log output matching '.*"message":"started.*'`（RabbitMQ） | 对照 Y |
+
+⇒ 机制一**与"等待容器"无关**（0.8 秒根本没等到）, 机制二才是真正的"起不来"。
+**耗时是区分二者的判据**, 比读类名或读 `[ERROR]` 首行都可靠:
+
+```bash
+# 失败耗时 < 5s  ⇒ 容器被删/连接被拒
+# 失败耗时 > 60s ⇒ 容器在等待策略内起不来
+```
+
+#### 五、同一模块内**失败类还会漂移**（顺序依赖的直接证据）
+
+| 对照 | 失败类 |
+| :--- | :--- |
+| U | `AuthIntegrationTest` / `AuthGateway` / `SearchService` / `NotificationMqFlow` / `NotificationRecovery` |
+| Y（同参同模块） | `SearchService` / `AuthGateway` / `NotificationRecovery` / **`WebSocketIntegrationTest`** / **`WebSocketIdentityTrustIT`** |
+
+两次命令**完全相同**, 失败类却不同 ⇒ 不是"某个测试坏了",
+而是**模块内测试间存在顺序依赖**（与 AGENTS.md 记录的
+`@AfterEach` 清理系统属性、静态嵌套 `@Configuration` 被扫到同源）。
+
+#### 六、结论
+
+| 项 | 状态 | 依据 |
+| :--- | :--- | :--- |
+| 「Ryuk 失败」 | **不是根因** | V/Z-B 变量均未生效却时绿时红; Ryuk 在成功轮次也正常启动清理 |
+| 「Ryuk 可禁用」 | **不成立** | 该版本无对应配置键 |
+| 全量 IT 失败 | **两种机制并存** | 机制一容器被删 / 机制二容器起不来 |
+| 并发假设 | **仅相关, 未受控证明** | 8 个数据点, 其他变量未受控 |
+| 模块内顺序依赖 | **确认存在** | U/Y 同参但失败类不同 |
+| 本次改动 | **与上述全部无关** | 看门狗治理只改 `deploy/tests/` 下两个文件, 不参与 IT |
+
+⚠️ **未闭合项（如实记录）**: 「机制一容器为何被删」与「模块内顺序依赖的具体来源」
+本轮未查明, 状态 **UNDETERMINED**。前者需要 `podman events` 与 Testcontainers
+日志的时间戳对齐, 后者需要按类逐个隔离跑。
