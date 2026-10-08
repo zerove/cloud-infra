@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_port_conflicts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_port_conflicts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs check_v18_watchdog; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -899,6 +899,42 @@ check_port_conflicts() {
   return 0
 }
 
+# ---- V18 迁移脚本看门狗守护 (2026-10-08 接线) -----------------------------
+#
+# 为什么必须阻断: 看门狗是 `test_v18_migration.sh` 的**保险丝**——
+# 平时不动作, 所以「它没被调用过」与「它坏了」在正常运行中完全一样(第三课)。
+# 而实测本项目已栽在这里一次: 看门狗把自己的 podman 诊断放在 kill **之前**,
+# 卡在 podman exec 上, 于是「看门狗已触发」为真, 「看门狗会终止」为假 ——
+# 保险丝成了新的挂死源。
+#
+# 这条门禁守护的不只是源码形态, 而是**跑出来的真实行为**:
+# 看门狗是否真的能终止一个忽略 SIGTERM 的顽固进程组。
+#
+# ⚠️ 有时限且不可无限等: 本机单次 podman exec 需 9~17 秒(宿主负载高时更久),
+#   而守护里含多个真实挂死实验。给 900s, 超时算失败(不是跳过)。
+check_v18_watchdog() {
+  local out rc
+  # ⚠️ 先确认脚本**存在**: 上一条自检只验证"函数被调用", 不验证
+  #    "被调用的东西在"。两者独立 —— 实测把脚本移走后自检仍全绿,
+  #    因为它只 grep 函数名。这正是本项目的第 6 类假门禁。
+  if [ ! -f "$SCRIPT_DIR/deploy/tests/test_v18_watchdog.py" ]; then
+    fail "V18 看门狗守护测试脚本不存在 —— 门禁会静默变成空跑并永远 PASS"
+    return 1
+  fi
+  out=$(timeout 900 python3 "$SCRIPT_DIR/deploy/tests/test_v18_watchdog.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | tail -25 | sed 's/^/  /'
+  if [ "$rc" -eq 124 ]; then
+    fail "V18 看门狗守护测试超时(900s) —— 装置本身可能已挂死, 本次不判定"
+    return 1
+  fi
+  if [ "$rc" -ne 0 ]; then
+    fail "V18 看门狗守护测试失败 —— 保险丝本身可能已失效(详见上方断言)"
+    return 1
+  fi
+  ok "V18 看门狗守护测试通过"
+  return 0
+}
+
 # ---- 容器代理变量泄漏 (运行时, 不需重启任何容器) ------------------------
 #
 # ⚠️ 判据必须是**运行时**而非 compose 文件, 也不是 `podman-compose config`
@@ -1137,6 +1173,12 @@ check_resource_optimization || true
 check_docs_probe_scripts || true
 check_lesson_tables || true
 check_port_conflicts || true
+
+# ⚠️ 这条**阻断**而非 `|| true`: 它守护的是"V18 迁移测试能否在挂死时结束"。
+#    失败意味着该测试一旦挂死就会**永久占用一个 CPU 核**, 进而让整个宿主的
+#    load 长期畸高, 使**其他**测试结论不可信(第八课: 先看宿主三本账)。
+#    把它降级为警告, 等于让一个会污染全局的问题只打印一行字。
+check_v18_watchdog || exit 1
 
 # 容器代理变量泄漏（2026-10-06 新增）。
 # ⚠️ 只警告不阻断, 且**必须在 compose 同步前跑** —— 它的作用是
