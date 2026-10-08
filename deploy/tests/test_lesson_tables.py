@@ -25,20 +25,21 @@ WORK = tempfile.mkdtemp(prefix="lesson-tables-")
 def run_guard(doc):
     """对指定文档跑守护, 返回 (rc, 输出)。
 
-    替换 DOC 时必须匹配**整个多行定义**:
-    早期版本用 ``^DOC = .*$`` 只替换了第一行, 而 DOC 在check_lesson_tables.py 里
-    是跨 4 行的 ``os.path.join(...)``, 于是剩余行变成孤立缩进块 →
-    IndentationError → rc=1。**所有用例都“符合预期”而实际一个都没跑起来**
-    (前5 项本就该 rc=1, 于是假通过)。
+    2026-10-08 重写: 原实现用正则**改写脚本文本**来换掉 DOC, 踩了两次:
+      1. 早期只匹配 ``^DOC = .*$`` 单行, 而 DOC 是跨多行的 os.path.join(...)
+         → 剩余行成孤立缩进块 → IndentationError → rc=1,
+         **所有用例都"符合预期"而实际一个都没跑起来**(假通过)。
+      2. 改成多行正则后, 守护侧又改成了
+         ``DOC = os.environ.get("DOC_OVERRIDE") or os.path.join(...)``,
+         形态再次对不上 → 替换静默不命中 → 全部 rc=2。
+    即"注入依赖被注入对象的当前写法", 对方一改就失效。
+
+    正解: 守护已支持 DOC_OVERRIDE 环境变量, 直接传, 不再改脚本文本。
+    改文本的方案必须删掉 —— 它每次改形态都会静默退化成假绿。
     """
-    s = open(SCRIPT, encoding="utf-8").read()
-    s = re.sub(r'^DOC = os\.path\.join\(.*?\n\)\n',
-               'DOC = %r\n' % doc, s, count=1, flags=re.M | re.S)
-    if "DOC = os.path.join" in s:
-        raise AssertionError("DOC 定义未被替换 —— 替换正则失效")
-    p = os.path.join(WORK, "_tmp_guard.py")
-    open(p, "w", encoding="utf-8").write(s)
-    r = subprocess.run([sys.executable, p], capture_output=True, text=True, timeout=120)
+    env = dict(os.environ, DOC_OVERRIDE=doc)
+    r = subprocess.run([sys.executable, SCRIPT], capture_output=True,
+                       text=True, timeout=120, env=env)
     return r.returncode, r.stdout + r.stderr
 
 
