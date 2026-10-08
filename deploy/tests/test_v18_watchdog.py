@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import glob
 import tempfile
 import time
 import unittest
@@ -43,6 +44,39 @@ DEVICE_SUBSTITUTIONS = [
     ('timeout 90 podman exec cloud-postgres psql -U postgres -d "$1" -tA -c "$2" 2>&1',
      'sleep 300'),
 ]
+
+
+_PROGRESS_GLOB = "v18-progress.*"
+# 全量泄漏守护的递归闸门(见 test_every_case_leaves_no_progress_file_behind)
+_RECURSE_GUARD = "V18_LEAK_SWEEP_CHILD"
+
+
+def snapshot_progress_files():
+    """当前所有进度文件的快照(用于算差集)。"""
+    return set(glob.glob(os.path.join(tempfile.gettempdir(), _PROGRESS_GLOB)))
+
+
+def remove_new_progress_files(before):
+    """删掉 `before` 之后新出现的进度文件, 返回删掉的数量。
+
+    ⚠️ 为什么必须是**装置自己的责任**, 而不是脚本的:
+    `test_watchdog_is_outside_target_process_group` 用 SIGKILL 杀主进程
+    —— 而 **SIGKILL 不可捕获**, 于是脚本内的 `cleanup` 与看门狗兜底
+    全都救不了。实测每次该用例稳定泄漏 1 个文件, 等 15 秒也不消失。
+
+    ⇒ 规则: **谁创建谁删除**。装置必须自己收拾(第八课补记一第 5 条)。
+
+    ⚠️ 必须删"差集"而不是"全部": 同一台机器上可能有别的进程在用同名文件,
+    删掉别人的东西是不可逆的误伤(与"不擅自终止他人进程"同源)。
+    """
+    n = 0
+    for f in snapshot_progress_files() - before:
+        try:
+            os.unlink(f)
+            n += 1
+        except OSError:
+            pass
+    return n
 
 
 def _is_regex_anchor(old):
@@ -222,6 +256,48 @@ class TestWatchdog(unittest.TestCase):
             if p.poll() is None:
                 p.kill()
 
+    def _run_case_killing_main_with_sigkill(self, kill_watchdog=True):
+        """复现"主进程被 SIGKILL, 看门狗独自收尾"这条真实故障路径。
+
+        ⚠️ 装置必须自己收掉看门狗: 它是 setsid 起在另一会话里的**孤儿**
+        (PPID=1), `p.kill()` 只杀目标组组长。若留着它:
+          - 它继续跑自己的倒计时;
+          - 而 `with` 一退出 TemporaryDirectory 就删了脚本, 它随后报错,
+            **永远走不到兜底 rm**。
+        实测: 不这么做, 每次稳定泄漏 1 个进度文件, 等 15 秒也不消失。
+        ⇒ 顺序不能反: 先杀看门狗(用**日志里它自己报告的** PGID), 再退出 with。
+
+        ⚠️ 用它报告的 PGID 而不是目标 PGID: `kill -- -<目标PGID>` 恰好
+        **不含**看门狗(这正是被守护的性质), 用错会让"清理"静默变成空操作。
+
+        ⚠️ `kill_watchdog=False` 用于"守护看门狗自己会清理"的用例:
+        若连看门狗一起 SIGKILL, 那被守护的兜底 `rm` 也跑不到 ——
+        **前提自相矛盾**, 判据必然红, 且红得毫无信息量。
+        实测: 两种变体对照(杀=红 / 不杀=绿)正是定位到这一点的手段。
+        """
+        with tempfile.TemporaryDirectory(prefix="v18wd-killmain-") as tmp:
+            script = make_hung_copy(tmp)
+            p, logpath = run_hung(script, watchdog_secs=8, wait_secs=0)
+            out = wait_for_log(logpath, "看门狗已启动", timeout=60)
+            self.assertTrue(out and "看门狗已启动" in out,
+                            "看门狗未报告启动:\n%s" % out)
+            target = pgid_from_log(logpath)
+            self.assertIsNotNone(target, "读不到目标 PGID:\n%s" % out)
+            m = re.search(r"看门狗自身 PGID=(\d+)", out)
+            self.assertIsNotNone(
+                m, "日志未报告看门狗自身 PGID(无法判定是否脱离):\n%s" % out)
+            self.assertNotEqual(
+                m.group(1), target,
+                "看门狗 PGID == 目标 PGID (%s) —— 它会杀死自己" % target)
+            wd_pgid = m.group(1)
+            if p.poll() is None:
+                p.kill()          # SIGKILL: 主进程的 trap cleanup EXIT 跑不到
+            if kill_watchdog:
+                subprocess.run(["kill", "-KILL", "--", "-%s" % wd_pgid],
+                               capture_output=True)
+            self._wait_watchdogs_gone(logpath)
+            return out
+
     def test_watchdog_is_outside_target_process_group(self):
         """负向对照: 看门狗必须**不**在目标进程组内。
 
@@ -232,23 +308,16 @@ class TestWatchdog(unittest.TestCase):
 
         ⇒ 即"看门狗报告已终止"与"真的已终止"是两件事(第九课)。
         """
-        with tempfile.TemporaryDirectory(prefix="v18wd-out-") as tmp:
-            script = make_hung_copy(tmp)
-            p, logpath = run_hung(script, watchdog_secs=8, wait_secs=0)
-            out = wait_for_log(logpath, "看门狗已启动", timeout=60)
-            self.assertTrue(out and "看门狗已启动" in out,
-                            "看门狗未报告启动:\n%s" % out)
-
-            target = pgid_from_log(logpath)
-            self.assertIsNotNone(target, "读不到目标 PGID:\n%s" % out)
-
-            # 回读看门狗自身 PGID: 日志里显式打印, 不靠外部推导
-            m = re.search(r"看门狗自身 PGID=(\d+)", out)
-            self.assertIsNotNone(m, "日志未报告看门狗自身 PGID(无法判定是否脱离):\n%s" % out)
-            self.assertNotEqual(m.group(1), target,
-                                "看门狗 PGID == 目标 PGID (%s) —— 它会杀死自己" % target)
-            if p.poll() is None:
-                p.kill()
+        before = snapshot_progress_files()
+        try:
+            self._run_case_killing_main_with_sigkill()
+        finally:
+            # ⚠️ 必须 try/finally: 本用例 SIGKILL 主进程(不可捕获) ⇒
+            # 脚本内的 cleanup 与看门狗兜底都救不了。谁创建谁删除 ——
+            # 装置必须自己收拾(第八课补记一第 5 条)。
+            # 之前这行在 `with` 之外且无 finally: 断言一失败就跳过清理,
+            # **失败的那一次反而泄漏** —— 即守护只在它不需要时生效。
+            remove_new_progress_files(before)
 
     def test_sigterm_ignoring_process_is_killed(self):
         """负向对照: 无视 SIGTERM 的进程必须被升级到 SIGKILL 清掉。
@@ -613,9 +682,7 @@ class TestWatchdog(unittest.TestCase):
         ⇒ 实测前后对比 /tmp 下的文件数, 而不是检查源码。
            源码检查只能证明"写法对", 证明不了"没有泄漏"。
         """
-        import glob
-        pattern = os.path.join(tempfile.gettempdir(), "v18-progress.*")
-        before = set(glob.glob(pattern))
+        before = snapshot_progress_files()
         with tempfile.TemporaryDirectory(prefix="v18wd-leak-") as tmp:
             script = make_hung_copy(tmp)
             p, logpath = run_hung(script, watchdog_secs=6, wait_secs=0)
@@ -628,13 +695,17 @@ class TestWatchdog(unittest.TestCase):
             #    于是正向假红(实测)。
             #    ⇒ 判据的采样时机必须落在"该发生的清理已完成"之后,
             #    而不是因为"日志里出现了某个词"就动手(第五课)。
-            deadline = time.time() + 90
-            while time.time() < deadline:
-                if pgid and pgid_alive(pgid) is False:
-                    break
-                time.sleep(2)
-            time.sleep(3)
-        leaked = sorted(set(glob.glob(pattern)) - before)
+            # ⚠️⚠️ 必须等**所有**残留进程退出, 不只是目标进程组。
+            #    实测: `test_watchdog_is_outside_target_process_group` 在看门狗
+            #    刚启动时就把主进程 SIGKILL 掉, 然后立刻返回 —— 此时看门狗
+            #    还在跑(上限 8s), 它才是最后删除进度文件的那个进程。
+            #    只等目标组 ⇒ 在看门狗删之前就采样 ⇒ **正向假红**。
+            #    ⇒ 判据的采样条件必须覆盖"负责清理的那个进程也已退出"。
+            # 等"负责清理的那个进程"也退出 —— 但**不**连带等目标组:
+            # 目标组是本用例**故意**杀掉的, 等它等于等一个永远不会发生的状态。
+            # 共用实现见 _wait_watchdogs_gone(探针三态在那里统一处理)。
+            self._wait_watchdogs_gone(logpath)
+        leaked = sorted(snapshot_progress_files() - before)
         self.assertEqual(
             leaked, [],
             "看门狗子进程泄漏了进度文件: %s\n"
@@ -722,6 +793,222 @@ class TestWatchdog(unittest.TestCase):
             self.assertLess(
                 elapsed, 60,
                 "drop_db 耗时 %.1fs: 时限未生效(默认 90s x 多次往返)" % elapsed)
+
+    def _wait_watchdogs_gone(self, logpath, timeout=120):
+        """等本次测试起的看门狗**与**目标组都退出。
+
+        ⚠️ 为什么要等两者: 判据若只等目标组, 就会在"负责删进度文件的那个
+        进程(看门狗)还在跑"时提前采样 ⇒ **正向假红**。
+        ⚠️ 为什么不能只等看门狗: 看门狗退出后才轮到主进程真正结束。
+        ⇒ 两者的交集才是"一切收干净"。
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            alive = self._residual_watchdogs(logpath)
+            if alive is None:
+                # ⚠️ 探针失效**不消耗**等待预算, 但也**不能**当成"已退出"。
+                #    判据失效 ⇒ 这次等待的结论 UNDETERMINED ⇒ 由调用方判红。
+                raise AssertionError(
+                    "探针(ps)不可用 ⇒ 无法判定看门狗是否已退出。"
+                    "必须记为 UNDETERMINED, 不能当'已清理'。"
+                    "(第八课补记一: 探针把'取不到值'当成'取到假值')")
+            if alive:
+                time.sleep(2)
+                continue
+            time.sleep(3)   # 给文件系统删除留出可见性延迟
+            again = self._residual_watchdogs(logpath)
+            if again is None:
+                raise AssertionError("探针(ps)在复核时不可用 ⇒ UNDETERMINED")
+            if not again:
+                return True
+            time.sleep(2)
+        return False
+
+    @staticmethod
+    def _residual_watchdogs(logpath):
+        """是否还有本测试起的看门狗子进程存活。
+
+        ⚠️ 判据形态: 看门狗以 `--watchdog-child` 重新执行脚本,
+        它的进程组组长是**自己**(setsid)。而 `pgid_alive` 读的是
+        日志里的"目标 PGID", 那不含看门狗 ⇒ 只等它会漏。
+        ⚠️ 也不能用 `pgrep -f`: 它会**匹配到自己**的调用包装,
+         报"还在"而实际已死(本文件开头列的三条自伤陷阱之一)。
+        ⇒ 只认"命令行里含 --watchdog-child"且**不在**本次测试 PID 下的进程。
+
+        ⚠️⚠️ 探针失效必须**红灯**, 不能返回 False。
+        旧实现 `except: return False`(探针坏了 → 当成"已退出"),
+        于是探针超时会让判据**假绿** —— 正是第八课补记一那条:
+        "探针把'取不到值'当成'取到假值'"。
+        这里改为 `None`(第三态), 由调用方显式判红。
+        """
+        try:
+            res = subprocess.run(
+                ["ps", "-eo", "pid=,args="],
+                capture_output=True, text=True, timeout=30)
+        except (subprocess.TimeoutExpired, OSError):
+            return None          # ← 探针不可用(第三态, 不等于"已退出")
+        if res.returncode != 0:
+            return None          # ps 自身失败 ⇒ 同样不可用
+        out = res.stdout or ""
+        if not out.strip():
+            return None          # 空输出可疑(与 2026-10-05 那次同形)
+        me = os.getpid()
+        for line in out.splitlines():
+            line = line.strip()
+            if not line or "--watchdog-child" not in line:
+                continue
+            parts = line.split(None, 1)
+            try:
+                pid = int(parts[0])
+            except (ValueError, IndexError):
+                continue
+            if pid == me:
+                continue
+            if "ps -eo" in line:
+                continue
+            return True
+        return False
+
+
+    def test_every_case_leaves_no_progress_file_behind(self):
+        """全量用例跑完后**一个**进度文件都不该新增。
+
+        ⚠️ 为什么需要这条: 现有的泄漏守护只跑**一个**用例
+        (test_watchdog_kills_hung_script), 于是它对**其他**用例的泄漏是盲的。
+        实测: 逐用例比对后发现 3 个用例各泄漏 1 个 ——
+        其中两个走探针路径(不装 trap cleanup EXIT), 第三个用 SIGKILL
+        杀主进程(SIGKILL 不可捕获, 脚本内清理救不了)。
+        而那次守护**全绿**, 因为它只测了一个没问题的用例。
+
+        ⇒ 这正是第九课补记八形态 3 的升级: 泄漏守护本身也会**因为覆盖面太窄**
+        而失效, 且失效形态同样是全绿。
+
+        ⚠️ 判据必须只删「本次新增的差集」, 不能删全部 ——
+        同机可能有别的进程在用同名文件, 误删是不可逆的。
+        """
+        # ⚠️⚠️ 必须有递归闸门: 本用例会**再跑一次全量**, 若不加限制,
+        #    子进程里又包含本用例 ⇒ 无限递归。
+        #    闸门用环境变量而非命令行参数 —— 参数会被 `python3 file.py <arg>`
+        #    解释成测试选择器, 而环境变量不会。
+        if os.environ.get(_RECURSE_GUARD):
+            self.skipTest("已在全量子进程中运行过(递归闸门)")
+        env = dict(os.environ)
+        env[_RECURSE_GUARD] = "1"
+        before = snapshot_progress_files()
+        try:
+            p = subprocess.Popen(
+                [sys.executable, os.path.abspath(__file__)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                env=env)
+            try:
+                p.communicate(timeout=900)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                self.fail("全量守护测试 900s 未结束 —— 可能有用例挂死")
+            leaked = sorted(snapshot_progress_files() - before)
+            self.assertEqual(
+                leaked, [],
+                "这些用例留下了进度文件(装置必须自己收拾): %s\n"
+                "⇒ SIGKILL 不可捕获, 不能指望脚本内的 cleanup; "
+                "见 remove_new_progress_files" % leaked)
+        finally:
+            remove_new_progress_files(before)
+
+
+    def test_watchdog_removes_progress_file_before_exiting(self):
+        """看门狗必须在 `exit 124` **之前**删掉进度文件。
+
+        ⚠️ 为什么不能用"源码里出现 rm"来判定: 之前那版兜底 `rm` 就写在
+        `--watchdog-child` 分支的 `watchdog` 调用之后, 而 `watchdog()` 以
+        `exit 124` 结束 —— **该行永远不可达**, 源码里却明明写着 `rm -f`。
+        静态匹配会全绿, 而每次该用例仍泄漏 1 个文件(实测)。
+
+        ⇒ 判据必须问"这行**跑不跑得到**", 不是"这行**写没写**"。
+        这里用同一条真实故障路径(SIGKILL 主进程)观测文件系统差集。
+
+        ⚠️ 但**不能**连看门狗一起杀: SIGKILL 不可捕获, 杀它等于让被守护的
+        兜底 `rm` 必然跑不到 ⇒ 前提自相矛盾。实测两种变体: 杀=稳定红 /
+        不杀=绿 —— 这个 A/B 对照正是分辨"产品缺陷"与"探针自伤"的手段,
+        而不是靠猜。
+        """
+        before = snapshot_progress_files()
+        try:
+            # 主进程被 SIGKILL ⇒ trap cleanup EXIT 跑不到 ⇒ 只剩看门狗兜底。
+            self._run_case_killing_main_with_sigkill(kill_watchdog=False)
+            leaked = sorted(snapshot_progress_files() - before)
+            self.assertEqual(
+                leaked, [],
+                "SIGKILL 主进程后进度文件仍在 ⇒ 看门狗的兜底 rm 不可达。"
+                "典型成因: 兜底写在 watchdog() 调用之后, 而它以 exit 结束。")
+        finally:
+            remove_new_progress_files(before)
+
+
+    def _assert_no_leak(self, argv, label):
+        """跑一次入口, 断言它**不新增**进度文件。"""
+        before = snapshot_progress_files()
+        try:
+            subprocess.run(argv, capture_output=True, timeout=300)
+            leaked = sorted(snapshot_progress_files() - before)
+            self.assertEqual(
+                leaked, [], "%s 入口新增了进度文件(装置需自己收拾): %s"
+                % (label, leaked))
+        finally:
+            remove_new_progress_files(before)
+
+    def test_probe_entry_leaves_no_progress_file(self):
+        """守护: `--probe-only` 入口不得新增进度文件。
+
+        ⚠️ 这条入口**装 trap cleanup EXIT**(它 source 脚本后 return),
+        但历史上它仍稳定泄漏 1 个 —— 因为清理时机在
+        `new_progress_file` 之后, 而入口在**它之前**就 return 了。
+        正是"读源码看得到 rm"却"跑不到"的形态。
+        """
+        # ⚠️ `--probe-only` 是给 **source** 用的(装完函数就 return),
+        #    不是独立的命令行入口 —— 当参数传给 `bash` 会走不到那条分支。
+        self._assert_no_leak(["bash", "-c", 'source "%s" --probe-only' % TARGET],
+                             "--probe-only")
+
+    def test_cleanup_probe_entry_leaves_no_progress_file(self):
+        """守护: `--cleanup-probe` 入口不得新增进度文件。
+
+        ⚠️ 它会真的去连库, 因此给足时限; 失败也应记为"入口自身泄漏",
+        而不是当作"通过" —— probe 失效不许静音。
+        """
+        self._assert_no_leak(["bash", TARGET, "--cleanup-probe"],
+                             "--cleanup-probe")
+
+
+    def test_main_process_sigkill_still_leaves_no_file(self):
+        """守护: 主进程被 SIGKILL 时(不可捕获), 进度文件仍要被清掉。
+
+        ⚠️ 与 `test_watchdog_removes_progress_file_before_exiting` 的差别:
+        那条断言的是**看门狗**负责兜底; 这条断言的是**主进程正常退出**那条
+        路径(trap cleanup EXIT)在被杀时确实失效, 且看门狗补上了。
+        两条都必要: 前者防"兜底写在 exit 之后", 后者防"根本没人兜底"。
+
+        ⚠️ 同样**不能**连看门狗一起杀(SIGKILL 不可捕获 ⇒ 前提自相矛盾)。
+        """
+        before = snapshot_progress_files()
+        try:
+            with tempfile.TemporaryDirectory(prefix="v18wd-sigkill-") as tmp:
+                script = make_hung_copy(tmp)
+                p, logpath = run_hung(script, watchdog_secs=8, wait_secs=0)
+                out = wait_for_log(logpath, "看门狗已启动", timeout=60)
+                self.assertTrue(out and "看门狗已启动" in out,
+                                "看门狗未报告启动:\n%s" % out)
+                if p.poll() is None:
+                    p.kill()          # 主进程 SIGKILL: trap cleanup EXIT 跑不到
+                self._wait_watchdogs_gone(logpath)
+            leaked = sorted(snapshot_progress_files() - before)
+            self.assertEqual(
+                leaked, [],
+                "主进程 SIGKILL 后进度文件仍在: %s\n"
+                "⇒ 没有任何进程兜底清理" % leaked)
+        finally:
+            remove_new_progress_files(before)
+
+
 class TestProcessGroupGuard(unittest.TestCase):
     """判据本身的守护 —— 否则它会退化成"杀整个用户会话"。"""
 

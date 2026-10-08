@@ -138,6 +138,17 @@ watchdog() {
          FROM pg_stat_activity WHERE state<>'idle';" 2>&1 \
       | head -8 | sed 's/^/!!!   /' >&2
   fi
+
+  # ⚠️ 进度文件的删除责任落在**这里**, 不能只放在调用点之后。
+  #    调用点 (`--watchdog-child` 分支) 的 `rm` 紧跟在 `watchdog` 之后 ——
+  #    而 `watchdog()` 以 `exit 124` 结束, **该行永远不可达**。
+  #    这正是第八课补记一第 6 条「函数不该假定调用前的初始状态」的变体:
+  #    一个"看起来做了清理"的调用点, 实际一次都没执行过。
+  #
+  #    为什么必须由看门狗兜底: 看门狗是**最后一个**退出的进程。主流程被
+  #    SIGKILL 时(不可捕获), `trap cleanup EXIT` 根本没机会跑。
+  #    `test_watchdog_is_outside_target_process_group` 就在复现这个场景。
+  [ -n "${PROGRESS_FILE:-}" ] && rm -f "$PROGRESS_FILE" 2>/dev/null
   exit 124
 }
 
@@ -292,6 +303,12 @@ if [ "${1:-}" = "--watchdog-child" ]; then
   fi
   trap '' TERM        # 绝不能因为目标组的 TERM 广播而提前死掉
   watchdog
+  # ⚠️ 看门狗是**最后一个**退出的进程(主流程被 TERM/KILL 后,
+  #    cleanup 可能根本没跑到 rm) ⇒ 进度文件的删除必须由它兜底。
+  #    实测: `test_watchdog_is_outside_target_process_group` 就在看门狗
+  #    刚启动时把主进程 SIGKILL 掉 —— SIGKILL 不可捕获, 主进程没机会清理,
+  #    而当时探针路径还没生效 ⇒ 每次该用例泄露 1 个文件。
+  [ -n "$PROGRESS_FILE" ] && rm -f "$PROGRESS_FILE" 2>/dev/null || true
   exit 124
 fi
 
@@ -412,6 +429,10 @@ if [ -n "$PROBE" ]; then
     # ⚠️ 用 subshell 避免 drop_db 的局部变量与后续逻辑互相影响
     ( drop_db "${DROP_DB_TIMEOUT:-15}" >/dev/null 2>&1 || true )
   fi
+  # ⚠️ 探针路径必须自己删进度文件: 它不走主流程, 也就不会装上
+  #    `trap cleanup EXIT` —— 而 `new_progress_file` 已经建了文件。
+  #    实测: 3 个走探针路径的用例会各泄露 1 个(逐用例比对定位)。
+  [ -n "$PROGRESS_FILE" ] && rm -f "$PROGRESS_FILE" 2>/dev/null || true
   return 0 2>/dev/null || exit 0
 fi
 
