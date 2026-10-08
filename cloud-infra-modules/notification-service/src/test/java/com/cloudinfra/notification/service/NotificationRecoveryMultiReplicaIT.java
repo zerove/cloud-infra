@@ -22,6 +22,7 @@ import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 
 import javax.sql.DataSource;
 import java.time.LocalDateTime;
@@ -56,16 +57,23 @@ class NotificationRecoveryMultiReplicaIT {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
         .withDatabaseName("cloud_infra")
         .withUsername("postgres")
-        .withPassword("password");
+        .withPassword("password")
+        // 受控对照(2026-10-07): 本机同时起 3 个 PostgreSQL 需 **157 秒**,
+        // 单个只需 10-38 秒。Testcontainers 默认 60 秒, 在多个 IT 同轮时
+        // 必然超时, 且报错会在容器间**随机漂移**(同一 IT 有时报 PG、
+        // 有时报 RabbitMQ) —— 资源竞争的签名, 不是某个容器配错了。
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
         .withExposedPorts(6379)
         .waitingFor(org.testcontainers.containers.wait.strategy.Wait
-            .forLogMessage(".*Ready to accept connections.*", 1));
+            .forLogMessage(".*Ready to accept connections.*", 1))
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Container
-    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine");
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine")
+        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
 
     @Configuration(proxyBeanMethods = false)
     static class MultiReplicaTestApplication {

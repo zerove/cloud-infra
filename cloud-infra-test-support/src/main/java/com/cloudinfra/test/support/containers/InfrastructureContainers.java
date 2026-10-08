@@ -4,6 +4,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import java.time.Duration;
+
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -44,7 +46,23 @@ public class InfrastructureContainers {
      * —— 真正的启动失败(镜像缺失、端口冲突)仍会立即失败, 只是不再把
      * "慢"误报成"坏"。
      */
-    private static final java.time.Duration STARTUP_TIMEOUT = java.time.Duration.ofMinutes(3);
+    /**
+     * 统一容器启动超时预算。
+     *
+     * <p>为什么是 3 分钟, 且为什么必须显式设置:
+     * <ul>
+     *   <li>Testcontainers 默认 60 秒。本机实测: <b>单个</b> PostgreSQL 需 10-38 秒,
+     *       但<b>同时</b>起 3 个需 <b>157 秒</b> —— 远超默认值。
+     *       受控对照: 3 个 PG 全部就绪, 只是慢。失败信息读起来像"容器坏了",
+     *       实则是预算不够。</li>
+     *   <li>失败时会在多个 IT 之间<b>随机漂移</b>(同一 IT 有时报 PostgreSQL,
+     *       有时报 RabbitMQ), 这正是资源竞争的签名, 而非某个容器配置有误。</li>
+     * </ul>
+     *
+     * <p>⚠️ 本常量必须被<b>各模块自己声明的容器</b>也引用, 而不只是本类里的 ——
+     * 否则大量 IT 仍用默认 60 秒。见 {@code check_container_startup_timeout.py}。
+     */
+    public static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(3);
 
     /** PostgreSQL 16 - 并行启动 */
     @Container
