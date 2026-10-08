@@ -20,6 +20,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 
@@ -46,7 +47,10 @@ class CodegenIntegrationTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
         .withDatabaseName("codegen_test")
         .withUsername("test")
-        .withPassword("test");
+        .withPassword("test")
+        // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
+        // n=3 并发时最长 125 秒 —— Testcontainers 默认 60 秒不够。
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @TempDir
     static Path outputDir;
