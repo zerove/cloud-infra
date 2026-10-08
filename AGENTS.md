@@ -2419,7 +2419,29 @@ javap -c -p org.testcontainers.utility.RyukContainer | grep -c getRyukImage
 
 即 **同一个库里有两条独立的镜像名解析路径**:
 `RyukContainer` 硬编码 `0.11.0`(实际建容器走这条),
-`TestcontainersConfiguration.getRyukImage()` 走 `parse()` 补全成 `latest`(**运行时没人调**)。
+`TestcontainersConfiguration.getRyukImage()` 走 `parse()` 补全成 `latest`
+(**全 jar 字节码里没有它的调用点**)。
+
+> ⚠️ **本节首版把结论说过头了, 已更正**: 初版写「运行时没人调」。
+> 那句话需要**运行时采样**(打印实际加载的镜像名)才能支撑, 而我并没有做 ——
+> 当时探针编译失败, 我改用了常量池取证。**实际能证明的只是静态事实**:
+> `1.21.0` 全部 class 文件中, `getRyukImage` 字串**只出现在声明它的那个类里**,
+> 无任何外部 Methodref。静态证据支持「这条配置路径未被使用」,
+> 但「运行时」三个字是超出证据的断言。
+>
+> 复核命令(可重跑):
+> ```bash
+> python3 -c "
+> import zipfile
+> z=zipfile.ZipFile('testcontainers-1.21.0.jar')
+> d='org/testcontainers/utility/TestcontainersConfiguration.class'
+> print([n for n in z.namelist()
+>        if n.endswith('.class') and b'getRyukImage' in z.read(n) and n!=d])"
+> # → []   即除声明类外无任何类引用它
+> ```
+> ⇒ **用静态证据支撑动态断言时, 必须把断言改写成证据实际覆盖的范围。**
+> 这与第五课补记六(`-XX` 参数出现在 cmdline 里 ≠ 生效)同源:
+> **看到 ≠ 生效, 静态可达性尤其不等于运行时执行。**
 
 | 我观察到的 | 它证明什么 | 它不证明什么 |
 | :--- | :--- | :--- |
@@ -2429,9 +2451,11 @@ javap -c -p org.testcontainers.utility.RyukContainer | grep -c getRyukImage
 **三条新规则**:
 
 1. **配置项的 getter 不等于它的消费端**。`getRyukImage()` 存在 ≠ 有人调它。
-   必须用**字节码引用计数**证明调用关系: `javap -c` + `grep <getter名>` 得 0,
-   就判定"该配置项是摆设"。这正是本项目"第三课"在库内部的形态 ——
+   必须用**字节码引用计数**证明调用关系: 在全 jar 里搜该名字, 除声明类外无命中
+   才判定"这条配置路径未被使用"。这正是本项目"第三课"在库内部的形态 ——
    之前只在自家代码里查, 这次是在依赖里。
+   ⚠️ **只搜 `RyukContainer` 一个类是不够的** —— 我第一版就是这么查的,
+   结论"该类不读配置项"成立但范围窄; 扩到全 jar 才敢说"无人调用"。
 2. **同一个量有多条解析路径时, 必须先穷举路径再取值**。
    本例若先问"还有谁构造这个镜像", 一条 `javap` 就结束了, 不必绕到"配置冲突"。
 3. **`0 in 0 files` 与 `latest vs 0.11.0` 是同一种假信号**: 取到值 ≠ 取到真值。

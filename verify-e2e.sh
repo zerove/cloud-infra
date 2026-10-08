@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -837,6 +837,38 @@ check_docs_probe_scripts() {
   return 0
 }
 
+# ---- AGENTS.md 课次表格结构 (2026-10-08 新增) ----------------------------
+#
+# 为什么只警告不阻断: 它守护的是**文档可信度**（课次里那些
+# "错误结论对照表"若列错位, 后来者会把错的当对的读）, 不是运行时健康。
+# 阻断会把文档缺陷变成 E2E 的失败结论, 掩盖真实状态 —— 与
+# check_docs_probe_scripts 同一理由。
+#
+# ⚠️ 必须区分 rc=1 与 rc=2: 前者是"表格真的坏了", 后者是"守护自己不可信"
+#   （定位失败 / 必需课次缺失）。两者都不阻断, 但**措辞必须不同** ——
+#   否则"探针自己坏了"会被读成"文档坏了", 正是第五课那一类错误信息。
+#
+# ⚠️ 这里**故意不用 warn()**: 本脚本只定义了 ok()/fail()(第 31-32 行)。
+#   写 warn 会在 set -e 下变成 "command not found" 而**中断整个 E2E** ——
+#   即"守护不可信"这个最该被看见的状态, 反而让整个验收停摆。
+#   check_jvm_opts_keys 的注释里记着这条, 我第一版仍写错了。
+#   未判定用 ok() 措辞为"未判定", 不谎称 PASS 也不谎称 FAIL。
+check_lesson_tables() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_lesson_tables.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 2 ]; then
+    ok "课次表格守护本次未判定（探针不可信: 定位失败/必需课次缺失）—— 不代表文档有问题"
+    return 0
+  fi
+  if [ "$rc" -eq 1 ]; then
+    fail "AGENTS.md 课次表格结构损坏（列数不一致或数据行缺失）"
+    return 1
+  fi
+  ok "AGENTS.md 课次表格结构完好"
+  return 0
+}
+
 # ---- 容器代理变量泄漏 (运行时, 不需重启任何容器) ------------------------
 #
 # ⚠️ 判据必须是**运行时**而非 compose 文件, 也不是 `podman-compose config`
@@ -1073,6 +1105,7 @@ check_resource_optimization || true
 # 它守护的是**文档可信度**而非运行时健康，不该成为 E2E 的失败原因。
 # 但登记进 run_gate_selftest —— 不登记就等于没人跑（第三课）。
 check_docs_probe_scripts || true
+check_lesson_tables || true
 
 # 容器代理变量泄漏（2026-10-06 新增）。
 # ⚠️ 只警告不阻断, 且**必须在 compose 同步前跑** —— 它的作用是
