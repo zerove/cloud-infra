@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_es_wait_strategy check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -615,7 +615,22 @@ STUB
   # 通用解法: 先定出自检体的行区间, 两个搜索都限定在该区间之外。
   local self_start self_end
   self_start="$(grep -n '^run_gate_selftest()' "$SCRIPT_DIR/verify-e2e.sh" | head -1 | cut -d: -f1)"
-  self_end="$(awk -v s="$self_start" 'NR>s && /^}/ {print NR; exit}' "$SCRIPT_DIR/verify-e2e.sh")"
+  # ⚠️ 函数结束行**不能**用"遇到第一个 ^} 就停"(原实现), 也不能靠数花括号。
+  #    · 前者: 本函数体内嵌了子 shell 的 `{ ...; }` 与多行 awk 程序里的 `/^}/`,
+  #      第一个 `^}`(原 704 行)远早于真正的函数结束(753 行)。
+  #      ⇒ 整个 self-test 只检查了 397–704, 而所有真实调用都在 1000+ 行。
+  #    · 后者: awk 程序**内部**的正则字面量 `\{` `\}` 会被当成结构花括号误计,
+  #      实测在 555 行提前归零。
+  #    正解: 脚本里所有函数定义都在第 0 列, 故函数体必然终止于"下一个顶层
+  #    定义之前、向上回溯找到的第一个 ^}"。
+  # ⚠️ 这个缺陷之所以长期是绿的: 阻断检查的判据字符串 `check_sw_oap_config; \};`
+  #    出现在**它自己那行 awk** 里(原 690 行, 恰好落在错误区间内), 于是自检
+  #    命中自己的判据代码 —— 即上面注释记的"第 6 次: 污染源是断言代码自身",
+  #    当年的修复(排除函数体)不足以覆盖"排除后区间算错了"这一层。
+  self_end="$(awk -v s="$self_start" '
+    NR > s && /^[A-Za-z_][A-Za-z0-9_]*\(\) \{/ { print prev; exit }
+    /^\}/ { prev = NR }
+  ' "$SCRIPT_DIR/verify-e2e.sh")"
   gate_line="$(awk -v s="$self_start" -v e="$self_end" '
     NR >= s && NR <= e { next }
     /check_commit_budget; \}; then/ { print NR; exit }
@@ -684,17 +699,39 @@ STUB
     fi
   done
 
-  # OAP 门禁是**阻断**型, 必须真被执行(不能被 || true 吞掉)。
-  if awk -v s="$self_start" -v e="$self_end" '
-      NR >= s && NR <= e { next }
-      /check_sw_oap_config; \};/ { found=1 }
-      END { exit found ? 0 : 1 }
-    ' "$SCRIPT_DIR/verify-e2e.sh"; then
-    echo "  PASS check_sw_oap_config 以阻断方式执行 (未被 || true 吞掉)"
-  else
-    echo "  FAIL check_sw_oap_config 不是阻断执行 —— OAP 错配将不再中止 E2E" >&2
-    failures=$((failures+1))
-  fi
+  # 阻断型门禁必须真被执行, 不能被 `|| true` 吞掉。
+  # ⚠️ 泛化成列表: 原先只查 check_sw_oap_config 一个。新的阻断型门禁若被后人
+  #    随手加 `|| true`, 就从"会中止 E2E"退化成"只打印一行"—— 而它的失败形态
+  #    (容器起不来)极具误导性, 极易被当成环境问题忽略。
+  #    "定义了 + 被调用了"都可能同时为真而门禁已是假门禁(第三课)。
+  # ⚠️ 判据必须覆盖**两种**合法阻断形态, 并排除 `|| true`:
+  #    (a) 裸调用             —— `check_xxx` 独占一行, return 1 即中止
+  #    (b) if 包裹的否定形式 —— `if ! { ...; check_xxx; }; then`
+  #    只认其一, 另一形态会**静默漏判**。
+  # ⚠️ 这里绝不能写成 `<门禁名>; \};` —— 那要求它是 for 列表的**最后一项**;
+  #    原列表只有一项所以"碰巧"成立, 往中间插一项就静默失效。
+  # ⚠️ 只用 index() 不用正则: 调用行含中文, mawk 下 `[;{]` 这类锚点会匹配失败
+  #    (实测三个条件同时返回 0 而行内容是对的) —— 又一次探针失效长得像被检对象有问题。
+  for _gate in check_sw_oap_config check_container_startup_budget_gate; do
+    _hit="$(awk -v s="$self_start" -v e="$self_end" -v g="$_gate" '
+        NR >= s && NR <= e { next }
+        /^[ \t]*#/ { next }
+        /\|\|[ \t]*true/ { next }
+        {
+          line = $0
+          sub(/^[ \t]+/, "", line)
+          if (line == g) { found = NR; next }
+          if (index(line, g ";") > 0) { found = NR; next }
+        }
+        END { print found + 0 }
+      ' "$SCRIPT_DIR/verify-e2e.sh")"
+    if [ "$_hit" -ne 0 ]; then
+      echo "  PASS $_gate 以阻断方式执行 (第 $_hit 行, 未被 || true 吞掉)"
+    else
+      echo "  FAIL $_gate 没有裸调用/if 包裹调用 —— 该门禁的失败将不再中止 E2E" >&2
+      failures=$((failures+1))
+    fi
+  done
 
   if [ "$failures" -ne 0 ]; then
     echo "  => $failures 项自检未通过" >&2
@@ -903,6 +940,30 @@ check_schema_standalone() {
   esac
 }
 
+# 判定测试里的容器声明**都有显式启动预算** (2026-10-08 新增)
+#
+# ⚠️ **阻断型**, 不加 `|| true` —— 与 check_schema_standalone 同类。
+#    理由: 启动预算是 Testcontainers 失败的**直接**成因, 不是文档可信度问题。
+#    fullit5 实测 8 个错误全是 ContainerLaunchException, 其中 auth/file 源于
+#    postgres 默认 60s 预算不足(受控对照: n=1 需 109s, n=3 并发最长 125s)。
+#    该缺陷稳定复现, 且失败形态(容器起不来)极具误导性 —— 会被读成代码问题,
+#    而真因只是一行缺失的配置。
+# ⚠️ rc=2 是**探针失效**(扫描范围没命中), 不等于通过 —— 第五课补记一。
+#    判据已从"总共扫到 0 个声明"改为"每个扫描根都要有命中":
+#    原判据下删掉整个 cloud-infra-auth 目录, 其余模块仍有声明 → 照样 PASS,
+#    即"少验了一个模块"被读成了"通过"(实测踩过)。
+check_container_startup_budget_gate() {
+  local out rc
+  out=$(timeout 120 python3 "$SCRIPT_DIR/deploy/tests/check_container_startup_budget.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1) fail "有容器声明缺少显式启动预算（详见上方）"; return 1 ;;
+    2) fail "容器启动预算门禁**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    0) ok "所有容器声明均有显式启动预算"; return 0 ;;
+    *) fail "容器启动预算门禁返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
 # 判定 compose 里的 depends_on **都指向真实存在的服务**。
 #
 # 为什么需要这个门禁 (2026-10-07 实测):
@@ -1028,6 +1089,8 @@ echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
 check_schema_init_wiring || true
 echo "[前置] 检查各服务 schema.sql 能在空库独立执行且列与实体对齐 ..."
 check_schema_standalone
+echo "[前置] 检查测试容器声明均有显式启动预算 ..."
+check_container_startup_budget_gate
 echo "[前置] 检查 ES 等待策略在真实 ES 日志上命中 ..."
 check_es_wait_strategy
 echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
