@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_port_conflicts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -869,6 +869,36 @@ check_lesson_tables() {
   return 0
 }
 
+# 端口抢占门禁（2026-10-08 新增）。
+#
+# 为什么要它: compose 端口被**本项目容器之外**的进程抢占时, 症状只显示
+#   "Couldn't listen on requested ports"
+# 堆栈指向 Testcontainers, 与端口占用毫无字面关联, 排查成本极高。
+#
+# ⚠️ 它**只报抢占, 不报"本项目自己在用"** —— 后者是正常运行状态。
+#    第一版没做这个区分, 把 cloud-skywalking-ui 常年占用的 18080 报成故障,
+#    进而被读成"Ryuk 根因是 18080 被占", 而 Ryuk 其实用随机端口(见 AGENTS.md 第九课补记五)。
+#
+# ⚠️ rc=2 一律 fail 而非 ok: 探针不可信若报 ok, 就与"通过"无法区分,
+#    是本项目第 6 类假门禁(机制在, 但生效与否不可知)。本函数**故意**
+#    不像 check_lesson_tables 那样把 rc=2 记成"本次未判定"——
+#    端口一旦查不到, 后续所有容器创建失败都无法与抢占区分。
+check_port_conflicts() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_port_conflicts.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 2 ]; then
+    fail "端口抢占门禁探针不可信（compose/ss/podman 读不到）—— 端口冲突将无法与容器创建失败区分"
+    return 1
+  fi
+  if [ "$rc" -eq 1 ]; then
+    fail "compose 端口被本项目容器之外的进程抢占 —— 容器创建阶段就会失败"
+    return 1
+  fi
+  ok "compose 端口无外部抢占"
+  return 0
+}
+
 # ---- 容器代理变量泄漏 (运行时, 不需重启任何容器) ------------------------
 #
 # ⚠️ 判据必须是**运行时**而非 compose 文件, 也不是 `podman-compose config`
@@ -1106,6 +1136,7 @@ check_resource_optimization || true
 # 但登记进 run_gate_selftest —— 不登记就等于没人跑（第三课）。
 check_docs_probe_scripts || true
 check_lesson_tables || true
+check_port_conflicts || true
 
 # 容器代理变量泄漏（2026-10-06 新增）。
 # ⚠️ 只警告不阻断, 且**必须在 compose 同步前跑** —— 它的作用是
