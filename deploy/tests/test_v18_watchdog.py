@@ -642,6 +642,86 @@ class TestWatchdog(unittest.TestCase):
             % leaked)
 
 
+    def test_drop_db_respects_timeout_at_runtime(self):
+        """运行时验证: drop_db 的时限**真的**在限制内部往返(非仅源码看起来对)。
+
+        为什么必须运行时验证: 现有的
+        `test_no_timeout_wrapping_shell_function` 与
+        `test_drop_db_timeout_applies_to_first_query` 都是**静态源码检查** ——
+        能证明写法正确, 证明不了"时限真的生效"。而本项目反复出现的
+        正是这一形态: 参数看起来已传入, 实际对首次调用无效。
+
+        装置: 把 x() 里的 podman 换成 `timeout "${X_TIMEOUT:-90}" sleep ...`。
+        替身**无论时限如何都会返回**, 所以判据只能用**耗时** ——
+        用返回值判会得到"两种写法完全一样"的假绿(实测)。
+
+        ⚠️ 替身必须让 db_count 返回**非 0**, 否则 drop_db 第一行就
+        `[ "$(db_count)" = "0" ] && return 0` 提前返回, sleep 根本不执行,
+        于是"时限生效"与"时限没生效"耗时完全相同 —— 判据无区分力。
+        ⇒ 用一个记住调用次数的替身: 第 1 次返回 1, 之后返回 0。
+        """
+        with tempfile.TemporaryDirectory(prefix="v18wd-drop-") as tmp:
+            # ⚠️ **不能**用 make_hung_copy: 它会把 x() 整个替换成 `sleep 300`,
+            #    于是找不到原形态 —— 探针查错了对象(第五课第七例)。
+            script = os.path.join(tmp, "drop_probe.sh")
+            shutil.copy(TARGET, script)
+            with open(script, encoding="utf-8") as f:
+                src = f.read()
+            # ⚠️ 正则必须吃掉**整行**。此前只匹配到 `podman` 就停,
+            #    替换后残留 `cloud-postgres psql ...` 成为语法错误 ——
+            #    而 bash 没有 set -e, 语法错误**不会**中断脚本,
+            #    于是探针"成功"返回, 判据读到 0.02s 便以为自己通过。
+            #    这正是第五课: 探针自身坏掉时伪装成 PASS。
+            # ⇒ 替换后必须自检: x() 那一行要以 `}` 结尾且不含 podman 实参。
+            x_orig = (r'(?m)^x\(\)\s*\{\s*timeout\s+"\$\{X_TIMEOUT:-90\}"'
+                      r'\s+podman exec.*\}$')
+            # 第 1 次 db_count 返回 1(库"存在")=> 继续走 drop_db 的真实路径
+            src, n = re.subn(
+                x_orig,
+                'x() { echo x > "$DROPPROBE_COUNT"; timeout "${X_TIMEOUT:-90}" '
+                'sleep "${X_TIMEOUT:-90}"; '
+                'if [ -s "$DROPPROBE_SEEN" ]; then echo 0; else '
+                ': > "$DROPPROBE_SEEN"; echo 1; fi; }',
+                src)
+            self.assertEqual(n, 1, "x() 装置替换未生效")
+            x_line = src.split("x() {", 1)[1].split("\n", 1)[0]
+            self.assertNotIn(
+                "cloud-postgres", x_line,
+                "x() 装置替换后仍残留 podman 实参 —— 探针会静默失效: %s" % x_line)
+            with open(script, "w", encoding="utf-8") as f:
+                f.write(src)
+            # ⚠️ 语法自检: bash -n 不通过就直接判红, 不给它跑到"假成功"的机会
+            chk = subprocess.run(["bash", "-n", script],
+                                 capture_output=True, text=True)
+            self.assertEqual(
+                chk.returncode, 0,
+                "装置替换后的脚本语法错误(探针会静默失效): %s"
+                % (chk.stderr or "").strip()[:200])
+
+            counter = os.path.join(tmp, "count")
+            seen = os.path.join(tmp, "seen")
+            env = dict(os.environ)
+            env["V18_REPO_ROOT"] = REPO
+            env["DROP_DB_TIMEOUT"] = "3"
+            env["DROPPROBE_COUNT"] = counter
+            env["DROPPROBE_SEEN"] = seen
+            t0 = time.time()
+            p = subprocess.Popen(["bash", script, "--cleanup-probe"],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, env=env, cwd=REPO)
+            try:
+                p.communicate(timeout=180)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                self.fail("drop_db 未受 DROP_DB_TIMEOUT 约束 —— 180s 仍未返回")
+            elapsed = time.time() - t0
+            # 装置真的被调用过吗? 没有它就谈不上"时限生效"
+            self.assertTrue(
+                os.path.exists(counter),
+                "x() 替身从未被调用 —— drop_db 提前返回了, 时限未被检验")
+            self.assertLess(
+                elapsed, 60,
+                "drop_db 耗时 %.1fs: 时限未生效(默认 90s x 多次往返)" % elapsed)
 class TestProcessGroupGuard(unittest.TestCase):
     """判据本身的守护 —— 否则它会退化成"杀整个用户会话"。"""
 

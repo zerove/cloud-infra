@@ -296,15 +296,16 @@ if [ "${1:-}" = "--watchdog-child" ]; then
 fi
 
 # ── 探针入口: 只加载函数定义, 不跑主流程 ────────────────────────────────
-# 用途: 让守护测试能**直接**请求 group_has_live_process 对某个 PGID 的判定,
-#       而不必真的起一个挂死脚本再从旁观察。
-# ⚠️ 为什么需要这个入口: 判据有**两份实现**(本文件的 bash 版与测试里的
-#    Python 版), 而端到端用例只能观察到 Python 探针看到的东西 ——
-#    删掉 bash 侧的僵尸过滤, 端到端用例仍然全绿(实测)。
-#    ⇒ 必须有一条**直接打在本实现上**的守护(第九课)。
-if [ "${1:-}" = "--probe-only" ]; then
-  return 0 2>/dev/null || exit 0
-fi
+# ⚠️ 位置要求: 必须在**所有函数定义之后**才 return, 否则探针请求的函数
+#    尚未定义就返回了, 而 bash 不报错 —— 探针于是拿到"成功"却什么都没验
+#    (第五课: 探针失效必须独立红灯, 不能伪装成 PASS)。
+#    故探针**先只置位**, 真正的 return 放在全部定义之后(见下方 PROBE 段)。
+PROBE=""
+case "${1:-}" in
+  --probe-only)    PROBE="probe" ;;
+  --cleanup-probe) PROBE="cleanup" ;;
+esac
+[ -n "$PROBE" ] && DB="v18_cleanup_probe"
 
 # 只报告版本: 不杀任何进程, 仅在 stdout 标记
 watchdog_report_only() {
@@ -399,6 +400,21 @@ cleanup() {
   #    静默吞掉, 于是**清理被跳过**而日志无任何异常(第五课)。
   #    正解: 把时限作为**参数**传给 drop_db, 由它自己限制内部往返。
 }
+
+# ── 探针真正返回: 全部函数已定义 ─────────────────────────────────────────
+# --probe-only: 让守护测试直接请求 group_has_live_process 的判定
+#   (判据有两份实现 —— 本文件的 bash 版与测试里的 Python 版 —— 端到端
+#    用例只能观察到 Python 探针看到的东西, 实测删掉 bash 侧僵尸过滤
+#    端到端仍全绿 ⇒ 必须有一条直接打在本实现上的守护)
+# --cleanup-probe: 执行**一次**带时限的 drop_db, 用于运行时验证时限生效
+if [ -n "$PROBE" ]; then
+  if [ "$PROBE" = "cleanup" ]; then
+    # ⚠️ 用 subshell 避免 drop_db 的局部变量与后续逻辑互相影响
+    ( drop_db "${DROP_DB_TIMEOUT:-15}" >/dev/null 2>&1 || true )
+  fi
+  return 0 2>/dev/null || exit 0
+fi
+
 trap cleanup EXIT
 
 echo "=== 前置 ==="
