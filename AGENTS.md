@@ -2762,6 +2762,80 @@ DOC = os.environ.get("DOC_OVERRIDE") or os.path.join(   # 新: 跨 3 行, 且形
 
 ---
 
+### ⚠️ 补记八收尾更正: **Ryuk 没有故障, 先前"根因未闭合"的账作废**（2026-10-08 18:19 实测）
+
+上面补记八末尾写着「Ryuk 根因未闭合」, 并据此把 E2E 全量验收记为 BLOCKED。
+**本轮用真实 IT 受控实验证明该前提不成立** —— Ryuk 启动正常、清理正常。
+
+#### 决定性证据（一次真实 IT 的完整生命周期）
+
+```text
+02:11:26  Creating container for image: testcontainers/ryuk:0.11.0
+02:11:31  Container testcontainers/ryuk:0.11.0 is starting: e2c4e8e72be5...
+02:12:13  Container testcontainers/ryuk:0.11.0 started in PT47.237790216S
+02:12:13  Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+...
+02:11:31  Container rabbitmq:3.13-management-alpine is starting
+          (IT 运行中: rabbitmq/redis/postgres 三个容器均 Up)
+...
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 477.2 s
+BUILD SUCCESS
+```
+
+IT 结束后再查: **IT 期间创建的三个容器全部消失**, ryuk 容器自身也已清理
+⇒ Ryuk 既启动了, 也**确实做了它该做的事**。
+
+#### 与 2026-09-18 的成功记录对照（同机, 唯一变量 = 宿主负载）
+
+| 项 | 2026-09-18 | 2026-10-08 |
+| :--- | :--- | :--- |
+| Ryuk 启动耗时 | `PT17.1S` | `PT47.2S` |
+| 结果 | `Ryuk started` + BUILD SUCCESS | `Ryuk started` + BUILD SUCCESS |
+| MemTotal | 20000 MB | 20003 MB |
+
+⇒ **47 秒 vs 17 秒的差异全部来自宿主负载, 与 Ryuk 本身无关**。
+`Ryuk started` 这一行在两次里都出现 ⇒ 「Ryuk 失败」从来不是可复现现象。
+
+#### 那句 `RegistryAuthLocator -- Failure` 为什么会被当成根因
+
+```text
+INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to
+     lookup auth config. Please ignore if you don't have images in a...
+```
+
+**日志自己说了 `Please ignore`** —— 它是 INFO 级, 是「本机没有私有镜像认证」
+这种常规情况的例行记录。此前把它读成「Ryuk 启动失败」, 属第五课
+「看起来正常的错误信息」: 报错措辞里有 `Failure`, 而**同一行**里
+`Please ignore` 才是有效限定词。
+
+#### 本轮我又踩了三次同型坑（记录以防重犯）
+
+| # | 探针缺陷 | 观测到的假象 | 正确判据 |
+| :--- | :--- | :--- | :--- |
+| 1 | `BUILD SUCCESS` 就当通过 | 实际日志写着 `Tests are skipped`, **零测试执行** | 必须查 `Tests run` + failsafe-reports 是否产出 |
+| 2 | 凭直觉推模块路径 `cloud-infra-modules/cloud-infra-system-module` | `Could not find the selected project in the reactor` | 从 `pom.xml` 提取 artifactId |
+| 3 | 用了不存在的 `bc` | RSS 全部显示 `0.00 GB` —— **整齐地全 0 是探针坏了** | 用 `awk` 算, 不依赖 `bc` |
+
+> ⚠️ 关于第 1 条: 它让「BUILD SUCCESS」这条**最不像故障的信号**变成了假绿。
+> 正确做法是同时要求 `Tests run: N` 里 **N > 0**。本次 `-DskipITs=false`
+> 放在 `failsafe:integration-test` **之前**无效, 放到**之后**才生效 ——
+> 参数顺序在这里真的有影响, 属例外而非通例, 但遇到"参数看起来传了却没生效"时
+> 应把它列入怀疑对象。
+
+#### 结论更正
+
+| 项 | 原记载 | 本轮实测 |
+| :--- | :--- | :--- |
+| Ryuk 状态 | 失败, 根因未闭合 | **启动正常, 清理正常** |
+| E2E BLOCKED 的理由之一 | Ryuk 未闭合 | **撤销** |
+
+E2E 全量验收仍 **BLOCKED**, 但理由只剩**宿主资源**
+（`Committed_AS 20.78 / CommitLimit 20.63 GB`, load 18~20）——
+这是环境事实, 不是代码缺陷, 也无法用代码消除。
+
+
+---
+
 ### ⚠️ 第九课补记九: **守护会因为"覆盖面太窄"而失效, 且失效形态同样是全绿**（2026-10-08）
 
 在补记八修完看门狗之后, 按"临时文件差集"复测又查出**新**的泄漏路径。
@@ -2851,4 +2925,8 @@ except (subprocess.TimeoutExpired, OSError):
 - `check_lesson_tables.py`: PASS（扫描 39 个课次小节）
 
 > ⚠️ **E2E 全量验收仍 BLOCKED**: 宿主 `Committed_AS 20.72 / CommitLimit 20.63 GB`
-> （100%）, load 15~19, Ryuk 根因未闭合。与本次改动无关, 不作放行依据。
+> （100%）, load 15~19。与本次改动无关, 不作放行依据。
+>
+> **【2026-10-08 18:19 更正】上面"Ryuk 根因未闭合"一句已作废** ——
+> 本轮用真实 IT 受控实验证明 Ryuk 启动与清理**均正常**。
+> 详见下方"补记八收尾更正"。
