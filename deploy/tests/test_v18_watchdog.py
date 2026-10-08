@@ -600,6 +600,48 @@ class TestWatchdog(unittest.TestCase):
             raise AssertionError("顽固装置替换未生效 —— 本用例会跑在普通装置上")
         open(script, "w", encoding="utf-8").write(src)
 
+    def test_watchdog_child_does_not_leak_progress_file(self):
+        """看门狗子进程不得创建无人清理的进度文件。
+
+        ⚠️ 泄漏形态: 子进程会**重新执行本脚本**。若 mktemp 在文件头,
+        子进程会先建出一个新文件, 直到入口改用父进程传入的路径才把它弃用
+        —— 那个文件此后无人删除 ⇒ 每跑一次看门狗就在 /tmp 留一个孤儿。
+
+        为什么必须有这条守护: 泄漏**不影响任何断言**, 所以靠功能测试
+        永远发现不了(第九课: 没有守护的"正确"最容易被重构悄悄推翻)。
+
+        ⇒ 实测前后对比 /tmp 下的文件数, 而不是检查源码。
+           源码检查只能证明"写法对", 证明不了"没有泄漏"。
+        """
+        import glob
+        pattern = os.path.join(tempfile.gettempdir(), "v18-progress.*")
+        before = set(glob.glob(pattern))
+        with tempfile.TemporaryDirectory(prefix="v18wd-leak-") as tmp:
+            script = make_hung_copy(tmp)
+            p, logpath = run_hung(script, watchdog_secs=6, wait_secs=0)
+            wait_for_log(logpath, "看门狗触发", timeout=90)
+            pgid = pgid_from_log(logpath)
+            # ⚠️⚠️ 必须等进程组**真正死透**再采样。
+            #    实测: 进度文件在 t=2~4s 存在、t=6s 自行消失 ——
+            #    那是主流程正常运行时的正常生命周期。若在"看门狗触发"
+            #    那一刻就采样, 会把这个**正常存在的**文件当成泄漏,
+            #    于是正向假红(实测)。
+            #    ⇒ 判据的采样时机必须落在"该发生的清理已完成"之后,
+            #    而不是因为"日志里出现了某个词"就动手(第五课)。
+            deadline = time.time() + 90
+            while time.time() < deadline:
+                if pgid and pgid_alive(pgid) is False:
+                    break
+                time.sleep(2)
+            time.sleep(3)
+        leaked = sorted(set(glob.glob(pattern)) - before)
+        self.assertEqual(
+            leaked, [],
+            "看门狗子进程泄漏了进度文件: %s\n"
+            "⇒ mktemp 必须推迟到主流程, 不能在文件头(见 new_progress_file)"
+            % leaked)
+
+
 class TestProcessGroupGuard(unittest.TestCase):
     """判据本身的守护 —— 否则它会退化成"杀整个用户会话"。"""
 

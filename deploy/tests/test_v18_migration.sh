@@ -37,8 +37,17 @@ set -uo pipefail
 WATCHDOG_SECS="${V18_WATCHDOG_SECS:-1800}"
 
 # 标记文件: 记录当前正在执行的用例, 供看门狗读取
-PROGRESS_FILE="$(mktemp -t v18-progress.XXXXXX)"
+#
+# ⚠️ mktemp 必须放在 `--watchdog-child` 判断**之后**。
+#    看门狗子进程会重新执行本脚本; 若在这里就 mktemp, 它会先建出一个
+#    无人清理的新文件, 直到子进程入口改用父进程传入的路径才被弃用
+#    ⇒ 每跑一次看门狗就在临时目录留一个孤儿文件。
+#    这类"创建了但没人用"的对象属于第九课说的「静默泄漏」——
+#    它不影响任何断言, 所以靠功能测试发现不了, 必须有专门守护
+#    (test_watchdog_child_does_not_leak_progress_file)。
+PROGRESS_FILE=""
 progress() { printf '%s\n' "$1" > "$PROGRESS_FILE" 2>/dev/null || true; }
+new_progress_file() { PROGRESS_FILE="$(mktemp -t v18-progress.XXXXXX)"; }
 
 # 看门狗: 超时后先 dump 进度, 再杀整个进程组。
 #
@@ -278,6 +287,8 @@ if [ "${1:-}" = "--watchdog-child" ]; then
   # 父进程传入的进度文件 —— 不能用本进程 mktemp 出来的(见调用处说明)
   if [ -n "${3:-}" ]; then
     PROGRESS_FILE="$3"
+  else
+    new_progress_file   # 兜底: 没传入时自己建一个
   fi
   trap '' TERM        # 绝不能因为目标组的 TERM 广播而提前死掉
   watchdog
@@ -312,6 +323,10 @@ watchdog_report_only() {
 #    与 AGENTS.md 第九课「探针给出的红不是被测对象有缺陷」同型。
 ROOT="${V18_REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 [ -n "$ROOT" ] || { echo "FAIL: 无法确定仓库根目录 (V18_REPO_ROOT 未设且推导失败)"; exit 2; }
+# 主流程到此才真正开始 —— 此时才创建进度文件。
+# ⚠️ 绝不能提前到文件头: 看门狗子进程会重新执行本脚本, 提前创建就会
+#    留下一个无人清理的孤儿文件(见文件头 new_progress_file 的说明)。
+new_progress_file
 MIGDIR="$ROOT/cloud-infra-modules/system-module/src/main/resources/db/migration"
 MIG="$MIGDIR/V18__fix_notification_status_column_type.sql"
 V13="$MIGDIR/V13__add_notification_main_table.sql"
@@ -369,6 +384,12 @@ device_error() { echo "  ERROR 装置缺陷: $1"; echo "        本用例结论�
 
 cleanup() {
   progress "清理: drop_db"
+  # ⚠️ 删除进度文件必须在 drop_db **之前**, 不能放在它后面。
+  #    实测: 装置在 psql_do 处挂死后被 TERM, cleanup 进入 drop_db
+  #    (已被替换成 sleep 300), 于是后面的 rm 永远到不了 ——
+  #    每次挂死都在临时目录留下一个孤儿文件。
+  #    即"清理函数"里最该保证的那件事(不留垃圾)被放在了最不可靠的位置。
+  rm -f "$PROGRESS_FILE" 2>/dev/null || true
   # ⚠️ 超时被看门狗杀掉时, cleanup 里的 drop_db 是**最长 90 秒**的
   #    podman exec —— 这会让"已终止"迟迟不成立(见 watchdog 里的说明)。
   #    因此清理本身加一个短上限: 清理失败不影响"已终止"这个事实。
@@ -377,7 +398,6 @@ cleanup() {
   #    外部 `timeout` 执行不了 shell 函数(rc=127), 而 `|| true` 会把它
   #    静默吞掉, 于是**清理被跳过**而日志无任何异常(第五课)。
   #    正解: 把时限作为**参数**传给 drop_db, 由它自己限制内部往返。
-  rm -f "$PROGRESS_FILE" 2>/dev/null || true
 }
 trap cleanup EXIT
 
