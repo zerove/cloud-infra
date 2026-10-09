@@ -4139,3 +4139,81 @@ rootless podman 下容器 label 的可见性与 Docker 不完全一致, 导致
 > (`timeout` 杀进程 / `pgrep` 匹配自身 / 查 tests jar 而非主 jar / 采样间隔不足 /
 > `journalctl` 实时查询超时 / grep 空结果被读成"无事件")。
 > **若一开始就去找权威事件源, 这 10 轮里至少有 6 轮是可以不花的。**
+
+---
+
+### ✅ 第九课补记二十二: **机制二不是第二个机制, 它是机制一的受害者**（2026-10-09 13:46）
+
+机制二一直未闭合, 因为它**从未在自己的失败路径上被观察过** —— 前三轮实验都在 Ryuk 阶段就崩了,
+根本到不了业务容器阶段。本轮改从**历史日志**(`/tmp/ctrl-single.log` 等)取真实样本。
+
+#### 一、机制二的真实样本
+
+```text
+12:03:13.220  Container postgres:16-alpine is starting: 2f71054cb2352a1f...
+12:04:21.404  ERROR Could not start container
+  ContainerLaunchException: Timed out waiting for log output matching
+  '.*database system is ready to accept connections.*'
+```
+
+表面看是"postgres 启动慢/起不来"。但同一份日志里, **Ryuk 在此前 0.4 秒内被创建了三次**:
+
+```text
+12:02:34.547  Creating container for image: testcontainers/ryuk:0.11.0
+12:02:34.898  Creating container for image: testcontainers/ryuk:0.11.0   ← 相隔 351ms
+12:02:35.719  Container testcontainers/ryuk:0.11.0 is starting: c1b00acaac78...
+12:02:35.741  Creating container for image: testcontainers/ryuk:0.11.0   ← 再隔 22ms
+```
+
+且 postgres 侧同样在**反复重建**:
+
+```text
+12:02:58.571  Creating postgres:16-alpine
+12:03:01.465  is starting: adbc24acddfa...
+12:03:05.946  Creating postgres:16-alpine        ← 第一次失败后重试
+12:03:12.472  Creating postgres:16-alpine        ← 又一次
+12:03:13.220  is starting: 2f71054cb235...
+12:03:23.869  is starting: 4c8691ee0eae...     ← 容器 ID 每次都不同
+```
+
+#### 二、判定: 二者同源
+
+| 判据 | 机制一(Ryuk) | 机制二(postgres) |
+| :--- | :--- | :--- |
+| 容器是否起来过 | ✅ 探针确认运行 ~60s | ✅ 有 bootstrap 日志输出 |
+| 是否被删/重建 | ✅ `container remove` | ✅ 反复 `Creating container` |
+| 错误文本 | `Could not start container` | `Timed out waiting for log output` |
+| 文本差异的原因 | 删在 start 之前 | 删在**打印 ready 日志之前** |
+
+⇒ **同一删除动作, 只是命中时刻不同, 于是报出不同的错误文本。**
+⇒ postgres 的 `performing post-bootstrap initialization ... ok` 证明它
+**确实启动了并正在初始化**, 只是没来得及打印 `ready to accept connections` 就被删。
+
+> **这解释了为什么机制二"看起来"是启动慢**: `LogMessageWaitStrategy` 等的是一个
+> 日志行, 容器在被删之前只来得及打印 bootstrap 完成、还没打印 ready ——
+> **表象是"等太久了", 真实是"被中途杀了"。**
+
+#### 三、由此推翻的一个旧分类
+
+此前把全量 IT 的容器失败分成"机制一(Ryuk 被删) / 机制二(业务容器启动超时)",
+隐含假设是**两个独立机制**。本轮证据表明:
+
+> **它们是同一个根因(Ryuk 经 socket RPC 清理容器)在不同容器上的两种表现。**
+> 分类应改为"**同一机制, 按被删时机分为两种错误文本**"。
+
+⚠️ **若不查 Ryuk 侧的日志, 机制二会被当成"业务容器启动性能问题"**,
+而去调 `STARTUP_TIMEOUT` 或改镜像 —— 那正是补记八补记三的形态
+("静态配置看起来不合理"不等于"它是故障原因")。
+
+#### 四、当前全局状态
+
+| 项 | 状态 |
+| :--- | :--- |
+| 机制一(Ryuk 被删) | ✅ **根因闭合**(补记二十一) |
+| 机制二(postgres 等超时) | ✅ **归因到机制一**(本节) |
+| 为何 Ryuk 删自己(filter 过宽) | ⚠️ **推断, 未实测** |
+| 全量 23 模块 IT | **FAIL / BLOCKED**(根因已知但**未验证修复**) |
+
+下一步不是继续找根因, 而是**验证处置是否有效**:
+Ryuk 的清理行为可用 `TESTCONTAINERS_RYUK_DISABLED=true` 关闭(仅本地诊断用,
+**不得作为交付方案** —— 用户已明确不允许全局关闭 Ryuk, 因其负责孤儿容器清理)。
