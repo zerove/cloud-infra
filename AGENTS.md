@@ -3732,3 +3732,104 @@ MemAvailable    : 9.68 GB
 本扩展**只是留证工具, 不修复任何失败**。它不会让 `no such container`
 或"等待启动超时"消失; 若哪天它"修好了"问题, 说明真根因是别的东西。
 机制一与机制二仍是 **UNDETERMINED**, 宿主 load 假设仍未受控证明。
+
+---
+
+### ⚠️ 第九课补记十七: **机制一根因已锁定, 且它是 flake 不是配置问题**（2026-10-09 18:26-19:16）
+
+诊断扩展上线后的第一次实战, 立刻改变了机制一的定性。
+
+#### 一、机制一 = Ryuk 容器启动失败, **不是业务容器**
+
+`NotificationDispatchReliabilityIT` 的失败现场:
+
+```text
+18:26:53.441  Creating container for image: testcontainers/ryuk:0.11.0
+18:26:54.635  Container testcontainers/ryuk:0.11.0 is starting: 55f79637fa5d...
+18:28:00.738  ERROR Could not start container
+18:28:00.766  ERROR There are no stdout/stderr logs available for the failed container
+  Caused by: InternalServerErrorException: Status 500:
+             {"cause":"no such container","message":"no container with ID 55f79637fa5d..."}
+```
+
+`no such container` 指向的是 **Ryuk 自己**, 不是 RabbitMQ/Postgres/ES。
+⇒ **机制一与机制二是两种不同机制**, 此前把它们混在一起讨论是错的。
+
+时间线: 创建到失败 **67 秒**; 而成功轮同样动作只花 **3.8 秒**
+(`Container testcontainers/ryuk:0.11.0 started in PT3.845465084S`)。
+
+#### 二、受控对照: 成功轮与失败轮**没有任何配置差异**
+
+| 候选变量 | 失败轮 18:26 | 成功轮 19:06 | 能否区分 |
+| :--- | :--- | :--- | :--- |
+| Ryuk 镜像 | 0.11.0 | 0.11.0 | ✗ |
+| 本地 Ryuk 镜像存在 | 是 | 是 | ✗ |
+| `RegistryAuthLocator` 警告 | 有 | 有 | ✗ |
+| **load1/核数** | **0.90** | **1.96** | ✗ **成功轮更高** |
+
+成功轮 `Tests run: 8, Failures: 0, Errors: 0` —— **该 IT 首次全绿**。
+
+⇒ **load 假设被证伪**: 成功轮负载更高却通过, 失败轮负载低却失败。
+⇒ 归类为 **非确定性失败(flake)**, 而非配置缺陷。
+
+> 这条修正很重要: 我此前把"高宿主 load"列为最可疑根因(补记十五的"未排除")。
+> **本轮用受控对照把它排除了。** 若是靠"高 load 时失败过"就保留怀疑,
+> 会一直找不到真因 —— 相关性不等于因果, 这里再一次。
+
+#### 三、`RegistryAuthLocator` 警告: 两次都有 ⇒ 不是区分变量
+
+```
+INFO RegistryAuthLocator -- Failure when attempting to lookup auth config.
+     Please ignore if you don't have images in an authenticated registry.
+```
+
+**这是我第一次见到它, 且它两次都出现** —— 但一次失败一次成功。
+若当时只看到失败轮, 极易归因成"认证配置有问题"。
+⇒ 与补记十四同型: **只在失败样本里出现的东西, 不能当根因**。
+
+#### 四、探针自身三次失效, 每次都差点得出错误结论
+
+| # | 失效 | 我一度得出的错误结论 |
+| :--- | :--- | :--- |
+| 1 | `awk '{print $1/'nproc'}'` 内嵌命令未执行 ⇒ 除零 | "✅ 处于低负载窗口"(假阳性) |
+| 2 | `pgrep -f` 匹配到自己的命令行 | 把自己的 bash 当成"其他测试 JVM" |
+| 3 | `mvn verify -DskipTests=true` 连 IT 一起跳过 | "failsafe 下扩展没触发" |
+
+第 3 次尤其隐蔽: 输出是 `BUILD SUCCESS`, 看起来"正常通过",
+实则**一个测试都没跑**。
+
+#### 五、连续三个错误假设, 都被受控对照推翻
+
+我先后提出并**自行证伪**了三个假设:
+
+| 假设 | 证伪方式 | 结果 |
+| :--- | :--- | :--- |
+| "surefire 隔离 ServiceLoader, 只有 failsafe 生效" | 在 surefire 路径放必失败测试 | ❌ **surefire 下也触发** |
+| "`@Testcontainers` 容器启动失败早于 `testFailed`, 故不触发" | 复刻 `@Container` 启动失败 | ❌ **完全正常触发**, 拿到现场快照 |
+| "那次没打印是因为 jar 旧" | 时间线核对 | ✅ **这条成立**(见下) |
+
+真正原因是**时间线**: 失败轮 18:26 启动, 而我确认 jar 内有 services 注册
+是在 **18:39** —— 那次跑的确实是**无注册的旧 jar**。
+
+⇒ 与第五课补记三、补记十六同形: **探针读的是上一版构建产物**。
+同一个错误我这一轮犯了第二次, 说明它不是偶发。
+
+#### 六、扩展触发路径已用受控注入证明(可复用结论)
+
+| 路径 | 是否触发 | 证据 |
+| :--- | :--- | :--- |
+| `@Test` 内抛异常 | ✅ | surefire 下诊断块 1 次 |
+| `@Testcontainers` + `@Container` 启动失败 | ✅ | 诊断块 1 次, 含完整快照 |
+| 裸 JUnit Platform Launcher | ✅ | `测试数=1 失败=1` + 快照 |
+
+⚠️ 手工 launcher 验证时踩了版本错配: 用 `junit-platform-launcher:1.10.2`
+配 `junit-jupiter-engine:6.0.3`, 编译虽过但运行无输出 ⇒ **无效对照**。
+本地有多版本共存时, 必须先对齐版本再取结论(补记十四同型: 版本取错让正确结论错三轮)。
+
+#### 七、机制二仍未闭合
+
+`NotificationDispatchReliabilityIT` 通过后, 机制二(等待业务容器启动日志超时)
+**本次未复现**, 仍是 **UNDETERMINED**。全量 IT 整体仍 **BLOCKED**。
+
+下一步不该再猜, 而应: 连跑该 IT 2~3 次统计 flake 率, 并在失败时用扩展留下的
+现场快照判断是"启动慢"还是"起不来"。
