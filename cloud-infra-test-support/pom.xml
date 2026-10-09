@@ -29,6 +29,16 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
         </dependency>
+        <!-- ⚠️ 必须显式声明: HostLoadDiagnosticsExtension 放在 src/main 且实现
+             org.junit.jupiter.api.extension.TestWatcher, 而 testcontainers:junit-jupiter
+             只含 10 个 class(Testcontainers 自己的注解), 不含 JUnit API。
+             spring-boot-starter-test 把 junit-jupiter-api 限制在 test scope,
+             ⇒ 编译 src/main 时 @AutoDetect / TestWatcher 均不可见。
+             这是"编译能过是因为恰好在 test 源码树里"的同型陷阱。 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

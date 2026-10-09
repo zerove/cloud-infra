@@ -3600,3 +3600,135 @@ VmSize 14.85 GB  RSS 0.11 GB
 ⚠️ 最可疑的仍是 **load 21 / 12 核**: 它不阻止分配, 但会让容器启动的每一步
 (`podman exec` 实测 9~17 秒/次) 显著变慢, 而 Testcontainers 的等待策略是**超时制**——
 启动慢就会被读成「起不来」。**这是超时型假失败**, 与「起不来」表象相同但机制不同。
+
+---
+
+### ⚠️ 第九课补记十六: **守护测试全绿 + 扩展完全没生效 —— 六个假绿叠在一起**（2026-10-09）
+
+为解决机制二「等待启动日志超时」的归因困难, 我给 test-support 加了
+`HostLoadDiagnosticsExtension`: IT 失败时自动打印宿主现场快照
+(load / CPU 核数 / `Committed_AS` / `CommitLimit` / `MemAvailable`)。
+**它的价值不在修复, 在留证** —— 失败当时的现场, 事后补采样关联性远弱于同步记录。
+
+结果: **守护测试 7 项全绿, 而真实下游 IT 里诊断块一次都没出现。**
+中间连续踩了六个坑, 每一个单独看都"很合理"。
+
+#### 一、假绿的三层
+
+| 层 | 我的守护写了什么 | 它实际证明了什么 |
+| :--- | :--- | :--- |
+| 1 | `try { 启容器 } catch { 断言诊断出现 }` | 只证明**容器如期超时**。扩展从未注册也照样绿 |
+| 2 | 捕获 `System.err` 断言标记 | 修好第 1 层后**正确报红** —— 但真因见下 |
+| 3 | 反射驱动 `renderSnapshot` | 只证明**扩展逻辑正确**, 证明不了"被加载" |
+
+**第 2 层的报红是真线索, 真因是**: `TestWatcher.testFailed` **只在测试失败时调用**,
+而我仍 catch 了异常 ⇒ 测试通过 ⇒ 永不触发。
+⇒ **扩展逻辑完全正确, 是验证方式让它无法被触发。**
+
+> 由此得一条通用规则: **当"机制生效"只能由失败触发时, 常规守护无法直接验证它。**
+> 正解是拆两层 —— 逻辑正确性用直接驱动断言(永远绿), 接线用一次性探针(人工)。
+> 我第二版试图用一个测试同时覆盖两者, 两头都不成立。
+
+#### 二、JUnit 6 **没有 `@AutoDetect`**: 我按记忆写的注解根本不存在
+
+接线修复时我凭印象加了 `@AutoDetect` + `META-INF/services` 双保险,
+结果 `cannot find symbol: class AutoDetect`。
+
+解包 `junit-jupiter-api-6.0.3` 实测, `extension` 包下 30 个类里**没有 `AutoDetect`**:
+
+```text
+ExtendWith  Extension  ExtensionContext  RegisterExtension  ...   ← 无 AutoDetect
+```
+
+真实机制是 `ServiceLoader.load(Extension.class, ...)` + `ServiceLoaderUtils.filter(...)`,
+由 `MutableExtensionRegistry.registerAutoDetectedExtensions` 调用,
+受 `junit.jupiter.extensions.autodetection.enabled` 控制(该键名本身是对的)。
+
+⇒ **与第六课补记「Jackson 丢弃字段客户端无痕迹」同形**: 凭记忆猜 API 名字必错,
+且**报错只说"找不到", 不说"你想要的东西在这个版本里从来就不存在"**。
+
+#### 三、`src/main` 里的测试扩展需要显式 JUnit 依赖
+
+`testcontainers:junit-jupiter` 只有 **10 个 class**(Testcontainers 自己的注解),
+不含 JUnit API; `spring-boot-starter-test` 把 `junit-jupiter-api` 限制在 `test` scope。
+⇒ 扩展放在 `src/main` 时 `@AutoDetect` / `TestWatcher` **均不可见**, 必须显式声明依赖。
+
+> 这是"编译能过只是因为恰好在 test 源码树里"的同型陷阱。
+> 判据: **任何 `src/main` 里 import 测试框架类型的新代码, 都要显式声明该依赖。**
+
+#### 四、最贵的一坑: 我在读**上一次构建留下的旧 jar**
+
+即使注册文件建好、编译通过, 探针仍报"未触发"。逐层排查:
+
+| 检查 | 结果 |
+| :--- | :--- |
+| jar 内两份资源都在 | ✅ |
+| 下游 test classpath 含该 jar | ✅ |
+| 全仓无第二份 properties 抢 key | ✅ |
+| **`javap` 看 `@AutoDetect` 能否解析** | ❌ **编译当时就是失败的** |
+
+真相: 那次 `mvn install` 因为 `@AutoDetect` 编译失败, **没有更新 jar**;
+我读的是**之前那次成功构建留下的旧 jar**, 里面当然没有 services 注册。
+⇒ 我把"上一版编译失败"读成了"注册方式不对"。
+
+> **规则**: 验证打包产物前, **先确认构建本身成功**。
+> 本项目已有同型记录(第五课补记三: 缺字节码时 `SKIP` 被读成通过)。
+> `javap`/常量池这种"不依赖运行就能验证"的手法, 应该前置到每次改注册/打包机制时。
+
+#### 五、负向对照又抓出一条真缺陷: 假 0 仍然守护不住
+
+`readLoadavg()` 改成硬编码 `"0.00 0.00 0.00"` 时, 守护**仍绿** ——
+因为我只断言了 `\d+\.\d+` 这个格式, 而 `"0.00"` 完全合法。
+**真实 `/proc/loadavg` 第一段永远 > 0**(有进程就在跑), 断言必须写成 `> 0`。
+
+同批还抓到两处:
+- `gb()` 在探针失效哨兵 `-1` 时渲染成 `-0.00 GB` ⇒ 改成显式 `(读取失败)`;
+- 判读文案写死"load 远高于核数 ⇒ 大概率是启动慢",
+  **把一个尚未受控证明的假设固化成结论** ⇒ 改为只给 `load1/核数` 比值判据。
+
+> 第三条是**这一轮最重要的修正**: 诊断工具的输出会被下一个人当证据。
+> 一个写死的结论, 会把未证明的假设变成"已证事实"再传下去 ——
+> **诊断工具必须给判据, 不给结论**。
+
+#### 六、九项负向对照总表
+
+| # | 注入 | 结果 |
+| :--- | :--- | :--- |
+| 1 | 关掉 auto-detection 开关 | 变红 ✅ |
+| 2 | 过滤逻辑恒 false | 变红 ✅ |
+| 3 | 删掉 `Committed_AS` 字段 | 变红 ✅ |
+| 4 | `readLoadavg` 返回假 0 | 变红 ✅(第一版**守护失效**, 加固后变红) |
+| 5 | 去掉"超限≠分配失败"提示 | 变红 ✅ |
+| 6 | `gb()` 退回伪装成合法值 | 变红 ✅(第一版**守护失效**, 补判据后变红) |
+| 7 | 判读改回预断式措辞 | 变红 ✅ |
+| 8 | 清空 services 注册内容 | 变红 ✅ |
+| 9 | 关掉 auto-detection(二次) | 变红 ✅ |
+
+⚠️ **对照 4 与 6 都是第一版守护"仍绿"才发现的**, 即补扫本身发现了守护的漏洞。
+若不做负向对照, 这两条假绿会一直留着(第五课补记一: 扫描器自己坏时会长成守护的样子)。
+
+#### 七、真实下游模块的接线证据(L2)
+
+在 `notification-service` 放一次性探针(故意抛 `ContainerLaunchException`),
+`mvn test -Dtest=ExtensionWiringProbeIT`:
+
+```text
+==== [容器启动失败 · 宿主现场快照] ====
+失败测试 : com.cloudinfrait.probe.ExtensionWiringProbeIT#intentionallyFailsWithContainerError
+load(1/5/15min) : 15.56 12.59 15.68 5/4085 1785300
+CPU 核数        : 12
+Committed_AS    : 22.07 GB  (提交额度, **超限≠分配失败**, 需实测 mmap)
+CommitLimit     : 20.63 GB   占比 107.0%
+MemAvailable    : 9.68 GB
+· load1/核数 = 1.30   (比值高 ⇒ 启动慢; 比值低 ⇒ 更像起不来。尚需受控对照定性)
+```
+
+探针**用完即删**(故意失败的测试不能进常规构建)。它证明了接线, 但**不可回归** ——
+守护测试跑在 `target/classes` 上, 覆盖不到"打进 jar 后是否仍在"。
+若要变成门禁, 需要 IT 级断言, 已记在守护测试的注释里。
+
+#### 八、仍未闭合
+
+本扩展**只是留证工具, 不修复任何失败**。它不会让 `no such container`
+或"等待启动超时"消失; 若哪天它"修好了"问题, 说明真根因是别的东西。
+机制一与机制二仍是 **UNDETERMINED**, 宿主 load 假设仍未受控证明。
