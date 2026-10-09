@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.extension.AfterAllCallback;
+import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestWatcher;
 
@@ -61,7 +63,18 @@ import org.junit.jupiter.api.extension.TestWatcher;
  * <b>超限并不等于分配会失败</b>（同轮实测 mmap 256MB 成功）。
  * ⇒ 三个指标各说一件事，<b>都不能单独作结论</b>，故本扩展同时打印并明确其边界。
  */
-public class HostLoadDiagnosticsExtension implements TestWatcher {
+public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallback, AfterAllCallback {
+
+    /**
+     * 已打印过快照的上下文体 —— 用于<b>去重</b>。
+     *
+     * <p>类级容器失败时 JUnit 会同时报一次 {@code class-level error} 与逐个方法失败,
+     * 若不去重, 同一次失败会打印 N+1 份几乎相同的快照, 把真正的日志淹掉。
+     */
+    private static final java.util.Set<String> PRINTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** 走过 {@code beforeAll} 的类 —— 用于类级失败兜底判断。 */
+    private static final java.util.Set<String> CLASS_MARKED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** 判定"与容器相关"的关键词 —— 覆盖 Testcontainers 与 Docker/Podman API 的报错文本。 */
     private static final List<String> CONTAINER_MARKERS = List.of(
@@ -83,8 +96,49 @@ public class HostLoadDiagnosticsExtension implements TestWatcher {
         if (!looksLikeContainerFailure(root)) {
             return; // 约束 2: 与容器无关的失败不打印，避免噪声
         }
+        emit(context, root);
+    }
+
+    /**
+     * <b>类级容器失败的兜底</b>（2026-10-09 真实 Ryuk 失败轮发现）。
+     *
+     * <p>该轮 surefire XML 为 {@code <testcase name="" ...>} + 1 个 {@code <error>}:
+     * 失败发生在<b>类级 {@code @Container} 启动</b>阶段, 即任何测试方法运行<b>之前</b>,
+     * 而 {@link TestWatcher#testFailed} 只在<b>方法级</b>上下文触发 ⇒ 不被调用,
+     * 现场快照零输出。
+     *
+     * <p>⇒ 这与"jar 是旧的"是两种不同的失效：<b>注册通了但钩子选错了</b>。
+     * 守护测试当时全部通过, 因为它们只验"扩展能否被发现",
+     * 没有验"类级容器失败时它是否被调用" —— 第三条硬规则(机制存在 ≠ 链路接通)。
+     *
+     * <p>这里<b>无法</b>拿到失败异常（{@code beforeAll} 抛异常时它走 Engine 异常链）,
+     * 故改为：{@code beforeAll} 正常返回后打一个标记, 由 {@link #testFailed} 补打。
+     * 若整个类因容器失败而一个方法都没跑到, {@code testFailed} 同样不会触发 ——
+     * 因此额外在 {@code afterAll} 里检查标记, 若"进过 beforeAll 但从未 testFailed"则补打。
+     */
+    @Override
+    public void beforeAll(ExtensionContext context) {
+        // 标记仅用于类级兜底; 方法级失败仍由 testFailed 直接处理
+        CLASS_MARKED.add(context.getTestClass().map(Class::getName).orElse("?"));
+    }
+
+    @Override
+    public void afterAll(ExtensionContext context) {
+        String cls = context.getTestClass().map(Class::getName).orElse("?");
+        if (CLASS_MARKED.remove(cls) && !PRINTED.contains(cls)) {
+            // 进过 beforeAll 却一次 testFailed 都没有 ⇒ 典型的类级容器失败
+            System.err.println(renderSnapshot(cls + "#<class-level>",
+                "(未捕获到异常对象) 类级容器在测试方法执行前失败, beforeAll 未抛异常但无任何方法结果"));
+        }
+    }
+
+    private static void emit(ExtensionContext context, String root) {
+        String key = describe(context);
+        if (!PRINTED.add(key)) {
+            return; // 同一次失败已打印过
+        }
         try {
-            System.err.println(renderSnapshot(describe(context), root));
+            System.err.println(renderSnapshot(key, root));
         } catch (Throwable t) {
             // 约束 1: 诊断自身失败绝不影响测试结果
             System.err.println("[宿主诊断] 诊断自身失败(不影响测试结果): " + t);
