@@ -3367,3 +3367,99 @@ KILL 主进程后立刻查:  2 个（文件仍在）
 | 清理延迟 | **1800s -> ~6s** |
 | 验证过程自身产生的残留 | **已清理**（1 个, 本会话实验产物） |
 | 全量 IT | **FAIL**, 两种机制并存, 根因 **UNDETERMINED** —— 未变 |
+
+---
+
+### ⚠️ 第九课补记十四: **版本号取错, 让一个正确结论错了三轮**（2026-10-09 05:51-06:56）
+
+补记十一我说「`testcontainers-2.0.5` 里无法禁用 Ryuk, 因为
+`RyukResourceReaper` 对 `isDisableChecks()` 引用次数 = 0」。
+本节为了回答「有没有更好的方案」去查,发现**这个结论的前提就是错的**:
+
+```xml
+pom.xml:42:  <testcontainers.version>1.21.0</testcontainers.version>
+```
+
+⇒ 项目锁定的是 **1.21.0**, 不是 2.0.5（2.0.5 只是我 `~/.m2` 里恰好存在的版本）。
+我验的是**另一个 jar**, 结论自然对不上真实运行的那个。
+
+#### 一、错在哪: 三轮都用了同一个错前提
+
+| 轮次 | 我说的 | 实际 |
+| :--- | :--- | :--- |
+| 补记十一 | 「三种禁用写法都无效」 | `TESTCONTAINERS_RYUK_DISABLED` **有效**, 我验错了 jar |
+| 补记十一 | 「该版本无对应配置键」 | 1.21.0 **有**, `ResourceReaper` 静态块直读 |
+| 上一轮回答 | 「本地优先走properties 文件」 | 该文件里的键 Ryuk **不读**（见下） |
+
+> ⚠️ **泛化形式**: 「在某个类里找不到X」只对**那个类**成立。
+> 我把它当成了「这个版本没有 X」, 而版本里同类实现有多个
+> （`ResourceReaper` / `RyukResourceReaper` 是不同类, 不同版本）。
+> **先用 `grep` 确认版本号, 再读字节码** —— 顺序反了, 后面全错。
+
+#### 二、`checks.disable` 是个**同名陷阱**（第二次被它绊倒）
+
+1.21.0 的 `TestcontainersConfiguration` 确实读 `checks.disable`
+（所以它**能**写进 `~/.testcontainers.properties`）, 但:
+
+```text
+checks.disable 被哪些类读取:
+  ./org/testcontainers/utility/TestcontainersConfiguration.class     ← 仅此一处
+ResourceReaper 里 isDisableChecks / checks 的引用:                    ← 零
+ResourceReaper 实际读的:  System.getenv("TESTCONTAINERS_RYUK_DISABLED")
+```
+
+⇒ `checks.disable` 只关**环境检查**（Docker 可达性探测等）, **与Ryuk 无关**。
+
+> 这是第八课补记二「谁启用谁禁用」的变体: **键名相同 ≠ 作用于同一组件**。
+> 判据必须是「**这个键被哪个类读取**」, 而不是「这个键存不存在」。
+
+#### 三、受控对照: 关掉 Ryuk 后**仍然失败** ⇒ Ryuk 不是根因
+
+同一 IT 类 (`NotificationDispatchReliabilityIT`, 确认用容器: `@Testcontainers` +
+`PostgreSQLContainer` + `RabbitMQContainer`), 仅改一个环境变量:
+
+| 组 | `TESTCONTAINERS_RYUK_DISABLED` | ryuk `Creating` 次数 | 结果 |
+| :--- | :--- | :--- | :--- |
+| B | `true` | **0** | `Tests run: 1, Errors: 1`, **651.3s** FAILURE |
+
+⚠️ **本次特意先验证了对照有效性**, 避免重犯补记十一的假绿:
+
+```text
+Creating container for image: rabbitmq:3.13-alpine   ← 确实跑到了容器阶段
+ryuk Creating 次数: 0                                  ← Ryuk 确实没建
+```
+
+失败根因与 Ryuk 无关:
+
+```text
+ContainerLaunchException: Timed out waiting for log output
+                         matching '.*Server startup complete.*'
+```
+
+⇒ 属补记十一的**机制二**（> 60s 的「起不来」）,
+**Ryuk 从根因候选中彻底排除**。
+
+⚠️ 顺带一个新细节: 等待目标是 `'.*Server startup complete.*'`,
+而此前 275s 那次是 RabbitMQ 的 `'.*"message":"started.*'`。
+**同一类容器, 等待策略不同** —— 说明不同 IT 类用不同启动策略,
+失败点也因此不同。归因时不能只按「哪个容器」聚合。
+
+#### 四、宿主的账（第八课: 先分清是谁的账）
+
+```text
+cloud-rabbitmq  Up 3 days (healthy)
+cloud-postgres  Up 2 days (healthy)
+```
+
+容器**都在跑且健康**, 但测试仍等不到 `Server startup complete`。
+⇒ 这是「新建的临时容器起不来」, 与已运行 3 天的业务容器无关,
+**两者同名但不是同一对象** —— 又一个「同名 ≠ 同一实例」的陷阱。
+
+#### 五、状态更新
+
+| 项 | 之前 | 现在 |
+| :--- | :--- | :--- |
+| Ryuk 是否根因 | UNDETERMINED | **排除**（关掉后同样失败, 且机制相同） |
+| Ryuk 能否禁用 | 「不能」 | **能**, 但只认环境变量, **不认 properties 文件** |
+| 机制二根因 | UNDETERMINED | **UNDETERMINED**（已排除 Ryuk, 剩宿主资源/启动策略/并发） |
+| 机制一根因 | UNDETERMINED | 未变 |
