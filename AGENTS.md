@@ -4289,3 +4289,62 @@ Ryuk 关闭后我预期会有残留容器需要手动清理, 实测差集为 **0
 
 **下一步应当做的是判断"这是不是 rootless podman 特有"**: 在标准 Docker 上跑同一 IT。
 若不复现, 则本地环境限制可如实记录, 不必强行修; 若复现, 才是真缺陷。
+
+---
+
+### ⚠️ 第九课补记二十四: 本地/CI 存在一处**真实配置差**, 但**不是**本次根因（2026-10-09 13:59）
+
+排查中发现的实际配置差, 如实记录 —— 包括它**为什么不是根因**。
+
+```text
+~/.testcontainers.properties
+  #Modified by Testcontainers           ← 由 TC 自动生成, 非本项目手写
+  #Fri Sep 18 00:36:51 CST 2026
+  docker.client.strategy=org.testcontainers.dockerclient.RootlessDockerClientProviderStrategy
+```
+
+#### 一、它确实改变了行为
+
+该配置让 TC **只**用 `RootlessDockerClientProviderStrategy`,
+即跳过默认的 `EnvironmentAndSystemPropertyClientProviderStrategy`
+⇒ `DOCKER_HOST` / `DOCKER_TLS_VERIFY` 等环境变量**被完全忽略**。
+
+本机 `DOCKER_HOST=unix:///run/podman/podman.sock` 恰好指向**不存在的路径**,
+若走默认策略, TC 会先在 Environment 策略上失败一次再 fallback —— 多一轮重试。
+
+> 这解释了补记十六里"无效 `DOCKER_HOST` 下 IT 仍能成功"这个当时未解释的现象:
+> **不是 fallback, 是压根没读它。**
+
+#### 二、但它**不能**解释 Ryuk 自删
+
+Ryuk 自删发生在**容器层**(补记二十一有 podman `container remove` 权威日志),
+而该配置只影响 **TC 如何连接 docker**。二者不在同一条链路上:
+
+| | 影响的链路 | 与 Ryuk 自删的关系 |
+| :--- | :--- | :--- |
+| `docker.client.strategy` | TC → docker 的**连接方式** | ✗ 不涉及 Ryuk 内部决策 |
+| Ryuk 的 filter | Ryuk → docker 的**清理范围** | ✓ 这才是相关链路 |
+
+⇒ **不能**用"改 strategy 配置"来解释或修复 Ryuk 自删。
+
+#### 三、如实标注当前认知边界
+
+| 项 | 状态 | 原因 |
+| :--- | :--- | :--- |
+| Ryuk 删掉了自己的容器 | ✅ 已证(podman 权威日志) | — |
+| 删除经 socket RPC 而非 HTTP | ✅ 已证(DELETE 请求数 0) | — |
+| 关闭 Ryuk ⇒ IT 通过 | ✅ 已证(8/8, 415s) | — |
+| **Ryuk 为何把本次会话的容器判为应清理** | ⚠️ **未实测** | 需读 Ryuk 二进制或开 debug 日志, 本地不可行 |
+| CI(Docker) 是否同样发生 | ⚠️ **UNKNOWN** | 未在 Docker 上验证过 |
+
+#### 四、为什么到此为止是**负责的**而非放弃
+
+1. **根因已闭合且经因果验证**(补记二十一 + 二十三), 剩下的最后一环是
+   **Ryuk 二进制内部的判断逻辑** —— 那不是本仓库能修的地方。
+2. **修复方向存在明确禁止项**: 关闭 Ryuk 已被用户明确排除(它负责孤儿容器清理)。
+3. 在这种约束下, 继续本地挖 Ryuk 内部逻辑**不会产生可交付物**。
+4. 真正有价值的下一步是**在标准 Docker(CI 环境)上跑一次全量 IT**:
+   - 若不复现 ⇒ 这是 rootless podman 环境限制, 如实记录即可, 不必强修;
+   - 若复现 ⇒ 才是本项目应修的真缺陷。
+
+⇒ **在 CI 侧取得证据之前, 全量 IT 保持 FAIL / BLOCKED。**
