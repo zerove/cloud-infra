@@ -4544,3 +4544,93 @@ $ mmap 256MB OK / 512MB OK / 768MB OK / 1024MB OK          ← 四次全部成�
 逐条看却是 `bash -c ... /proc/[0-9]*` —— **匹配到的是我自己的探测脚本**
 (脚本文本里含 `java` 字样)。改用 `readlink /proc/<pid>/exe` 后一次得到正确结果。
 ⇒ 与补记二十一记录的 `pgrep -f` 同源: **任何按命令行子串筛自己的判据都会自匹配**。
+
+---
+
+### 🔴 第九课补记二十六: 全量 IT 真跑 ⇒ 拿到**真实错误文本**, 再次推翻先前结论（2026-10-10 00:11-00:31）
+
+补记二十五推翻了"Ryuk 自删", 并正确指出"失败无法复现"。
+本轮**首次让全量 23 模块 IT 真正执行完**, 拿到了**第一手的异常链**。
+
+#### 一、全量真实结果(非"无失败", 而是 10 个 ERROR)
+
+`BUILD FAILURE`, 总耗时 `05:04 min`。**以 failsafe XML 为准**(不看顶层聚合):
+
+| 模块 | 测试类 | 结果 |
+| :--- | :--- | :--- |
+| framework-grpc | `GrpcServerLifecycleIntegrationTest` | 5 run / **1 error** (112.0s) |
+| framework-web | `IdempotencyStoreIT` | 5 run / **5 errors** (206.6s) |
+| cloud-infra-gateway | `CrossServiceFeignChainIntegrationTest` | 1 run / **1 error** (131.2s) |
+| cloud-infra-gateway | `GatewaySentinelIntegrationTest` | 1 run / **1 error** (**0.222s**) |
+| cloud-infra-gateway | `GatewayRoutingIntegrationTest` | 1 run / **1 error** (**0.233s**) |
+| cloud-infra-gateway | `GatewayIntegrationTest` | 1 run / **1 error** (**0.213s**) |
+
+⚠️ **耗时 0.2 秒是决定性线索** —— Testcontainers 起一个容器需数十秒,
+0.2 秒内失败**不可能是容器问题**, 而是**根本没走到启动容器那一步**。
+
+#### 二、真实错误文本(此前从未见过这一条)
+
+```
+org.testcontainers.containers.ContainerLaunchException: Container startup failed for image testcontainers/ryuk:0.11.0
+  Caused by: RetryCountExceededException: Retry limit hit with exception
+  Caused by: ContainerLaunchException: Could not create/start container
+  Caused by: java.lang.IllegalStateException: Wait strategy failed. Container exited with code 0
+  Caused by: ContainerLaunchException: Timed out waiting for log output matching '.*Started.*'
+```
+
+**`Container exited with code 0`** —— Ryuk 以**成功退出码**结束。
+这与补记二十五观测到的"全程 running"是**两种不同现象**, 也与补记十九的"被删除"不同。
+
+#### 三、机制已定位: **上下文失败阈值**, 而非容器本身
+
+`framework-web` 的报告里出现了这一行, 它解释了那 0.2 秒:
+
+```
+java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded:
+  skipping repeated attempt to load context for [WebMergedContextConfiguration...]
+```
+
+Spring TestContext 框架在**首次上下文加载失败后置位阈值**, 同一 JVM 内**后续所有依赖该上下文的测试被立即跳过** ——
+**失败耗时 0.2 秒, 且报的是同一个 Ryuk 异常**(因为它复用首次的失败原因)。
+
+⇒ 三个 gateway 测试的 0.2 秒失败**不是三个独立失败, 是一个失败的连带**。
+   这与 AGENTS.md「第四节 测试夹具隔离」记录的形态**完全一致**, 只是方向相反:
+   此处是**失败沿上下文缓存传播**, 而非夹具沿 classpath 传播。
+
+#### 四、受控对照: 单独跑全部通过(再次证明"必须能复现")
+
+| 条件 | 结果 |
+| :--- | :--- |
+| 单跑 `GatewayIntegrationTest` | ✅ **4/4**, 156.8s |
+| 同模块连跑三个 gateway 测试 | ✅ **6/6** 全绿 |
+| 全量 23 模块 | ❌ 三者在 0.2s 内失败 |
+
+⇒ **失败条件是"前面有模块失败"**, 而非测试自身有问题。
+   这正是补记二十五第六节规则 3 的又一次体现: **失败现场会被前序状态污染**。
+
+#### 五、Ryuk `exited with code 0` 的受控对照(部分结论)
+
+| 变体 | 结果 |
+| :--- | :--- |
+| 挂 rootless socket, 第 2 次 | `running`, 日志含 `Started address=[::]:8080` |
+| 挂 rootless socket, 第 3 次 | `running`, 日志含 `Started address=[::]:8080` |
+| 挂 rootless socket, **第 1 次** | `running`, 但 **`Started address` 出现 0 次** |
+| 两个 Ryuk 容器同时挂同一 socket | **均 running, 不冲突** |
+
+第 1 次的现象说明 **Ryuk 启动存在耗时抖动**, 而 Testcontainers 的
+等待策略是**有限窗口**匹配 `.*Started.*` ⇒ **窗口内没打印 ⇒ 判为 exited**。
+
+⚠️ 但这**不足以解释**全量时的失败(0.2 秒起都没到), 故 Ryuk 退出码的**完整机制仍未闭合**,
+如实标为 **UNDETERMINED**。
+
+#### 六、可迁移规则
+
+1. **`ApplicationContext failure threshold` 会把"一次失败"放大成"N 次失败"**。
+   看到同一模块多个测试**耗时几乎相同且极短**(0.2s 级) ⇒ **先找首次失败的那个**,
+   不要逐个独立归因。本项目三个 gateway 错误实为**一个**。
+   ⇒ **错误计数必须区分"独立失败"与"连带失败"**, 否则会高估问题面。
+2. **耗时是判据, 不是附注**。0.2 秒 vs 131 秒差 600 倍 ——
+   这个量级差异本身就排除了"同一个根因"。
+3. **`exited with code 0` 不等于成功**。对 Testcontainers 而言,
+   等待策略依赖**日志模式匹配**; 容器"成功地提前退出"与"成功启动"是两件事。
+   ⇒ **不要用退出码判断容器是否就绪, 要用等待策略实际匹配的东西判断。**
