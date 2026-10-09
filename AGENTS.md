@@ -3735,7 +3735,7 @@ MemAvailable    : 9.68 GB
 
 ---
 
-### ⚠️ 第九课补记十七: **机制一根因已锁定, 且它是 flake 不是配置问题**（2026-10-09 18:26-19:16）
+### ⚠️ 第九课补记十七: 机制一 = Ryuk 容器启动失败（**位置已锁定, 根因未锁定**）（2026-10-09 18:26-19:16, 20:02 修正）
 
 诊断扩展上线后的第一次实战, 立刻改变了机制一的定性。
 
@@ -3769,12 +3769,13 @@ MemAvailable    : 9.68 GB
 
 成功轮 `Tests run: 8, Failures: 0, Errors: 0` —— **该 IT 首次全绿**。
 
-⇒ **load 假设被证伪**: 成功轮负载更高却通过, 失败轮负载低却失败。
-⇒ 归类为 **非确定性失败(flake)**, 而非配置缺陷。
+⇒ **load 不构成简单阈值判据**: 成功轮的 load 比值(1.96)反而**高于**失败轮(0.90)。
+⇒ 即"高 load ⇒ 必然失败"这一形式已被受控对照排除。
 
-> 这条修正很重要: 我此前把"高宿主 load"列为最可疑根因(补记十五的"未排除")。
-> **本轮用受控对照把它排除了。** 若是靠"高 load 时失败过"就保留怀疑,
-> 会一直找不到真因 —— 相关性不等于因果, 这里再一次。
+> ⚠️ **但"load 完全无关"这一步尚未成立, 且本轮取样再次复现时出现了反向数据**。
+> 三次 Ryuk 启动耗时: **4s 成功 / 48s 成功 / 66s 失败**, 分布极宽(相差 16 倍)。
+> ⇒ "简单阈值"与"完全无影响"是**两个不同命题**, 前者被排除不蕴含后者。
+> 取样仍在进行(4 轮), 在拿到 flake 率与耗时分布之前, 根因保持 **UNDETERMINED**。
 
 #### 三、`RegistryAuthLocator` 警告: 两次都有 ⇒ 不是区分变量
 
@@ -3833,3 +3834,82 @@ INFO RegistryAuthLocator -- Failure when attempting to lookup auth config.
 
 下一步不该再猜, 而应: 连跑该 IT 2~3 次统计 flake 率, 并在失败时用扩展留下的
 现场快照判断是"启动慢"还是"起不来"。
+
+---
+
+### ⚠️ 第九课补记十八: 同一种机制, **错误信息每次都不同** —— 这是它难闭合的真因（2026-10-09 20:02）
+
+连跑取样时, 机制一**第二次复现**, 但报错与第一次**完全不同**:
+
+| | 第 1 次(18:26) | 第 2 次(20:02) |
+| :--- | :--- | :--- |
+| 症状 | `Status 500: {"cause":"no such container"}` | `java.io.IOException: Broken pipe` |
+| 创建→失败 | **66 秒** | **7 秒** |
+| `no such container` 出现次数 | 有 | **0 次** |
+
+**同一机制 (Ryuk 容器启动失败), 两次的错误文本与耗时差了一个数量级。**
+
+#### 一、`Broken pipe` 指向 podman socket, 而非容器本身
+
+```text
+20:02:55.454 ERROR tc.testcontainers/ryuk:0.11.0 -- Could not start container
+java.lang.RuntimeException: java.io.IOException: Broken pipe
+  Caused by: java.io.IOException: Broken pipe
+  Suppressed: java.io.IOException: Broken pipe
+```
+
+`Broken pipe` = **对端已关闭连接**。podman 的 API socket 在容器 create 后、start 时断开,
+Java 侧写请求得到 EPIPE。同一轮还可见 HTTP 层的重试记录:
+
+```text
+HttpRequestRetryExec -- Recoverable I/O exception (java.io.IOException...)
+```
+
+⇒ 即**连接层**先坏, 而"容器消失了"只是它在 podman 侧的表现。
+
+#### 二、本轮同时**证伪了 `DOCKER_HOST` 假设**
+
+补记十七之前我把失效的 `DOCKER_HOST` 列为嫌疑。本轮拿到直接反证:
+
+```text
+DOCKER_HOST=unix:///run/podman/podman.sock      ← 该路径【不存在】
+Loaded ...RootlessDockerClientProviderStrategy
+Found Docker environment with Rootless Docker accessed via Unix socket
+XDG_RUNTIME_DIR=/run/user/1000                  ← TC 实际用的 socket
+```
+
+⇒ TC 走的是 **rootless 默认路径**, 完全绕过失效的 `DOCKER_HOST`。
+⇒ 这解释了"失效 socket 下 IT 仍能成功过"这个原本矛盾的现象。
+
+> ⚠️ **这里我又犯了第五课的形态**: 查 jar 时先命中了
+> `cloud-infra-test-support-*-tests.jar`(无 `META-INF/services`),
+> 一度判成"扩展没被注册"。换成**主 jar** 后注册完好,
+> 且用 `ServiceLoader.load(Extension.class)` 实测能发现扩展、
+> surefire XML 里该 jar 也在 335 条 classpath 中。
+> ⇒ **探针查错了对象**(tests jar vs 主 jar), 结论错误 —— 第五课第七例又一次。
+
+#### 三、两条新规则
+
+1. **同一机制的错误信息可以完全不同, 所以"按错误文本归因"必然漏**。
+   本轮若只保留第 1 次的样本, 会把根因锁定成"podman 返回 no such container";
+   而第 2 次证明它连那个错误都不产生。⇒ **必须按【失败位置】归类, 不能按【报错文本】**。
+   本项目已有前科: 同一处根因在 CI 上先表现为 `UnknownHostException: cloud-nacos`(补记四),
+   本地复现却是 `IllegalStateException: 内部调用签名凭据缺失`。
+
+2. **`Broken pipe` 这类"对端已关闭"要往上追一层, 不要停在 socket**。
+   它同时可能是**原因**(podman 崩/重启/被 OOM kill)与**结果**(容器被清理后连接失效)。
+   本轮尚未区分, 故仍 **UNDETERMINED**。
+
+#### 四、取样数据(4 轮进行中)与当前定性
+
+| 项 | 状态 |
+| :--- | :--- |
+| Ryuk 启动耗时分布(4s / 48s / 66s失败) | 宽度 16 倍, 待第 3、4 轮补全 |
+| `DOCKER_HOST` 假设 | **已排除** (走 rootless socket) |
+| 机制一根因 | **UNDETERMINED** |
+| 机制二(业务容器等待日志超时) | **UNDETERMINED** |
+| 全量 23 模块 IT | **FAIL / BLOCKED** |
+
+下一步: 取样出齐后按 `Broken pipe`(连接层) 与 `no such container`(容器层)
+**分别统计出现频次**, 看是否本就是两个不同机制 —— 若是, 则此前"机制一"这个合并命名
+本身就需要拆开。
