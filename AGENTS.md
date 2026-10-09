@@ -3495,3 +3495,108 @@ load average:   21.53 / 12 核
 | Ryuk 能否禁用 | 「不能」 | **能**, 但只认环境变量, **不认 properties 文件** |
 | 机制二根因 | UNDETERMINED | **UNDETERMINED**（已排除 Ryuk, 剩宿主资源/启动策略/并发） |
 | 机制一根因 | UNDETERMINED | 未变 |
+
+---
+
+### ⚠️ 第九课补记十五: **`memory.current` 不是提交量 —— 我用错指标, 差点归因到「宿主内存耗尽」**（2026-10-09 08:13-08:23）
+
+上一节我看到 `Committed_AS`(21.5GB) > `CommitLimit`(20.63GB),
+当场写下「宿主全局提交预算耗尽 ⇒ 提高 mem_limit 只会更快耗尽」。
+本节去现场重测, **那个结论站不住**。
+
+#### 一、探针先坏了一次（形态很典型）
+
+```bash
+awk '{printf "%.2f GB", $1/1048576}' # 忘了 awk 不能做除法之外的操作
+# 输出: 0.00 GB / 0.00 GB / ... 全部进程
+```
+
+根因: 用了 `bc` 做浮点, 而**本机没有 `bc`** ⇒ `printf` 拿到空串 ⇒ **每个进程都显示 0.00 GB**。
+
+> ⚠️ 这正是第五课「探针失效伪装成没有发现问题」, 且形态是**整齐地全 0**。
+> 若我当时看到"没有大内存进程", 很可能就此宣布"宿主内存正常"。
+> 判据输出**全为同一个值**时, 先怀疑判据本身(第八课补记一: `存活=0` 与 `失败=0` 同时出现必有一方输入为空)。
+
+#### 二、`Committed_AS > CommitLimit` 在 `overcommit_memory=0` 下**不构成阻塞**
+
+现场参数:
+
+```text
+overcommit_memory = 0     overcommit_ratio = 80
+MemTotal 19.53 GB  SwapTotal 5.00 GB
+CommitLimit  = 20.63 GB  (= MemTotal + SwapTotal, 与 ratio 无关)
+Committed_AS = 20.97 ~ 23.58 GB  (三次采样: 100.1% / 101.6% / 109.0%)
+```
+
+⚠️ **`CommitLimit` 恰好等于 `MemTotal + SwapTotal`**, 说明它由「严格模式」那一套公式给出,
+但 `overcommit_memory=0` 的语义是**启发式放行**: 允许 `Committed_AS` 超过 `CommitLimit`,
+只在真正 `mmap` 时按启发式判断是否拒绝。
+
+决定性实验（不是推断, 是实测分配）:
+
+```text
+mmap  256 MB -> OK
+mmap   64 MB -> OK
+mmap   16 MB -> OK
+```
+
+⇒ **提交预算此刻并没有阻塞分配**。
+对比补记八补记三那次的对照实验(`mmap 256MB FAIL errno=12 ENOMEM`),
+本机当前状态与之**相反**。
+
+> ⇒ 「`Committed_AS` 超限」**不能**直接推出「分配会失败」。
+> 两者之间隔着启发式判断, 必须用**真实分配**验证。
+> **账面超限与实际阻塞是两个事件**, 前者只是后者的必要非充分条件。
+
+#### 三、我用错指标: `memory.current` ≠ 提交量
+
+| 指标 | 含义 | 是否计入 `Committed_AS` |
+| :--- | :--- | :--- |
+| `memory.current` | cgroup 内**所有**内存, 含 page cache | **否** |
+| `memory.stat` 的 `anon` | 匿名页(堆栈等) | **是**（主要成分） |
+| `memory.stat` 的 `file` | **page cache** | 否 |
+
+`session-c4.scope` 报 `memory.current = 8.47 GB`, 我据此以为有 9GB 进程,
+实则:
+
+```text
+file   7.58 GB   ← page cache, 不计入提交
+anon   0.64 GB   ← 真正计入
+```
+
+而该scope 下的 20 个进程 RSS 合计不到 1GB(jcode 0.21×3 + python 0.02 + ...) —— 与 `anon 0.64GB` 吻合。
+
+> ⚠️ 这是第八课补记四的同型, 只是方向相反:
+> 那里是 `VmSize` 高估(虚拟预留 vs 实际驻留), 这里是 `memory.current` 高估(含 page cache)。
+> **两个指标都不能替代 `Committed_AS`, 而 `Committed_AS` 也不能替代「真实分配是否成功」。**
+
+#### 四、顺带排除一个看似确凿的嫌疑
+
+`podman system service`(pid 947366) 的 `VmSize` 高达 **14.85 GB**, 且挂在宿主
+(`app.slice/podman.service`, systemd 管的 socket 常驻服务, 已运行 4.4 天) ——
+形态与补记八补记一那个「VmSize 40GB 的孤儿 JVM」极像。
+
+但它的 cgroup 实测:
+
+```text
+anon 65.8 MB   file 114.7 MB   ⇒ 合计约 172 MB
+VmSize 14.85 GB  RSS 0.11 GB
+```
+
+⇒ 14.85GB 里几乎全是**未触碰的虚拟预留**, 不计入提交。
+**又一次「VmSize 大 ≠ 提交多」。**
+
+#### 五、机制二的根因仍然 UNDETERMINED, 但排除了一批
+
+| 候选 | 状态 | 依据 |
+| :--- | :--- | :--- |
+| Ryuk | **排除** | 补记十四双向对照 |
+| 提交预算阻塞 mmap | **排除** | 256MB mmap 实测成功 |
+| `session-c4` 进程占用 | **排除** | anon 仅 0.64GB |
+| `podman system service` | **排除** | cgroup 仅 172MB |
+| **宿主 load 21/12 核导致启动迟缓** | **未排除** | 时间相关, 仍未受控证明 |
+| 同类容器的启动策略差异 | **未排除** | 两次等待目标不同(`Server startup complete` vs `"message":"started`) |
+
+⚠️ 最可疑的仍是 **load 21 / 12 核**: 它不阻止分配, 但会让容器启动的每一步
+(`podman exec` 实测 9~17 秒/次) 显著变慢, 而 Testcontainers 的等待策略是**超时制**——
+启动慢就会被读成「起不来」。**这是超时型假失败**, 与「起不来」表象相同但机制不同。
