@@ -5808,3 +5808,87 @@ PY
 
 5. **未闭合的部分明确写 `UNDETERMINED`。**
    本项目 AGENTS.md 要求根因来自受控实验；未做实验的部分就不写成结论。
+
+---
+
+### 🔴 第九课补记四十: 我为闭合一个 UNDETERMINED 写了探针, 三次采到的都不是被测对象（2026-10-10 13:39-13:46）
+
+#### 一、动机与结局
+
+为了闭合"`Broken pipe` 的触发条件"（补记三十九的 `UNDETERMINED`）, 我写了
+`deploy/tests/check_podman_socket_health.py`, 采 Podman 服务端的
+`Threads` / `RSS` / `FD` / `VmSize`。
+
+**三次版本都"成功返回了数据", 三次采到的都不是被测对象。**
+
+| 版本 | 判据 | 输出 | 实际采到的是 |
+| :--- | :--- | :--- | :--- |
+| v1 | `ps` 里 `comm=="podman"` | `Threads=11 RSS=44MB` | `podman healthcheck run` 这个**短命 CLI 子进程** |
+| v2 | args 以 podman 开头, 取最新 PID | 同上（换个 PID） | **客户端** `podman ps -a` |
+| v3 | 先确认 `podman.service` 在跑 | `PROBE-FAIL` | 正确地承认"没有服务端" |
+
+⚠️ v1/v2 的输出**看起来完全正常**: 有 PID、有线程数、有内存。
+   若不核对"这个 PID 到底是谁", 就会拿客户端的数字当服务端证据, 得出一个
+   语法正确、语义错误的结论 —— 这正是第五课的核心形态。
+
+#### 二、v3 的发现: 本机 rootless Podman 是 SDKD 模式
+
+```text
+$ systemctl --user list-units --all | grep podman
+  podman.service   loaded **inactive dead**   Podman API Service
+  podman.socket    loaded active listening     Podman API Socket
+```
+
+⇒ **没有常驻 API 服务端**; `podman <verb>` 客户端自带引擎处理请求。
+
+#### 三、⚠️ 但 v3 的结论也是错的 —— 而且错在更隐蔽的地方
+
+`podman.service` 管的 socket 与 Testcontainers 用的**不是同一个**:
+
+```text
+DOCKER_HOST                       = unix:///run/podman/podman.sock          ← Testcontainers 用
+podman info RemoteSocket.Path     = /run/user/1000/podman/podman.sock      ← podman.service 管
+ss -xlpn 里两个都在 LISTEN:  inode 497 = /run/podman/…,  inode 4640 = /run/user/1000/…
+```
+
+而 `/run/podman/` 在**宿主上根本不存在目录项**（`ls -la /run/podman/` 无输出）,
+它由 conmon 在挂载命名空间内提供 ⇒ `ss -xlpn` 能看到 socket 却没有 PID,
+`/proc` 扫不到持有者。
+
+⇒ **我在查 `podman.service`, 而 Testcontainers 根本不经过它。**
+   v3 那个"正确地承认没有服务端"的自检, 是在**为正确的理由, 检查了错误的对象**。
+
+#### 四、处置: 删除探针, 而不是交付它
+
+一个在本机**永远只能报 `PROBE-FAIL`** 的工具, 对本项目零价值 ——
+按框架能力准入原则第 5 条（"不得为凑完整补配套"）, 应当**不建**。
+
+已删除, 工作树干净。**留下的是认知, 不是代码。**
+
+#### 五、四条规则（这是本次最值钱的产出）
+
+1. **探针成功返回数据, 不等于它采对了对象。**
+   第三次修正的教训: 我从"进程名像不像"一路修到"服务有没有在跑",
+   却始终**没核对过被测对象是否真的经过这条链路** ——
+   判据要指向**真实标识**（这里是 `DOCKER_HOST`, 而非 `podman.service`）。
+
+2. **同一名称的两套实现, 是这类探针的头号陷阱。**
+   `/run/podman/` 与 `/run/user/1000/podman/` 都叫 podman socket,
+   由不同进程管。**先确认被测链路走哪一个**, 再写探针。
+
+3. **"探针失效"与"探针查错了对象"是两个不同的失败, 但都会被读成"环境有问题"。**
+   v1/v2 是后者, v3 是前者。**两者都不该产出结论。**
+
+4. **为闭合 UNDETERMINED 而写的工具, 若自身无法验证, 应放弃而不是交付。**
+   本次若硬交付, 就是给项目加一个"每次都红"的门禁 ——
+   正是补记三十五批评自己的那种"诚实但弄坏构建"的变体。
+
+#### 六、仍然成立的结论（未被本轮推翻）
+
+补记三十九的定性不受影响, 因为它基于**异常链**而非探针:
+
+| 层 | 状态 |
+| :--- | :--- |
+| 故障在 Podman 侧 socket 写入 | ✅ 已闭合（链尾 `Broken pipe` @ `UnixSocket$WrappedWritableByteChannel.write`） |
+| 不是代码/内存/I-O 问题 | ✅ 已闭合（三次对照全绿 + 账本健康） |
+| **触发条件** | ❌ **仍 UNDETERMINED** —— 本轮三次探针尝试均未取到有效对象 |
