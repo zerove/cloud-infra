@@ -5587,3 +5587,127 @@ try {
 
 3. **能改验证手段就别改生产代码。** 生产改动会引入门禁、引入无关风险面;
    验证手段的选择空间大得多, 且失败时更容易归因。
+
+---
+
+### 🔴 第九课补记三十八: 全量 IT 里"此消彼长"的 error —— 先看时间窗, 再看模块（2026-10-10 12:14-12:52）
+
+#### 一、结果与直觉相反
+
+| 轮次 | search-service | 其余模块 |
+| :--- | :--- | :--- |
+| 上一轮全量 | **FAIL**（唯一失败模块） | 全绿 |
+| 本轮全量 | **PASS**（8/8, 611s） | **5 个 error** |
+
+**search 修好了, 别的坏了。** 若只看"哪轮错在哪", 会得出"我的修复让别处坏了" —— 完全错误的因果。
+
+#### 二、决定性证据: 5 个 error 挤在 75 秒窗口内
+
+按 failsafe XML 的写入时刻排序（基准 = 最早报告 `20:14:10`）:
+
+```text
+    +  0s 20:14:10  cloud-infra-codegen                1 项  ✓
+    + 44s 20:14:54  cloud-infra-framework              5 项  ✓
+    ... (framework 7 个模块连续绿) ...
+    +707s 20:25:57  cloud-infra-gateway                5 项  ✓
+    +731s 20:26:21  cloud-infra-auth                   6 项  ✓
+ ✗  +734s 20:26:24  system-module                     1 项  e=1
+    +752s 20:26:42  cloud-infra-gateway                7 项  ✓
+ ✗  +766s 20:26:55  system-module                     1 项  e=1
+ ✗  +788s 20:27:18  notification-service              1 项  e=1
+ ✗  +807s 20:27:37  gateway                           1 项  e=1
+ ✗  +809s 20:27:39  notification-service              1 项  e=1
+    +931s 20:29:41  cloud-infra-auth                   6 项  ✓
+    ...
+    +1557s 20:40:07  search-service                    8 项  ✓   ← 611s
+```
+
+⇒ **全部 5 个 error 落在 `+734s ~ +809s` 的 75 秒内**, 跨 3 个模块;
+   而这 3 个模块在此后**又各自跑绿了**。
+
+**模块不是变量, 时间窗才是。** 若按模块归因, 会得到"system/gateway/notification 三个模块各自有缺陷" —— 与"它们各自都跑绿过"直接矛盾。
+
+#### 三、错误机制: 故障在 Podman 侧, 不在测试代码
+
+链尾（而不是首行）才有决定性信息:
+
+```text
+ContainerLaunchException: Container startup failed for image redis:7-alpine
+  ...
+Caused by: java.lang.RuntimeException: java.io.IOException: Broken pipe
+    at ApacheDockerHttpClientImpl.execute(...)
+    at UnixSocket$WrappedWritableByteChannel.write(UnixSocket.java:98)   ← 向 Podman socket 写时断
+```
+
+**同一时刻另一个模块报的是**:
+
+```text
+Container startup failed for image testcontainers/ryuk:0.11.0
+Caused by: IllegalStateException: Wait strategy failed. Container exited with code 0
+Caused by: Timed out waiting for log output matching '.*Started.*'
+```
+
+⚠️ **注意后者**: "Container exited with code 0" + "等 Started 日志超时" ——
+   这正是第一轮我判为"Ryuk 自删"的那个形态, **当时已用事件流证伪**。
+   这次它出现在**同一 75 秒窗口**里 ⇒ 它也是环境故障的**症状**, 不是独立原因。
+   **一个已知被证伪的解释, 换个时间重新出现时, 先验应大幅下调。**
+
+#### 四、受控对照: 唯一变量是时间窗
+
+同样 3 个模块、同样代码, 换到 12:41 之后重跑:
+
+```text
+对照重跑(本次生成): tests=61 failures=0 errors=0   [排除旧报告 3]
+```
+
+⇒ **61 项全绿。** 代码没变, Podman 也没重启过（版本仍是 5.8.7, `podman ps` 正常,
+   且当场 `podman run redis:7-alpine echo alive` → `alive`）。
+
+⚠️ 因此**不能**说"Podman 有 bug": 现在的 Podman 是好的, 能起容器。
+   只能说"在 75 秒那个窗口内, Podman 的 socket 侧拒绝/中断了请求"。
+   具体是 OOM、fd 上限、内部超时还是别的, **本轮没有证据, 不编造**。
+
+#### 五、这套判据为什么有效: 三条都能提前否掉错误归因
+
+| 若只用这个判据 | 会得出的错误结论 |
+| :--- | :--- |
+| 按模块统计 | "gateway/system/notification 三个模块有缺陷" |
+| 按错误文本 | "Ryuk 又自删了"（已证伪的解释） |
+| 与上一轮对比 | "我的 search 修复连累了别的模块" |
+
+**只有把时间轴画出来**才会看到 75 秒的空白, 并意识到"错误集中在窗口内"。
+
+#### 六、四条规则
+
+1. **全量/并发测试的失败, 必须先按【时间】排序, 再按【模块】归因。**
+   时间上聚集 = 环境问题; 时间上分散 = 才可能是各自的代码问题。
+   本项目已因"按模块归因"误判过一次（补记: Ryuk 方向）。
+
+2. **"此消彼长"是环境故障的signature, 不是因果证据。**
+   这轮 A 好了 B 坏了, 上轮 A 坏了 B 好了 —— 若代码是原因, 不会这样互换。
+
+3. **已知被证伪的解释再次出现时, 先验下调。**
+   Ryuk 自删在第一轮被事件流证伪, 本轮以另一种形态复现 ⇒ 默认它是症状。
+
+4. **受控对照只改一个变量。** 本例唯一变量是时间窗, 代码与 Podman 版本均未变。
+   若不固定"同一批模块", 对照就失去意义。
+
+#### 七、⚠️ 本项目已有合适的门禁位, 但要认清它的边界
+
+`check_commit_runtime_guard.py`（阈值 92%）在 `verify-e2e.sh` 里**只警告不阻断**,
+理由是"commit 高不等于服务已坏"。本轮的形态**恰好落在它够不着的地方**:
+
+| 维度 | 本轮实测 | commit 门禁能否发现 |
+| :--- | :--- | :--- |
+| `Committed_AS` | 3.4 → 4.6 GB / 21.6 GB（**21%**） | ❌ 完全健康 |
+| `MemAvailable` | 17.6 GB | ❌ |
+| `%wa` | **0** | ❌ |
+| 故障 | Podman socket `Broken pipe` | ❌ |
+
+⇒ **宿主内存/I-O 完全健康, 而 Podman socket 侧短暂拒绝请求。**
+   这类故障**不在**任何现有门禁的覆盖范围内。
+
+⇒ 因此本轮的定性是 **`UNDETERMINED`**（触发条件未闭合）,
+   而**不是** "已修复" 也**不是** "环境问题已排除"。
+   已交付的是: **受控对照证据**（61 项绿）+ **可复用的判据**（时间窗聚合）+
+   **完整的错误机制**（链尾 Broken pipe, 故障在 Podman 侧）。
