@@ -5851,12 +5851,99 @@ podman info RemoteSocket.Path     = /run/user/1000/podman/podman.sock      ← p
 ss -xlpn 里两个都在 LISTEN:  inode 497 = /run/podman/…,  inode 4640 = /run/user/1000/…
 ```
 
-而 `/run/podman/` 在**宿主上根本不存在目录项**（`ls -la /run/podman/` 无输出）,
-它由 conmon 在挂载命名空间内提供 ⇒ `ss -xlpn` 能看到 socket 却没有 PID,
-`/proc` 扫不到持有者。
+> ⚠️【2026-10-10 23:14 更正本节措辞】初版写"`/run/podman/` 在宿主上根本不存在目录项"。
+> 复核后**该表述是错的**: 实际是 **`Permission denied`** ——
+>   `$ ls -la /run/podman/` → `cannot open directory: Permission denied`
+>   `$ test -S /run/podman/podman.sock` → `exists=N isSocket=N`（对当前用户不可见）
+>
+> 二者的**处置完全不同**:
+>
+> | 形态 | 若为"不存在" | 实际是"无权限" |
+> | :--- | :--- | :--- |
+> | 意味着 | Podman 根本没起 | 它在跑, 只是 root 权限 |
+> | 该做什么 | 去查 Podman 为什么没起 | **换个观测手段**, 如 `sudo` 或客户端侧 |
+> | 写"不存在"的后果 | 会误导下一个人去查 Podman | — |
+>
+> ⇒ 这正是第五课「看起来正常的错误信息」: 我先前那句 `ls` **无输出**，
+>   同时兼容"不存在"与"无权限"两个互斥结论，而我当时读成了前者。
+>   **判别命令**: `stat <path>` 会把 `No such file or directory` 与
+>   `Permission denied` 分开报出来 —— 必须用它，不能只看 `ls` 有没有输出。
+>
+> ⚠️ 更普遍: **每条探针命令都必须先确认它的失败模式不止一种**。
+>   同型实例见第八课补记一（`podman inspect` 超时 vs 容器真不存在）。
 
-⇒ **我在查 `podman.service`, 而 Testcontainers 根本不经过它。**
-   v3 那个"正确地承认没有服务端"的自检, 是在**为正确的理由, 检查了错误的对象**。
+⚠️【2026-10-10 23:16 全面更正本节】上一条推理**错在把 socket 归属当成了服务归属**。
+逐项复核后的真实情况:
+
+| 项 | 我先前的说法 | 实际 |
+| :--- | :--- | :--- |
+| Testcontainers 连哪个 socket | `/run/podman/podman.sock` | ❌ **连不上**（见下） |
+| `podman.service` 管哪个 | Testcontainers 用的那个 | ❌ 它管 `/run/user/1000/...`, 是**不同**的 socket |
+| `podman.service` inactive ⇒ 无服务端 | 推论成立 | ⚠️ 推理**错**: SDKD 模式下 socket 照样工作, `inactive` 只说明无常驻进程 |
+
+**权威判据（不是读记忆, 是解包 + 实测）**:
+
+```text
+~/.testcontainers.properties
+  docker.client.strategy=org.testcontainers.dockerclient.RootlessDockerClientProviderStrategy
+
+$ unzip -p testcontainers-2.0.5.jar .../RootlessDockerClientProviderStrategy.class | strings
+  XDG_RUNTIME_DIR   socketPath   resolveSocketPath   unix://
+  # 错误信息原文: "$XDG_RUNTIME_DIR is not set."
+  #              "$XDG_RUNTIME_DIR is set to '{}' but the folder does not exist."
+  #              "$XDG_RUNTIME_DIR is set but '{}' does not exist."
+```
+
+⇒ **它解析的是 `$XDG_RUNTIME_DIR/podman/podman.sock`** = `/run/user/1000/podman/podman.sock`。
+而 `DOCKER_HOST=unix:///run/podman/podman.sock` 这个**环境变量根本没被它用**
+（`RootlessDockerClientProviderStrategy` 只认 `XDG_RUNTIME_DIR`）。
+
+**决定性验证: 那个 socket 普通用户根本连不上**:
+
+```text
+$ test -e /run/podman/podman.sock          → rc=0  (目录存在, 但 drwx------ root root)
+$ stat -c '%F' /run/podman/podman.sock     → Permission denied
+
+# Java 侧实测（用 UnixDomainSocketAddress 真连一次）
+$ java P3   # SocketChannel.open(UnixDomainSocketAddress.of("/run/podman/podman.sock"))
+  connect FAILED = java.net.BindException
+  msg = Permission denied
+```
+
+⇒ **若 Testcontainers 真连这个 socket, 它一个容器都起不来。**
+   而实测它起过上千个 ⇒ **它必然走的是 `$XDG_RUNTIME_DIR` 那条**。
+
+⚠️⚠️ 而这里还藏着**第五课的又一种形态, 且比之前的都隐蔽**:
+
+```java
+Files.exists(Path.of("/run/podman/podman.sock"))   // → false
+Files.readAttributes(...)                          // → AccessDeniedException
+```
+
+**`exists()` 返回 `false`, 但 `stat` 说 `Permission denied`。**
+`exists()` **把"无权限"吞成了"不存在"** —— 两个互斥的结论被压成同一个 `false`。
+若据此写"该 socket 不存在, 所以 Podman 没起", 就是**第五课的教科书案例**。
+
+判别方法（本次唯一有用的推论）:
+
+| 现象 | 读法 |
+| :--- | :--- |
+| `test -e` rc=0 但 `stat` 报 Permission denied | 路径**存在**, 你只是没权限 |
+| `Files.exists()=false` 且 `stat` 报 No such file | 真的不存在 |
+
+⇒ **`Files.exists()` 永远不足以证明"不存在"。** 必须配 `stat`/`readAttributes` 看**失败模式**。
+
+#### 对"三次探针采错对象"的最终定性
+
+| 版本 | 采到 | 是否被测对象 |
+| :--- | :--- | :--- |
+| v1 | `podman healthcheck run` 子进程 | ❌ 无关 |
+| v2 | 客户端 `podman ps -a` | ❌ 无关 |
+| v3 | `PROBE-FAIL`（因查了 `podman.service`） | ⚠️ 理由错、对象错 |
+
+⇒ **三轮都该判"探针无效"**。而之所以必须删掉它（而非交付）:
+   它采样的是"某个 podman 客户端进程的内存", 与 `Broken pipe` 的成因**无因果关系** ——
+   交付它只会制造一个"看起来在监控"的假门禁。
 
 #### 四、处置: 删除探针, 而不是交付它
 
