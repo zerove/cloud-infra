@@ -71,6 +71,92 @@ class RebuildReadinessGuardTest {
                 .containsPattern("(?s).*\\b(await\\w*\\s*\\(|\\.health\\s*\\(|waitFor\\w*\\s*\\(|refresh\\w*\\s*\\().*");
     }
 
+    /**
+     * 就绪等待的【判据语义】必须与目标索引绑定（2026-10-10 新增）。
+     *
+     * <p>⚠️ 本项针对一个已实测的假门禁: 上一项断言的正则是
+     * {@code (await\w*\s*\(|\.health\s*\(|waitFor\w*\s*\(|refresh\w*\s*\()},
+     * 它只要匹配到 <b>调用名</b> 就通过, <b>不检查调用后面判断的是什么</b>。
+     *
+     * <p>负向对照（已实测, 守护当时判绿）:
+     * <pre>
+     *   // 原判据
+     *   if (health.getRelocatingShards() == 0 && health.getInitializingShards() == 0) return;
+     *   // 注入: 换成恒真且与目标索引无关的条件
+     *   if (health.getNumberOfDataNodes() >= 0) return;
+     *   → RebuildReadinessGuardTest 仍然 BUILD SUCCESS
+     * </pre>
+     *
+     * <p>根因: {@code ClusterHealth} 只暴露<b>集群级</b>计数, 没有任何按索引查询的方法
+     * （javap 确认: 无 {@code getIndex(...)} / per-index 字段）。因此现有实现
+     * <b>在原理上就无法确认目标索引已释放</b> —— 它看到的是全集群的分片活动。
+     *
+     * <p>本项守护"判据必须引用目标索引"这一性质。它允许三种正确形态:
+     * <ol>
+     *   <li>直接引用索引标识（如 {@code indexName} / {@code getIndexName()}）;</li>
+     *   <li>查询索引级 API（如 {@code indexOps}、{@code getShardState}、
+     *       {@code shardRoutings}、{@code refresh} 等按索引生效的方法）;</li>
+     *   <li>显式调用 ES 的索引级端点（形如 {@code _cat/indices} 的通配查询）。</li>
+     * </ol>
+     *
+     * <p>若将来改成"查询目标索引是否存在"而非"分片是否释放", 只要在代码里出现索引标识即可。
+     * 本项<b>不</b>断言具体策略 —— 那是根因闭合后的选择, 不是守护该管的事。
+     */
+    @Test
+    @DisplayName("就绪等待的判据必须引用目标索引, 不能只看集群级计数")
+    void readinessCriterionIsBoundToTargetIndex() throws Exception {
+        String src = Files.readString(SERVICE_IMPL);
+
+        int delete = src.indexOf("indexOps.delete();");
+        int create = src.indexOf("indexOps.createWithMapping();");
+        assertThat(create).as("前提: createWithMapping() 必须存在").isGreaterThan(delete);
+
+        String waitMethod = extractWaitMethodBody(src);
+        assertThat(waitMethod)
+                .as("必须能定位到 await* 等待方法体 —— 若方法被改名/删除, 本守护失去被守护对象, "
+                        + "请同步更新本测试而不是删除它")
+                .isNotNull();
+
+        // 集群级计数: 这些字段与"目标索引是否已释放"没有因果绑定
+        assertThat(waitMethod)
+                .as("ClusterHealth 只有集群级计数(无按索引查询), 单独使用它无法确认目标索引已释放; "
+                        + "判据必须同时引用索引标识或索引级 API")
+                .doesNotContainPattern("(?s).*getRelocatingShards\\(\\)\\s*==\\s*0"
+                        + ".*getInitializingShards\\(\\)\\s*==\\s*0.*")
+                .doesNotContainPattern("(?s).*getActiveShardsPercent\\(\\).*");
+
+        // 反过来: 判据必须【确实】引用了目标索引或索引级 API
+        boolean boundToIndex = waitMethod.matches("(?s).*(indexName|getIndexName\\(\\)|indexOps"
+                + "|getShardState|shardRoutings|IndexCoordinates).*");
+        assertThat(boundToIndex)
+                .as("等待判据必须引用目标索引(索引名/索引级 API), 而非只看集群级计数:\n" + waitMethod)
+                .isTrue();
+    }
+
+    /** 取出 await* 等待方法的方法体源码; 找不到返回 null(由调用方断言)。 */
+    private static String extractWaitMethodBody(String src) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("private\\s+void\\s+(await\\w*)\\s*\\([^)]*\\)\\s*\\{")
+                .matcher(src);
+        if (!m.find()) {
+            return null;
+        }
+        int start = m.end() - 1;   // 指向 '{'
+        int depth = 0;
+        for (int i = start; i < src.length(); i++) {
+            char c = src.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return src.substring(start, i + 1);
+                }
+            }
+        }
+        return src.substring(start);
+    }
+
     /** 去掉行注释与块注释, 只留代码, 避免注释里的字被判据当成证据。 */
     private static String stripComments(String src) {
         return src
