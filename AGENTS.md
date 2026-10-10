@@ -1402,6 +1402,92 @@ find . -name "*.java" -path "*/src/test/*" -newermt "2026-10-08 02:00" -printf "
 > 但 gateway/auth/system-module/notification/file 的 IT **一个都没跑成**。
 > 这类污染会**吞掉整轮验收**, 且失败信息(语法错误)与真实原因(我改了文件)毫无相似之处。
 
+### ⚠️ 第八课补记五: **「错误信息在日志里出现了 N 次」要先分清是谁写的 N 次**（2026-10-10）
+
+给宿主快照加了 `Broken pipe` 相关取证后, 我统计了一句话:
+
+```text
+grep -c 'Broken pipe' fullit.log   →   31
+```
+
+据此在汇报里写了"`Broken pipe` 出现 31 次"。**真实故障只有 4 次。**
+
+多出来的 27 次来自**我自己写进快照的那句边界声明**:
+
+```java
+out.append("· 本段只给【事实】, 不给结论: socket 可连 ≠ 运行时健康"
+    + "(容器被杀 / SDK 内部错误 / Broken pipe 均不在此列)\n");
+```
+
+⇒ 关键词统计把自己的**说明文字**当成了**被观测事件**。
+这与第八课补记四（`2>/dev/null || true` 让「SQL 写错」和「真的没数据」产出同一个输出）
+同源, 但方向相反: 那次是**探针无法区分两种情况**, 这次是**探针的输出混进了观测对象**。
+
+**三条规则**:
+
+1. **统计命中数前, 先看被命中的那一行是不是"描述"而非"事件"**。
+   判据: 那行出现在**快照/注释/文档**里, 还是出现在**异常抛出点**里。
+2. **计数器必须能自证**。正确写法是带上下文的计数, 例如
+   ```bash
+   grep -c 'Caused by: java.io.IOException: Broken pipe'   # 4  ← 真实故障
+   grep -c 'Broken pipe'                                  # 31 ← 含我自己的说明文字
+   ```
+   两者不等, 差值就是"自污染"。**把两个数都报出来**, 差值才有意义。
+3. **新增诊断输出后, 立刻重跑一次自己的统计脚本**。新写的说明文字会改变统计结果 ——
+   这是"探针自己坏掉"的又一种形态: 它没坏, 但**它污染了观测**。
+
+### ⚠️ 第八课补记六: 「次生异常」会顶替「主因」占据报错位置（2026-10-10）
+
+全量 IT 报出 `Broken pipe`, 我此前四轮都把它当作**待归因的主因**。本轮逐层读 `Caused by` 后才发现:
+
+```text
+顶层: ContainerLaunchException: Timed out waiting for log output matching '.*Server startup complete.*'
+        ↑ 这是【主因】: 容器日志里一直没出现 ready 标记
+  └─ Caused by: Could not create/start container
+       └─ Caused by: java.io.IOException: Broken pipe    ← 这是【次生现象】
+            at ...ForkedBooter.main(...)                ← surefire/failsafe 输出截断处
+```
+
+`Broken pipe` 发生在**失败后的日志流清理阶段**: 等待已超时 → Testcontainers 放弃 →
+关闭日志流 socket → 此时正在写的那个流自然得到 `EPIPE`。
+
+**它既不是原因, 也不是无害的噪音 —— 它是"某处已经失败"的证据**。
+
+**三条规则**:
+
+1. **拿到一个异常, 先确认它是不是链尾**。栈顶是 `Broken pipe` 时,
+   真正的信息在上游的 `Timed out ...` 里。
+2. **"最难懂的异常"往往不是"最深的异常"**。本例中 `Broken pipe` 语义明确、
+   看起来具体, 反而掩盖了语义模糊但更有价值的 `Timed out`。
+3. **异常链被工具截断时, 不能假设"上面没有别的了"**。本例 surefire 的输出在
+   `ForkedBooter.main` 处截断, 我一度以为链尾就是全部 —— 必须回到 XML 报告看
+   `testsuite` 级的完整 `error` 元素。
+
+### ⚠️ 第八课补记七: 同一次运行里可能有两类**独立**故障, 把它们混为一谈会同时错两次（2026-10-10）
+
+本轮全量 IT 的失败实际包含**两类互不相关**的问题:
+
+| 类别 | 次数 | 内容 |
+| :--- | :--- | :--- |
+| A. 等待超时 | 2 | `Timed out waiting for log output matching '.*Server startup complete.*'`（rabbitmq） |
+| B. socket 写入中断 | 4 | `Broken pipe`（notification 1、file 1、gateway 2） |
+
+我最初把 A 当成 B 的"容器启动慢"表现, 于是把 A 的证据用去解释 B, 又把 B 的证据
+用去支持 A —— **两个错误互相加固, 看起来自洽**。
+
+**判别方法（可复用）**: 按异常块切分后统计, 而不是全文统计:
+
+```python
+for 每个以 "ContainerLaunchException: Container startup failed" 开头的块:
+    print("超时:", "Timed out" in 块, " Broken pipe:", "Broken pipe" in 块)
+```
+
+本次结果: 4 个块**全是 B**, **没有一个**含 A。
+⇒ A 与 B 发生在**不同测试**里, 不是同一故障的两个阶段。
+
+**规则**: 报告失败分布时, **先按异常块聚类, 再给计数**。
+全文关键词计数会把不同故障合并成一个数字, 而那个数字不指向任何真实机制。
+
 ### ⚠️ 第八课补记四: 探针把「诊断输出」当成了「无输出」（2026-10-05）
 
 同一场事故里, 同一个损坏的 `healthcheck.log` 让我连续误判了**两次**,
