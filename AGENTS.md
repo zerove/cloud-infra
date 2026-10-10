@@ -4989,3 +4989,68 @@ P=$(podman exec es-t3 curl -s -m 15 --noproxy '*' -o /dev/null -w '%{http_code}'
 5. **两次"验证探针"其实是在验证探针自己。** 我先跑了 A/B 对照(2分01秒),
    **之后**才去自检探针 —— 顺序反了。
    ⇒ **顺序是硬要求**: 自检 → 对照 → 结论。反过来做等于先采信数据再检查仪器。
+
+---
+
+### 🔴 第九课补记三十一: 首次读到"503 从哪来" —— `@BeforeEach` 的 `deleteAll()`（2026-10-10 10:37-10:41）
+
+补记三十排除了 `pending_tasks`。本轮不再盲试 ES 参数, 改为**读应用代码**,
+第一次定位到 503 的**实际发起点**。
+
+#### 一、代码事实(此前六轮从未读过 rebuild 实现)
+
+`IndexAdminServiceImpl.rebuildIndex` 是**删索引后立即重建**, 中间无任何等待:
+
+```java
+if (indexOps.exists()) {
+    indexOps.delete();          // ← Spring Data ES 内部发 _delete_by_query
+}
+indexOps.createWithMapping();   // ← 紧接着建, 不等分片就绪
+```
+
+**更关键的是 `@BeforeEach`** —— 它每个用例都触发一次:
+
+```java
+webTestClient = WebTestClient.bindToServer()...
+operLogRepository.deleteAll();  // ← 内部也是 _delete_by_query, 且带 refresh=true
+```
+
+⇒ **`_delete_by_query` 并非只在 rebuild 出现, 而是每个用例的前置动作。**
+   这解释了为何第一个失败是 `testIndexAdminListRebuildDetailDelete`,
+   而**随后 4 个用例在 `@BeforeEach` 阶段被连带失败** —— 它们的失败点根本不在被测逻辑。
+
+⚠️ `deleteByQuery` 在 `src/main` 下**零命中** —— 说明它完全由 Spring Data ES
+   的 Repository 内部发出, 靠 grep 业务代码找不到。**框架层行为不会出现在业务代码里。**
+
+#### 二、受控对照: 五个变量, 单容器下全部成功
+
+探针前置自检(`http_code` == 200)后:
+
+| # | 变量 | 结果 |
+| :--- | :--- | :--- |
+| 1 | 空索引 `_delete_by_query?refresh` | **200** |
+| 2 | 有数据(2 篇)`?refresh=true` | **200**, `deleted:2` |
+| 3 | 索引**已删除**后再请求 | **404** `index_not_found_exception` |
+| 4 | 重建后**立即**请求(无等待) | **200** |
+| 5 | 两个 `_delete_by_query` 并发 | **200** |
+
+⚠️ 变量 3 得到的是 **404 而非 503** ⇒ **"索引不存在"这条路径已被排除**,
+   它不会产生本次的 `no_shard_available_action_exception`。
+
+⇒ **单容器 + 无外部竞争下, 五种路径全部无法复现 503。**
+   剩余唯一未被检验的变量: **宿主资源竞争下的分片分配状态**。
+
+#### 三、三条规则
+
+1. **框架层的行为不会出现在业务代码里**。`_delete_by_query` 由 Spring Data ES
+   的 Repository 内部发出, `src/main` 下 grep 零命中。
+   ⇒ 排查框架行为必须**读框架源码或抓 HTTP 流量**, 不能只搜业务代码 ——
+     否则会得出"代码里没有这个请求"的错误结论。
+
+2. **失败点在 `@BeforeEach` 时, 被测逻辑根本没执行**。
+   本项目 5 个失败里有 4 个属此类。⇒ **连带失败的用例不提供独立信息**,
+     它们只是同一个根因的回声; 计数时不应与首个真实失败并列。
+
+3. **排除"索引不存在"要给出它自己的错误类型**。变量 3 证明该路径返回
+   `index_not_found_exception`(404), 而非 503 ⇒ **两条路径可区分**,
+     这比"测出来没报错"强得多 —— 它正面否证了一个候选。
