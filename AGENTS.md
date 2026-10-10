@@ -882,7 +882,53 @@ SKIP 提示: "⚠️  [运行期] /proc/meminfo 读不到 commit 账本..." ← 
    若当时只用桩数据验证, 这 2 个新假阳性会一路留到 CI。
 
 
-### ⚠️ 第六课补记: ES 版本不匹配，会伪装成“客户端异常”（2026-10-03）
+### ⚠️ 第五课补记十: **编译失败**是本项目最诚实的一课 —— 而它的对立面是"编译通过但探针无效"（2026-10-10）
+
+写 socket 取证探针时, 我连续**四次**按记忆写 API, 全部编译失败:
+
+| 我写的 | 真实情况（反射查证后） |
+| :--- | :--- |
+| `BasicFileAttributes.isSocket()` | 该接口**没有** `isSocket` —— 只有 `isOther`/`isRegularFile`/`isDirectory` |
+| `java.nio.file.attribute.UnixFileAttributes` | **不存在** —— 是 `sun.nio.fs` 内部类, 编译期不可用 |
+| `ServerSocketChannel.open(UnixDomainSocketAddress)` | 该重载只接受 `InetSocketAddress` |
+| `new UnixDomainSocketAddress(Path)` | 构造器**私有** —— 必须 `UnixDomainSocketAddress.of(...)` |
+
+真实可用的组合:
+
+```java
+try (var server = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+    server.bind(UnixDomainSocketAddress.of(path));        // of(Path) / of(String)
+    try (var c = SocketChannel.open(UnixDomainSocketAddress.of(path))) { /* connected */ }
+}
+```
+
+**为什么值得单独记**: 这四次失败与前九例形态**相反** —— 前九例是"探针给出语法合法、
+语义错误的结论", 本次是**当场编译失败, 什么都没跑**。我第一反应却是
+"那就绕开类型判断, 只看 connect 的互斥结果", 这个转向是对的:
+
+| 曾经的写法 | 问题 |
+| :--- | :--- |
+| `attr.isSocket() ? "socket" : "非 socket"` | 依赖一个**我记错存在的方法**; 换成猜 `isOther()` 后, 结论成了推断而非事实 |
+| 改后: 只报 connect 结果 | **四种路径实测互不相同**, 已足够定位, 无需叠加脆弱的类型推断 |
+
+⇒ **最好的修法有时不是"把 API 写对", 而是"让 API 的不确定性不再影响结论"。**
+   本机实测四种互斥结果已完备: 真实 socket→connected / root-only→`BindException` /
+   普通文件·目录→`ConnectException` / 不存在→`SocketException`。
+
+#### 三条规则
+
+1. **写完先反射查签名, 再写调用**:
+   ```java
+   for (var m : SocketChannel.class.getMethods()) if (m.getName().equals("open")) { /* ... */ }
+   ```
+   这是第五课补记三"先取健康样本看真实格式"的**编译期版本** —— `javap` 在 JDK 内部 API 上常常给不出可用信息。
+2. **编译失败 ≠ 浪费**。它是**唯一不会给出假结论**的失败形态。前九例的假绿至少还会"打印出东西",
+   编译失败连跑都没跑 —— 所以出现编译错误时, 第一反应应是"感谢它拦住了我", 而不是"赶紧绕过它"。
+3. **绕过方式有优劣之分**: "改用更基础的 API 表达同一事实"(本次) > "换个差不多但记不准的 API" >
+   "删掉这项判断"。删掉判断会让结论退化成"看起来正常", 那就是回到第五课本身。
+
+
+### ⚠️ 第六课补记:
 
 `search` 的报错连续两个 E2E run（`37077332251` / `37079433594`）都停在这里：
 
