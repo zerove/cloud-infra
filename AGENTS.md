@@ -5476,3 +5476,114 @@ AGENTS.md 早已记载的「ArchUnit 步骤的 `-DfailIfNoTests` 失效」同型
    本次守护绿→红→绿全部有效, 仍与"IT 未覆盖"并存 —— 因为它们看的是不同东西。
 
 3. **`-Dtest=` 下的 `BUILD SUCCESS` 一律无效, 直到确认 `Tests run` 非零。**
+
+---
+
+### 🔴 第九课补记三十七: 我自己的新用例第一次就红了 —— 探针失效, 不是被测对象失败（2026-10-10 12:01）
+
+#### 一、事件
+
+为闭合补记三十六的缺口, 我给 `SearchServiceIntegrationTest` 加了一个覆盖
+删除-重建路径的用例, 断言用 Spring 的 `OutputCaptureExtension` 捕获日志:
+
+```java
+assertThat(output.getAll()).contains("删除旧索引");
+```
+
+第一次跑:
+
+```text
+Tests run: 8, Failures: 1, Errors: 0, Time elapsed: 404.8 s
+[未进入删除-重建路径（无删除日志）。实际日志:
+  |-WARN in ch.qos.logback.core.model.processor.AppenderModelHandler
+      - Appender named [CONSOLE_STD] not referenced. Skipping further processing.
+  ... Spring Boot 启动 banner ...
+```
+
+**表面读法**: 删除-重建路径没执行, 我的修复无效。
+**真实原因**: 捕获到的全是 **logback 启动警告**, 业务日志一条都没有。
+
+#### 二、根因: 自定义 appender 破坏了 `OutputCaptureExtension`
+
+本项目 `cloud-infra-common/.../logback-common.xml` 定义了自定义 appender
+（`CONSOLE_STD` / `CONSOLE_JSON`）。`OutputCaptureExtension` 的实现是把
+`System.out` 换成捕获流 —— 当目标 logger 根本没往 `System.out` 写时, 它只能
+抓到启动期那些**恰好经过控制台**的警告。
+
+⚠️ 这与第五课「探针的对象必须从被测系统里提取」同源, 但更隐蔽一层:
+   探针**成功返回了内容**, 不是空结果 —— 所以"空 ⇒ 失败"的直觉检查抓不到它。
+   必须**看内容是不是被测对象的内容**。
+
+> 我差点又犯第八课补记一的错: 若不逐行看那 10 条带时间戳的日志, 就会直接
+> 写下"重建路径未被执行"这个**格式正确、语义错误**的结论。
+
+#### 三、正确判据: 直挂目标 logger 的 `ListAppender`
+
+本仓库**已有先例**（`cloud-infra-gateway` 的 `AuthEvaluatorTest`), 不自创:
+
+```java
+Logger target = (Logger) LoggerFactory.getLogger(IndexAdminServiceImpl.class);
+ListAppender<ILoggingEvent> recorder = new ListAppender<>();
+recorder.start();
+target.addAppender(recorder);
+try {
+    indexAdminService.rebuildIndex("sys_oper_log");   // 真实键名, 越过参数校验
+    List<String> msgs = recorder.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    assertThat(msgs).anyMatch(m -> m.contains("删除旧索引") && m.contains("sys_oper_log"));
+    assertThat(msgs).anyMatch(m -> m.contains("已重建"));
+    // 行为契约: 重建后必须立即可见且非 MISSING
+    assertThat(indexAdminService.listIndexes())
+          .anyMatch(i -> "sys_oper_log".equals(i.getIndexName()) && !"MISSING".equals(i.getStatus()));
+} finally {
+    target.detachAppender(recorder);   // 必须还原, 否则污染同 JVM 内后续测试
+    recorder.stop();
+}
+```
+
+结果: `Tests run: 8, Failures: 0` —— **且这次绿灯是有意义的**。
+（对比: 上一轮 8 项里 1 项失败, 恰恰是它把恒真变成了可测。）
+
+#### 四、顺带解决: ADG 门禁让我改用日志捕获
+
+我本想在 `IndexAdminServiceImpl` 加一个静态计数器让 IT 能断言路径被走到,
+**写入被 ADG 门禁拦下**:
+
+```text
+?:54 Catching generic Exception hides specific errors
+?:62 Catching generic Exception hides specific errors
+```
+
+这两处是**既有代码**, 与我的改动无关。但按第四课, 第 62 行
+（单个索引计数失败只 `log.warn`, 不影响整体清单）属**错误规范化**边界,
+宽捕获是契约属性, **本就不该收窄**。
+
+⇒ 门禁正确地阻止了我, 但理由与门禁自己想说的不同。
+   **不动生产代码**反而是更好的选择: `ListAppender` 达成了同一验证目的,
+   且不把无关改动混入提交。
+
+⚠️ 一般的形式: **门禁报错 ≠ 该照门禁改**。先问"这个 catch 的意图是什么",
+再决定是改代码、还是改验证手段、还是补豁免。
+
+#### 五、覆盖守护从"记录现状"升级为"守护性质"
+
+`RebuildPathCoverageGuardTest` 原先断言 `isFalse()`（记录"当前未覆盖"）,
+现改为 `isTrue()`。**反向价值更大**:
+
+```text
+删掉唯一覆盖用例  → 守护立刻报红 → 堵住"删掉覆盖后绿灯依旧"的退路
+还原              → 恢复绿
+```
+
+⇒ 断言方向应指向**要守护的性质**, 而不只是**当前状态**。
+   指向当前状态的断言, 只能在状态变化时被人看见; 指向性质的断言能主动拦住回归。
+
+#### 六、三条规则
+
+1. **探针返回了内容 ≠ 探针有效。** 必须核对内容**是不是被测对象的内容**。
+   `OutputCaptureExtension` + 自定义 appender 是"成功返回错误内容"的典型。
+
+2. **新写的断言第一次就红, 先怀疑探针, 再怀疑被测对象。**
+   尤其是"断言的是日志/输出"这类间接观测 —— 它比直接返回值脆弱得多。
+
+3. **能改验证手段就别改生产代码。** 生产改动会引入门禁、引入无关风险面;
+   验证手段的选择空间大得多, 且失败时更容易归因。
