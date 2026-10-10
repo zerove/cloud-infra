@@ -215,6 +215,11 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
         // 自动发现容器(exec 内 curl), 不需要外部传入端点。
         // 失败/未找到容器时它自己会标注"未取证", 不会拖垮本快照。
         out.append(ElasticsearchContainerProbe.readShardState());
+        // socket 连通性 —— `Broken pipe` 类失败的【唯一】可用判据。
+        // 2026-10-10 实测: 该故障已闭合到"Podman socket 写入侧", 但快照原先不含
+        // "Testcontainers 连的是哪个 socket / 此刻能否连上", 导致每次都要重新考古,
+        // 而本机两个候选 socket 一个可连一个 Permission denied —— 极易再次采错对象。
+        out.append(ContainerRuntimeSocketProbe.render());
         return out.toString();
     }
 
