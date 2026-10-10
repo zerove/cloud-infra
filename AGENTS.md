@@ -5389,3 +5389,90 @@ class RebuildReadinessGuardTest   // ← *Test.java, surefire 默认拾取
 
 4. **冲突发生在你没改过的文件上时, 恢复是安全的** ——
    但先验证"该文件确实不在我的改动清单里", 而不是假设。
+
+---
+
+### 🔴 第九课补记三十六: 「测试全绿」与「修复有效」是两件事（2026-10-10 11:48）
+
+#### 一、事件
+
+我加了 `awaitShardsReleased` 修复后, 第一次跑 search-service IT:
+
+```text
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 365.9 s
+BUILD SUCCESS      ← 此前失败的那个类
+```
+
+**这看起来就是修复生效的证据。** 它不是。
+
+#### 二、自查发现: 那条路径根本没被执行
+
+`SearchServiceIntegrationTest` 里唯一一处调用是:
+
+```java
+indexAdminService.rebuildIndex("unknown-index");   // 期望抛 IllegalArgumentException
+```
+
+而实现的第一件事（第 99 行）是:
+
+```java
+Class<?> docType = KNOWN_INDEXES.get(indexName);
+if (docType == null) {
+    throw new IllegalArgumentException("不支持的索引 '" + indexName + "' ...");
+}
+```
+
+⇒ **第 104–112 行（`delete()` → `awaitShardsReleased()` → `createWithMapping()`）从未执行。**
+
+| 该 IT 的绿灯实际证明了什么 | 值 |
+| :--- | :--- |
+| 参数校验会抛异常 | ✅ 是 |
+| 删除-重建路径可用 | ❌ **完全未测** |
+| 分片就绪等待有效 | ❌ **完全未测** |
+
+⇒ **无论修复在不在, 这个 IT 都会绿。** 它不是"修复有效"的证据, 而是**恒真**。
+
+⚠️ 与第四课「守护测试的有效性只有负向对照能证明」同源, 但这里更隐蔽一层:
+   上一轮我已对该守护做了绿→红→绿三向验证, 以为闭环了。
+   **三向验证证明的是"守护会红", 不是"被守护对象被测到了"** ——
+   守护盯着的是**源码文本**, 而 IT 走的是**运行时路径**, 两者可以完全脱钩。
+   ⇒ **守护有效 ≠ 覆盖存在。** 前者验机制, 后者验路径。
+
+#### 三、固化: 把"覆盖状态"变成可断言的结论
+
+新增 `RebuildPathCoverageGuardTest`, 断言当前**未**覆盖, 并在失败信息里说明解除方式。
+
+两处刻意的设计:
+
+| 设计 | 理由 |
+| :--- | :--- |
+| 索引名从实现的 `KNOWN_INDEXES` **提取**而非手写 | 手写会与实现漂移 ⇒ 恒假绿（第五课: 探针的对象必须从被测系统提取） |
+| 断言"当前状态"而非"必须覆盖" | 要求真删索引重建属**为覆盖率写用例**; 且这样也会因【好】的改动而变红, 必须由人显式改断言并留痕 |
+
+三向验证: 正向 `1/1` 绿 → 注入 `rebuildIndex("sys_oper_log")` → 如实报红 → 还原 → 恢复绿。
+
+#### 四、同轮又踩一次"零测试冒充通过"
+
+验证时我写了 `-Dtest='RebuildPathCoverageGuardTest+RebuildReadinessGuardTest'`:
+
+```text
+No tests matching pattern "A+B" were executed!   ← BUILD FAILURE
+```
+
+**`+` 不是 surefire 的多测试选择语法**（正确是逗号）。而我同时加了
+`-DfailIfNoTests=true`, **本该让它报红的场景反而报了绿** —— 正是本项目
+AGENTS.md 早已记载的「ArchUnit 步骤的 `-DfailIfNoTests` 失效」同型问题, 我又踩一次。
+
+⚠️ **规则**: 用 `-Dtest=` 过滤时, **判据必须包含 `Tests run: N` 且 N > 0**。
+   `BUILD SUCCESS` 在 `-Dtest=` 存在时**不构成证据** —— 它可能是一个都没跑。
+
+#### 五、三条可执行的规则
+
+1. **证明修复有效, 必须确认测试真的执行到了修复代码路径。**
+   最直接的判据: 让修复路径带一个**可观测副作用**（日志/计数器）, 断言它在测试后出现过。
+   "测试类全绿" 只证明**这个测试**没崩, 不证明**你改的那行**被执行。
+
+2. **静态守护验机制, IT 验路径, 两者不能互相替代。**
+   本次守护绿→红→绿全部有效, 仍与"IT 未覆盖"并存 —— 因为它们看的是不同东西。
+
+3. **`-Dtest=` 下的 `BUILD SUCCESS` 一律无效, 直到确认 `Tests run` 非零。**
