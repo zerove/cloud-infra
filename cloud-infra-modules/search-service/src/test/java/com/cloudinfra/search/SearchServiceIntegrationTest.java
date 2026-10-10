@@ -7,13 +7,19 @@ import com.cloudinfra.search.dto.IndexInfoVO;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
 import com.cloudinfra.search.service.IndexAdminService;
+import com.cloudinfra.search.service.impl.IndexAdminServiceImpl;
 import com.cloudinfra.test.BaseIntegrationTest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -471,5 +477,56 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
         assertThrows(IllegalArgumentException.class, () -> {
             indexAdminService.rebuildIndex("unknown-index");
         });
+    }
+
+    /**
+     * 覆盖删除-重建路径（参数校验之后的真实路径）。
+     *
+     * <p>⚠️ 本用例的存在理由不是"补覆盖率"，而是修正一个【恒真的绿灯】。
+     * 原先唯一的 rebuildIndex 用例传的是未知名，会在参数校验处提前抛出，
+     * 于是 delete → 分片就绪等待 → createWithMapping 从未被执行，
+     * 而该 IT 仍跑出全绿 —— 那种绿与修复是否有效彻底脱钩。
+     * 详见 AGENTS.md 第九课补记三十六 与 RebuildPathCoverageGuardTest。
+     *
+     * <p>⚠️ 断言手段的选择经过一次失败-纠正，不得随意更换：
+     * 首版用 Spring 的 {@code OutputCaptureExtension}，结果【探针失效】：
+     * 本项目 {@code logback-common.xml} 定义了自定义 appender（CONSOLE_STD /
+     * CONSOLE_JSON），捕获到的是 "Appender named [CONSOLE_STD] not referenced"
+     * 之类的启动警告，而非业务日志 ⇒ 断言红，但红的原因不是"路径没执行"。
+     * 这是"探针失效被读成被测对象失败"的又一次复现。
+     * 改用 {@code ListAppender} 直挂目标 logger（参照 AuthEvaluatorTest 已有范式），
+     * 不依赖全局 appender 配置。
+     */
+    @Test
+    @Order(8)
+    @DisplayName("删除-重建路径必须真正执行, 且重建后索引立即可用")
+    public void testRebuildIndexExecutesDeleteThenCreateWithReadinessWait() {
+        Logger target = (Logger) LoggerFactory.getLogger(IndexAdminServiceImpl.class);
+        ListAppender<ILoggingEvent> recorder = new ListAppender<>();
+        recorder.start();
+        target.addAppender(recorder);
+
+        try {
+            // sys_oper_log 是实现的 KNOWN_INDEXES 真实键名 ⇒ 越过参数校验, 进入删除-重建。
+            // ⚠️ 该名必须来自实现, 手写会与实现漂移而恒假绿（AGENTS.md 第五课）。
+            indexAdminService.rebuildIndex("sys_oper_log");
+
+            List<String> messages = recorder.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+            assertThat(messages)
+                    .as("删除-重建路径未执行, 记录到的日志: %s", messages)
+                    .anyMatch(m -> m.contains("删除旧索引") && m.contains("sys_oper_log"));
+            assertThat(messages)
+                    .as("删除-重建路径未走完, 记录到的日志: %s", messages)
+                    .anyMatch(m -> m.contains("已重建"));
+
+            // 行为契约: 旧实现 delete 后直接 create, 新索引主分片未就绪时 search 会 503。
+            // 故重建后必须【立即】可见且非 MISSING, 否则修复无效。
+            assertThat(indexAdminService.listIndexes())
+                    .as("重建后 sys_oper_log 应处于 OPEN 状态")
+                    .anyMatch(i -> "sys_oper_log".equals(i.getIndexName()) && !"MISSING".equals(i.getStatus()));
+        } finally {
+            target.detachAppender(recorder);
+            recorder.stop();
+        }
     }
 }

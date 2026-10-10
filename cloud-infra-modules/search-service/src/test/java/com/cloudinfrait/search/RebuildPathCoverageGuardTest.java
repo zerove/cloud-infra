@@ -57,18 +57,17 @@ class RebuildPathCoverageGuardTest {
         boolean coversDeleteCreate = known.stream()
                 .anyMatch(name -> it.contains("rebuildIndex(\"" + name + "\""));
 
-        // 断言方向说明: 本守护断言的是【当前已知的覆盖状态】, 而不是"必须覆盖"。
-        // 之所以不要求覆盖删除-重建: 那需要真删索引再重建, 会破坏共享测试数据,
-        // 属于"为覆盖率写用例", 不是为正确性写用例。
+        // 断言方向: 必须【已覆盖】。
+        // 2026-10-10 补用例前此处断言 false(记录"当前未覆盖"), 属临时姿态;
+        // 已新增 testRebuildIndexExecutesDeleteThenCreateWithReadinessWait 走真实路径,
+        // 故改为 true —— 即从"记录现状"升级为"守护该性质"。
         //
-        // 但断言"当前未覆盖"同样有代价: 它会因【好】的改动而变红(有人补了覆盖用例)。
-        // 故此处把判据写在【可解释的方向】上: 只要覆盖状态仍是 false 就绿,
-        // 一旦变成 true 就必须由人显式改断言并说明 —— 那正是需要留痕的时刻。
+        // ⚠️ 该断言的反面价值同样重要: 若有人删掉那个用例, 本守护会立刻报红,
+        // 从而堵住"删掉唯一覆盖 → 绿灯依旧 → 修复再次失去证据"这条退路。
         assertThat(coversDeleteCreate)
-                .as("删除-重建路径当前应【未】被 IT 覆盖: 唯一调用传的是 unknown-index, "
-                        + "会在参数校验处提前抛出, 到不了 delete/等待/create。"
-                        + "若新增了用真实索引名(如 " + known.get(0) + ")的覆盖用例, 请把本断言改为 true 并在此说明。")
-                .isFalse();
+                .as("删除-重建路径必须被 IT 覆盖: 需存在一个传入 KNOWN_INDEXES 真实键名"
+                        + "(如 " + known.get(0) + ")的 rebuildIndex 调用, 否则 delete/等待/create 零执行。")
+                .isTrue();
     }
 
     /** 从 {@code KNOWN_INDEXES} 声明里提取字符串键名(纯文本解析, 不触发类加载)。 */
