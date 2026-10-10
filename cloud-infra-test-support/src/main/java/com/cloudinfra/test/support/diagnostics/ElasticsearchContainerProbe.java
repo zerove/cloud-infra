@@ -43,15 +43,9 @@ final class ElasticsearchContainerProbe {
             return ps;
         }
 
-        String target = ps.lines()
-                .map(String::trim)
-                .filter(n -> !n.isEmpty())
-                .filter(n -> n.toLowerCase(java.util.Locale.ROOT).contains("elasticsearch"))
-                .findFirst()
-                .orElse(null);
-
+        String target = findEsContainer(ps);
         if (target == null) {
-            return "(未取证: 未找到名字含 elasticsearch 的运行中容器)";
+            return "(未取证: 未找到 ES 容器; 运行中容器名: " + summarize(ps) + ")";
         }
 
         String body = execIn(target,
@@ -74,6 +68,40 @@ final class ElasticsearchContainerProbe {
         out.append("  是否导致失败【需对照实验】。\n");
         out.append("=".repeat(72)).append('\n');
         return out.toString();
+    }
+
+    /**
+     * 定位 ES 容器。
+     *
+     * <p>⚠️ 第一版只认名字含 {@code elasticsearch} 的容器, 在真实场景下失效 ——
+     *   实测容器名为 {@code es-snap-check}(不含该词)且 ES 明确 green 时,
+     *   探针仍报"未找到容器"。即【判据比真实情况窄】, 与第五课补记五同型。
+     *
+     * <p>改为两级: 先按名字(便宜), 再按【是否真的有 ES 在 9200 应答】(可靠)。
+     * 后者是判别式 —— 名字只是启发式, 端口应答才是事实。
+     */
+    private static String findEsContainer(String ps) {
+        List<String> names = ps.lines().map(String::trim).filter(n -> !n.isEmpty()).toList();
+
+        for (String n : names) {
+            if (n.toLowerCase(java.util.Locale.ROOT).contains("elasticsearch")) {
+                return n;
+            }
+        }
+        // 名字没命中就逐个探测 —— 容器少时开销可接受, 且只在失败快照里调用
+        for (String n : names) {
+            String body = execIn(n, "curl -s -m 5 --noproxy '*' http://127.0.0.1:9200/");
+            if (body != null && !body.startsWith("(未取证") && !"(超时)".equals(body)
+                    && body.contains("cluster_name")) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    private static String summarize(String ps) {
+        List<String> names = ps.lines().map(String::trim).filter(n -> !n.isEmpty()).toList();
+        return names.isEmpty() ? "(无)" : String.join(", ", names);
     }
 
     private static String execIn(String container, String shellCmd) {

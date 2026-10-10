@@ -211,6 +211,10 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
         out.append("· `no such container` 是第三种形态(容器被删), 与上面两者都不同类\n");
         out.append("· MemAvailable 充足但仍失败 ⇒ 不是物理内存不足(账面 ≠ 可分配)\n");
         out.append("=".repeat(72)).append('\n');
+        // ES 分片取证 —— 补上先前七轮排查一直缺的失败当刻 ES 侧读数。
+        // 自动发现容器(exec 内 curl), 不需要外部传入端点。
+        // 失败/未找到容器时它自己会标注"未取证", 不会拖垮本快照。
+        out.append(ElasticsearchContainerProbe.readShardState());
         return out.toString();
     }
 
