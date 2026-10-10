@@ -4712,3 +4712,74 @@ Spring TestContext 框架在**首次上下文加载失败后置位阈值**, 同�
    "全量失败是环境问题", search 的真实缺陷就会被永久掩盖。
 3. **计数型判据需先用已知样本校准**(第四节)。`grep -c ERROR` 这种口径错误的判据,
    会稳定地产生错误结论, 且因为"有数", 不会引起怀疑。
+
+---
+
+### ⚠️ 第九课补记二十八: 全量仅剩 1 个失败, **与 Ryuk 无关**, 真错因是 ES 返回 503（2026-10-10 07:19-10:06）
+
+第四轮全量(环境宽松: commit 13-33%, load 2-7, 0 容器起步):
+`19:54 min`, **23 个测试类全部执行**, **仅 1 个失败**:
+
+```
+[ERROR] Tests run: 7, Failures: 1, Errors: 4, Skipped: 0, Time elapsed: 580.6 s
+  -- in com.cloudinfra.search.SearchServiceIntegrationTest
+```
+
+此前三轮追查的 **Ryuk 自删 / 找不到 socket / filter 过宽 / 上下文阈值连带**
+**全部与本失败无关** —— 这次终于拿到了第一手的、**与 Testcontainers 无关**的真实错误。
+
+#### 一、真实错误文本(此前五轮从未见过这一条)
+
+```
+java.lang.AssertionError: Status expected:<200 OK> but was:<500 INTERNAL_SERVER_ERROR>
+  -- testIndexAdminListRebuildDetailDelete (33.29s)
+
+org.springframework.dao.DataAccessResourceFailureException
+  Caused by: java.lang.RuntimeException: method [POST], host [http://localhost:45673],
+             URI [/sys_oper_log/_delete_by_query], status line [503]
+  Caused by: co.elastic.clients.transport.rest5_client.low_level.ResponseException
+  -- testIndexAdminUnknownIndexBadRequest (0.022s)
+  -- testUnauthenticatedRequestGetsBusinessCode401 (0.019s)
+  -- testUserWithoutPermissionGetsBusinessCode403 (0.016s)
+  -- testIndexAdminServiceThrowsException (0.017s)
+```
+
+**故障链**: `@Order(3)` 的 rebuild 调 `POST /sys_oper_log/_delete_by_query`
+→ **ES 返回 503** → 该用例 500 → **`@BeforeEach` 随后的 4 个用例全被连带失败**
+(它们耗时均 <0.03s, 即"环境准备阶段就挂")。
+
+#### 二、已排除的假设(受控对照, 非推断)
+
+| 假设 | 实测 | 判定 |
+| :--- | :--- | :--- |
+| ES 版本不匹配(第六课补记 `media_type_header_exception`) | 错误文本无该特征 | ❌ |
+| 容器启动超时不够 | 手工起同配置 ES: **40s** 出 `started`; IT 已设 `withStartupTimeout(3min)` | ❌ |
+| 上下文失败阈值连带(补记二十六) | 报告含该错误 **0 次** | ❌ |
+| 单节点 ⇒ 集群 `yellow` ⇒ `_delete_by_query` 不可用 | 实测 `yellow` 下连续 3 次 **HTTP 200** | ❌ |
+| 单副本无法分配 ⇒ 集群 `red` | `unassigned_shards=2` 但 `unassigned_primary_shards=0`, 仍 **200** | ❌ |
+| 环境资源紧张 | 第四轮全程 commit 13-33%, 远低于第二三轮的 116-135% | ❌ |
+
+⇒ 六项全排除, **真因仍 UNDETERMINED**。
+
+#### 三、本轮唯一新增的实质线索
+
+`number_of_pending_tasks` 在空闲状态下就达 **90 → 160**(两次采样), 而
+`task_max_waiting_in_queue_millis` 达 **22623**。
+
+ES 集群任务队列在**无外部负载时**就积压到百级, 说明该 IT 的 ES 配置下
+集群内部任务(索引模板/ILM 初始化 —— 前面日志里大量 `adding index template`/`adding ingest pipeline`)
+执行缓慢。`_delete_by_query` 需与这些任务竞争资源, **在超时窗口内可能返回 503**。
+
+⚠️ 这仍是**假设**, 未实测(需在 503 发生的当刻抓 ES 日志, 而该当刻已过去)。
+
+#### 四、可迁移规则
+
+1. **`Tests run: N` 的 N 变化极有价值**。第三轮 `Tests run: 1`(截断) vs
+   第四轮 `Tests run: 7`(完整) ⇒ **同一个测试在不同批次执行数不同**,
+   说明有测试被连带跳过。⇒ **先比 `Tests run` 的 N, 再看失败数**,
+   否则会把"连带"误算成"多个独立失败"。
+2. **耗时 <0.03s 的失败必是环境准备阶段**。本轮 4 个 error 耗时 0.016–0.022s,
+   ⇒ 它们**根本没执行到断言**, 是 `@BeforeEach` 连带。
+   ⇒ **按耗时给失败分类**(启动期 / 环境准备期 / 执行期), 能立刻区分"根因"与"连带"。
+3. **本项目最长的追查链(五轮 / 约 12 小时)最终指向的却是一个非 Testcontainers 问题**。
+   若一开始按 `Tests run` 的 N 与失败耗时分类, 前三轮的 Ryuk 方向可能根本不会走。
