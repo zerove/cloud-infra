@@ -5711,3 +5711,100 @@ Caused by: Timed out waiting for log output matching '.*Started.*'
    而**不是** "已修复" 也**不是** "环境问题已排除"。
    已交付的是: **受控对照证据**（61 项绿）+ **可复用的判据**（时间窗聚合）+
    **完整的错误机制**（链尾 Broken pipe, 故障在 Podman 侧）。
+
+---
+
+### ✅ 第九课补记三十九: 两轮全量对照闭合了 Podman 侧故障的定性（2026-10-10 20:53-21:38）
+
+#### 一、两轮全量的并列结果
+
+**两轮之间只有文档提交，零 Java/YAML/XML 改动**（`git diff --stat eb43f7ea..HEAD` 无输出）。
+
+| | 第一轮全量 | 第二轮全量 |
+| :--- | :--- | :--- |
+| 起始 | 20:14:10 | 20:53:45 |
+| 合计 | 96 项 / **5 errors** | 115 项 / **1 error** |
+| 失败时刻 | `+734s ~ +809s`（**75 秒窗口**） | `+591s`（**单点**） |
+| 涉及模块 | system / gateway / notification（3 个） | 仅 gateway（1 个） |
+| 链尾 | `java.io.IOException: Broken pipe` | `java.io.IOException: Broken pipe` |
+| search-service | 8/8 绿（611s） | 8/8 绿（+1781s） |
+
+**同代码、同环境类型、同链尾，失败次数从 5 降到 1。**
+
+#### 二、受控对照: 唯一变量是"是否在全量并发中"
+
+| 对照轮次 | 范围 | 结果 |
+| :--- | :--- | :--- |
+| 第一次 | 全量中的 3 个失败模块, 单独跑 | **61 项 / 0 error** |
+| 第二次 | `gateway` 全部 5 个 IT 类, 单独跑 | **18 项 / 0 error** |
+
+第二次尤其关键: **报错的正是 `GatewaySentinelIntegrationTest` 本身**
+（`Container startup failed for image redis:7-alpine` → `Broken pipe`），
+单独跑它 **1/1 绿**。
+
+⇒ 代码、镜像、Podman 版本（全程 5.8.7 未重启）、依赖、配置全部相同,
+   **唯一差别是它是否处在全量并发窗口内**。
+
+#### 三、定性: `ENVIRONMENTAL`, 但**触发条件仍 UNDETERMINED**
+
+| 层 | 结论 |
+| :--- | :--- |
+| 故障**在哪一侧** | ✅ **已闭合**: Podman 服务端（Unix socket 写请求时 `Broken pipe`） |
+| 故障**在谁身上** | ✅ **已闭合**: 环境，非测试代码、非业务代码 |
+| **触发条件** | ❌ **未闭合**: 为何在全量并发窗口内 socket 会断 |
+
+⚠️ 必须区分这两层。本轮若只写"环境问题，已排除"，同样是**越界结论** ——
+   "不是代码问题"有证据, "是环境问题"只有相关性, "为什么是环境问题"完全没证据。
+
+已排除的候选（都有数据支撑）:
+
+| 候选 | 判据 | 结果 |
+| :--- | :--- | :--- |
+| 宿主 commit 耗尽 | `Committed_AS` 3.4→4.6 GB / 21.6 GB（**21%**） | ❌ |
+| 物理内存不足 | `MemAvailable` 17.6 GB | ❌ |
+| I/O 饥饿 | `%wa = 0` | ❌ |
+| Podman 版本/损坏 | 全程 5.8.7 未重启; 事毕 `podman run redis:7-alpine` → `alive` | ❌ |
+| 特定模块缺陷 | 同模块单独跑 61/18 项全绿 | ❌ |
+| 代码回归 | 两轮间零代码改动 | ❌ |
+
+**未排除**: 并发容器创建压力是否触发 Podman 内部的 fd/线程/锁竞争 ——
+   本轮未采集到该窗口的 Podman 内部指标, **不编造**。
+
+#### 四、可复用的判据（本次最实用的产出）
+
+```bash
+# 按 failsafe XML 的【写入时刻】排序, 而不是按模块或错误文本
+python3 - <<'PY'
+import glob,os,xml.etree.ElementTree as ET,datetime
+rows=[]
+for p in glob.glob('**/failsafe-reports/TEST-*.xml',recursive=True):
+    m=os.path.getmtime(p); r=ET.parse(p).getroot()
+    rows.append((m,p,int(r.get('tests',0)),int(r.get('failures',0)),int(r.get('errors',0))))
+rows.sort(); t0=rows[0][0]
+for m,p,t,f,e in rows:
+    print(f"{'✗' if f or e else ' '} +{m-t0:6.0f}s {p.split('/')[0]:40s} t={t} f={f} e={e}")
+PY
+```
+
+| 分布形态 | 读法 |
+| :--- | :--- |
+| 挤在连续几十秒内 | **环境故障**（本例 5/5 落在 75s 窗口） |
+| 时间上分散、集中在某模块 | 才是**代码问题** |
+| 每次失败的模块都不同 | **几乎必然**是环境 |
+
+#### 五、五条规则
+
+1. **"不是代码问题"与"是环境问题"是两个结论。**
+   前者需证据, 后者在本轮只有相关性。跨过去就是越界结论。
+
+2. **失败次数的跨轮次变化是有力判据。**
+   同代码下 5 → 1, 配合"单独跑全绿", 已足以否定代码回归。
+
+3. **第二次对照要挑"报错的那个类本身"。**
+   比"整个模块重跑"更强: 它把变量从"模块"收到"类", 排除了模块内其他因素。
+
+4. **已排除的候选要列成表, 附判据。**
+   否则下一个人会重新怀疑一遍内存、I/O、Podman 版本, 重复本轮的工作。
+
+5. **未闭合的部分明确写 `UNDETERMINED`。**
+   本项目 AGENTS.md 要求根因来自受控实验；未做实验的部分就不写成结论。
