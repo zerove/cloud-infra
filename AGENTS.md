@@ -1477,9 +1477,9 @@ out.append("· 本段只给【事实】, 不给结论: socket 可连 ≠ 运行�
 3. **新增诊断输出后, 立刻重跑一次自己的统计脚本**。新写的说明文字会改变统计结果 ——
    这是"探针自己坏掉"的又一种形态: 它没坏, 但**它污染了观测**。
 
-### ⚠️ 第八课补记六: 「次生异常」会顶替「主因」占据报错位置（2026-10-10）
+### ⚠️ 第八课补记六: 「次生异常」会顶替「主因」占据报错位置（2026-10-10 记录，2026-10-11 更正）
 
-全量 IT 报出 `Broken pipe`, 我此前四轮都把它当作**待归因的主因**。本轮逐层读 `Caused by` 后才发现:
+全量 IT 报出 `Broken pipe`, 我此前四轮都把它当作**待归因的主因**。本轮逐层读 `Caused by` 后才看清:
 
 ```text
 顶层: ContainerLaunchException: Timed out waiting for log output matching '.*Server startup complete.*'
@@ -1493,6 +1493,31 @@ out.append("· 本段只给【事实】, 不给结论: socket 可连 ≠ 运行�
 关闭日志流 socket → 此时正在写的那个流自然得到 `EPIPE`。
 
 **它既不是原因, 也不是无害的噪音 —— 它是"某处已经失败"的证据**。
+
+> ⚠️ **【2026-10-11 更正 —— 上面的因果链只对部分故障成立, 不是通用形态】**
+>
+> 下一轮全量 IT 的真实数据推翻了我"Broken pipe 一律是超时的次生现象"这一定性:
+>
+> | 失败 | **顶层异常**（锚定 `error` 元素, 非全文搜索） | load1 | commit |
+> | :--- | :--- | ---: | ---: |
+> | notif / `NotificationMqFlowIntegrationTest` | `Timed out waiting for log output` | 28.52 | 12.72 GB |
+> | notif / `NotificationServiceIntegrationTest` | **`Broken pipe`（顶层即它）** | 22.45 | 11.51 GB |
+> | gateway / `GatewaySentinelIntegrationTest` | **`Broken pipe`（顶层即它）** | 23.22 | 10.15 GB |
+> | search / `SearchServiceIntegrationTest` | `Timed out waiting for log output` | **8.21** | **5.42 GB** |
+>
+> 即 **`Broken pipe` 有两种形态**, 必须分开处理:
+>
+> 1. **次生形态**（2 例）: 顶层 `Timed out` → `Broken pipe`。此时讲上面那段"清理阶段的 EPIPE"。
+> 2. **独立形态**（2 例）: **顶层就是 `Broken pipe`**, 全链无 `Timed out`。
+>    这类**不是任何超时的产物**, 它自己就是失败点, 归因需要另行取证。
+>
+> **两条由此得到的规则（比原三条更严格）**:
+>
+> - **"某异常是次生"是需要证据的结论, 不能因为它"看起来像清理阶段"就默认成立**。
+>   判据是**它上面那一层的异常** —— 上层有 `Timed out` 才是次生, 没有就不是。
+> - **不能用 load1 区分两类故障**。上表 load1 从 8.21 到 28.52,
+>   而低载的 8.21 是超时、高载的 28.52 也是超时 —— **load 与机制不相关**。
+>   我先前"高负载导致容器起不来"的统一解释, 被 load1=8.21/commit=5.42% 的 search 失败直接证伪。
 
 **三条规则**:
 
