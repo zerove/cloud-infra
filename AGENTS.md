@@ -5357,6 +5357,27 @@ assertThat(between).containsAnyOf("health", "await", "refresh", "waitFor");
 | 同测试的 `@BeforeEach deleteAll` 断言 | **仍红, 刻意保留** |
 | 503 触发条件 | **仍 UNDETERMINED** |
 
+##### 2026-10-11 更新: 判据从集群级改为索引级, 且再次确认"触发条件未闭合"
+
+| 项 | 状态 | 证据 |
+| :--- | :--- | :--- |
+| 判据绑定到目标索引 | **PASS** | 用 `HealthRequest.index(...)` 取 `IndexHealthStats`; 索引名随方法签名传入 |
+| 源码守护能识别该缺陷 | **PASS** | 三向: 修复版绿 / 退回集群级判据**红 1 项** / 还原绿 |
+| search IT 8/8 | **PASS** | 报告时间戳 08:37(本轮), 8 个用例名逐一列出, 非聚合行虚报 |
+| **原缺陷下 IT 会否失败** | **NOT REPRODUCIBLE** | 退回集群级形态后仍 **8/8 全绿、0 次 `no_shard_available`** |
+| ⇒ 修复的**因果有效性** | **UNDETERMINED** | 见下 |
+
+最后一行是本轮最重要的产出: 我把判据**退回缺陷形态**跑同一套 IT, 它照样全绿 ——
+说明原 503 在单容器条件下根本无法复现。因此能说的只是
+**"集群级判据在原理上无法绑定目标索引"**(源码守护对其报红),
+**不能**说**"本修复消除了 503"**。该结论已写进
+`IndexAdminServiceImpl#awaitShardsReleased` 的方法注释与
+`beforeEachDeleteAllIsNotBare` 的解除条件, 防止下一个人误读为已闭环。
+
+> ⚠️ 途中踩到**第五课补记十一**(重构成 helper 会让源码守护失去被守护对象):
+> 我先把判据抽成 `targetIndexFullyReleased`, 守护随即**报绿失效** ——
+> 它只截取 `awaitShardsReleased` 的方法体做文本断言。判据最终**内联**在方法体内。
+
 ⚠️ **`deleteAll` 那条断言我刻意没有修绿**, 因为五变量受控对照显示
    单容器下 `deleteAll` 路径**返回 200**, 我**没有**证据支持在那里加等待。
    **为了让守护全绿而顺手加一个没有依据的等待, 就是又一次"为了绿而绿"。**

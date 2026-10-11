@@ -132,6 +132,13 @@ public class IndexAdminServiceImpl implements IndexAdminService {
      * <p>现改为直接查询目标索引的 {@link IndexHealthStats}, 并额外要求它已不在集群
      * {@code indices} 视图中出现(即旧分片完全从分配器移除)。索引名同时出现在
      * {@code HealthRequest} 与日志/异常里, 便于失败时定位。
+     *
+     * <p><b>⚠️ 因果有效性尚未证实</b>(2026-10-11 实测): 把本判据退回集群级形态后重跑
+     * {@code SearchServiceIntegrationTest}, 仍是 <b>8/8 全绿、0 次 no_shard_available</b> ——
+     * 即原 503 在单容器条件下<b>无法复现</b>。因此可以确认的是"集群级判据在原理上无法绑定目标索引"
+     * (源码守护 {@code readinessCriterionIsBoundToTargetIndex} 对其报红), 但<b>不能</b>声称
+     * "本修复消除了该 503"。这与 {@code beforeEachDeleteAllIsNotBare} 当初被
+     * {@code @Disabled} 的理由一致。闭环需要宿主资源竞争下的复现证据。
      */
     private void awaitShardsReleased(String indexName, Class<?> docType) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);

@@ -180,6 +180,14 @@ class RebuildReadinessGuardTest {
      * <p><b>解除条件</b>: 补记三十一的五变量受控对照显示该路径返回 200,
      * 即【单容器下无法复现】。只有拿到“宿主资源竞争下该路径确实失败”的证据,
      * 才可为它加等待; 若最终证明无需等待, 则删除本测试并在此记录结论。
+     *
+     * <p><b>2026-10-11 复核(同向, 仍不解除)</b>: {@code IndexAdminServiceImpl} 的
+     * {@code awaitShardsReleased} 已改为索引级判据。为判断"索引级判据是否真的消除了 503",
+     * 把该判据退回<b>集群级形态(原始缺陷)</b>后重跑 {@code SearchServiceIntegrationTest},
+     * 结果仍是 <b>8/8 全绿、0 次 no_shard_available</b>。
+     * ⇒ 原 503 在单容器条件下同样不可复现, 本项的解除条件<b>未被满足</b>, 保持 {@code @Disabled}。
+     * 这也解释了为何 {@code IndexAdminServiceImpl} 侧只能声称"判据已绑定索引"
+     * 而不能声称"503 已修复"。
      */
     @Test
     @Disabled("缺就绪等待是否致 503 尚未闭合; 加等待属无依据修复, 任其失败会弄红默认构建")
