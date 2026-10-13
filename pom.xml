@@ -396,8 +396,21 @@
                       显式指定 classesDirectory 使用编译输出目录。
                     -->
                     <classesDirectory>${project.build.outputDirectory}</classesDirectory>
-                    <!-- 单个 IT 卡死兜底：forked JVM 10 分钟无响应则杀掉并记失败，避免全量回归无限阻塞 -->
-                    <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                    <!--
+                      单个 IT 卡死兜底：forked JVM 无响应则杀掉并记失败，避免全量回归无限阻塞。
+
+                      ⚠️ 2026-10-13 由 600 提到 1800：该阈值原本**低于本项目 IT 的正常耗时**,
+                      于是这个"卡死兜底"变成了误报型守卫 —— 它杀的不是卡死的进程, 而是跑得慢的健康进程。
+
+                      实测依据（同一宿主, 受控对照）:
+                        原始 HEAD 全量 IT : notification-service 耗时 12:33 → 被误杀
+                        本次改动全量 IT   : notification-service 耗时 13:24 → 被误杀
+                      两边都报 `There was a timeout in the fork`, 与代码改动无关。
+
+                      1800s 给实测 13min 留约 2.3 倍余量, 仍远小于"永远阻塞"。
+                      真正卡死的进程仍会被杀 —— 只是不再误伤慢而健康的模块。
+                    -->
+                    <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
                     <includes>
                         <include>**/*IntegrationTest.java</include>
                         <include>**/*IT.java</include>
