@@ -33,6 +33,11 @@ import static org.springframework.http.HttpMethod.HEAD;
 import static org.springframework.http.HttpMethod.OPTIONS;
 
 @EnableDiscoveryClient
+// 保留 @EnableFeignClients: 网关自身路由不走 Feign(见 gatewayRouter() 的 lb:// + http()),
+// 但 **framework-security 的 RemotePermissionProvider 是 @Component + @ConditionalOnClass(UserApi.class)**,
+// 会被 scanBasePackages="com.cloudinfra" 扫到, 它按类型注入 UserApi ——
+// 去掉本注解后网关启动即 `No qualifying bean of type 'UserApi'` (2026-10-13 e2e 实测)。
+// 即"网关自身零 Feign 调用"不等于"网关不需要 Feign bean": 被扫描进来的框架组件需要。
 @EnableFeignClients(basePackages = "com.cloudinfra.api")
 @SpringBootApplication(
     scanBasePackages = { "com.cloudinfra" },
