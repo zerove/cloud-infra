@@ -3,5 +3,4 @@ com.cloudinfra.starter.config.SecurityAutoConfiguration
 com.cloudinfra.starter.config.TraceIdAutoConfiguration
 com.cloudinfra.starter.config.FeignTraceIdAutoConfiguration
 com.cloudinfra.starter.config.AuditLogAutoConfiguration
-com.cloudinfra.starter.config.IdempotentAutoConfiguration
 com.cloudinfra.starter.config.ActuatorSecurityAutoConfiguration
