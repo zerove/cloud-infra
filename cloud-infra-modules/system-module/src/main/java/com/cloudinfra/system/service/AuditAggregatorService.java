@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -59,20 +60,30 @@ public class AuditAggregatorService {
             // 2. 异步拉取通知发送日志 (远程 API)
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
                 try {
-                    Result<List<NotificationLogDTO>> result = notificationApi.getLogs(userId);
-                    if (result == null || result.getData() == null) {
-                        return Collections.emptyList();
+                    // 端点已分页：必须逐页取完, 否则审计聚合会静默丢数据
+                    final int pageSize = 100;
+                    final int maxPages = 50;
+                    List<UnifiedAuditRecord> collected = new ArrayList<>();
+                    for (int page = 1; page <= maxPages; page++) {
+                        Result<List<NotificationLogDTO>> result =
+                            notificationApi.getLogs(userId, page, pageSize);
+                        if (result == null || result.getData() == null || result.getData().isEmpty()) {
+                            break;
+                        }
+                        result.getData().forEach(log -> collected.add(new UnifiedAuditRecord(
+                            log.getCreateTime(),
+                            userId.toString(),
+                            "发送通知 [" + log.getChannelCode() + "]",
+                            log.getNotificationId().toString(),
+                            log.getStatus(),
+                            log.getErrorMessage(),
+                            "NOTIFICATION"
+                        )));
+                        if (result.getData().size() < pageSize) {
+                            break;
+                        }
                     }
-                    
-                    return result.getData().stream().map(log -> new UnifiedAuditRecord(
-                        log.getCreateTime(),
-                        userId.toString(),
-                        "发送通知 [" + log.getChannelCode() + "]",
-                        log.getNotificationId().toString(),
-                        log.getStatus(),
-                        log.getErrorMessage(),
-                        "NOTIFICATION"
-                    )).collect(Collectors.toList());
+                    return collected;
                 } catch (Exception e) {
                     log.error("拉取通知审计日志失败: {}", e.getMessage());
                     return Collections.emptyList();

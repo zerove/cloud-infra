@@ -483,10 +483,12 @@ class FileServiceImplTest {
         v2.setVersionNumber(2);
         FileVersion v1 = new FileVersion();
         v1.setVersionNumber(1);
-        given(versionMapper.selectList(any())).willReturn(List.of(v2, v1));
+        given(versionMapper.selectPage(any(), any())).willReturn(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<FileVersion>(1, 20)
+                    .setRecords(List.of(v2, v1)));
 
         // when
-        List<FileVersion> history = fileService.getVersionHistory(1L);
+        List<FileVersion> history = fileService.getVersionHistory(1L, 1, 20);
 
         // then
         assertThat(history).hasSize(2);

@@ -336,13 +336,16 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:history')")
     @GetMapping("/history/{fileId}")
     public Result<List<FileVersion>> history(@PathVariable Long fileId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
         try {
             Long userId = resolveUserId(requestUserId);
             if (!permissionService.hasAccess(userId, fileId, "READ")) {
                 return Result.fail(403, "无权限查看版本历史");
             }
-            List<com.cloudinfra.file.domain.FileVersion> domainVersions = fileService.getVersionHistory(fileId);
+            List<com.cloudinfra.file.domain.FileVersion> domainVersions = fileService.getVersionHistory(
+                    fileId, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
             List<FileVersion> dtoVersions = domainVersions.stream()
                 .map(v -> {
                     FileVersion dto = new FileVersion();

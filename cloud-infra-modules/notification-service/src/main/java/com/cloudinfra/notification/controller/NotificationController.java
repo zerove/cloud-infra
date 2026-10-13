@@ -92,8 +92,12 @@ public class NotificationController implements NotificationApi {
     @Operation(summary = "根据关键词搜索通知")
     @PreAuthorize("@ss.hasPermi('notification:search')")
     @GetMapping("/search")
-    public Result<List<NotificationDTO>> searchNotifications(@RequestParam String keyword) {
-        List<Notification> notifications = notificationService.searchNotifications(keyword);
+    public Result<List<NotificationDTO>> searchNotifications(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        List<Notification> notifications =
+                notificationService.searchNotifications(keyword, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
         return Result.success(notifications.stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList()));
@@ -103,8 +107,12 @@ public class NotificationController implements NotificationApi {
     @Operation(summary = "获取特定用户的发送审计日志")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/logs")
-    public Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId) {
-        List<NotificationLog> logs = notificationService.getLogs(userId);
+    public Result<List<NotificationLogDTO>> getLogs(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        List<NotificationLog> logs =
+                notificationService.getLogs(userId, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
         return Result.success(logs.stream()
                 .map(this::mapToLogDTO)
                 .collect(Collectors.toList()));

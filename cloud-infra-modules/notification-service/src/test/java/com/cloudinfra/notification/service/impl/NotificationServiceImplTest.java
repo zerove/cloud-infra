@@ -248,10 +248,12 @@ class NotificationServiceImplTest {
         // given
         String keyword = "test";
         List<Notification> expected = List.of(new Notification());
-        given(notificationMapper.selectList(any())).willReturn(expected);
+        given(notificationMapper.selectPage(any(), any())).willReturn(
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification>(1, 10)
+                .setRecords(expected));
 
         // when
-        List<Notification> result = notificationService.searchNotifications(keyword);
+        List<Notification> result = notificationService.searchNotifications(keyword, 1, 10);
 
         // then
         assertThat(result).hasSize(1);
@@ -265,11 +267,13 @@ class NotificationServiceImplTest {
         notification.setId(1L);
         List<Notification> notifications = List.of(notification);
         List<NotificationLog> expected = List.of(new NotificationLog());
-        given(notificationMapper.selectList(any())).willReturn(notifications);
+        given(notificationMapper.selectPage(any(), any())).willReturn(
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification>(1, 10)
+                .setRecords(notifications));
         given(logMapper.selectList(any())).willReturn(expected);
 
         // when
-        List<NotificationLog> result = notificationService.getLogs(userId);
+        List<NotificationLog> result = notificationService.getLogs(userId, 1, 10);
 
         // then
         assertThat(result).hasSize(1);

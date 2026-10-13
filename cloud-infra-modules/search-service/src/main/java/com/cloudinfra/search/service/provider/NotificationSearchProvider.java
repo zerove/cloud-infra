@@ -20,7 +20,7 @@ public class NotificationSearchProvider implements SearchProvider {
     @Override
     public List<UnifiedSearchResult> search(String query, int limit) {
         try {
-            Result<List<NotificationDTO>> result = notificationApi.searchNotifications(query);
+            Result<List<NotificationDTO>> result = notificationApi.searchNotifications(query, 1, limit);
             if (result == null || result.getData() == null) {
                 return Collections.emptyList();
             }

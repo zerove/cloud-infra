@@ -214,12 +214,14 @@ public class FileServiceImpl implements IFileService {
     }
 
     @Override
-    public List<FileVersion> getVersionHistory(Long fileId) {
-        return versionMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
-                .eq(FileVersion::getFileId, fileId)
-                .orderByDesc(FileVersion::getVersionNumber)
-        );
+    public List<FileVersion> getVersionHistory(Long fileId, int page, int size) {
+        // 版本数随重传次数无界增长, 故分页; 调用方需翻页取全量
+        return versionMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
+                    .eq(FileVersion::getFileId, fileId)
+                    .orderByDesc(FileVersion::getVersionNumber)
+        ).getRecords();
     }
 
     /**

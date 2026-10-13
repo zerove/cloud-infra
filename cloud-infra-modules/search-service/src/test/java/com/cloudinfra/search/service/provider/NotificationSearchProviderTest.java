@@ -34,7 +34,7 @@ class NotificationSearchProviderTest {
         NotificationDTO dto = new NotificationDTO(
                 5L, 1L, null, "系统升级通知", "今晚 23:00 维护",
                 null, LocalDateTime.of(2026, 8, 17, 9, 0), null);
-        given(notificationApi.searchNotifications("升级")).willReturn(Result.success(List.of(dto)));
+        given(notificationApi.searchNotifications("升级", 1, 10)).willReturn(Result.success(List.of(dto)));
 
         List<UnifiedSearchResult> results = provider.search("升级", 10);
 
@@ -54,7 +54,7 @@ class NotificationSearchProviderTest {
                 1L, 1L, null, "t1", "c1", null, LocalDateTime.now(), null);
         NotificationDTO dto2 = new NotificationDTO(
                 2L, 1L, null, "t2", "c2", null, LocalDateTime.now(), null);
-        given(notificationApi.searchNotifications("x")).willReturn(Result.success(List.of(dto1, dto2)));
+        given(notificationApi.searchNotifications("x", 1, 1)).willReturn(Result.success(List.of(dto1, dto2)));
 
         List<UnifiedSearchResult> results = provider.search("x", 1);
 
@@ -64,21 +64,21 @@ class NotificationSearchProviderTest {
 
     @Test
     void search_whenResultNull_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x")).willReturn(null);
+        given(notificationApi.searchNotifications("x", 1, 5)).willReturn(null);
 
         assertThat(provider.search("x", 5)).isEmpty();
     }
 
     @Test
     void search_whenDataNull_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x")).willReturn(Result.success(null));
+        given(notificationApi.searchNotifications("x", 1, 5)).willReturn(Result.success(null));
 
         assertThat(provider.search("x", 5)).isEmpty();
     }
 
     @Test
     void search_whenApiThrows_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x")).willThrow(new RuntimeException("feign down"));
+        given(notificationApi.searchNotifications("x", 1, 5)).willThrow(new RuntimeException("feign down"));
 
         assertThat(provider.search("x", 5)).isEmpty();
     }

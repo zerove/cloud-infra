@@ -24,7 +24,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -281,15 +280,17 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public List<NotificationLog> getLogs(Long userId) {
-        // 1. 获取用户的所有通知 ID
-        List<Notification> notifications = notificationMapper.selectList(
-            new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
-        );
-        if (notifications == null || notifications.isEmpty()) {
+    public List<NotificationLog> getLogs(Long userId, int page, int size) {
+        // 1. 分页取出该用户的通知 ID（原先全量取出后再 IN 查询, ID 集合会随数据量无限增长）
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> idPage =
+            notificationMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
+                    .orderByDesc(Notification::getCreateTime));
+        if (idPage.getRecords() == null || idPage.getRecords().isEmpty()) {
             return Collections.emptyList();
         }
-        List<Long> notificationIds = notifications.stream()
+        List<Long> notificationIds = idPage.getRecords().stream()
             .map(Notification::getId)
             .collect(Collectors.toList());
 
@@ -303,13 +304,16 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public List<Notification> searchNotifications(String keyword) {
-        return notificationMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Notification>()
-                .and(wrapper -> wrapper.like(Notification::getTitle, keyword)
-                                       .or()
-                                       .like(Notification::getContent, keyword))
-        );
+    public List<Notification> searchNotifications(String keyword, int page, int size) {
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> result =
+            notificationMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Notification>()
+                    .and(wrapper -> wrapper.like(Notification::getTitle, keyword)
+                                           .or()
+                                           .like(Notification::getContent, keyword))
+                    .orderByDesc(Notification::getCreateTime));
+        return result.getRecords();
     }
 
     @Override

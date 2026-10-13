@@ -46,12 +46,12 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             }
 
             @Override
-            public Result<List<NotificationDTO>> searchNotifications(String keyword) {
+            public Result<List<NotificationDTO>> searchNotifications(String keyword, Integer page, Integer size) {
                 return Result.success(Collections.emptyList());
             }
 
             @Override
-            public Result<List<NotificationLogDTO>> getLogs(Long userId) {
+            public Result<List<NotificationLogDTO>> getLogs(Long userId, Integer page, Integer size) {
                 return Result.success(Collections.emptyList());
             }
         };

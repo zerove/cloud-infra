@@ -21,10 +21,10 @@ public interface INotificationService {
     /**
      * 根据关键词检索通知 (检索标题和内容)
      */
-    List<Notification> searchNotifications(String keyword);
+    List<Notification> searchNotifications(String keyword, int page, int size);
 
     /**
      * 获取用户发送审计日志
      */
-    List<NotificationLog> getLogs(Long userId);
+    List<NotificationLog> getLogs(Long userId, int page, int size);
 }

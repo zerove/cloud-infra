@@ -54,13 +54,21 @@ public interface NotificationApi {
 
     /**
      * 根据关键词搜索通知
+     *
+     * <p>分页参数为可选：不传时按默认值返回单页，调用方需显式翻页才能取全量。
      */
     @GetMapping("/notification/search")
-    Result<List<NotificationDTO>> searchNotifications(@RequestParam String keyword);
+    Result<List<NotificationDTO>> searchNotifications(
+            @RequestParam String keyword,
+            @RequestParam(required = false, defaultValue = "1") Integer page,
+            @RequestParam(required = false, defaultValue = "10") Integer size);
 
     /**
      * 获取特定用户的发送审计日志
      */
     @GetMapping("/notification/logs")
-    Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId);
+    Result<List<NotificationLogDTO>> getLogs(
+            @RequestParam Long userId,
+            @RequestParam(required = false, defaultValue = "1") Integer page,
+            @RequestParam(required = false, defaultValue = "10") Integer size);
 }
