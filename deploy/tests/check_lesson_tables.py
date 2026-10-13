@@ -20,9 +20,10 @@ import os
 import re
 import sys
 
+# 课次补记已于 2026-10-13 从 AGENTS.md 迁至 docs/lessons/debugging-log.md。
 DOC = os.environ.get("DOC_OVERRIDE") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "AGENTS.md",
+    "docs/lessons/debugging-log.md",
 )
 # DOC_OVERRIDE 的存在是为了让负向对照能在**副本**上注入缺陷, 而不必改仓库里的真实文档。
 # 若副本本身写坏 / 读不到, 必须像对待真实文档一样判 rc=2 ——

@@ -17,7 +17,7 @@ import shutil
 BASE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(BASE, "check_lesson_tables.py")
 REPO = os.path.dirname(os.path.dirname(BASE))
-SRC = os.path.join(REPO, "AGENTS.md")
+SRC = os.path.join(REPO, "docs/lessons/debugging-log.md")
 # 变异副本写临时目录, 不落仓库 —— 否则守护自身会污染被检工作区
 WORK = tempfile.mkdtemp(prefix="lesson-tables-")
 

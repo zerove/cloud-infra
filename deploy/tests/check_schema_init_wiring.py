@@ -99,6 +99,68 @@ EXEMPT_FILES: dict[str, str] = {
 }
 
 
+# 表级豁免: (service, 表名) -> 理由。
+#
+# 为什么需要它: 2026-10-05 的规则是"任何服务都不得在自己的 schema 里重建 Flyway 表",
+# 当时 notification 的副本被删掉了。但 **2026-10-07 又被刻意加回**两张表, 理由不同:
+#   1. notification 的集成测试用 Testcontainers 起**空库且不跑 Flyway**
+#      (迁移在 system-module 的 jar 里, 本服务测试不加载) => 表永远不存在;
+#   2. 5 个 Mapper 里 4 个**直接写** sys_notification, 是本服务核心写路径;
+#   3. 生产两者都建, V12/V13 的 CREATE TABLE IF NOT EXISTS 与
+#      V14/V15/V17 的 ADD COLUMN IF NOT EXISTS 全部幂等, 可共存。
+# 即"重复建表"在此**不是疏忽, 而是该服务对测试环境的必要自持**。
+#
+# ⚠️ 豁免必须附验证, 不能只声明理由(AGENTS.md「豁免必须附验证」):
+#   配套守护是 deploy/tests/check_schema_standalone.py —— 它在**真实空库**上执行
+#   notification 的 schema.sql, 并逐列核对与实体是否对齐。
+#   下面的 _verify_shared_by_design_guard() 会在每次运行时确认该守护仍在位,
+#   免得"例外还在、验证没了"。
+SHARED_BY_DESIGN: dict[tuple[str, str], str] = {
+    ("notification-service", "sys_notification"): (
+        "本服务测试库不跑 Flyway, 且 4/5 个 Mapper 直接写该表, 必须自持"
+    ),
+    ("notification-service", "sys_notification_preference"): (
+        "NotificationRouter 读它做路由决策且有写路径, 同上必须自持"
+    ),
+}
+
+_GUARD = MODULES / "notification-service" / "src" / "main" / "resources" / "schema.sql"
+
+
+def _verify_shared_by_design_guard() -> bool:
+    """确认配套守护**仍在位且仍以阻断方式接线**。
+
+    守护被删, 或被后人加了 `|| true` 降级, 例外就失去了验证依据 —— 此时必须判红。
+    ⚠️ 这里**只验证在位与接线形态**, 不代跑它(它要在真实空库上执行 schema.sql)。
+    """
+    guard = Path("deploy/tests/check_schema_standalone.py")
+    if not guard.exists():
+        print(f"FAIL: 表级豁免依赖的守护 {guard} 已不存在 —— 豁免失去依据, 不得继续生效")
+        return False
+
+    wiring = Path("verify-e2e.sh")
+    if not wiring.exists():
+        print("FAIL: verify-e2e.sh 不存在, 无法确认配套守护是否接线")
+        return False
+    text = wiring.read_text(encoding="utf-8", errors="replace")
+    called = [
+        ln for ln in text.splitlines()
+        if "check_schema_standalone" in ln
+        and not ln.strip().startswith("#")
+        and "() {" not in ln
+    ]
+    if not called:
+        print("FAIL: check_schema_standalone 已无调用点 —— 配套守护形同虚设, 例外失去依据")
+        return False
+    if any(ln.rstrip().endswith("|| true") for ln in called):
+        print(
+            "FAIL: check_schema_standalone 被 `|| true` 降级为非阻断 —— "
+            "配套守护不再中止 E2E, 例外失去依据"
+        )
+        return False
+    return True
+
+
 def find_schema_services():
     """返回 [(service_dir_name, sql 文件列表), ...] —— 含 schema*.sql 全部变体。
 
@@ -187,6 +249,9 @@ def main():
     failures = []
     notes = []
 
+    if not _verify_shared_by_design_guard():
+        return 1
+
     # 表归属检查: 除 Flyway 管理者自身外, 任何服务都不应在 schema*.sql 里
     # 重建 Flyway 管理的表。
     #
@@ -226,7 +291,16 @@ def main():
 
             # 表归属重叠检查 (仅对非 Flyway 管理者自身)
             if service != FLYWAY_OWNER:
-                overlap = sorted(tables & flyway_tables)
+                overlap = sorted(
+                    t for t in (tables & flyway_tables)
+                    if (service, t) not in SHARED_BY_DESIGN
+                )
+                excused = sorted(set(tables & flyway_tables) - set(overlap))
+                for t in excused:
+                    notes.append(
+                        f"{key}: {t} 与 Flyway 重叠属**刻意共持** "
+                        f"—— {SHARED_BY_DESIGN[(service, t)]} ⊘"
+                    )
                 if overlap:
                     failures.append(
                         f"{key}: 重复定义了 Flyway 管理的表 {overlap} —— "

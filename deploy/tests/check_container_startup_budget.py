@@ -74,7 +74,6 @@ SCAN_GLOBS = (
     "cloud-infra-gateway/src/test/**/*.java",
     "cloud-infra-modules/*/src/test/**/*.java",
     "cloud-infra-framework/*/src/test/**/*.java",
-    "cloud-infra-codegen/*/src/test/**/*.java",
 )
 
 # 容器声明: new GenericContainer<>(... / new PostgreSQLContainer("..."

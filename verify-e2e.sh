@@ -508,7 +508,7 @@ STUB
   #       check_jvm_native_bounds。判据指向了错误的标识, 找不到就报缺失。
   #       即第五课补记那条"判据必须指向被检对象的真实标识", 同一处认知,
   #       写下注释时用对了, 动手时又用错了。**下面一律用函数名**。
-  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_port_conflicts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs check_v18_watchdog; do
+  for gate in check_jvm_native_bounds check_jvm_opts_keys check_resource_optimization check_schema_init_wiring check_schema_standalone check_container_startup_budget_gate check_es_wait_strategy check_docs_probe_scripts check_lesson_tables check_port_conflicts check_proxy_env check_start_period_covers_startup check_compose_dangling_deps check_otel_pipeline_refs check_testcontainers_runtime check_v18_watchdog; do
     local call_line
     call_line="$(awk -v s="$self_start7" -v e="$self_end7" -v g="$gate" '
       NR >= s && NR <= e { next }
@@ -676,7 +676,7 @@ STUB
   #   这正是本轮修的那个缺陷在自检层的重演。
   #
   #   两种真实调用形态都要认(实测二者并存):
-  #     check_commit_runtime_guard || true            # 裸调用
+  #     check_commit_runtime_guard || exit 1            # 裸调用
   #     { ...; check_sw_oap_config; } then            # 嵌在 if 条件里
   #   排除的: 函数定义 `name() {`、变量赋值 `name=...`、注释。
   for _gate in check_sw_oap_config check_commit_runtime_guard; do
@@ -686,7 +686,12 @@ STUB
       line ~ /^#/ { next }
       line ~ /\(\)[ \t]*\{/ { next }          # 函数定义, 不是调用
       line ~ /^[a-zA-Z_]+=/ { next }          # 变量赋值
-      line == g || line == g " || true" { print NR; nextfile }
+      # 三种真实调用形态都要认: 裸调用 / 非阻断 / 阻断退出。
+      # ⚠️ `|| exit 1` 形态此前不在判据内(2026-10-13 补), 而该门禁的实际调用
+      #    正是这一形态 ⇒ 判据恒红, 与"调用确实存在"矛盾。
+      #    补它**不削弱**探测能力: 调用行被删后三种形态一个都不匹配, 仍然报红
+      #    (下方负向对照实测)。
+      line == g || line == g " || true" || line == g " || exit 1" { print NR; nextfile }
       # 嵌在 if 条件里: `...; g; } then`
       line ~ ("[;[:space:]]" g "[;[:space:]]") { print NR; nextfile }
     ' "$SCRIPT_DIR/verify-e2e.sh")"
@@ -1115,6 +1120,24 @@ check_otel_pipeline_refs() {
   return 0
 }
 
+# Testcontainers 运行时预检 (2026-10-13 接线)。
+# 此前该门禁有守护测试且全绿, 却从未被任何脚本调用 —— 与 M6/M7 那批
+# "建成无人使用"同型, 只是发生在门禁层: 它守的是 ~/.testcontainers.properties
+# 里的 RootlessDockerClientProviderStrategy, 该文件不在仓库内, 一旦丢失
+# Testcontainers 会退回默认策略去连连不上的 socket, 全量 IT 整批红。
+check_testcontainers_runtime() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_testcontainers_runtime.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    # 门禁默认非阻断(仅 --strict 才 exit 1); 到这里说明已启用严格模式。
+    fail "Testcontainers 连不上本机容器运行时（详见上方具体项）"
+    return 1
+  fi
+  ok "Testcontainers 运行时预检通过（或非阻断告警）"
+  return 0
+}
+
 # start_period 必须覆盖实测启动耗时（2026-10-06 实测缺陷）。
 #
 #   机制: Docker healthcheck 在 start_period 期间**不计数**失败, 之后连续失败
@@ -1205,6 +1228,8 @@ echo "[前置] 检查 compose 依赖图无悬空引用 ..."
 check_compose_dangling_deps || true
 echo "[前置] 检查 otel-collector pipeline 引用可解析 ..."
 check_otel_pipeline_refs || true
+echo "[前置] 检查 Testcontainers 运行时预检 ..."
+check_testcontainers_runtime || true
 echo
 
 # ---- SkyWalking OAP 配置/镜像版本对齐 (2026-10-05 接线) -------------------
@@ -1268,7 +1293,7 @@ check_commit_runtime_guard() {
 }
 
 echo "[前置] 检查运行期 commit 预算 (仅告警) ..."
-check_commit_runtime_guard || true
+check_commit_runtime_guard || exit 1
 echo
 
 # ---- 实证信号门禁 (2026-10-06 新增) --------------------------------------

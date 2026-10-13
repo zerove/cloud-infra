@@ -131,7 +131,7 @@ def source_candidates() -> list[tuple[str, Path]]:
             if not pkg or not cls:
                 continue
             # ⚠️【2026-10-07 误报修正】只管 Spring 实际管理的类。
-            # 反例: WorkflowEngine 有 `private final ExecutorService executor`
+#   反例(已随编排引擎于 2026-10-13 删除): WorkflowEngine 有 `private final ExecutorService executor`
             #   却**手写**构造器、无任何 stereotype 注解 → 它不是 bean,
             #   构造参数上的 @Qualifier 永不被解析。
             #   把它纳入判定会对纯 POJO 报红, 而"误报"比"漏报"更坏:

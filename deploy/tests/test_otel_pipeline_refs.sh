@@ -18,10 +18,17 @@ trap 'rm -rf "$WORK"' EXIT
 pass=0
 fail=0
 
+# 2026-10-13: 配置真源已收敛到 deploy/k8s/infra/values.yaml 的
+# `otelCollector.config`(模板改为 toYaml 消费它), compose 侧那份随容器移除。
+# 故夹具一律写到新路径, 且按真源的嵌套结构包裹。
 mk() {
   local dir="$1"; shift
-  mkdir -p "$dir/deploy/monitoring"
-  cat > "$dir/deploy/monitoring/otel-collector.yml"
+  mkdir -p "$dir/deploy/k8s/infra"
+  {
+    echo "otelCollector:"
+    echo "  config:"
+    sed 's/^/    /'
+  } > "$dir/deploy/k8s/infra/values.yaml"
 }
 
 expect_rc() {
@@ -60,8 +67,11 @@ YAML
 expect_rc 1 "case0 deleted-exporter still referenced (the real defect)" "$WORK/case0"
 
 # ---- case 1: production config must be green right now --------------------
-mkdir -p "$WORK/case1/deploy/monitoring"
-cp "$ROOT/deploy/monitoring/otel-collector.yml" "$WORK/case1/deploy/monitoring/otel-collector.yml"
+# 2026-10-13: 守护对象已从 compose 的 deploy/monitoring/otel-collector.yml
+# **迁移**到 k8s 的 Helm 模板 (compose 侧 collector 随容器一并移除)。
+# 本用例随之指向新位置 —— 否则它复制一个已不存在的文件, 恒定拿到 rc=2。
+mkdir -p "$WORK/case1/deploy/k8s/infra"
+cp "$ROOT/deploy/k8s/infra/values.yaml" "$WORK/case1/deploy/k8s/infra/values.yaml"
 expect_rc 0 "case1 production otel config: green" "$WORK/case1"
 
 # ---- case 2: dangling receiver -------------------------------------------

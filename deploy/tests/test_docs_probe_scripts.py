@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""守护: AGENTS.md 里给出的 commit/meminfo 判据脚本必须**原样可跑**, 且输出格式
+"""守护: 调试战史文档里给出的 commit/meminfo 判据脚本必须**原样可跑**, 且输出格式
 与文档描述一致。
 
 ## 为什么需要这个守护
@@ -24,7 +24,7 @@
 第五课规则: 探针的对象必须从被测系统里提取。若把脚本复制到本文件里,
 文档改了而守护不改, 就会出现"守护全绿、文档里的脚本已经坏了"。
 
-故实现方式是: 从 AGENTS.md 按锚点定位 fenced code block, 原样 exec。
+故实现方式是: 从 debugging-log.md 按锚点定位 fenced code block, 原样 exec。
 这带来一个额外性质 —— **本守护无法与文档漂移**, 改文档就会改被测对象。
 
 ## 负向对照记录
@@ -46,7 +46,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-AGENTS = Path(__file__).resolve().parents[2] / "AGENTS.md"
+# 课次补记已于 2026-10-13 从 AGENTS.md 迁至 docs/lessons/debugging-log.md,
+# 被守护的 bash 代码块随之搬到了那里 —— 指向必须同步更新, 否则抽取恒失败。
+DOC = Path(__file__).resolve().parents[2] / "docs/lessons/debugging-log.md"
+# 锚点必须带标题的**可区分片段**: 文档里有两节都叫「第八课补记六」,
+# 只匹配标题前缀会命中错误的那节(次生异常), 抽到不含 Committed_AS 的块。
 
 passed = 0
 failed: list[str] = []
@@ -63,14 +67,14 @@ def check(desc: str, ok: bool, detail: str = "") -> None:
 
 
 def extract_block(anchor_regex: str) -> str | None:
-    """从 AGENTS.md 抽取锚点之后最近的 ```bash 代码块(原样, 不做任何改写)。
+    """从 debugging-log.md 抽取锚点之后最近的 ```bash 代码块(原样, 不做任何改写)。
 
     ⚠️ 块引用里的代码围栏带引用前缀(`> ```bash`), 必须先剥掉,
     否则正则匹配不到 → 静默返回 None → 后续断言全部被跳过 → 假绿。
     这正是第五课补记一「扫到 0 个目标必须判红」的形态, 故调用方一律
     把 None 当失败处理。
     """
-    text = AGENTS.read_text(encoding="utf-8")
+    text = DOC.read_text(encoding="utf-8")
     m = re.search(anchor_regex, text)
     if not m:
         return None
@@ -98,8 +102,8 @@ def run(script: str) -> tuple[int, str, str]:
 
 def case_1_extraction() -> None:
     print("\n═══ 1. 文档脚本可被抽取(探针对象来自文档, 非手写) ═══")
-    script = extract_block(r"### ⚠️ 第八课补记六")
-    check("AGENTS.md 存在", AGENTS.is_file(), str(AGENTS))
+    script = extract_block(r"### ⚠️ 第八课补记六: commit 占比高")
+    check("debugging-log.md 存在", DOC.is_file(), str(DOC))
     check("判别法脚本块被抽取到", script is not None, "锚点后未找到 ```bash")
     if script is None:
         return
@@ -110,7 +114,7 @@ def case_1_extraction() -> None:
 
 def case_2_runs_clean() -> None:
     print("\n═══ 2. 原样执行: 退出码 0 且无 stderr ═══")
-    script = extract_block(r"### ⚠️ 第八课补记六")
+    script = extract_block(r"### ⚠️ 第八课补记六: commit 占比高")
     if script is None:
         check("脚本存在", False, "跳过 —— 抽取失败")
         return
@@ -125,7 +129,7 @@ def case_2_runs_clean() -> None:
 
 def case_3_output_format() -> None:
     print("\n═══ 3. 输出格式与文档承诺一致 ═══")
-    script = extract_block(r"### ⚠️ 第八课补记六")
+    script = extract_block(r"### ⚠️ 第八课补记六: commit 占比高")
     if script is None:
         check("脚本存在", False, "跳过 —— 抽取失败")
         return
@@ -137,11 +141,16 @@ def case_3_output_format() -> None:
     check("输出完整匹配文档承诺的正则", bool(pat.match(out)),
           f"实际: {out!r}")
     # 单位陷阱(AGENTS.md 记录): /1024 会把 1.5GB 显示成 1540GB。
-    # 若有人把换算改回 /1024, ratio 会变成 1000000% 量级。
+    # ⚠️ 原断言 `0 <= ratio <= 100` 已于 2026-10-13 修正, 它既不成立又冗余:
+    #   不成立: 无物理定律要求 RSS <= Committed_AS —— 本机实测 RSS=3.17GB >
+    #          Committed_AS=2.17GB ⇒ ratio=145.8%, 该断言在 overcommit 主机上恒红。
+    #   冗余: 真正的防护是 case_5 的**结构性**检查(断言脚本含 1048576); 其注释已说明
+    #          两者同时被除以 1024 时 ratio 不变 ⇒ ratio 对该缺陷本无分辨力。
+    # 现只保留 /1024 量级错误的特征区间(会产生 1e6% 比值)。勿再收紧回 100。
     m = re.search(r"ratio=(\d+(?:\.\d+)?)", out)
     if m:
         ratio = float(m.group(1))
-        check("ratio 在物理可能区间(0~100%)", 0 <= ratio <= 100,
+        check("ratio 未落入 /1024 单位错误的特征量级(>=10000%)", 0 <= ratio < 10_000,
               f"ratio={ratio}% ⇒ 高度疑似单位换算错误(/1024 当 GB)")
     else:
         check("ratio 可解析", False, f"无法从 {out!r} 提取 ratio")
@@ -168,7 +177,7 @@ def case_3_output_format() -> None:
 
 def case_4_no_bc_dependency() -> None:
     print("\n═══ 4. 环境依赖: 不得依赖不存在的 bc ═══")
-    script = extract_block(r"### ⚠️ 第八课补记六")
+    script = extract_block(r"### ⚠️ 第八课补记六: commit 占比高")
     if script is None:
         check("脚本存在", False, "跳过 —— 抽取失败")
         return
@@ -186,7 +195,7 @@ def case_4_no_bc_dependency() -> None:
 
 def case_5_units_not_regressed() -> None:
     print("\n═══ 5. 单位换算未被改回 /1024 ═══")
-    script = extract_block(r"### ⚠️ 第八课补记六")
+    script = extract_block(r"### ⚠️ 第八课补记六: commit 占比高")
     if script is None:
         check("脚本存在", False, "跳过 —— 抽取失败")
         return
@@ -206,7 +215,7 @@ def case_5_units_not_regressed() -> None:
 
 def case_6_docs_consistency() -> None:
     print("\n═══ 6. 文档数值与实测不矛盾 ═══")
-    text = AGENTS.read_text(encoding="utf-8")
+    text = DOC.read_text(encoding="utf-8")
     # 被否定的 <15% 门槛不得以**建议**的形式复活。
     # ⚠️ 不能简单断言 "经验值 <15%" 不在文中 —— 它必然出现, 因为文档需要
     #    引用它才能说明它被否定了。真正的判据是: 那句话必须带着否定标记。
@@ -234,7 +243,7 @@ def case_6_docs_consistency() -> None:
 
 
 def main() -> int:
-    print("═══ AGENTS.md 第八课补记六 · 文档判据脚本可执行性守护 ═══")
+    print("═══ debugging-log.md 第八课补记六 · 文档判据脚本可执行性守护 ═══")
     for fn in (
         case_1_extraction,
         case_2_runs_clean,

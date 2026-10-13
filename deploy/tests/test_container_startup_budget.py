@@ -163,10 +163,12 @@ def main() -> int:
 
     print("\n=== 用例 5: 移走整个模块目录 → 扫描根未命中, 必须 rc=2 ===")
     moved: Path | None = None
-    target = REPO / "cloud-infra-codegen"
+    # 夹具模块必须同时满足: 仍存在、且自身确有容器声明 (否则移走它不会让对应 glob 落空,
+    # 用例就失去意义)。cloud-infra-codegen 已于 2026-10-13 删除, 改用 cloud-infra-auth。
+    target = REPO / "cloud-infra-auth"
     tmp = Path(tempfile.mkdtemp(prefix="gate-guard-"))
     try:
-        moved = tmp / "cloud-infra-codegen"
+        moved = tmp / "cloud-infra-auth"
         shutil.move(str(target), str(moved))
         rc, out = run_gate()
         results.append(check("扫描根未命中被判失败", rc, SCAN_FAIL, out[-500:]))
