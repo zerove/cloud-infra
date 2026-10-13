@@ -6,7 +6,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
 
 /**
  * ES 分片取证 —— 只在【ES 端点可达】时产出, 不可达时明确标注"未取证"。

@@ -151,6 +151,7 @@ final class ContainerRuntimeSocketProbe {
      * <p>⚠️ 只看能否建连, <b>不读写任何字节</b>: 解析协议响应会引入版本依赖,
      * 版本变化时会把"连接正常"误报成"连不上"（第五课）。
      */
+    @SuppressWarnings("PMD.UnusedLocalVariable") // 变量按设计不读取: 只求建连成功
     static String describeConnect(Path path) {
         try (SocketChannel ch = SocketChannel.open(UnixDomainSocketAddress.of(path))) {
             // open(UnixDomainSocketAddress) 即完成 connect; 未抛异常即连接成功

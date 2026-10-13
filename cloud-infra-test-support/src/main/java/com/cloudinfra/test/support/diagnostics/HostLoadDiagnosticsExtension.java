@@ -1,5 +1,6 @@
 package com.cloudinfra.test.support.diagnostics;
 
+import java.util.Locale;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -88,7 +89,6 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
         "CreateContainerError",
         "no such container");
 
-    private static final long TOTAL_BYTES = 1024L * 1024L * 1024L;
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
@@ -167,9 +167,9 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
     }
 
     static boolean looksLikeContainerFailure(String chain) {
-        String lower = chain.toLowerCase();
+        String lower = chain.toLowerCase(Locale.ROOT);
         for (String marker : CONTAINER_MARKERS) {
-            if (lower.contains(marker.toLowerCase())) {
+            if (lower.contains(marker.toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }
