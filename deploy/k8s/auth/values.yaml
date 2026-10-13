@@ -196,9 +196,10 @@ configMap:
             base-path: /management
             exposure:
               include: health,info,prometheus,metrics,env,beans,conditions,refresh
-        tracing:
-          sampling:
-            probability: 1.0
+        # ⚠️ 此处原有一处被遮蔽的 `tracing:` 重复键(仅含 sampling.probability),
+        # 后面的 tracing 块会静默覆盖它, 使前者的配置从未生效。
+        # 已删除 —— 行为完全等价(后一个块同样设了 sampling.probability),
+        # 目的只是消除"看起来生效其实被丢弃"的陷阱(2026-10-13 审计)。
         otlp:
           tracing:
             endpoint: http://otel-collector:4317

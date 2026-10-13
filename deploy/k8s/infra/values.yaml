@@ -153,11 +153,14 @@ otelCollector:
           http:
     processors:
       batch:
+    # ⚠️ 2026-10-13 修正: 原用 `otlp` exporter 指向 `zipkin:4317` —— Zipkin 不监听
+    # 4317 也不说 OTLP, 该出口无法工作。正确形态见同仓库 deploy/k8s/auth/values.yaml:
+    # `zipkin` exporter + /api/v2/spans 端点。
+    # 另: 本段此前是**死配置** —— 模板硬编码了同一份副本且不读 .Values。现模板改为
+    # 消费本段(单一真源), 见 templates/otel-collector.yaml。
     exporters:
-      otlp:
-        endpoint: zipkin:4317
-        tls:
-          insecure: true
+      zipkin:
+        endpoint: http://zipkin:9411/api/v2/spans
       logging:
         verbosity: basic
     service:
@@ -165,7 +168,7 @@ otelCollector:
         traces:
           receivers: [otlp]
           processors: [batch]
-          exporters: [otlp, logging]
+          exporters: [zipkin, logging]
 
 minio:
   enabled: true
