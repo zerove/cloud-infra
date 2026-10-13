@@ -12,13 +12,14 @@
 > 详见 [ROADMAP.md](ROADMAP.md) “按被使用标准重算”。
 
 **v1.0.0 关键变更** (相对 v1.0.0-rc1):
-- ⚪ **cloud-infra-codegen 模块** (8 个新 commit, 3660 行): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接)
-  - **2026-09-30 修正**: 该项已降级为 `⚪` 可选开发工具。声称的“消除 RuoYi 手工 CRUD 样板”仅在 `sys_post`
-  **一张表**上验证过, 其余业务表均为手写。未达成“已交付”标准, 详见 ROADMAP 重算章节
+- ⛔ **cloud-infra-codegen 模块已移除** (2026-10-13)
+    - **2026-09-30 修正**: 该项降级为 `⚪` 可选开发工具 —— 声称的“消除 RuoYi 手工 CRUD 样板”
+      仅在 `sys_post` **一张表**上验证过, 其余业务表均为手写。
+    - **2026-10-13 终局**: 框架准入原则第 1 条要求“第二个使用方”, 而该模块**零生产引用**,
+      故整体删除 (原 2,464 行 main 代码)。不是冻结 —— 无消费者且无维护者的代码, 正确状态是删除。
 - ✅ **P0-3b JWT blacklist 端到端 401 实测通过** (HTTP 401 + Redis blacklist TTL 24h)
 - ✅ **Caffeine ClassLoader 死锁修复**: cloud-system 内存 768m→2g + `--enable-native-access=ALL-UNNAMED`
 - ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
-- ✅ **AGENTS.md 同步 codegen 模块** (55cd647)
 
 **完整状态**: [HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) · 26 个新 commits · 9 P0/M5 issues closed · 11 Prometheus 告警 (2 业务类运行时实测) · p99 165ms · 101 测试全过
 
@@ -30,11 +31,6 @@
 bash e2e-test.sh            # 6/6 业务断言 PASS
 ./deploy/up.sh --check      # 0 配置漂移
 
-# 代码生成 (新!)
-mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
-  com.cloudinfra:cloud-infra-codegen-maven-plugin:1.0.0-SNAPSHOT:generate \
-  -Dcodegen.url=jdbc:postgresql://localhost:5432/cloud_infra \
-  -Dcodegen.moduleName=system -Dcodegen.tableNames=sys_user
 ```
 
 ## 🚀 技术栈
@@ -62,7 +58,6 @@ mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
     - `search-service`: 基于 Elasticsearch 的高性能搜索。
 - **`cloud-infra-api`**: 共享 DTO 和 Feign 客户端，确保服务间通信的类型安全。
 - **`cloud-infra-common`**: 基础工具类和通用基类。
-- **`cloud-infra-codegen`**: 代码生成工具 (`⚪` 可选, 非已交付能力)。含 `core` (JDK 17 编译) + `maven-plugin` 子模块; 仅 `sys_post` 一表验证过, 停止新增模板
 
 ## 📈 可观测性
 
