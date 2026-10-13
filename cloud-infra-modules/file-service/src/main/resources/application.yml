@@ -61,6 +61,3 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  otlp:
-    tracing:
-      endpoint: http://otel-collector:4317

@@ -72,10 +72,6 @@ management:
     enabled: true
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      endpoint: http://otel-collector:4317
-
 # Resilience4j 弹性设计配置
 resilience4j:
   circuitbreaker:

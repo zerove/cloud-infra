@@ -20,13 +20,6 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-
-
 spring:
   rabbitmq:
     host: cloud-rabbitmq
@@ -46,6 +39,12 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:60000}
     stream:
       rabbit:
         binder:

@@ -6,6 +6,12 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:60000}
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
@@ -63,6 +69,10 @@ spring:
     port: 5672
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        prefetch: ${RABBITMQ_PREFETCH:10}
+        acknowledge-mode: auto
   config:
     import:
       - optional:nacos:actuator-config.yaml
@@ -85,12 +95,6 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-
 # 平台能力配置
 cloud-infra:
   tenant:
