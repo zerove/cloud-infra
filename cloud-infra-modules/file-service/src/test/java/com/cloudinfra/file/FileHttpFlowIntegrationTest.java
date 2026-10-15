@@ -89,7 +89,7 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
 
     private static final Set<String> FILE_PERMS = Set.of(
             "file:file:upload", "file:file:update", "file:file:download",
-            "file:file:history", "file:file:search");
+            "file:file:history", "file:file:search", "file:file:remove");
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -261,6 +261,56 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
                         + "VALUES (1, 1, ?, 0)", 1024L * 1024 * 1024);
             }
         });
+    }
+
+    /**
+     * 删除端点的 HTTP 可达性。
+     *
+     * <p>服务层 delete() 早已存在, 但在补上 @DeleteMapping 之前没有任何入口能到达它 ——
+     * 「能力存在」不等于「能力被暴露」。本用例锁住 HTTP 这一层。
+     *
+     * <p>注意断的是**业务码**而非 HTTP 状态: 本项目约定 HTTP 200 + 业务码
+     * (见 AuthenticationEntryPointImpl 注释), 断 HTTP 状态会假绿。
+     */
+    @Test
+    void deleteEndpointRemovesFileOverHttp() {
+        byte[] up = client.post().uri("/file/upload")
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .body(BodyInserters.fromMultipartData(textFile("to-delete.txt").build()))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        String json = new String(up);
+
+        int i = json.indexOf("fileId") + 7;
+        while (i < json.length() && !Character.isDigit(json.charAt(i))) { i++; }
+        int j = i;
+        while (j < json.length() && Character.isDigit(json.charAt(j))) { j++; }
+        long fileId = Long.parseLong(json.substring(i, j));
+
+        client.delete().uri("/file/" + fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.code").isEqualTo(200);
+
+        // 删完必须取不回原始内容, 否则等于「接口返回成功但对象还在」。
+        // download 走 StreamingResponseBody 没有 Result 信封, 故直接比对载荷 ——
+        // 判据指向被检对象本身, 与响应结构解耦。
+        byte[] after = client.get().uri("/file/download/" + fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+
+        assertThat(after == null ? "" : new String(after))
+                .doesNotContain("integration-test-content-to-delete.txt");
     }
 
     private MultipartBodyBuilder textFile(String name) {
