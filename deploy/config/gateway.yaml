@@ -77,39 +77,6 @@ management:
       endpoint: http://otel-collector:4317
 
 # Resilience4j 弹性设计配置
-resilience4j:
-  circuitbreaker:
-    failure-rate-threshold: 50
-    slow-call-rate-threshold: 80
-    slow-call-duration-threshold-ms: 2000
-    sliding-window-count-based: true
-    sliding-window-size: 100
-    minimum-number-of-calls: 10
-    permitted-calls-in-half-open: 10
-    wait-duration-in-open-state-ms: 30000
-    record-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
-      - org.springframework.web.client.ResourceAccessException
-  ratelimiter:
-    limit-refresh-period-ms: 1000
-    limit-for-period: 100
-    timeout-duration-ms: 500
-  retry:
-    max-attempts: 3
-    wait-duration-ms: 500
-    exponential-backoff: true
-    exponential-multiplier: 2.0
-    retry-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
-    ignore-exceptions:
-      - java.lang.IllegalArgumentException
-      - java.lang.IllegalStateException
-  bulkhead:
-    max-concurrent-calls: 50
-    max-wait-duration-ms: 1000
-
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
   jwt:
