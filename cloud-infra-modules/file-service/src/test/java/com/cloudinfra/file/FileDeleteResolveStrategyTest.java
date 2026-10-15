@@ -10,6 +10,7 @@ import com.cloudinfra.file.service.StorageStrategy;
 import com.cloudinfra.file.service.impl.FileServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
@@ -104,8 +105,16 @@ class FileDeleteResolveStrategyTest {
         when(metadataMapper.selectById(meta.getId())).thenReturn(meta);
         when(metadataMapper.deleteById(meta.getId())).thenReturn(1);
 
+        // TransactionTemplate 必须真正执行回调: mock 默认对 execute() 返回 null,
+        // 若不接线则业务代码读到的删除结果恒为 null, 测试会以"删除应成功"失败。
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        when(transactionTemplate.execute(any())).thenAnswer(inv -> {
+            TransactionCallback<?> callback = inv.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
         return new FileServiceImpl(factory, metadataMapper, versionMapper,
-                permissionService, quotaService, mock(TransactionTemplate.class));
+                permissionService, quotaService, transactionTemplate);
     }
 
     @Test

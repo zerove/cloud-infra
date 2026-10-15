@@ -18,7 +18,6 @@ import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.framework.web.monitor.BusinessMetric;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
@@ -239,14 +238,17 @@ public class FileServiceImpl implements IFileService {
      * 保留 {@code boolean} 返回值以兼容既有调用方，成功时恒为 true。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public boolean delete(Long fileId, Long userId) {
+        // 顺序有语义: 先查元数据(不存在→404), 再校验权限(无权→403)。
+        // 反过来会让"文件不存在"的调用方收到 403, 从而泄漏资源存在性。
         FileMetadata metadata = metadataMapper.selectById(fileId);
         if (metadata == null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在");
         }
 
-        // 写权限校验（含上传者本人或授权用户）
+        // 权限校验走 Feign(resourceMappingApi + userApi), 存储删除走对象存储;
+        // 二者都是网络往返, 必须在事务外执行, 否则数据库连接会被跨网络持有。
+        // 本类的 upload()/update() 早已采用该约定, 仅 delete() 曾把三者一起塞进 @Transactional。
         if (!permissionService.hasAccess(userId, fileId, "WRITE")) {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to delete this file");
         }
@@ -254,25 +256,30 @@ public class FileServiceImpl implements IFileService {
         // 删除同样必须命中真实存储后, 否则 MinIO 上的大文件删不掉且会残留配额占用
         StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
         if (!strategy.delete(metadata.getFilePath())) {
-            // 存储仍持有对象: 抛错并回滚, 避免留下"记录没了、文件还在"的幽灵文件
+            // 存储仍持有对象: 抛错且不落库, 避免留下"记录没了、文件还在"的幽灵文件
             // (且配额不会被错误释放)
             log.warn("存储删除失败, 保留元数据以免产生幽灵文件 [fileId={}, path={}]",
                     fileId, metadata.getFilePath());
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "存储删除失败，文件未被删除");
         }
 
-        // 释放配额：优先使用元数据中的真实上传者，回退到当前操作者
         Long ownerId = parseUploader(metadata.getUploader());
         if (ownerId == null) {
             ownerId = userId;
         }
-        if (metadata.getFileSize() != null) {
-            quotaService.release(ownerId, metadata.getFileSize());
-        }
+        final Long quotaOwnerId = ownerId;
+        final long fileSize = metadata.getFileSize() == null ? 0L : metadata.getFileSize();
 
-        versionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
-            .eq(FileVersion::getFileId, fileId));
-        return metadataMapper.deleteById(fileId) > 0;
+        // 存储已删, 此处只剩 DB 变更: 用短事务一次性提交
+        Boolean removed = transactionTemplate.execute(status -> {
+            if (fileSize > 0) {
+                quotaService.release(quotaOwnerId, fileSize);
+            }
+            versionMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
+                .eq(FileVersion::getFileId, fileId));
+            return metadataMapper.deleteById(fileId) > 0;
+        });
+        return Boolean.TRUE.equals(removed);
     }
 
     /**
