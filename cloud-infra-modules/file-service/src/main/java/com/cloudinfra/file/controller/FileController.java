@@ -43,6 +43,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import com.cloudinfra.common.core.exception.BusinessException;
+import com.cloudinfra.common.core.exception.ErrorCode;
 
 @Tag(name = "文件管理")
 @RestController
@@ -371,5 +374,33 @@ public class FileController {
             return Result.fail(400, "搜索关键词不能为空");
         }
         return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
+    }
+
+    @Operation(summary = "删除文件（硬删除，不可恢复）")
+    @PreAuthorize("@ss.hasPermi('file:file:remove')")
+    @DeleteMapping("/{fileId}")
+    public Result<Void> remove(
+            @PathVariable Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+        Long userId = resolveUserId(requestUserId);
+        // service 层抛 BusinessException 时由 GlobalExceptionHandler 统一转 Result,
+        // 但其 getSuggestedHttpStatus() 恒为 500 —— 权限/不存在这类语义失败
+        // 不该被读成"服务故障"。故在此显式映射, 与 @PreAuthorize 的 401/403 保持语义一致。
+        try {
+            fileService.delete(fileId, userId);
+            return Result.success();
+        } catch (BusinessException e) {
+            // 按 ErrorCode 枚举比对, 不用裸数字: 1005/1006 一旦调整,
+            // 裸数字会静默失配并退化成 500。
+            if (ErrorCode.NO_PERMISSION.getCode().equals(e.getCode())) {
+                return Result.fail(403, e.getMessage());
+            }
+            if (ErrorCode.RESOURCE_NOT_FOUND.getCode().equals(e.getCode())) {
+                return Result.fail(404, e.getMessage());
+            }
+            // 其余(含存储删除失败 SYSTEM_ERROR): 保留可读原因, 不吞掉
+            log.error("文件删除失败 [fileId={}]: {}", fileId, e.getMessage());
+            return Result.fail(ErrorCode.SYSTEM_ERROR.getCode(), e.getMessage());
+        }
     }
 }
