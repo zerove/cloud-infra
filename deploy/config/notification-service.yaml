@@ -6,6 +6,12 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
@@ -17,7 +23,6 @@ spring:
   main:
     # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
     lazy-initialization: false
-    allow-bean-definition-overriding: true
   task:
     scheduling:
       # Spring Boot 默认 pool.size=1, 即全模块共用一个调度线程。
@@ -28,16 +33,28 @@ spring:
         size: 2
       thread-name-prefix: notif-sched-
   datasource:
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:20}
+      minimum-idle: ${HIKARI_MIN_IDLE:5}
       idle-timeout: 30000
       max-lifetime: 600000
       connection-timeout: 30000
+  # 本服务的 schema.sql 此前从未被执行 —— 全仓只有 system-module 配了 Flyway,
+  # 而 src/main/resources/schema.sql 里的 7 张表(含 sys_notification_schedule)
+  # 无人引用。后果: @Scheduled 定时扫描每轮抛
+  # `relation "sys_notification_schedule" does not exist`(实测 39 次),
+  # 定时调度功能实际不可用, 但容器 healthcheck 仍报 healthy。
+  #
+  # 该文件全部为 `CREATE TABLE IF NOT EXISTS`, 且无 DROP/TRUNCATE/ALTER
+  # (已实测 0 处), 故 mode: always 可安全重复执行, 不会破坏既有数据。
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
   threads:
     virtual:
       enabled: true
@@ -51,6 +68,10 @@ spring:
     port: 5672
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        prefetch: ${RABBITMQ_PREFETCH:10}
+        acknowledge-mode: auto
   config:
     import:
       - optional:nacos:actuator-config.yaml
@@ -73,12 +94,6 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-
 # 平台能力配置
 cloud-infra:
   tenant:

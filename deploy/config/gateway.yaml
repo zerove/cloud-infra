@@ -10,7 +10,6 @@ spring:
       enabled: true
   main:
     lazy-initialization: true
-    allow-bean-definition-overriding: true
   datasource:
     hikari:
       connection-timeout: 30000
@@ -77,38 +76,53 @@ management:
       endpoint: http://otel-collector:4317
 
 # Resilience4j 弹性设计配置
+#
+# ⚠️ 结构说明（2026-10-15 修正）: 此前这些参数被**平铺**在 `circuitbreaker:` 之下,
+# 而 resilience4j-spring-boot3 的属性类 CommonCircuitBreakerConfigurationProperties
+# 只有 instances / backends / configs 三个 Map 字段, **不存在**任何顶层阈值字段。
+# 即这些键全部无法绑定, 被 Spring 静默忽略 —— 配置"看起来生效"实则跑的是库默认值
+# (minimumNumberOfCalls=100 / waitDurationInOpenState=60s / slowCallDurationThreshold=60s)。
+# 正确的默认值写法必须嵌在 `configs.default` 之下。
 resilience4j:
   circuitbreaker:
-    failure-rate-threshold: 50
-    slow-call-rate-threshold: 80
-    slow-call-duration-threshold-ms: 2000
-    sliding-window-count-based: true
-    sliding-window-size: 100
-    minimum-number-of-calls: 10
-    permitted-calls-in-half-open: 10
-    wait-duration-in-open-state-ms: 30000
-    record-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
-      - org.springframework.web.client.ResourceAccessException
+    configs:
+      default:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-count-based: true
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        permitted-calls-in-half-open-state: 10
+        wait-duration-in-open-state: 30s
+        record-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
   ratelimiter:
-    limit-refresh-period-ms: 1000
-    limit-for-period: 100
-    timeout-duration-ms: 500
+    configs:
+      default:
+        limit-refresh-period: 1s
+        limit-for-period: 100
+        timeout-duration: 500ms
   retry:
-    max-attempts: 3
-    wait-duration-ms: 500
-    exponential-backoff: true
-    exponential-multiplier: 2.0
-    retry-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
-    ignore-exceptions:
-      - java.lang.IllegalArgumentException
-      - java.lang.IllegalStateException
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff: true
+        exponential-multiplier: 2.0
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+          - java.lang.IllegalStateException
   bulkhead:
-    max-concurrent-calls: 50
-    max-wait-duration-ms: 1000
+    configs:
+      default:
+        max-concurrent-calls: 50
+        max-wait-duration: 1s
 
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:

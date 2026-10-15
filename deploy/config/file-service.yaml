@@ -9,6 +9,12 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
     stream:
       rabbit:
         binder:
@@ -30,12 +36,11 @@ spring:
   main:
     # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
     lazy-initialization: false
-    allow-bean-definition-overriding: true
   threads:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
@@ -60,6 +65,16 @@ spring:
         reWriteBatchedInserts: true
         # 连接参数
         ApplicationName: cloud-infra-file
+  # 本服务的 schema.sql 此前从未被执行 —— 4 张表(file_metadata / file_permission /
+  # file_version / sys_storage_quota)各有对应的 @TableName Mapper 真实引用,
+  # 但运行时 4 张表全部缺失(已实测), 任何文件元数据操作都会失败。
+  #
+  # 该文件全部为 `CREATE TABLE IF NOT EXISTS`, 且无 DROP/TRUNCATE/ALTER(实测 0 处),
+  # 故 mode: always 可安全重复执行, 不会破坏既有数据。
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:cloud-redis}
@@ -82,13 +97,22 @@ auth:
 file:
   storage:
     type: auto
+    local:
+      # ⚠️ 键名必须与 LocalStorageStrategy 的 @Value 逐字一致 (2026-10-06 实测缺陷)。
+      #   代码读的是 `${file.storage.local.path:...}`, 而此前配置写的是
+      #   `upload.dir` —— 那个键**没有任何代码读取**, 于是服务一直静默使用
+      #   代码默认值 /tmp/cloud-infra/uploads。
+      #   证据: 运行时 /data 在容器内不存在, 而 /tmp/cloud-infra/uploads 存在。
+      #   教训: 配了 ≠ 生效(第三条硬规则), 配置键必须与读取处逐字对齐。
+      path: /data/uploads
     minio:
       endpoint: ${MINIO_ENDPOINT:http://cloud-minio:9000}
       access-key: ${MINIO_ACCESS_KEY:minio-dev-user}
       secret-key: ${MINIO_SECRET_KEY:minio-dev-secret-12345678}
-      bucket: ${MINIO_BUCKET:cloud-infra}
-  upload:
-    dir: /data/uploads
+      # 桶名必须与 FileController 签名直传硬编码的 "cloud-infra-files" 一致。
+      # 2026-10-06 实测: 不一致时常规上传报 NoSuchBucket; 小文件走本地故不受影响,
+      # 于是缺陷长期只在大文件路径上暴露。
+      bucket: ${MINIO_BUCKET:cloud-infra-files}
 
 management:
   server:
@@ -101,12 +125,6 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-
 # 平台能力配置
 cloud-infra:
   tenant:
