@@ -101,7 +101,7 @@ env:
   value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
-    path: /actuator/health/liveness
+    path: /management/health/liveness
     port: 9301
   initialDelaySeconds: 60
   periodSeconds: 10
@@ -109,7 +109,7 @@ livenessProbe:
   failureThreshold: 3
 readinessProbe:
   httpGet:
-    path: /actuator/health/readiness
+    path: /management/health/readiness
     port: 9301
   initialDelaySeconds: 30
   periodSeconds: 10
@@ -117,7 +117,7 @@ readinessProbe:
   failureThreshold: 3
 startupProbe:
   httpGet:
-    path: /actuator/health/startup
+    path: /management/health/readiness
     port: 9301
   initialDelaySeconds: 10
   periodSeconds: 10

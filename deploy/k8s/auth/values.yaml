@@ -132,7 +132,7 @@ env:
 
 livenessProbe:
   httpGet:
-    path: /actuator/health/liveness
+    path: /management/health/liveness
     port: 9301
   initialDelaySeconds: 60
   periodSeconds: 10
@@ -141,7 +141,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /actuator/health/readiness
+    path: /management/health/readiness
     port: 9301
   initialDelaySeconds: 30
   periodSeconds: 10
@@ -150,7 +150,7 @@ readinessProbe:
 
 startupProbe:
   httpGet:
-    path: /actuator/health/startup
+    path: /management/health/readiness
     port: 9301
   initialDelaySeconds: 10
   periodSeconds: 10
