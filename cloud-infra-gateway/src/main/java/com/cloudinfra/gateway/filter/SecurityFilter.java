@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 
 /**
  * 统一安全过滤器
@@ -32,7 +33,23 @@ import java.util.concurrent.ThreadLocalRandom;
 public class SecurityFilter extends OncePerRequestFilter implements Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityFilter.class);
-    private static final String TRACE_ID = "traceId";
+
+    /** MDC 键。logback 的 %X{traceId} 依赖此名，不要改。 */
+    private static final String TRACE_ID_MDC_KEY = "traceId";
+
+    /**
+     * 对外/对下游的 HTTP 头名。必须与 framework-web 的
+     * {@code TraceIdFilter.TRACE_ID_HEADER} 及 {@code FeignTraceIdInterceptor} 一致，
+     * 否则网关生成的 ID 到不了下游，下游会各自重新生成（trace 在服务边界断裂）。
+     */
+    private static final String TRACE_ID = "X-Trace-Id";
+
+    /**
+     * 外部可控头的白名单校验，与 {@code TraceIdFilter.SAFE_TRACE_ID} 同规则。
+     * 网关未引入 framework-web，缺少该过滤器，故在此自行设卡；
+     * 校验不通过即丢弃并重新生成，避免日志伪造。
+     */
+    private static final Pattern SAFE_TRACE_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     /**
      * 注入下游的租户请求头。与 {@code TenantContextFilter.TENANT_HEADER} 同名，
@@ -63,11 +80,11 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
         
         // 1. 处理链路追踪 ID
         String tempTraceId = request.getHeader(TRACE_ID);
-        if (tempTraceId == null || tempTraceId.isEmpty()) {
+        if (tempTraceId == null || tempTraceId.isEmpty() || !SAFE_TRACE_ID.matcher(tempTraceId).matches()) {
             tempTraceId = Long.toHexString(ThreadLocalRandom.current().nextLong()) + Long.toHexString(ThreadLocalRandom.current().nextLong());
         }
         final String traceId = tempTraceId;
-        MDC.put(TRACE_ID, traceId);
+        MDC.put(TRACE_ID_MDC_KEY, traceId);
 
         try {
             // 2. 执行认证判定
@@ -145,7 +162,7 @@ AuthContext authContext = new AuthContext(
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Security filter error");
         } finally {
-            MDC.remove(TRACE_ID);
+            MDC.remove(TRACE_ID_MDC_KEY);
         }
     }
 
