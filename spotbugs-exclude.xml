@@ -52,17 +52,6 @@
             <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
         </And>
     </Match>
-    <!--
-      OutboxEventRepository 的 SQL 用 Java 文本块 + formatted(TABLE) 组装。
-      文本块内是字面换行符而非 %n：SQL 语句必须与平台行分隔符无关，
-      改用 %n 会让同一份 SQL 在不同操作系统上产生不同字节。
-    -->
-    <Match>
-        <And>
-            <Class name="com.cloudinfra.framework.mybatis.outbox.OutboxEventRepository"/>
-            <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
-        </And>
-    </Match>
 
     <!--
       2026-09-30 新增。背景: CI 自 2026-09-05 起因 GraalVM 版本资产失效而从未真正运行,
