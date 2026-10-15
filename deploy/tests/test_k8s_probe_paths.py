@@ -17,6 +17,14 @@ actuator 健康端点的真实路径是 `/management/health/*`, 而**不是**
 第二个坑: **Spring Boot 没有 `startup` 健康分组**。实测
 `/management/health/startup` -> 404。因此 startupProbe 也必须指向 readiness。
 
+## 独立佐证（不是推断）
+
+`deploy/compose.yaml` 里 6 个服务的 healthcheck 用的就是
+`http://localhost:9301/management/health/readiness`, 且**长期可用**。
+即该路径是生产中已被验证可达的那个, 而 `/actuator/health/*` 从未生效过。
+本守护同时校验 compose healthcheck, 使三个部署面(manifests / Helm / compose)
+不会各自漂移。
+
 ## 判定方式
 
 扫描 manifests/ 与 deploy/k8s/ 下所有 `*Probe.httpGet.path`:
@@ -38,6 +46,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SPRING_SERVICES = ("auth", "system", "file", "notification", "search", "gateway")
 SCAN_ROOTS = [REPO_ROOT / "manifests"]
 SCAN_ROOTS += [REPO_ROOT / "deploy" / "k8s" / name for name in SPRING_SERVICES]
+
+COMPOSE_FILE = REPO_ROOT / "deploy" / "compose.yaml"
 
 MANAGEMENT_PORT = 9301
 VALID_GROUPS = {"liveness", "readiness"}
@@ -134,6 +144,30 @@ def main() -> int:
                 failures.append(
                     f"{rel}:{line_no}: {probe} 端口 {port_match.group(1)} "
                     f"应为管理端口 {MANAGEMENT_PORT}")
+
+    # compose healthcheck 也必须指向真实可达的路径。
+    # 只取真正的 URL 行: compose 里大量注释会提到 /actuator/health 作为说明,
+    # 首版未排除注释行, 导致 6 处假阳性。
+    if COMPOSE_FILE.is_file():
+        url_re = re.compile(r"https?://[^\s\"']+")
+        for line_no, line in enumerate(
+                COMPOSE_FILE.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for url in url_re.findall(stripped):
+                if "/_cluster/health" in url or url.rstrip("/").endswith(":8848"):
+                    continue      # 第三方组件原生探针
+                if "/management/health/" in url:
+                    group = url.split("/management/health/")[1].split("/")[0]
+                    if group not in VALID_GROUPS:
+                        failures.append(
+                            f"deploy/compose.yaml:{line_no}: healthcheck 指向不存在的"
+                            f"分组 '{group}'(URL {url})")
+                elif "actuator/health" in url:
+                    failures.append(
+                        f"deploy/compose.yaml:{line_no}: healthcheck 使用 {url} —— "
+                        f"base-path=/management, 该路径恒 404(实测)")
 
     if failures:
         print("FAIL:")
