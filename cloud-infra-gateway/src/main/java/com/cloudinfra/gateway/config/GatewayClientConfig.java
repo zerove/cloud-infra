@@ -16,8 +16,6 @@ import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestClient;
 
-import java.time.Duration;
-
 /**
  * 网关 HTTP 客户端配置
  * 仅提供配置好的 ClientHttpRequestFactory 和 RestClient.Builder
@@ -27,27 +25,24 @@ import java.time.Duration;
 @Configuration
 public class GatewayClientConfig {
 
-    private static final Duration CONNECT_TIMEOUT = java.time.Duration.ofSeconds(3);
-    private static final Duration CONNECTION_REQUEST_TIMEOUT = java.time.Duration.ofSeconds(3);
-    private static final Duration READ_TIMEOUT = java.time.Duration.ofSeconds(10);
-
     /**
      * 创建配置好的 ClientHttpRequestFactory
      * 配置跳过代理，直接连接目标服务（内网服务间调用不需要代理）
+     *
+     * <p>超时值来自 {@link GatewayHttpTimeoutProperties}，而非本类常量。
+     * 此前这里声明过 {@code CONNECT_TIMEOUT} / {@code CONNECTION_REQUEST_TIMEOUT} /
+     * {@code READ_TIMEOUT = ofSeconds(10)} 三个常量，却在 {@code RequestConfig} 里
+     * 另写了一份字面量：两份互不引用，**改常量不会有任何效果**，
+     * 而字面量才是实际生效的那个。已统一改为读取配置项。
      */
     @Bean
     @Primary
-    public ClientHttpRequestFactory clientHttpRequestFactory() {
+    public ClientHttpRequestFactory clientHttpRequestFactory(GatewayHttpTimeoutProperties timeouts) {
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(2000);
         cm.setDefaultMaxPerRoute(500);
 
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.of(Duration.ofSeconds(3)))
-                .setConnectTimeout(Timeout.of(Duration.ofSeconds(3)))
-                .setResponseTimeout(Timeout.of(Duration.ofSeconds(10)))
-                .setProxy(null)
-                .build();
+        RequestConfig requestConfig = buildRequestConfig(timeouts);
 
         CloseableHttpClient httpClient = HttpClients.custom()
                 .setConnectionManager(cm)
@@ -57,6 +52,20 @@ public class GatewayClientConfig {
                 .build();
 
         return new HttpComponentsClientHttpRequestFactory(httpClient);
+    }
+
+    /**
+     * 包级可见（而非 private）是有意为之：本方法存在的唯一目的是让
+     * {@code GatewayHttpTimeoutWiringTest} 能断言超时真的来自配置项。
+     * 若改成 private，唯一的验证途径只剩反射进 Apache HttpClient 私有字段。
+     */
+    RequestConfig buildRequestConfig(GatewayHttpTimeoutProperties timeouts) {
+        return RequestConfig.custom()
+                .setConnectionRequestTimeout(Timeout.of(timeouts.getConnectionRequest()))
+                .setConnectTimeout(Timeout.of(timeouts.getConnect()))
+                .setResponseTimeout(Timeout.of(timeouts.getRead()))
+                .setProxy(null)
+                .build();
     }
 
     /**

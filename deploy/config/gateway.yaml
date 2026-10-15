@@ -121,3 +121,16 @@ auth:
 # 第一优先级读 System.getenv("INTERNAL_CALL_SECRET"), 且全仓无任何 @Value/Environment
 # 消费者读该键 —— 这段配置同步到 Nacos 后从不被读取, 只会误导运维以为改 Nacos 能生效。
 # 密钥的唯一正确来源是环境变量 INTERNAL_CALL_SECRET, compose.yaml 已用 ${INTERNAL_CALL_SECRET:?} 强制拦截漏配。
+
+# 网关转发到后端服务的 HTTP 客户端超时
+# 读超时原为硬编码 10s (GatewayClientConfig 里的字面量), 而 file/upload 的
+# 20MiB 上传经网关实测耗时 2.6~5.2s, 余量仅 2~4 倍, 宿主负载高峰时被击穿,
+# 表现为客户端 500 而 file-service 日志全是 200 (网关先于服务端放弃)。
+# 现改为可配置; 代码默认值同样是 60s, 不依赖本配置也会生效。
+# 注意: 键名必须与 GatewayHttpTimeoutProperties 的 Java Bean 名逐字对齐
+# (是 read 而不是 readTimeout), 否则会静默退回默认值而不报错。
+gateway:
+  http-timeout:
+    connect: 3s
+    connection-request: 3s
+    read: 60s
