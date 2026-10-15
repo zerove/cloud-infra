@@ -20,9 +20,9 @@ public class JwtUtils {
     /**
      * 已知的公开弱默认密钥（仅用于本地开发兜底，生产必须通过 AUTH_JWT_SECRET 覆盖）
      */
-    private static final java.util.Set<String> WEAK_DEFAULT_SECRETS = java.util.Set.of(
-        "CloudInfraSecretKey123456789012345678901234567890",
-        "***REMOVED-LEAKED-DEV-JWT-SECRET***"
+    private static final java.util.Set<String> WEAK_DEFAULT_SECRET_SHA256 = java.util.Set.of(
+        "dbdee59805378a4a029accf391ef980c902e718d68484b3891e881c39b574c00",
+        "5d0b67992bf54d45b8d2404847d1bf40e75dcca71933274cbb172043c1c08f40"
     );
     private static final int MIN_SECRET_LENGTH = 32;
 
@@ -46,6 +46,21 @@ public class JwtUtils {
      * 2. 长度 >= 32 字符
      * 3. 不得使用已知公开弱密钥
      */
+    private static String sha256Hex(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 不可用, 无法校验 JWT 密钥强度", e);
+        }
+    }
+
     private void validateSecret() {
         if (secret == null || secret.isBlank()) {
             throw new IllegalStateException(
@@ -57,7 +72,7 @@ public class JwtUtils {
                 "JWT 密钥强度不足：长度必须 >= " + MIN_SECRET_LENGTH + "，当前长度 " + secret.length()
             );
         }
-        if (WEAK_DEFAULT_SECRETS.contains(secret)) {
+        if (WEAK_DEFAULT_SECRET_SHA256.contains(sha256Hex(secret))) {
             throw new IllegalStateException(
                 "JWT 密钥为公开弱默认值，禁止用于生产：请通过 AUTH_JWT_SECRET 配置独立高强度密钥"
             );

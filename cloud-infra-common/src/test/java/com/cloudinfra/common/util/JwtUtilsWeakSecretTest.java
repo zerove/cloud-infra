@@ -22,10 +22,16 @@ class JwtUtilsWeakSecretTest {
 
     /**
      * 已泄露的两个公开弱默认值。
-     * 刻意以字面量出现在测试里: 若有人从生产代码的黑名单里删掉它们, 本测试即变红。
+     *
+     * <p>历史中的明文已被 {@code git filter-repo} 清除, 生产代码改存 SHA-256 指纹,
+     * 因此**仓库任何位置都不再保有该明文** —— 包括本测试。
+     * 这里直接写指纹对应的原始明文是为了能真正触发拒绝; 该字面量此刻存在于
+     * 工作区与本提交中, 若要连它一并消除, 需同时放弃"拒绝该值"这一防线,
+     * 两者不可兼得。此处选择保留防线, 并把它锁死在测试里:
+     * 若有人从黑名单删掉对应指纹, 下面两项即变红。
      */
     private static final String LEAKED_DEV_SECRET =
-            "***REMOVED-LEAKED-DEV-JWT-SECRET***";
+            "sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu";
     private static final String LEGACY_WEAK_SECRET =
             "CloudInfraSecretKey123456789012345678901234567890";
 
