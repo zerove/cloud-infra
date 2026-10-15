@@ -33,11 +33,6 @@ cloud-infra:
   tenant:
     enabled: false
     require-tenant: false
-  outbox:
-    enabled: true
-    poll-interval-ms: 1000
-    batch-size: 100
-    cleanup-days: 7
 
 management:
   server:
