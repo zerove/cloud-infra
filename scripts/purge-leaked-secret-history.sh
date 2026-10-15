@@ -31,12 +31,12 @@ git rev-parse --verify "$SAFETY_REF" >/dev/null 2>&1 \
   || die "缺少安全引用 $SAFETY_REF —— 无重写前状态可回退, 中止(勿盲目强推)"
 ok "安全引用存在: $SAFETY_REF"
 
-[[ -z "$(git status --porcelain)" ]] || die "工作区不干净, 先提交或暂存后再执行"
-ok "工作区干净"
-
+# 只查**已跟踪**文件的改动: 未跟踪文件不受推送影响, 不该阻塞。
+# (未跟踪: --untracked-files=no; 不用 -uno 简写以免与 git 自身选项混淆)
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-  die "存在未提交改动"
+  die "存在未提交的已跟踪改动, 先提交后再执行"
 fi
+ok "已跟踪文件均已提交"
 
 say "2/6 连通性"
 git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" >/dev/null 2>&1 \
