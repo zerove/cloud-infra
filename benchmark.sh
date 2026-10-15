@@ -14,7 +14,7 @@ CONCURRENCY=50
 BUSINESS_PORT=18080
 MANAGEMENT_PORT=19301
 # 负载端点: 业务端口上的免认证 JSON 端点(网关白名单内)
-LOAD_ENDPOINT="/v3/api-docs"
+LOAD_ENDPOINT="${LOAD_ENDPOINT:-/v3/api-docs}"
 # 就绪检查端点: actuator 位于独立管理端口
 READY_URL="http://127.0.0.1:${MANAGEMENT_PORT}/management/health"
 BENCHMARK_DIR="benchmark-results"
@@ -58,6 +58,7 @@ if [ "$MODE" = "native" ]; then
   fi
   # 注意: --spring.cloud.nacos.*.enabled=false 在 native 下不生效(AOT 已固化 Nacos 客户端初始化),
   # 依赖 /etc/hosts 将 cloud-nacos/cloud-redis 映射到 127.0.0.1 来直连本地基础设施
+  INTERNAL_CALL_SECRET="${INTERNAL_CALL_SECRET:-benchmark-internal-call-secret-min-32-chars}" \
   "$BIN" \
     --spring.data.redis.host=127.0.0.1 \
     --spring.data.redis.port=6379 \
@@ -72,6 +73,9 @@ else
   fi
   # 独立管理端口避免与已部署实例冲突; 显式 dev profile 激活 logback 控制台输出
   # Redis 覆盖为 127.0.0.1: 本地容器端口映射经回环可达, 而容器网桥 IP 在 WSL2 下不通
+  # INTERNAL_CALL_SECRET 必须用**环境变量**注入: InternalCallCrypto 只认 env 或 -D 系统属性,
+  # `--key=value` 命令行参数不会被 Spring Boot 写回 System.getProperty, 写了不生效(AGENTS.md 记录)。
+  INTERNAL_CALL_SECRET="${INTERNAL_CALL_SECRET:-benchmark-internal-call-secret-min-32-chars}" \
   java -jar "$JAR" \
     --spring.profiles.active=dev \
     --spring.cloud.nacos.config.enabled=false \
@@ -113,6 +117,28 @@ echo "RSS 内存: ${MEM_MB}MB"
 
 # 3. 并发吞吐量基准 (CONCURRENCY 个 worker 持续打 DURATION 秒)
 echo ""
+# 压测前预检 —— 缺了它, 压一个 404/401 也会得到漂亮的 RPS 数字,
+# 而那衡量的是错误页而非业务路径。历史上 /v3/api-docs 就是这种"测了等于没测"。
+# 必须给 connect/max-timeout: 端点无监听时 curl 默认等满 TCP 超时(约 2 分钟),
+# 预检反而成了新的阻塞点(实测踩到)。
+# 用 || true 而非 || echo "000": curl 连接失败时 -w 仍会输出 "000" 且退出码非 0,
+# 加 || echo 会拼成 "000000"(实测)。
+PREFLIGHT_CODE=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' \
+  --connect-timeout 5 --max-time 15 \
+  "http://localhost:${BUSINESS_PORT}${LOAD_ENDPOINT}" 2>/dev/null || true)
+PREFLIGHT_CODE="${PREFLIGHT_CODE:-000}"
+[ "$PREFLIGHT_CODE" = "000" ] && PREFLIGHT_CODE="000"
+case "$PREFLIGHT_CODE" in
+  2??) : ;;
+  *)
+    echo "❌ 压测端点预检失败: ${LOAD_ENDPOINT} 返回 HTTP ${PREFLIGHT_CODE}"
+    echo "   2xx 才说明该端点真实可达; 000/404/401 会让压测只测到错误路径。"
+    echo "   可用 --endpoint 指定可达端点后重试。"
+    exit 1
+    ;;
+esac
+echo "✅ 压测端点预检通过: ${LOAD_ENDPOINT} → HTTP ${PREFLIGHT_CODE}"
+
 echo "📊 测试 3: HTTP 吞吐量 (${DURATION}s, 并发 ${CONCURRENCY})"
 END_EPOCH=$(( $(date +%s) + DURATION ))
 
@@ -146,7 +172,13 @@ for f in "$BENCHMARK_DIR"/worker-*.result; do
 done
 rm -f "$BENCHMARK_DIR"/worker-*.result
 
-RPS=$(( (TOTAL_OK + TOTAL_FAIL) / DURATION ))
+# 只按成功数计吞吐: 原式 (OK+FAIL) 会让"端点全挂"表现为高 RPS, 从而骗过吞吐门禁
+RPS=$(( TOTAL_OK / DURATION ))
+if [ "$DURATION" -gt 0 ]; then
+  FAIL_RATE_PCT=$(( TOTAL_FAIL * 100 / (TOTAL_OK + TOTAL_FAIL) ))
+else
+  FAIL_RATE_PCT=100
+fi
 echo "成功请求: ${TOTAL_OK}, 失败: ${TOTAL_FAIL}, 吞吐量: ${RPS} RPS"
 
 # 4. 延迟分位 (p50/p95/p99)
@@ -163,7 +195,8 @@ vals.sort()
 def percentile(p):
     k = (len(vals)-1) * p
     f = int(k); c = min(f+1, len(vals)-1)
-    return vals[f] + (vals[c]-vals[f])*(k-f)
+    # 线性插值会产出 40.179999999999836 这类浮点尾巴, 直接进报告与 PR 评论很难看
+    return round(vals[f] + (vals[c]-vals[f])*(k-f), 1)
 print(int(statistics.mean(vals)), percentile(0.50), percentile(0.95), percentile(0.99), vals[-1])
 PYEOF
 )"
@@ -201,6 +234,7 @@ cat > "$REPORT_FILE" <<EOF
 | 吞吐量 | ${RPS} RPS |
 | 成功请求 | ${TOTAL_OK} |
 | 失败请求 | ${TOTAL_FAIL} |
+| 失败率 | ${FAIL_RATE_PCT}% |
 | 平均延迟 | ${AVG_L50}ms |
 | p50 延迟 | ${P50}ms |
 | p95 延迟 | ${P95}ms |
