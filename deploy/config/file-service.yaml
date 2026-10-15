@@ -65,16 +65,6 @@ spring:
         reWriteBatchedInserts: true
         # 连接参数
         ApplicationName: cloud-infra-file
-  # 本服务的 schema.sql 此前从未被执行 —— 4 张表(file_metadata / file_permission /
-  # file_version / sys_storage_quota)各有对应的 @TableName Mapper 真实引用,
-  # 但运行时 4 张表全部缺失(已实测), 任何文件元数据操作都会失败。
-  #
-  # 该文件全部为 `CREATE TABLE IF NOT EXISTS`, 且无 DROP/TRUNCATE/ALTER(实测 0 处),
-  # 故 mode: always 可安全重复执行, 不会破坏既有数据。
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:cloud-redis}

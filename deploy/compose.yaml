@@ -732,6 +732,10 @@ services:
     networks:
       - cloud-infra
     depends_on:
+      # schema 由 system-module 的 Flyway 独占管理, 本服务不再自行建表,
+      # 因此必须等它迁移完成(system 的 healthcheck 已指向其 readiness)。
+      system:
+        condition: service_healthy
       nacos:
         condition: service_healthy
       # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
@@ -793,6 +797,10 @@ services:
     networks:
       - cloud-infra
     depends_on:
+      # schema 由 system-module 的 Flyway 独占管理, 本服务不再自行建表,
+      # 因此必须等它迁移完成(system 的 healthcheck 已指向其 readiness)。
+      system:
+        condition: service_healthy
       nacos:
         condition: service_healthy
       # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
@@ -854,6 +862,10 @@ services:
     networks:
       - cloud-infra
     depends_on:
+      # schema 由 system-module 的 Flyway 独占管理, 本服务不再自行建表,
+      # 因此必须等它迁移完成(system 的 healthcheck 已指向其 readiness)。
+      system:
+        condition: service_healthy
       nacos:
         condition: service_healthy
       # ⚠️ 必须是 service_started, **不能是 service_healthy** (2026-10-03 实测回退)。
