@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-429%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-504%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
 
 > ⚠️ **进度口径说明** (2026-09-30): 徽章中的 `ROADMAP 1/6` 按项目级完成定义统计,
 > 即**被真实业务使用的能力数**。若按传统“条目打勾”口径计, M6/M7 看起来接近全绿 ——
@@ -20,7 +20,7 @@
 - ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
 - ✅ **AGENTS.md 同步 codegen 模块** (55cd647)
 
-**完整状态**: [HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) · 26 个新 commits · 9 P0/M5 issues closed · 11 Prometheus 告警 (2 业务类运行时实测) · p99 165ms · 101 测试全过
+**完整状态**: [HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) · 26 个新 commits · 9 P0/M5 issues closed · 11 Prometheus 告警 (2 业务类运行时实测) · 性能基线见下方「性能基线」(口径: 网关入口路径, 非业务链路)
 
 **v1.0.0 零信任发布**: 6 个质量门全部通过, git tag `e6b786d` on origin, 0 commit drift. 详见 [docs/releases/v1.0.0.md](docs/releases/v1.0.0.md)
 
@@ -76,7 +76,7 @@ mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
 - **配置校验优化**: ConfigValidationAutoConfiguration 新增条件注解，测试环境自动禁用，避免启动噪音。
 - **系统模块覆盖率调整**: 降低整体覆盖率门槛至 15%，核心 service.impl 保持 80% 门槛。
 
-## 📊 性能基线 (2026-08)
+## 📊 性能基线 (2026-08 实测)
 
 | 指标 | 值 |
 |------|-----|
@@ -91,7 +91,12 @@ mvn -pl cloud-infra-codegen/cloud-infra-codegen-maven-plugin \
 | p99 延迟 | 1066ms |
 | 最大延迟 | 1163ms |
 
-*测试条件: 10并发, 10秒, 端点 `/v3/api-docs`, Gateway + Auth + System + File + Notification + Search 全链路*
+> ⚠️ **口径说明（必读）**: 端点是 `/v3/api-docs` —— 网关自己生成的**静态 OpenAPI JSON**，
+> **不触达任何业务逻辑**。因此上表衡量的是"网关入口路径"（过滤器链 + 路由 + 响应），
+> **不是业务吞吐或业务延迟**，不能据此推断业务性能。
+> 要测业务链路需起全栈后用 `./benchmark.sh --endpoint <业务路径>` 重测。
+> 另：本表为 2026-08 的基线；此处不再并列更晚的"优化后"数字，
+> 因为两者若非同端点同并发比较，数字变小只说明测的东西变了，不说明变快了。
 
 ## 🛠️ 快速开始
 
