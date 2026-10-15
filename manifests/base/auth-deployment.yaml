@@ -17,6 +17,16 @@ spec:
                   image: localhost/cloud-infra-auth:latest
                   imagePullPolicy: IfNotPresent
                   env:
+                      - name: AUTH_JWT_SECRET
+                        valueFrom:
+                            secretKeyRef:
+                                name: cloud-infra-secrets
+                                key: jwt.secret
+                      - name: INTERNAL_CALL_SECRET
+                        valueFrom:
+                            secretKeyRef:
+                                name: cloud-infra-secrets
+                                key: internalCall.secret
                       - name: SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR
                         value: "nacos-service:8848"
                       - name: SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR
@@ -24,7 +34,31 @@ spec:
                       - name: JAVA_OPTS
                         value: "-XX:+UseSerialGC -Xmx256m -Xms128m -XX:+UseContainerSupport"
                   ports:
-                      - containerPort: 9200
+                      - name: app
+                        containerPort: 8081
+                      - name: management
+                        containerPort: 9301
+                  startupProbe:
+                      httpGet:
+                          path: /management/health/readiness
+                          port: 9301
+                      periodSeconds: 5
+                      timeoutSeconds: 5
+                      failureThreshold: 60
+                  livenessProbe:
+                      httpGet:
+                          path: /management/health/liveness
+                          port: 9301
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                      failureThreshold: 6
+                  readinessProbe:
+                      httpGet:
+                          path: /management/health/readiness
+                          port: 9301
+                      periodSeconds: 5
+                      timeoutSeconds: 3
+                      failureThreshold: 3
                   resources:
                       requests:
                           cpu: 250m
@@ -39,7 +73,7 @@ metadata:
     name: auth-service
 spec:
     ports:
-        - port: 9200
-          targetPort: 9200
+        - port: 8081
+          targetPort: 8081
     selector:
         app: auth
