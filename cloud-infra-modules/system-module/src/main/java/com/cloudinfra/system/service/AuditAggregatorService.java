@@ -31,6 +31,9 @@ public class AuditAggregatorService {
     private final SysOperLogMapper operLogMapper;
     private final NotificationApi notificationApi;
 
+    /** 时间线单源上限。与下方通知侧的 pageSize*maxPages 保持对称。 */
+    private static final int OPER_LOG_LIMIT = 5000;
+
     /**
      * 获取指定用户的统一行为时间线
      * @param userId 用户ID
@@ -46,6 +49,7 @@ public class AuditAggregatorService {
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysOperLog>()
                         .eq(SysOperLog::getUserId, userId)
                         .orderByDesc(SysOperLog::getCreateTime)
+                        .last("LIMIT " + OPER_LOG_LIMIT)
                 ).stream().map(log -> new UnifiedAuditRecord(
                     log.getCreateTime(),
                     userId.toString(),
