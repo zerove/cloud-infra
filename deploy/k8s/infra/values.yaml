@@ -47,7 +47,7 @@ postgresql:
   auth:
     database: cloud_infra
     username: postgres
-    password: password
+    password: ""
     existingSecret: cloud-infra-secrets
     secretKey: postgres.password
   resources:
@@ -70,7 +70,7 @@ rabbitmq:
   replicas: 1
   auth:
     username: guest
-    password: guest
+    password: ""
   resources:
     limits:
       cpu: 500m
@@ -176,7 +176,7 @@ minio:
   replicas: 1
   auth:
     rootUser: cloud-infra-minio-dev
-    rootPassword: CloudInfraMinioDevSecret2024
+    rootPassword: ""
   resources:
     limits:
       cpu: 500m

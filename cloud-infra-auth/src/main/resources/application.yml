@@ -31,7 +31,7 @@ spring:
 datasource:
   url: jdbc:postgresql://cloud-postgres:5432/cloud_infra
   username: postgres
-  password: password
+  password: ${SPRING_DATASOURCE_PASSWORD:password}
   driver-class-name: org.postgresql.Driver
   hikari:
     maximum-pool-size: 20

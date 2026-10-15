@@ -61,7 +61,7 @@ services:
       MODE: standalone
       PREFER_HOST_MODE: hostname
       NACOS_AUTH_ENABLE: "false"
-      NACOS_AUTH_TOKEN: c2VjcmV0VG9rZW4xMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZg==
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
       NACOS_AUTH_IDENTITY_KEY: serverIdentity
       NACOS_AUTH_IDENTITY_VALUE: security
       # 启用 v1/v2 客户端 API 兼容 (up.sh 配置同步与运维脚本依赖 v1 API)
@@ -418,7 +418,7 @@ services:
       - no_proxy=*
       - NO_PROXY=*
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:

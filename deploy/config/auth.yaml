@@ -33,7 +33,6 @@ spring:
   main:
     # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
     lazy-initialization: false
-    allow-bean-definition-overriding: true
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
@@ -44,7 +43,7 @@ spring:
         config:
           default:
             connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
-            readTimeout: ${FEIGN_READ_TIMEOUT_MS:60000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
     stream:
       rabbit:
         binder:
