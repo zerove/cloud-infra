@@ -57,7 +57,7 @@
 
         <!-- Native Image Build Control -->
         <spring-boot.aot.skip>true</spring-boot.aot.skip>
-        <native.image.skip>true</native.image.skip>
+        <native.image.skip>false</native.image.skip>
         <spring-boot.repackage.skip>false</spring-boot.repackage.skip>
 
         <!-- 测试分离控制：单测走 surefire，集成测试走 failsafe -->
@@ -371,6 +371,13 @@
                 <version>3.5.6</version>
                 <configuration>
                     <skip>${skipUnitTests}</skip>
+                    <!--
+                      IT 必须排除: 集成测试由 failsafe 驱动。
+                      缺失此 excludes 时 surefire 会把 *IT / *IntegrationTest 当单测执行,
+                      且不带 failsafe 的 systemPropertyVariables 注入
+                      (cloud-infra.internal-call.secret), 导致 InternalCallSecretProvider
+                      fail-fast 而整类 IT 启动失败。参见 AGENTS.md「测试夹具隔离」。
+                    -->
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/*IT.java</exclude>
@@ -539,7 +546,7 @@
             <id>native</id>
             <properties>
                 <spring-boot.aot.skip>false</spring-boot.aot.skip>
-                <native.image.skip>false</native.image.skip>
+<native.image.skip>true</native.image.skip>
                 <!-- Buildpacks Native Image 构建配置 -->
                 <spring-boot.build-image.builder>paketobuildpacks/builder:tiny</spring-boot.build-image.builder>
                 <spring-boot.build-image.env.BP_NATIVE_IMAGE>true</spring-boot.build-image.env.BP_NATIVE_IMAGE>
