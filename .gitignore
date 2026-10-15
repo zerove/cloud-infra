@@ -113,3 +113,6 @@ nacos-mysql.sql
 
 # Dry run tools (manual development verification, not part of production test suite)
 **/SysUserDryRun.java
+
+# 会话开始前即存在的本地规划笔记, 非仓库产物
+MEMORY_OPTIMIZATION_PLAN.md
