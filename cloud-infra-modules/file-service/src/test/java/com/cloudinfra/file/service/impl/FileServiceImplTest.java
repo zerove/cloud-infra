@@ -224,7 +224,7 @@ class FileServiceImplTest {
 
         given(metadataMapper.selectById(fileId)).willReturn(metadata);
         given(permissionService.hasAccess(userId, fileId, "WRITE")).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(any())).willReturn(storageStrategy);
         given(storageStrategy.delete(metadata.getFilePath())).willReturn(true);
         given(metadataMapper.deleteById(fileId)).willReturn(1);
 
@@ -237,15 +237,19 @@ class FileServiceImplTest {
     }
 
     @Test
-    void delete_nonExistentFile_shouldReturnFalse() {
-        // given
+    void delete_nonExistentFile_shouldThrowNotFound() {
+        // given: 元数据不存在
         given(metadataMapper.selectById(anyLong())).willReturn(null);
 
-        // when
-        boolean result = fileService.delete(99L, 1L);
+        // when / then
+        // 契约变更: 由"静默 return false"改为抛 RESOURCE_NOT_FOUND ——
+        // 否则调用方无法区分"文件不存在"与"存储删除失败"。
+        assertThatThrownBy(() -> fileService.delete(99L, 1L))
+            .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+            .hasMessageContaining("文件不存在");
 
-        // then
-        assertThat(result).isFalse();
+        // 且不得触碰存储
+        then(storageFactory).should(never()).resolveForRead(any());
     }
 
     @Test
@@ -433,22 +437,24 @@ class FileServiceImplTest {
     }
 
     @Test
-    void delete_whenStorageDeleteFails_shouldReturnFalse() {
+    void delete_whenStorageDeleteFails_shouldThrowAndNotTouchDb() {
         // given
         FileMetadata metadata = new FileMetadata();
         metadata.setId(1L);
         metadata.setFilePath("/uploads/doc.pdf");
         given(metadataMapper.selectById(1L)).willReturn(metadata);
         given(permissionService.hasAccess(anyLong(), anyLong(), eq("WRITE"))).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(any())).willReturn(storageStrategy);
         given(storageStrategy.delete("/uploads/doc.pdf")).willReturn(false);
 
-        // when
-        boolean result = fileService.delete(1L, 1L);
+        // when / then: 契约变更 —— 抛错而非静默返回 false, 且绝不落库
+        assertThatThrownBy(() -> fileService.delete(1L, 1L))
+            .isInstanceOf(com.cloudinfra.common.core.exception.BusinessException.class)
+            .hasMessageContaining("存储删除失败");
 
-        // then
-        assertThat(result).isFalse();
+        // 关键: 元数据必须保留, 否则产生"记录没了、文件还在"的幽灵文件
         then(metadataMapper).should(never()).deleteById(anyLong());
+        then(quotaService).should(never()).release(anyLong(), anyLong());
     }
 
     @Test
@@ -461,7 +467,7 @@ class FileServiceImplTest {
         metadata.setUploader("not-a-number");
         given(metadataMapper.selectById(1L)).willReturn(metadata);
         given(permissionService.hasAccess(anyLong(), anyLong(), eq("WRITE"))).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(any())).willReturn(storageStrategy);
         given(storageStrategy.delete("/uploads/doc.pdf")).willReturn(true);
         given(metadataMapper.deleteById(1L)).willReturn(1);
 
