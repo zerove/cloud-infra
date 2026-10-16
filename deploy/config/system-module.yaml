@@ -9,6 +9,12 @@ spring:
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
     stream:
       rabbit:
         binder:
@@ -30,12 +36,11 @@ spring:
     # (Spring Boot loader NestedJarFile 全局锁 + 虚拟线程 pinning 导致死锁, 见本次调试记录)
     lazy-initialization: false
     # 已保持 false: 与其他服务统一 - 防止 fat jar 类加载与 Nacos 注册并发风险
-    allow-bean-definition-overriding: true
   autoconfigure:
     # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
     exclude: io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
   datasource:
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
@@ -102,7 +107,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: health,info,prometheus,metrics,env,beans,conditions,refresh
+        include: health,info,prometheus,metrics,refresh
   endpoint:
     health:
       show-details: always
@@ -113,48 +118,63 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
-
 # Resilience4j 弹性设计配置
+#
+# ⚠️ 阈值必须嵌在 configs.default / instances.<name> 之下。属性类
+# CommonCircuitBreakerConfigurationProperties 只有 instances/backends/configs
+# 三个 Map 字段, 平铺在 circuitbreaker: 下的键不会被绑定 (静默跑库默认值)。
+# deploy/tests/test_resilience4j_config_shape.py 守护此结构。
 resilience4j:
   circuitbreaker:
-    failure-rate-threshold: 50
-    slow-call-rate-threshold: 80
-    slow-call-duration-threshold-ms: 2000
-    sliding-window-count-based: true
-    sliding-window-size: 100
-    minimum-number-of-calls: 10
-    permitted-calls-in-half-open: 10
-    wait-duration-in-open-state-ms: 30000
-    record-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
-      - org.springframework.web.client.ResourceAccessException
+    configs:
+      default:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-count-based: true
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        permitted-calls-in-half-open-state: 10
+        wait-duration-in-open-state: 30s
+        record-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
     # 下游服务熔断实例(与 cloud-infra-api Feign 注解 name 对应)
     instances:
       notificationService:
         failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-count-based: true
         sliding-window-size: 100
         minimum-number-of-calls: 10
+        permitted-calls-in-half-open-state: 10
         wait-duration-in-open-state: 30s
       fileService:
         failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-count-based: true
         sliding-window-size: 100
         minimum-number-of-calls: 10
+        permitted-calls-in-half-open-state: 10
         wait-duration-in-open-state: 30s
       searchService:
         failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        sliding-window-count-based: true
         sliding-window-size: 100
         minimum-number-of-calls: 10
+        permitted-calls-in-half-open-state: 10
         wait-duration-in-open-state: 30s
   ratelimiter:
-    limit-refresh-period-ms: 1000
-    limit-for-period: 100
-    timeout-duration-ms: 500
+    configs:
+      default:
+        limit-refresh-period: 1s
+        limit-for-period: 100
+        timeout-duration: 500ms
     # 下游服务限流实例(与 cloud-infra-api Feign 注解 name 对应, 写操作防刷)
     instances:
       notificationService:
@@ -166,13 +186,18 @@ resilience4j:
         limit-for-period: 100
         timeout-duration: 500ms
   retry:
-    max-attempts: 3
-    wait-duration-ms: 500
-    exponential-backoff: true
-    exponential-multiplier: 2.0
-    retry-exceptions:
-      - java.io.IOException
-      - java.util.concurrent.TimeoutException
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff: true
+        exponential-multiplier: 2.0
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+          - java.lang.IllegalStateException
     # 下游服务重试实例(与 cloud-infra-api Feign 注解 name 对应)
     instances:
       notificationService:
@@ -184,12 +209,11 @@ resilience4j:
       searchService:
         max-attempts: 3
         wait-duration: 500ms
-    ignore-exceptions:
-      - java.lang.IllegalArgumentException
-      - java.lang.IllegalStateException
   bulkhead:
-    max-concurrent-calls: 50
-    max-wait-duration-ms: 1000
+    configs:
+      default:
+        max-concurrent-calls: 50
+        max-wait-duration: 1s
 
 # JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
 auth:
@@ -219,7 +243,7 @@ cloud-infra:
   #   staging: enabled=false hot-deploy=false (中间环境, 模拟生产)
   #   prod:   enabled=false hot-deploy=false (生产, 默认)
   plugin:
-    enabled: true   # 默认开启 (兼容现有 dev 行为), 生产环境通过 SPRING_PROFILES_ACTIVE=prod 覆盖
+    enabled: false  # 默认关闭: Nacos 配置优先级高于 application-prod.yml, 此处若为 true 则生产实际开启
     hot-deploy: false # 热加载默认关闭, 需显式 dev profile 开启
 
 mybatis-plus:

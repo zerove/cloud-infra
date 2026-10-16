@@ -8,7 +8,17 @@ spring:
     port: 5672
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        prefetch: ${RABBITMQ_PREFETCH:10}
+        acknowledge-mode: auto
   cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
+            readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:cloud-nacos:8848}
@@ -22,7 +32,6 @@ spring:
   main:
     # 关闭懒初始化: 与系统模块统一，防止 fat jar 类加载与 Nacos 注册并发风险
     lazy-initialization: false
-    allow-bean-definition-overriding: true
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://cloud-elasticsearch:9200}
   data:
@@ -58,8 +67,3 @@ management:
   tracing:
     sampling:
       probability: 1.0
-  opentelemetry:
-    tracing:
-      export:
-        otlp:
-          endpoint: ${OTLP_TRACING_ENDPOINT:http://otel-collector:4318/v1/traces}
