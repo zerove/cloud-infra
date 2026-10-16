@@ -1,7 +1,12 @@
 # ============================================================
 # 基准测试门禁
-# 在 main 分支合并前运行, 对比性能基线, 防止性能回归
-# 基线: gateway 启动时间 < 5s (JVM) / < 2s (Native), 内存 < 512MB, 吞吐 > 100 RPS
+# 在 main 合并前运行, 对比性能基线, 防止性能回归
+#
+# 实际阈值(唯一真源是下方 "Compare with baseline" 里的变量, 不是本注释):
+#   启动 < 15000ms, 内存 < 512MB, 吞吐 > 100 RPS, p99 < 1000ms
+# 注意: benchmark.sh 默认打的是 /v3/api-docs —— 网关自己生成的静态 OpenAPI JSON,
+# **不触达任何业务逻辑**。因此本门禁衡量的是"网关入口路径"(过滤器链 + 路由 + 响应),
+# 不是业务吞吐。要测业务链路需起全栈后用 --endpoint 指定业务路径。
 # 用法: 在 PR 上添加 `benchmark` 标签触发
 # ============================================================
 name: Benchmark Gate
@@ -52,6 +57,9 @@ jobs:
           STARTUP_MS=$(grep -oP '启动时间 \| \K\d+' "$REPORT" 2>/dev/null || grep -A1 '启动时间' "$REPORT" | tail -1 | grep -oP '\d+' | head -1)
           MEM_MB=$(grep 'RSS 内存' "$REPORT" | grep -oP '\d+')
           RPS=$(grep '吞吐量' "$REPORT" | grep -oP '[0-9]+ RPS' | grep -oP '\d+')
+          # p99 是本次新增的门禁项: 原先只卡启动/内存/吞吐, 延迟劣化可静默通过
+          P99_MS=$(grep -oP 'p99 延迟 \| \K[0-9.]+' "$REPORT" 2>/dev/null | head -1)
+          [ -z "$P99_MS" ] && P99_MS=$(grep -oP 'p99[^0-9]*\K[0-9.]+' "$REPORT" 2>/dev/null | head -1)
           echo "== 基准指标 =="
           echo "启动时间: ${STARTUP_MS}ms"
           echo "内存: ${MEM_MB}MB"
@@ -59,6 +67,10 @@ jobs:
           echo "STARTUP_MS=${STARTUP_MS}" >> $GITHUB_ENV
           echo "MEM_MB=${MEM_MB}" >> $GITHUB_ENV
           echo "RPS=${RPS}" >> $GITHUB_ENV
+          FAIL_RATE=$(grep -oP '失败率 \| \K[0-9]+' "$REPORT" 2>/dev/null | head -1)
+          [ -z "$FAIL_RATE" ] && FAIL_RATE=$(grep -oP '失败率[^0-9]*\K[0-9]+' "$REPORT" 2>/dev/null | head -1)
+          echo "P99_MS=${P99_MS:-}" >> $GITHUB_ENV
+          echo "FAIL_RATE=${FAIL_RATE:-}" >> $GITHUB_ENV
 
       - name: Compare with baseline
         run: |
@@ -66,6 +78,9 @@ jobs:
           MAX_STARTUP_MS=15000
           MAX_MEM_MB=512
           MIN_RPS=100
+          MAX_P99_MS=1000
+          # 失败率门禁: 没有它, 端点全挂也能靠"尝试数"凑出高 RPS 并通过
+          MAX_FAIL_RATE=5
 
           echo "=== 性能门禁检查 ==="
           echo "启动时间: ${STARTUP_MS}ms (阈值: ${MAX_STARTUP_MS}ms)"
@@ -93,6 +108,28 @@ jobs:
             FAILED=true
           else
             echo "✅ 吞吐量符合要求"
+          fi
+
+          # 缺 p99 视为失败(fail-closed): 报告格式变化导致解析不出来时,
+          # 不能因为"没测到"就当作通过 —— 否则新增门禁会变成又一次假门禁。
+          if [ -z "${P99_MS:-}" ]; then
+            echo "❌ p99 未能从报告中解析出来, 无法判定延迟预算(视为不通过)"
+            FAILED=true
+          elif awk "BEGIN{exit !(${P99_MS} > ${MAX_P99_MS})}"; then
+            echo "❌ p99 超出阈值: ${P99_MS}ms > ${MAX_P99_MS}ms"
+            FAILED=true
+          else
+            echo "✅ p99 符合要求"
+          fi
+
+          if [ -z "${FAIL_RATE:-}" ]; then
+            echo "❌ 失败率未能解析出来, 无法判定(视为不通过)"
+            FAILED=true
+          elif [ "${FAIL_RATE}" -gt "${MAX_FAIL_RATE}" ]; then
+            echo "❌ 请求失败率过高: ${FAIL_RATE}% > ${MAX_FAIL_RATE}%"
+            FAILED=true
+          else
+            echo "✅ 失败率符合要求"
           fi
 
           if [ "$FAILED" = true ]; then
