@@ -63,12 +63,6 @@
             <artifactId>mybatis-spring</artifactId>
             <version>4.1.0</version>
         </dependency>
-        <!-- Outbox 事件模式依赖 (optional，仅需 Outbox 模块显式引入) -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-stream</artifactId>
-            <optional>true</optional>
-        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
