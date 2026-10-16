@@ -39,9 +39,29 @@ sibling module (notification/file/search) 默认不在 test classpath,
 
 跳过: 注释、import、Bean 方法签名 (那是定义不是注入)。
 
-## 负向对照
+## 两种注入风格必须分别判定（2026-10-15 修正）
 
-去掉任一注入点的 `@Qualifier`, 本守护必须失败。
+本守护曾把 `NotificationServiceImpl` 误报为违规, 而该类其实**已正确修复**:
+它刻意不用 Lombok 的 `@RequiredArgsConstructor`, 改用显式构造器并把
+`@Qualifier` 写在**构造参数**上(第 104 行)。误报的两个原因:
+
+1. 把**字段**当成注入点 —— 显式构造器的类里字段只是被赋值的普通字段
+2. `m_ctor` 的启用条件写反了, 恰恰把合规的 `@Qualifier(...) AsyncTaskExecutor x` 跳过
+
+另有一个真实漏报: `has_explicit_ctor` 只在**类声明那一行**找 Lombok 注解
+(而它写在前一行), 导致 Lombok 路径下"字段无 @Qualifier"(真实缺陷)被误判为合规。
+
+## 负向对照（四种组合全部实测）
+
+| 场景 | 期望 | 实测 |
+| :--- | :--- | :--- |
+| Lombok + 字段无 `@Qualifier` | 报红 | 报红 |
+| Lombok + 字段带 `@Qualifier` | 通过 | 通过 |
+| 显式构造器 + 参数无 `@Qualifier` | 报红 | 报红 |
+| 显式构造器 + 参数带 `@Qualifier` | 通过 | 通过 |
+
+原 docstring 声称"去掉任一注入点的 `@Qualifier` 本守护必须失败", 但修复前
+该声称对显式构造器路径**并不成立** —— 真正让它报红的是被误判的字段。
 """
 import re
 import sys
@@ -73,6 +93,29 @@ FIELD_RE = re.compile(
 CTOR_PARAM_RE = re.compile(
     r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(" + "|".join(AMBIGUOUS_TYPES) + r")\s+(\w+)\s*[,)]"
 )
+
+
+LOMBOK_CTOR_ANNOTATIONS = ("@RequiredArgsConstructor", "@AllArgsConstructor")
+
+
+def has_explicit_ctor(lines: list[str], field_idx: int) -> bool:
+    """该类是否使用显式构造器(而非 Lombok 生成)。
+
+    Lombok 的 @RequiredArgsConstructor/@AllArgsConstructor 会把字段变成构造参数,
+    此时字段上的 @Qualifier 不被复制到构造参数 -> 必须在字段上标注。
+    显式构造器则相反: 字段不是注入点, 注入点是构造参数。
+    """
+    # Lombok 注解写在类声明的**前一行**(或前几行), 不在 class 行上,
+    # 故必须累计扫描到类声明为止, 而不是只看 class 那一行。
+    seen_lombok = False
+    for raw in lines[:field_idx]:
+        line = strip_comment(raw).strip()
+        if line.startswith("class ") or line.startswith("public class") \
+                or line.startswith("final class") or line.startswith("abstract class"):
+            return not seen_lombok
+        if any(a in line for a in LOMBOK_CTOR_ANNOTATIONS):
+            seen_lombok = True
+    return False
 
 
 def strip_comment(line: str) -> str:
@@ -112,15 +155,23 @@ def find_violations() -> list[tuple[str, int, str]]:
                 continue
 
             m_field = FIELD_RE.search(line)
-            m_ctor = CTOR_PARAM_RE.match(line) if line.lstrip().startswith("@") is False else None
+            # 原条件 `if line.lstrip().startswith("@") is False` 是反的:
+            # 正确限定过的构造参数行**恰恰以 @Qualifier 开头**, 反而被跳过。
+            m_ctor = CTOR_PARAM_RE.match(line)
 
-            hit = m_field or m_ctor
-            if not hit:
+            # 字段声明只在"由 Lombok 生成构造器"时才是注入点。
+            # 显式构造器的类里, 字段只是被赋值的普通字段 —— 真正的注入点是构造参数。
+            if m_field and not has_explicit_ctor(lines, i):
+                hit = m_field
+            elif m_ctor:
+                hit = m_ctor
+            else:
                 continue
 
             # 向上找最近的注解行。字段注入时 @Qualifier 通常紧贴上一行,
             # 也可能与其它注解同行。留 3 行窗口足够。
-            window = lines[max(0, i - 3):i]
+            # 含当前行: 构造参数的 @Qualifier 常与参数同行, 只看上一行会漏判
+            window = lines[max(0, i - 3):i + 1]
             has_qualifier = any("@Qualifier" in strip_comment(w) for w in window)
             if not has_qualifier:
                 violations.append((str(rel), i + 1, line.strip()))
