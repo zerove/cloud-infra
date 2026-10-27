@@ -7,6 +7,10 @@ import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.LinkedHashMap;
 
 @Component
 public final class VirtualThreadMonitorHealthIndicator implements HealthIndicator {
@@ -42,23 +46,17 @@ public final class VirtualThreadMonitorHealthIndicator implements HealthIndicato
 
         // 健康细粒度: 按线程源拆分钉住计数 (AGENTS.md Q6 修复)
         if (pinnedMonitor != null && pinnedMonitor.isRunning()) {
-            Map<String, Long> sourceCounts = new TreeMap<>(
-                pinnedMonitor.getPinnedBySourceCounters().entrySet().stream()
-                    .collect(Collectors.toMap(
-                        e -> e.getKey(),
-                        e -> e.getValue().sum(),
-                        (a, b) -> a, // 冲突时保留第一个
-                        Comparator.comparingLong(Map.Entry::getValue)
-                    ))
-            );
+            Map<String, Long> sourceCounts = new TreeMap<>();
+            pinnedMonitor.getPinnedBySourceCounters().forEach((k, v) -> sourceCounts.put(k, v.sum()));
+
             List<Map<String, Object>> sources = sourceCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .map(e -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("source", e.getKey());
                     m.put("pinnedCount", e.getValue());
                     return m;
                 })
-                .sorted(Comparator.comparingLong(m -> ((Number) m.get("pinnedCount")).longValue()).reversed())
                 .toList();
             builder.withDetail("pinnedBySource", sources);
         }

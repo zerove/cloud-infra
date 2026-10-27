@@ -11,7 +11,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 @ConditionalOnProperty(prefix = "spring.threads.virtual", name = "enabled", havingValue = "true")
@@ -43,16 +46,16 @@ public class VirtualThreadPinnedMonitor {
             try (var es = EventStream.openRepository()) {
                 es.onEvent("jdk.VirtualThreadPinned", event -> {
                     long durationNanos = event.getDuration().toNanos();
-                    long source = classifySource(event.getThread("eventThread"));
+                    String threadName = event.getThread("eventThread").getJavaName();
+                    long source = classifySource(threadName);
 
                     pinnedDurationTimer.record(Duration.ofNanos(durationNanos));
-                    pinnedBySourceTimer.record(Duration.ofNanos(durationNanos), () -> source);
+                    pinnedBySourceTimer.record(Duration.ofNanos(durationNanos));
 
                     // 每线程源计数
                     LongAdder adder = pinnedBySourceCounters.computeIfAbsent(sourceKey(source), k -> new LongAdder());
                     adder.increment();
 
-                    String threadName = event.getThread("eventThread").getJavaName();
                     log.warn("Virtual Thread Pinned: duration={}ms, source={}, thread={}",
                         durationNanos / 1_000_000.0, sourceKey(source), threadName);
                 });
@@ -71,13 +74,12 @@ public class VirtualThreadPinnedMonitor {
      * "cloud-infra-notification.notifyConsumer.vthread-5" -> "5"。
      * 用于按模块维度拆分健康指标，避免全局单一布尔值掩盖具体路径劣化。
      */
-    private static String classifySource(ThreadInfo threadInfo) {
-        String name = threadInfo.getJavaName();
-        int idx = name.lastIndexOf('.');
-        return idx > 0 ? name.substring(idx + 1) : name;
+    private static long classifySource(String threadName) {
+        int idx = threadName.lastIndexOf('.');
+        return idx > 0 ? idx : -1L;
     }
 
-    private static String sourceKey(int sourceNum) {
+    private static String sourceKey(long sourceNum) {
         return "src-" + sourceNum;
     }
 
@@ -85,7 +87,7 @@ public class VirtualThreadPinnedMonitor {
      * 健康细粒度: 累计各线程源钉住次数。
      */
     public Map<String, LongAdder> getPinnedBySourceCounters() {
-        return Collections.unmodifiableMap(pinnedBySourceCounters);
+        return java.util.Collections.unmodifiableMap(pinnedBySourceCounters);
     }
 
     /**
