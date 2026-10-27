@@ -31,9 +31,6 @@ public class RemotePermissionProvider implements IPermissionProvider {
     // HeaderAuthenticationFilter catch 后走 fallback 装配 (空 permissions),
     // 30s 后 L1 失效再重试 Feign.
     public List<String> getPermissionsByUserId(Long userId) {
-        // A3 关键修复: Feign 默认不抛异常, 下游返回 Result.fail() 时静默 swallow 成空 list,
-        // 触发 @Cacheable 把"空"永久缓存 30 分钟, 业务持续 401。
-        // 显式判 Result.isSuccess(), 失败抛 RuntimeException 阻止 @Cacheable 缓存空值。
         try {
             Result<List<String>> result = userApi.getPermissionsByUserId(userId);
             if (result == null) {
@@ -53,7 +50,10 @@ public class RemotePermissionProvider implements IPermissionProvider {
         } catch (PermissionFetchException ex) {
             throw ex;
         } catch (Exception ex) {
-            // Feign 调用失败 (超时/连接拒绝/5xx) — 抛异常阻断 @Cacheable 缓存空值
+            // A3 安全边界原则: 本处是**安全判定边界** (AGENTS.md 第四课 教训 2)。
+            // 任何 Feign 调用失败(超时/连接拒绝/5xx/未知异常)都应被统一封装为 PermissionFetchException,
+            // 让下游安全过滤器退化为"无权限 → 拒绝"。保留宽捕获: 收窄会漏掉部分失败模式,
+            // 把"拒绝伪装成服务故障"(500) —— 这比"无权限"更危险。此 catch 目的是**拒绝**, 不是归一化。
             log.warn("getPermissionsByUserId Feign 调用失败, userId={}, err={}", userId, ex.toString());
             throw new PermissionFetchException("Feign call failed for userId=" + userId, ex);
         }
