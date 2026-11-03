@@ -168,7 +168,7 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 | 2 | `@Scheduled` 缺 `@EnableScheduling` | mock 直接调方法, 绕过触发 |
 | 3 | 门禁脚本没有任何脚本调用 | 脚本自己能跑通, 从未被要求运行 |
 
-**2026-10-05 复盘查出第 4 类, 且规模超出预期**: `deploy/tests/` 共 21 个脚本,
+**2026-10-05 复盘查出第 4 类, 且规模超出预期**: `deploy/tests/` 当时共 21 个脚本（2026-10-17 实测已增至 51 个）,
 逐个反查 `.github/workflows/*.yml` 的引用, **只有 6 个被调用, 15 个从未执行**。
 
 ### 它解释了一个长期 puzzled 现象
@@ -345,7 +345,10 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 
 ## 🚫 框架能力准入原则 (2026-09-29 新增, 强制)
 
-本项目已出现约 4200 行“已实现且有自测, 但业务零引用”的框架代码。新增框架能力前必须先回答:
+本项目曾出现约 4200 行“已实现且有自测, 但业务零引用”的框架代码。
+**这 4200 行已于 2026-10-13 全部删除**（codegen 2464 + 幂等 376 + Outbox 767 + 编排引擎 540 ——
+原表所列 764/767/500/2464 与实际删除量略有出入，以 ARCHITECTURE.md 为准）。
+本节保留的是**准入原则**，而非存量清单。新增框架能力前必须先回答:
 
 1. **先有第二个真实用例, 再有抽象。** 只有一个用例时直接写具体代码。
 2. **提出来源必须是业务, 不是设想。** 说清“哪个现有业务场景现在就需要它”。
@@ -357,7 +360,8 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 
 违反上述任一条即视为过度设计。详见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
 
-> **当前存量提醒** (2026-10-01 更新): 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
+> **当前存量提醒** (2026-10-17 更新): 上述零业务引用代码**已全部删除, 当前存量约 0 行**。
+> 历史记录: 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
 > 幂等 500 + codegen 2464)。保留但暂停投入。
 > **Outbox 的业务负担已于 issue 29 解除**: opt-in 失效已修,
 > `deploy/config/search-service.yaml` 里那个“并不生效”的规避开关与对应死配置已删除。
@@ -390,12 +394,61 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 
 ---
 
+## 🔍 快速核查清单（部署态与防护核验，每次会话必带）
+
+> 本节固化本次 11-02 复核用到的 4 条 grep 命令。下一轮审计前任何一条删引用都不会再漏。
+> 不改了任何代码；仅把“可复现核验”放进新会话默认动作。
+
+```bash
+# 0. 多租户已真正启用（业务 Mapper 注解数 + 部署态开关数都要 ≥ 1）
+rg -c "@TenantFilter" --type java cloud-infra-modules          # 期望 ≥9
+for f in deploy/config/{system-module,file-service,notification-service}.yaml; do
+  rg -n "^  tenant:" "$f"; done                                # 期望 enabled: true
+
+# 1. 已删除框架残留归零（幂等 / Outbox / OpenAPI / 编排引擎）
+rg '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' --type java cloud-infra-modules  # 期望 0
+
+# 2. Controller @PreAuthorize 覆盖率（非 /internal/** 仅计业务 controller）
+python3 - <<'PYEOF'
+import re, glob, os
+pa=re.compile(r'@PreAuthorize\(')
+for f in sorted(glob.glob('cloud-infra-modules/*/src/main/java/**/controller/*.java', recursive=True)):
+    t=open(f).read(); has_pa=bool(pa.search(t))
+    if re.search(r'@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping)', t):
+        print('Y' if has_pa else 'N')
+PYEOF
+# 期望 N 仅 InternalUserController
+
+# 3. 关键过滤器 order 与信任链（第六课：TenantContextFilter 必须先于 HeaderAuthenticationFilter）
+#    两种规格都要验证：两端都有显式 getOrder 时二者比较；
+#    若一端无显式 order，守护标记为"存疑"(red)，不绿——这不等于守卫失效，
+#    只是"下一个防御窗口"需要有人补 order 注入，避免假绿。
+#    可执行版本见 `deploy/tests/quick_audit.sh`（一键跑 4 站），本质等价于上述三条命令。
+# 真相（本会话实测，-U 模式读到全量）：
+#   TenantContextFilter  返回 -110（早先会话误记为 -100，实为 -110；见 trust-chain-review 第 46 行）
+#   HeaderAuthenticationFilter: implements OncePerRequestFilter 但无显式 getOrder()，按容器默认序
+# 期望：TCF(-110) 应小于 HAF 的任何显式约定；HAF 无显式 → 守护 red。
+rg -U "getOrder\(\)\s*\{[^}]*return\s+(-?\d+)" --type java \
+  cloud-infra-common/src/main/java/com/cloudinfra/common/core/tenant/TenantContextFilter.java
+rg -n "implements Ordered" --type java \
+  cloud-infra-framework/framework-security/src/main/java/com/cloudinfra/framework/security/filter/HeaderAuthenticationFilter.java
+# 期望 TCF(-110) < HAF: HAF 无显式 getOrder 即守护报红。一键等价脚本：
+#   bash deploy/tests/quick_audit.sh  (见本节末段注释)
+```
+
+> 本节用于替换会上述出现的 4 条手工命令——节省至少 1 次会话来回重做同一件事。
+
+---
+
 ## 🏗️ 系统架构分析 (System Architecture)
 
 ### 1. 整体设计
 Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 构建的高并发微服务平台。
 
-- **极致性能**: 全面启用 `spring.threads.virtual.enabled=true`，配合 **Generational ZGC** 消除线程阻塞瓶颈，保持微秒级 GC 停顿。
+- **极致性能**: 全面启用 `spring.threads.virtual.enabled=true`，配合 **G1GC**（堆 256m）。
+  > **2026-10-17 更正**: 本文档此前多处声称 `Generational ZGC`。运行态从来不是 ZGC ——
+  > 唯一出处是一个自陈"已失效"的根 `Dockerfile`, 该文件已删除。compose / Helm / 各模块
+  > Dockerfile 三面现已统一为 G1GC + `-Xmx256m`（该值是唯一有 E2E 运行时证据的堆）。
 - **统一入口**: `cloud-infra-gateway` 处理全局认证、限流和路由，将身份信息 (`X-User-Id`, `X-User-Name`) 注入下游。
 - **身份模型**: `cloud-infra-auth` 负责 JWT 签发与刷新，下游通过 `framework-security` 执行 RBAC 鉴权 (`@ss.hasPermi`)。
 
@@ -657,7 +710,13 @@ native 修好后，`Build & Push Docker Images` 首次真正执行，立刻失�
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
 - **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
-- **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
+- **性能**: KEYS→SCAN, 分页 LIMIT, Feign 显式超时, G1GC + 256m。
+  - **2026-10-17 更正 —— 「N+1 批量删除」此前并未真正完成**:
+    `SysUserServiceImpl.deleteUserByIds` 仍在循环里逐用户 `userRoleMapper.delete` + Redis 广播,
+    `UserSessionRevoker.revokeAllSessions(List)` 是 `forEach` 导致 **N 次全库 SCAN**。
+    二者已于 2026-10-17 改为单条 `IN` 批量删除 + 单次 SCAN（Redis `{a,b,c}` 选支）。
+  - **性能基线以 README 为准**: 57 RPS / p99 1066ms, 端点 `/v3/api-docs`（静态 OpenAPI JSON,
+    不触达业务逻辑）。此前并列的「146 RPS / p99 165ms」**无可复现依据**, 已撤下。
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
 - **代码生成**: `cloud-infra-codegen` (`⚪` 可选工具) 含 10+ 模板, 支持 Maven 插件/CLI/编程式三种调用, 基于 Flyway DDL 解析。**不再投入**

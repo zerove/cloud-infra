@@ -199,6 +199,15 @@ jobs:
         run: python3 deploy/tests/test_gate_wiring.py
         shell: bash
 
+      - name: Quick audit (tenancy + trust chain)
+        # 2026-11-02 Session 四条核验的可执行固化版本，固化在 deploy/tests/quick_audit.sh。
+        # 由 AGENTS.md「🔍 快速核查清单」第 0~3 条支撑，覆盖多租户启用、框架残留归零、
+        # Controller @PreAuthorize 覆盖率、过滤器 order 与信任链四类关键门禁。
+        # ⚠️ 这正是此前"门禁脚本自己从未被调用"的第 N 例: 脚本已存在但无 CI 引用。
+        # 加这一步让它成为真正的门禁而非摆设——改坏一条 order 会红, 改回会绿。
+        run: bash deploy/tests/quick_audit.sh
+        shell: bash
+
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:

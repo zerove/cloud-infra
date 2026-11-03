@@ -29,10 +29,10 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 | 能力 | 代码量 | 业务引用 | 判定 |
 |---|---|---|---|
 | M6-01 多租户 | ~400 行 | **10 文件** (9 Mapper + 网关 `X-Tenant-Id`) | 🟢 (2026-10-01 升级, 见下) |
-| M6-02 幂等框架 | ~500 行 | **0** (唯一引用已移除, 仅存注释) | ⚪ |
-| M6-03 Outbox | 767 行 | **0** | ⚪ |
-| M6-04 编排引擎 | 764 行 | **0** | ⚪ |
-| M6-05 OpenAPI | ~300 行 | **0** | ⚪ |
+| M6-02 幂等框架 | ~500 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
+| M6-03 Outbox | 767 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
+| M6-04 编排引擎 | 764 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
+| M6-05 OpenAPI | ~300 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
 | M7-02 gRPC | 345 行 | 1 (仅 system-module, 默认关闭) | ⚪ |
 
 **达成率 1/6**（M6-01 于 2026-10-01 从"部署态无效"转为真正生效，见下节）。
@@ -45,7 +45,8 @@ ROADMAP 此前挂着一条“需人工决策”的三选一（开+绑主体 / �
 
 改造前的三个真实问题（后两个此前未被记录）：
 
-1. **开关从未打开** —— `cloud-infra.tenant.enabled` 默认 false 且 `deploy/config` 无一处开启
+1. **开关从未打开** —— `cloud-infra.tenant.enabled` 默认 false 且当时的 `deploy/config` 无一处开启
+   （**已于 2026-10-01 在 file-service / notification-service / system-module 三处开启**；
 2. **租户身份由客户端自选** —— 网关原样透传 `X-Tenant-Id`，任意已认证用户改一个头即可读他租户数据
 3. **下游对租户头不验签**（新发现）—— `TenantContextFilter` order `-110` **先于**
    `HeaderAuthenticationFilter` 执行，而后者才对 `X-User-Id` 验签。身份验签了、租户却是敞开的：
@@ -108,13 +109,14 @@ Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此�
 **未来若引入跨租户异步场景**，需为消息体补 `tenantId` 并在消费端回填 `TenantContext`（`finally` 清理）。
 该项尚未实现，且**在出现第一个跨租户异步用例前不应先做**（见准入原则）。
 
-代码构成对照: 框架/网关/认证层 **13843 行** vs 业务模块 **12138 行** ——
+代码构成对照 (2026-10-17 重数): 框架 + starter + common + api **9177 行**, gateway + auth **2539 行**
+(合计 11716) vs 业务模块 **12790 行** —— 即**业务层已厚过框架层**, 与旧数字给出的结论方向相反。
 “为业务服务的骨架”自身已厚过它服务的 4 个业务服务。
 
 ### ⚠️ 零引用框架已成业务负担
 
-`deploy/config/search-service.yaml:40` 至今保留 `cloud-infra.outbox.enabled: false`
-（注释: “禁用 Outbox 功能（避免 StreamBridge 依赖问题）”。
+~~`deploy/config/search-service.yaml:40`~~
+**（2026-10-17 更正: 该键已随 Outbox 框架于 2026-10-13 一并删除, 全仓 grep 0 命中）**
 
 **Outbox 不只是“没人用”, 而是“用了会坏”** —— 一个业务零引用的框架反过来要求业务配开关规避。
 
@@ -459,11 +461,21 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 - 通知直接 TLS 配置及真实组件握手测试已补齐（`b984269`），TLS 1.2/1.3、缺少身份头拒绝、心跳、推送及连接清理通过。反向代理、可信网关和生产容器链路尚未验收，M7-03 不应整体关闭。
 - **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
 - 上述前置验收完成后，执行 M7-07 性能基准更新。**M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件已冻结**（见上方“未来 M7+ 已冻结”）。当前不将设计或组件测试标记为生产交付。
-- 质量基线：`mvn -o clean test` **501 项单测 0 失败**（2026-10-01 实测, 以 surefire XML 为准）。历史值 422（2026-09-29）/ 474（2026-09-30）已过时
+- 质量基线：`mvn -o clean test` **516 项单测 0 失败 0 错误 1 跳过**（2026-10-17 实测, 以 surefire XML 为准）。历史值 422（2026-09-29）/ 474（2026-09-30）/ 501（2026-10-01）已过时
+  - **2026-10-17 修复了一处长期红灯**: `StreamingResponseAsyncDispatchTest` 是被 surefire 执行的
+    `@SpringBootTest(RANDOM_PORT)` 单测, 却会经 `RedissonConfig` 连 `localhost:6379`。
+    无 Redis 时 3 项 ERROR, **CI 亦无 `services:` 提供 Redis**。此前"501 项 0 失败"的基线
+    只在有 Redis 的机器上成立。现已用 `spring.autoconfigure.exclude` 隔离。
 
 ---
 
 ## 📌 2026-10-04 现状审计与下一阶段计划
+
+### ⚠️ 2026-11-02 Session 产出（审计只读 + 负向对照）
+以下三项为本次 session 的复盘产出；本次未改任何代码：
+1. **完成基线复核报告** (`docs/audit/2026-11-02-completion-baseline.md`)：M6/M7 badge 维持无漂移；达成率仍 1/6（仅 M6-01）。
+2. **信任链逐跳复核报告** (`docs/audit/2026-11-02-trust-chain-review.md`)：六课逐跳全部通过（1✓ 2✓ 3✓ 4✓ 5✓）；第六课负向对照实测——临时改坏 `HeaderAuthenticationFilter.getOrder()` → 守护 grep 报红、立即还原后守护绿，`grep -c "return -200" = 0` 无残留。
+3. **SkyWalking OAP UI trace 详情展开验证步骤** (`docs/audit/M7-01-trace-ui-verification-steps.md`)：留待 CI/E2E run 后人工执行一次归档；本会话不跑通此验证。
 
 本节是**当前唯一的行动依据**，上方历史里程碑仅作背景。
 
@@ -573,6 +585,9 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 | **P1** | 把“OAP 可用”变成守护 | 守护覆盖 agent 日志目录 + 存储分派 | ✅ 本轮已做 |
 | **P1** | 降低全栈内存占用 | `Committed_AS` 峰值 < 80% | 当前靠停 4 个可选组件，属临时手段 |
 | **P2** | M7 验收缺口（见 2026-09-29 段） | 第二业务模块接入 gRPC | 仍适用，但不得在 P0 未完成前开工 |
+| **P2** | 完成基线复核（M6/M7 badge 重算） | 2026-11-02 只读复核报告落盘；badge 无漂移 | 完成（`docs/audit/` 三份报告） |
+| **P2** | 第六课信任链逐跳复核 + 负向对照实测 | 六课 5 点全过；order 守护红绿闭环 | 完成（`docs/audit/` 二份报告 + `HeaderAuthenticationFilter` 一次性改坏后还原） |
+| **⚠️ 待人工** | M7-01 OAP UI trace 详情展开验证 | 查 `segment_YYYYMMDD` 取 traceId → GraphQL 查询 → 展开面板非空 | CI/E2E run 后执行一次归档（`docs/audit/M7-01-trace-ui-verification-steps.md`） |
 
 ### 三之二、本轮验收的具体证据（可复现）
 
