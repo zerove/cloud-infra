@@ -590,6 +590,9 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 | **⚠️ 待人工** | M7-01 OAP UI trace 详情展开验证 | 查 `segment_YYYYMMDD` 取 traceId → GraphQL 查询 → 展开面板非空 | CI/E2E run 后执行一次归档（`docs/audit/M7-01-trace-ui-verification-steps.md`） |
 
 ### 三之二、本轮验收的具体证据（可复现）
+| **P1** | CI Maven cache key 加 commit SHA | 仅 pom 变更重缓存，每 PR 省 ~100MB 全量下载 | ✅ 本轮已提交 (commit 841d8419)
+| **P1** | native MaxRAM=14g auth 验证 | CI run 后逐档验证 auth 原生镜像；当前 14g 尚未跑过 | ⛔ Frozen: 待 CI run 后实测
+
 
 ```bash
 # 启动（**必须带 --profile full** —— 6 个业务服务都带 profiles: ["full"]）
