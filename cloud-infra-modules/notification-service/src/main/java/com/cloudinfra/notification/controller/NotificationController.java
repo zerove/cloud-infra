@@ -71,7 +71,8 @@ public class NotificationController implements NotificationApi {
     }
 
     /**
-     * @deprecated S2 兼容窗口：优先使用 {@link #getMyHistory}；最终收口见 ADR-011（需权限/兼容决策）。
+     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；优先使用 {@link #getMyHistory}。
+     *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
      */
     @Deprecated(since = "S2-compat", forRemoval = false)
     @Override
@@ -83,7 +84,11 @@ public class NotificationController implements NotificationApi {
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
             PageQuery pageQuery) {
-        // 分页窗口的缺省/钳制统一由 PageQuery 处理, 控制器不再内联 Math.min/max
+        // S2-B3: 旧接口禁止跨用户查询；自助查询请使用 /notification/my/history
+        Long current = SecurityUtils.getUserId();
+        if (current == null || !current.equals(userId)) {
+            return Result.fail(403, "仅允许查询当前用户的通知历史，请使用 /notification/my/history");
+        }
         PageResult<Notification> notifications =
                 notificationService.getNotificationHistory(userId, status, type, pageQuery);
         return Result.success(notifications.map(n -> new NotificationHistoryResponse(
@@ -126,7 +131,8 @@ public class NotificationController implements NotificationApi {
     }
 
     /**
-     * @deprecated S2 兼容窗口：优先使用 {@link #getMyLogs}；最终收口见 ADR-011（需权限/兼容决策）。
+     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；优先使用 {@link #getMyLogs}。
+     *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
      */
     @Deprecated(since = "S2-compat", forRemoval = false)
     @Override
@@ -136,6 +142,11 @@ public class NotificationController implements NotificationApi {
     public Result<PageResult<NotificationLogDTO>> getLogs(
             @RequestParam Long userId,
             PageQuery pageQuery) {
+        // S2-B3: 旧接口禁止跨用户查询；自助查询请使用 /notification/my/logs
+        Long current = SecurityUtils.getUserId();
+        if (current == null || !current.equals(userId)) {
+            return Result.fail(403, "仅允许查询当前用户的发送日志，请使用 /notification/my/logs");
+        }
         return Result.success(notificationService.getLogs(userId, pageQuery).map(this::mapToLogDTO));
     }
 

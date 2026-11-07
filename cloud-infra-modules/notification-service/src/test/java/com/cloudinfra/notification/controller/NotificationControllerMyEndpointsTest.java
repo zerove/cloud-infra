@@ -98,29 +98,49 @@ class NotificationControllerMyEndpointsTest {
     }
 
     @Test
-    void legacyHistory_passesExplicitUserId_forCompatibility() throws Exception {
-        // S2: 旧接口暂保留 userId 参数语义（兼容窗口）；/my/* 为安全迁移路径
-        given(notificationService.getNotificationHistory(eq(999L), isNull(), isNull(), any(PageQuery.class)))
+    void legacyHistory_rejectsCrossUser_with403_B3() throws Exception {
+        // S2-B3: 旧接口禁止跨用户查询，防止任意 userId 遍历
+        mockMvc.perform(get("/notification/history").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value(403));
+
+        then(notificationService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void legacyHistory_allowsSameUser_forCompatibility() throws Exception {
+        given(notificationService.getNotificationHistory(eq(AUTHENTICATED_USER_ID), isNull(), isNull(), any(PageQuery.class)))
             .willReturn(PageResult.empty());
 
-        mockMvc.perform(get("/notification/history").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+        mockMvc.perform(get("/notification/history").param("userId", "42").param("pageNum", "1").param("pageSize", "10"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
 
         then(notificationService).should()
-            .getNotificationHistory(eq(999L), isNull(), isNull(), any(PageQuery.class));
+            .getNotificationHistory(eq(AUTHENTICATED_USER_ID), isNull(), isNull(), any(PageQuery.class));
     }
 
     @Test
-    void legacyLogs_passesExplicitUserId_forCompatibility() throws Exception {
-        given(notificationService.getLogs(eq(999L), any(PageQuery.class)))
+    void legacyLogs_rejectsCrossUser_with403_B3() throws Exception {
+        mockMvc.perform(get("/notification/logs").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value(403));
+
+        then(notificationService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void legacyLogs_allowsSameUser_forCompatibility() throws Exception {
+        given(notificationService.getLogs(eq(AUTHENTICATED_USER_ID), any(PageQuery.class)))
             .willReturn(PageResult.empty());
 
-        mockMvc.perform(get("/notification/logs").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+        mockMvc.perform(get("/notification/logs").param("userId", "42").param("pageNum", "1").param("pageSize", "10"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
 
-        then(notificationService).should().getLogs(eq(999L), any(PageQuery.class));
+        then(notificationService).should().getLogs(eq(AUTHENTICATED_USER_ID), any(PageQuery.class));
     }
 
     @Test
