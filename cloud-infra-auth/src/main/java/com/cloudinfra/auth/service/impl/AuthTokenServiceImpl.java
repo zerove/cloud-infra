@@ -1,6 +1,7 @@
 package com.cloudinfra.auth.service.impl;
 
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.common.core.tenant.TenantClaims;
 import com.cloudinfra.auth.exception.AuthBusinessException;
 import com.cloudinfra.auth.exception.AuthExceptionCode;
 import com.cloudinfra.auth.service.AuthTokenService;
@@ -17,12 +18,13 @@ import java.util.UUID;
 public class AuthTokenServiceImpl implements AuthTokenService {
 
     /**
-     * 租户标识的 JWT claim 名。网关 {@code AuthEvaluator} 按同名常量读取，
-     * 两端各自声明以避免网关反向依赖 auth 模块，并由
-     * {@code TenantClaimNameConsistencyTest} 做跨模块一致性断言，
-     * 防止一侧改名后另一侧静默读不到（那种失败不报错，只是租户隔离悄悄失效）。
+     * 租户标识的 JWT claim 名。与网关 {@code AuthEvaluator} 共享 common 的
+     * {@link TenantClaims#TENANT_ID_CLAIM} 唯一常量 —— 一致性由构造保证，
+     * 不再是需要跨模块测试去比对的不变量；字面量由 {@code TenantClaimsTest} 锁定。
+     * 改名不会编译失败，只会让租户隔离无声失效（修复前注释引用的
+     * {@code TenantClaimNameConsistencyTest} 从未存在）。
      */
-    public static final String CLAIM_TENANT_ID = "tenantId";
+    public static final String CLAIM_TENANT_ID = TenantClaims.TENANT_ID_CLAIM;
 
     /**
      * 默认租户。与 V14 迁移脚本的 {@code DEFAULT 'default'} 保持一致：

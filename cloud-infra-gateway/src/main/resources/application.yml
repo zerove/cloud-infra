@@ -119,4 +119,4 @@ management:
   tracing:
     enabled: true
     sampling:
-      probability: 1.0
+      probability: ${TRACE_SAMPLING_PROBABILITY:0.1}

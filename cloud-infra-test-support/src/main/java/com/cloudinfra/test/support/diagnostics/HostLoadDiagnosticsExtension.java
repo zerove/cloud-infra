@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -77,6 +78,19 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
     /** 走过 {@code beforeAll} 的类 —— 用于类级失败兜底判断。 */
     private static final java.util.Set<String> CLASS_MARKED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    /**
+     * 已产生过方法级结果（成功/失败/中止/禁用都算）的类 —— 类级兜底的唯一判据。
+     *
+     * <p>⚠️ 2026-10-18 修复: 原判据是 {@code !PRINTED.contains(cls)}, 意图为
+     * "从未触发过 testFailed" —— 但 {@code PRINTED} 只由 {@link #emit} 写入
+     * {@code Class#method} 键, <b>裸类名永不命中</b> ⇒ 条件恒真
+     * ⇒ <b>每个全绿测试类都被误判为类级失败并刷一份假快照</b>
+     * (b2-modules.log 55 次、fulltest.log 76 次; 连 12/12 全绿的
+     * {@code GrpcSecurityInterceptorTest} 也打印)。这与本项目「机制存在 ≠ 生效」同型:
+     * 兜底分支写得能跑, 判据却从未成立过正确条件。
+     */
+    private static final java.util.Set<String> HAD_RESULT = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     /** 判定"与容器相关"的关键词 —— 覆盖 Testcontainers 与 Docker/Podman API 的报错文本。 */
     private static final List<String> CONTAINER_MARKERS = List.of(
         "ContainerLaunchException",
@@ -92,11 +106,44 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
+        markHadResult(context);
         String root = rootCauseChain(cause);
         if (!looksLikeContainerFailure(root)) {
             return; // 约束 2: 与容器无关的失败不打印，避免噪声
         }
         emit(context, root);
+    }
+
+    // 以下三个钩子不打印任何东西, 只为 afterAll 的类级兜底提供判据:
+    // "这个方法所属的类确实产生过方法级结果" —— 产生过就绝不是类级启动失败。
+
+    @Override
+    public void testSuccessful(ExtensionContext context) {
+        markHadResult(context);
+    }
+
+    @Override
+    public void testAborted(ExtensionContext context, Throwable cause) {
+        markHadResult(context);
+    }
+
+    @Override
+    public void testDisabled(ExtensionContext context, Optional<String> reason) {
+        markHadResult(context);
+    }
+
+    /**
+     * 记录"该类（含 {@code @Nested} 的外层类）已产生过方法级结果"。
+     *
+     * <p>必须沿 {@code getParent()} 向上遍历: 外层类若只含 {@code @Nested} 测试,
+     * 自身没有方法级回调, 但它的 {@code afterAll} 依旧会发生 ——
+     * 不标记外层就会把它误判为类级失败（修复前正是如此）。
+     */
+    private static void markHadResult(ExtensionContext context) {
+        for (Optional<ExtensionContext> cur = Optional.of(context); cur.isPresent();
+                cur = cur.get().getParent()) {
+            cur.get().getTestClass().map(Class::getName).ifPresent(HAD_RESULT::add);
+        }
     }
 
     /**
@@ -114,7 +161,11 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
      * <p>这里<b>无法</b>拿到失败异常（{@code beforeAll} 抛异常时它走 Engine 异常链）,
      * 故改为：{@code beforeAll} 正常返回后打一个标记, 由 {@link #testFailed} 补打。
      * 若整个类因容器失败而一个方法都没跑到, {@code testFailed} 同样不会触发 ——
-     * 因此额外在 {@code afterAll} 里检查标记, 若"进过 beforeAll 但从未 testFailed"则补打。
+     * 因此额外在 {@code afterAll} 里检查标记, 若"进过 beforeAll 但零方法结果"则补打。
+     *
+     * <p>⚠️ <b>2026-10-18 修复</b>: 原判据 {@code !PRINTED.contains(cls)} 恒真
+     * （见 {@link #HAD_RESULT} 字段说明）, 导致对全绿类也打印假快照;
+     * 现判据 = "进过 beforeAll 且零方法级结果", 由 {@link #HAD_RESULT} 追踪。
      */
     @Override
     public void beforeAll(ExtensionContext context) {
@@ -125,8 +176,10 @@ public class HostLoadDiagnosticsExtension implements TestWatcher, BeforeAllCallb
     @Override
     public void afterAll(ExtensionContext context) {
         String cls = context.getTestClass().map(Class::getName).orElse("?");
-        if (CLASS_MARKED.remove(cls) && !PRINTED.contains(cls)) {
-            // 进过 beforeAll 却一次 testFailed 都没有 ⇒ 典型的类级容器失败
+        boolean enteredBeforeAll = CLASS_MARKED.remove(cls);
+        boolean hadMethodResult = HAD_RESULT.remove(cls);
+        if (enteredBeforeAll && !hadMethodResult) {
+            // 进过 beforeAll 却零方法结果 ⇒ 典型的类级容器失败
             System.err.println(renderSnapshot(cls + "#<class-level>",
                 "(未捕获到异常对象) 类级容器在测试方法执行前失败, beforeAll 未抛异常但无任何方法结果"));
         }

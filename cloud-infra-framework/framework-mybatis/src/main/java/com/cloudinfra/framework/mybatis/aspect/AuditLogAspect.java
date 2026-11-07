@@ -3,6 +3,7 @@ package com.cloudinfra.framework.mybatis.aspect;
 import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.context.UserContext;
 import com.cloudinfra.common.core.audit.IAuditLogService;
+import com.cloudinfra.common.util.SensitiveDataRedactor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -11,7 +12,6 @@ import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,9 +45,9 @@ public class AuditLogAspect {
         String username = UserContext.get("username");
         LocalDateTime startTime = LocalDateTime.now();
         
-        // 记录请求参数
-        Object[] args = joinPoint.getArgs();
-        String params = args == null ? "[]" : Arrays.deepToString(args);
+        // 不可改回 Arrays.deepToString: @AuditLog 标注的 user-create/register 实参含 password,
+        // Lombok @Data 的 toString() 会把 BCrypt 前的明文口令写进 sys_audit_log.params。
+        String params = SensitiveDataRedactor.redactArgs(joinPoint.getArgs());
 
         Object result;
         String status = "SUCCESS";

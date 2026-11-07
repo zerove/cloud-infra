@@ -27,30 +27,6 @@ spring:
     import:
       - optional:nacos:actuator-config.yaml
 
-# 默认数据源配置（供自动配置启动，Nacos 配置会覆盖）
-datasource:
-  url: jdbc:postgresql://cloud-postgres:5432/cloud_infra
-  username: postgres
-  password: ${SPRING_DATASOURCE_PASSWORD:password}
-  driver-class-name: org.postgresql.Driver
-  hikari:
-    maximum-pool-size: 20
-    minimum-idle: 5
-    idle-timeout: 30000
-    max-lifetime: 600000
-    connection-timeout: 30000
-    validation-timeout: 5000
-    leak-detection-threshold: 60000
-    connection-test-query: SELECT 1
-    pool-name: cloud-infra-auth-hikari-pool
-    read-only: false
-    data-source-properties:
-      cachePrepStmts: true
-      prepStmtCacheSize: 250
-      prepStmtCacheSqlLimit: 2048
-      useServerPrepStmts: true
-      reWriteBatchedInserts: true
-      ApplicationName: cloud-infra-auth
 
 # JWT 配置（本地直启兜底；生产必须通过 AUTH_JWT_SECRET 注入外置强密钥）
 auth:
@@ -63,12 +39,6 @@ auth:
       max-size: ${AUTH_JWT_CACHE_MAX_SIZE:10000}
       ttl-seconds: ${AUTH_JWT_CACHE_TTL:300}
 
-# 默认 Redis 配置
-data:
-  redis:
-    host: cloud-redis
-    port: 6379
-    database: 0
 
 # 追踪配置由 management.tracing 与 management.otlp 统一管理
 
@@ -82,7 +52,8 @@ management:
         include: health,info,prometheus,metrics,env,beans,conditions,refresh
   tracing:
     sampling:
-      probability: 1.0
+      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
+      probability: 0.2
 # MyBatis-Plus：native 下必须显式指定日志实现，避免运行时反射选型 NPE；
 # 禁用延迟加载，避免 Javassist 字节码代理在 native 下不可用
 mybatis-plus:

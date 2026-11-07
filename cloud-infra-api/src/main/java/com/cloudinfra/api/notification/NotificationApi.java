@@ -8,18 +8,20 @@ import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.api.notification.fallback.NotificationApiFallbackFactory;
+import com.cloudinfra.common.core.domain.PageQuery;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.cloud.openfeign.SpringQueryMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
-import java.util.List;
 
 @FeignClient(name = "notification-service", fallbackFactory = NotificationApiFallbackFactory.class)
 public interface NotificationApi {
@@ -33,17 +35,20 @@ public interface NotificationApi {
     Result<NotificationResponse> send(@RequestBody NotificationRequest request);
 
     /**
-     * 获取通知历史记录
+     * 获取通知历史记录 (分页, 可按状态/类型过滤)
+     *
+     * <p>分页窗口由 {@link PageQuery} 承载: 缺省 pageNum=1 / pageSize=10,
+     * 越界值由其 {@code normalized*} 方法统一钳制; 返回 {@link PageResult}
+     * 含 total 便于翻页。
      */
     @GetMapping("/notification/history")
     @CircuitBreaker(name = "notificationService")
     @Retry(name = "notificationService")
-    Result<List<NotificationHistoryResponse>> getHistory(
+    Result<PageResult<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size);
+            @SpringQueryMap PageQuery pageQuery);
 
     /**
      * 将通知标记为已读
@@ -53,22 +58,21 @@ public interface NotificationApi {
     Result<Void> markAsRead(@PathVariable("id") Long id);
 
     /**
-     * 根据关键词搜索通知
+     * 根据关键词搜索通知 (分页)
      *
-     * <p>分页参数为可选：不传时按默认值返回单页，调用方需显式翻页才能取全量。
+     * <p>分页窗口由 {@link PageQuery} 承载; 返回 {@link PageResult} 含 total,
+     * 调用方据此显式翻页。
      */
     @GetMapping("/notification/search")
-    Result<List<NotificationDTO>> searchNotifications(
+    Result<PageResult<NotificationDTO>> searchNotifications(
             @RequestParam String keyword,
-            @RequestParam(required = false, defaultValue = "1") Integer page,
-            @RequestParam(required = false, defaultValue = "10") Integer size);
+            @SpringQueryMap PageQuery pageQuery);
 
     /**
-     * 获取特定用户的发送审计日志
+     * 获取特定用户的发送审计日志 (按日志行分页, records 与 total 同为日志条数)
      */
     @GetMapping("/notification/logs")
-    Result<List<NotificationLogDTO>> getLogs(
+    Result<PageResult<NotificationLogDTO>> getLogs(
             @RequestParam Long userId,
-            @RequestParam(required = false, defaultValue = "1") Integer page,
-            @RequestParam(required = false, defaultValue = "10") Integer size);
+            @SpringQueryMap PageQuery pageQuery);
 }

@@ -1,1 +1,3 @@
 com.cloudinfra.framework.security.config.FrameworkSecurityAutoConfiguration
+com.cloudinfra.framework.security.config.PasswordEncoderConfig
+com.cloudinfra.framework.security.config.PermissionRefreshConfig

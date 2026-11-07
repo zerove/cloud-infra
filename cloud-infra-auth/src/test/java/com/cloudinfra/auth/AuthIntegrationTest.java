@@ -4,6 +4,7 @@ import com.cloudinfra.api.system.UserApi;
 import com.cloudinfra.api.system.dto.RegisterUserDTO;
 import com.cloudinfra.api.system.dto.UserCredentialDTO;
 import com.cloudinfra.auth.controller.AuthController;
+import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.framework.redis.service.RedisService;
@@ -111,9 +112,10 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldRegisterAndLoginSuccessfully() {
         // Given: 准备注册用户
-        LoginUser registerUser = new LoginUser();
-        registerUser.setUsername("integration_test_user");
-        registerUser.setPassword("Test@1234");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("integration_test_user")
+                .password("Test@1234")
+                .build();
 
         // Mock registerUser to return success
         Mockito.when(userApi.registerUser(Mockito.any())).thenReturn(Result.success());
@@ -125,11 +127,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
         assertThat(registerResult.isSuccess()).isTrue();
 
         // When: 调用登录接口
-        LoginUser loginUser = new LoginUser();
-        loginUser.setUsername("integration_test_user");
-        loginUser.setPassword("Test@1234");
-        loginUser.setCaptcha("ABCD");
-        loginUser.setUuid("test-uuid-1");
+        LoginRequest loginUser = new LoginRequest("integration_test_user", "Test@1234", "ABCD", "test-uuid-1");
 
         // Mock login dependencies
         UserCredentialDTO credentialDTO = UserCredentialDTO.builder()
@@ -167,19 +165,16 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldRefreshTokenSuccessfully() {
         // Given: 先注册并登录获取 refreshToken
-        LoginUser registerUser = new LoginUser();
-        registerUser.setUsername("refresh_test_user");
-        registerUser.setPassword("Test@1234");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("refresh_test_user")
+                .password("Test@1234")
+                .build();
         
         Mockito.when(userApi.registerUser(Mockito.any())).thenReturn(Result.success());
         
         authController.register(registerUser, null);
 
-        LoginUser loginUser = new LoginUser();
-        loginUser.setUsername("refresh_test_user");
-        loginUser.setPassword("Test@1234");
-        loginUser.setCaptcha("ABCD");
-        loginUser.setUuid("test-uuid-2");
+        LoginRequest loginUser = new LoginRequest("refresh_test_user", "Test@1234", "ABCD", "test-uuid-2");
 
         UserCredentialDTO credentialDTO = UserCredentialDTO.builder()
             .userId(2L)
@@ -233,19 +228,16 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldLogoutSuccessfully() {
         // Given: 登录获取 token
-        LoginUser registerUser = new LoginUser();
-        registerUser.setUsername("logout_test_user");
-        registerUser.setPassword("Test@1234");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("logout_test_user")
+                .password("Test@1234")
+                .build();
         
         Mockito.when(userApi.registerUser(Mockito.any())).thenReturn(Result.success());
         
         authController.register(registerUser, null);
 
-        LoginUser loginUser = new LoginUser();
-        loginUser.setUsername("logout_test_user");
-        loginUser.setPassword("Test@1234");
-        loginUser.setCaptcha("ABCD");
-        loginUser.setUuid("test-uuid-3");
+        LoginRequest loginUser = new LoginRequest("logout_test_user", "Test@1234", "ABCD", "test-uuid-3");
 
         UserCredentialDTO credentialDTO = UserCredentialDTO.builder()
             .userId(3L)
@@ -294,9 +286,10 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldRejectInvalidPasswordOnRegister() {
         // Given: 密码不符合强度要求
-        LoginUser registerUser = new LoginUser();
-        registerUser.setUsername("weak_password_user");
-        registerUser.setPassword("weak");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("weak_password_user")
+                .password("weak")
+                .build();
 
         // When: 注册
         Result<Void> result = authController.register(registerUser, null);
@@ -309,18 +302,20 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldRejectDuplicateUsername() {
         // Given: 先注册一个用户
-        LoginUser registerUser1 = new LoginUser();
-        registerUser1.setUsername("duplicate_user");
-        registerUser1.setPassword("Test@1234");
+RegisterUserDTO registerUser1 = RegisterUserDTO.builder()
+                .username("duplicate_user")
+                .password("Test@1234")
+                .build();
         
         Mockito.when(userApi.registerUser(Mockito.any())).thenReturn(Result.success());
         
         authController.register(registerUser1, null);
 
         // When: 再次注册相同用户名
-        LoginUser registerUser2 = new LoginUser();
-        registerUser2.setUsername("duplicate_user");
-        registerUser2.setPassword("Test@1234");
+RegisterUserDTO registerUser2 = RegisterUserDTO.builder()
+                .username("duplicate_user")
+                .password("Test@1234")
+                .build();
         
         Mockito.when(userApi.registerUser(Mockito.any())).thenReturn(Result.fail("用户已存在"));
         

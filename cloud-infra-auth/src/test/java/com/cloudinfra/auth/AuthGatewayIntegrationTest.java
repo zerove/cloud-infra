@@ -1,5 +1,7 @@
 package com.cloudinfra.auth;
 
+import com.cloudinfra.api.system.dto.RegisterUserDTO;
+import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.test.BaseIntegrationTest;
 import com.cloudinfra.test.support.containers.InfrastructureContainers;
@@ -112,9 +114,10 @@ class AuthGatewayIntegrationTest extends BaseIntegrationTest {
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.success());
 
         // When: 注册用户
-        com.cloudinfra.common.core.domain.model.LoginUser registerUser = new com.cloudinfra.common.core.domain.model.LoginUser();
-        registerUser.setUsername("integration_test_user");
-        registerUser.setPassword("Test@1234");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("integration_test_user")
+                .password("Test@1234")
+                .build();
 
         Result<Void> registerResult = authController.register(registerUser, null);
 
@@ -137,9 +140,10 @@ class AuthGatewayIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldRejectInvalidPasswordOnRegister() {
         // Given: 密码不符合强度要求
-        com.cloudinfra.common.core.domain.model.LoginUser registerUser = new com.cloudinfra.common.core.domain.model.LoginUser();
-        registerUser.setUsername("weak_password_user");
-        registerUser.setPassword("weak");
+RegisterUserDTO registerUser = RegisterUserDTO.builder()
+                .username("weak_password_user")
+                .password("weak")
+                .build();
 
         // When: 注册
         Result<Void> result = authController.register(registerUser, null);
@@ -154,15 +158,17 @@ class AuthGatewayIntegrationTest extends BaseIntegrationTest {
         // Given: 先注册一个用户
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.success());
 
-        com.cloudinfra.common.core.domain.model.LoginUser registerUser1 = new com.cloudinfra.common.core.domain.model.LoginUser();
-        registerUser1.setUsername("duplicate_user");
-        registerUser1.setPassword("Test@1234");
+RegisterUserDTO registerUser1 = RegisterUserDTO.builder()
+                .username("duplicate_user")
+                .password("Test@1234")
+                .build();
         authController.register(registerUser1, null);
 
         // When: 再次注册相同用户名
-        com.cloudinfra.common.core.domain.model.LoginUser registerUser2 = new com.cloudinfra.common.core.domain.model.LoginUser();
-        registerUser2.setUsername("duplicate_user");
-        registerUser2.setPassword("Test@1234");
+RegisterUserDTO registerUser2 = RegisterUserDTO.builder()
+                .username("duplicate_user")
+                .password("Test@1234")
+                .build();
 
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.fail("用户已存在"));
 

@@ -1,10 +1,12 @@
-com.cloudinfra.framework.web.config.VirtualThreadConfig
 com.cloudinfra.framework.web.config.ActuatorConfig
+com.cloudinfra.framework.web.config.CacheConfig
 com.cloudinfra.framework.web.config.CloudInfraRuntimeHints
 com.cloudinfra.framework.web.config.ConfigValidationAutoConfiguration
 com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration
-com.cloudinfra.framework.web.config.Resilience4jAutoConfiguration
+com.cloudinfra.framework.web.config.GlobalExceptionAutoConfiguration
 com.cloudinfra.framework.web.config.GracefulShutdownAutoConfiguration
 com.cloudinfra.framework.web.config.Jackson2CompatibilityAutoConfiguration
+com.cloudinfra.framework.web.config.Resilience4jAutoConfiguration
 com.cloudinfra.framework.web.config.UserContextAutoConfiguration
-com.cloudinfra.framework.web.config.GlobalExceptionAutoConfiguration
+com.cloudinfra.framework.web.config.VirtualThreadConfig
+com.cloudinfra.framework.web.monitor.MetricsConfig

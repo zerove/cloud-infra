@@ -93,16 +93,10 @@ public class SysLoginService {
         }
     }
 
-    public Result<Void> register(LoginUser registerUser, String clientIp) {
+    public Result<Void> register(com.cloudinfra.api.system.dto.RegisterUserDTO registerUser, String clientIp) {
         checkRegisterRateLimit(registerUser.getUsername(), clientIp);
-
-        com.cloudinfra.api.system.dto.RegisterUserDTO userDTO =
-            com.cloudinfra.api.system.dto.RegisterUserDTO.builder()
-                .username(registerUser.getUsername())
-                .password(registerUser.getPassword()) // 明文密码由 system 模块 BCrypt 加密
-                .build();
-
-        return userApi.registerUser(userDTO);
+        // 明文密码由 system 模块 BCrypt 加密
+        return userApi.registerUser(registerUser);
     }
 
     /**

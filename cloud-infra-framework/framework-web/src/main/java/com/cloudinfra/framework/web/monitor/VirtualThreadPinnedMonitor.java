@@ -7,6 +7,7 @@ import jakarta.annotation.PreDestroy;
 import jdk.jfr.consumer.EventStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -24,9 +25,14 @@ public class VirtualThreadPinnedMonitor {
     private final MeterRegistry meterRegistry;
     private final Timer pinnedDurationTimer;
     private final Timer pinnedBySourceTimer;
-    private final Map<String, LongAdder> pinnedBySourceCounters = new ConcurrentHashMap<>();
-    private final AtomicBoolean running = new AtomicBoolean(true);
+    /** 采样开关: 0.0~1.0, 默认 0.2 表示 20% 的 pin 事件采入指标统计 */
+    @Value("${spring.threads.virtual.pinned.sample-rate:0.2}")
+    private double sampleRate;
     private Thread monitorThread;
+    /** 概率采样计数器：未采到的 pin 事件累计数为 sampleRate 倍（每秒重置以近似采样率） */
+    private final AtomicBoolean running = new AtomicBoolean(true);
+    private final Map<String, LongAdder> pinnedBySourceCounters = new ConcurrentHashMap<>();
+    private final LongAdder unsampledCount = new LongAdder();
 
     public VirtualThreadPinnedMonitor(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -49,15 +55,18 @@ public class VirtualThreadPinnedMonitor {
                     String threadName = event.getThread("eventThread").getJavaName();
                     long source = classifySource(threadName);
 
-                    pinnedDurationTimer.record(Duration.ofNanos(durationNanos));
-                    pinnedBySourceTimer.record(Duration.ofNanos(durationNanos));
+                    if (shouldSample(durationNanos)) {
+                        pinnedDurationTimer.record(Duration.ofNanos(durationNanos));
+                        pinnedBySourceTimer.record(Duration.ofNanos(durationNanos));
 
-                    // 每线程源计数
-                    LongAdder adder = pinnedBySourceCounters.computeIfAbsent(sourceKey(source), k -> new LongAdder());
-                    adder.increment();
+                        LongAdder adder = pinnedBySourceCounters.computeIfAbsent(sourceKey(source), k -> new LongAdder());
+                        adder.increment();
 
-                    log.warn("Virtual Thread Pinned: duration={}ms, source={}, thread={}",
-                        durationNanos / 1_000_000.0, sourceKey(source), threadName);
+                        log.warn("Virtual Thread Pinned: duration={}ms, source={}, thread={}",
+                            durationNanos / 1_000_000.0, sourceKey(source), threadName);
+                    } else {
+                        unsampledCount.increment();
+                    }
                 });
                 es.start();
             } catch (java.io.IOException | RuntimeException e) {
@@ -97,6 +106,28 @@ public class VirtualThreadPinnedMonitor {
     public long countForSource(String sourceKey) {
         LongAdder adder = pinnedBySourceCounters.get(sourceKey);
         return adder == null ? 0L : adder.sum();
+    }
+
+    /**
+     * 概率采样判定: 默认 20% 的 pin 事件采入指标统计。
+     * ps.sampleFactor 在启动后即生效, 但 JFR event 是流式到达的,
+     * 每条 pin 事件第一次机会都要做一次随机决策 —— 这是 jfr stream 的单线程串行消费
+     * (见 EventStream#consume), 不会丢事件(全量都到了 onEvent)。
+     */
+    private boolean shouldSample(long durationNanos) {
+        if (Double.compare(sampleRate, 0.0) <= 0.0) {
+            return false; // 关闭监控
+        }
+        double r = Math.random();
+        return r < sampleRate;
+    }
+
+    /**
+     * 每秒重置 unsampledCount, 使累计值近似采样率对应的无采事件数。
+     * 对外暴露为 health 查询/手动巡检用。
+     */
+    public void resetUnsampledCount() {
+        unsampledCount.reset();
     }
 
     public boolean isRunning() {

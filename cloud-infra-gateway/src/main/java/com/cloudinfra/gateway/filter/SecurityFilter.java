@@ -1,6 +1,7 @@
 package com.cloudinfra.gateway.filter;
 
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.tenant.TenantContextFilter;
 import com.cloudinfra.gateway.domain.auth.AuthContext;
 import com.cloudinfra.gateway.domain.auth.AuthEvaluator;
 import com.cloudinfra.gateway.domain.auth.AuthResult;
@@ -52,10 +53,10 @@ public class SecurityFilter extends OncePerRequestFilter implements Ordered {
     private static final Pattern SAFE_TRACE_ID = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     /**
-     * 注入下游的租户请求头。与 {@code TenantContextFilter.TENANT_HEADER} 同名，
-     * 由 {@code TenantHeaderNameConsistencyTest} 做跨模块一致性断言。
+     * 注入下游的租户请求头。直接引用 common 的唯一真源 {@link TenantContextFilter#TENANT_HEADER}，
+     * 不再复制字面量 —— 值相等可以靠巧合，引用同一常量才能把"改一处、两处同步"变成结构性事实。
      */
-    private static final String TENANT_HEADER = "X-Tenant-Id";
+    private static final String TENANT_HEADER = TenantContextFilter.TENANT_HEADER;
     
     @Resource
     private AuthEvaluator authEvaluator;

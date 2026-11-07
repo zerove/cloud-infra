@@ -39,6 +39,15 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
         </dependency>
+        <!-- ⚠️ 仅本模块自身的行为守护测试需要 (test scope, 不泄漏给下游):
+             ClassLevelFallbackBehaviorTest 用 JUnit Platform Launcher 在真实引擎里
+             执行 fixture, 验证"全绿类零快照 / 类级失败仍打印"的生命周期契约。
+             版本由 junit-bom (Spring Boot BOM) 管理。 -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

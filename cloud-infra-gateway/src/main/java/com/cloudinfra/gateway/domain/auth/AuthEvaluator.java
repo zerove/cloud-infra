@@ -1,6 +1,7 @@
 package com.cloudinfra.gateway.domain.auth;
 
 import com.cloudinfra.common.util.JwtUtils;
+import com.cloudinfra.common.core.tenant.TenantClaims;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import com.auth0.jwt.interfaces.Claim;
 import com.auth0.jwt.interfaces.DecodedJWT;
@@ -31,12 +32,14 @@ public class AuthEvaluator {
     private static final Logger log = LoggerFactory.getLogger(AuthEvaluator.class);
 
     /**
-     * 租户标识的 JWT claim 名。auth 侧（{@code AuthTokenServiceImpl.CLAIM_TENANT_ID}）声明同名常量；
-     * 两端不共享常量是为了避免网关反向依赖 auth 模块，但名字必须一致，
-     * 否则一侧改名后另一侧静默读不到，租户隔离会无声失效。
-     * 由 {@code TenantClaimNameConsistencyTest} 跨模块断言名字一致。
+     * 租户标识的 JWT claim 名。与 auth 侧共享 common 的 {@link TenantClaims#TENANT_ID_CLAIM}
+     * 唯一常量（网关与 auth 互不依赖，common 是双方共同的下游）。
+     * 改名不会编译失败，只会让租户隔离无声失效 —— 字面量由 {@code TenantClaimsTest} 锁定。
+     *
+     * <p>修复前两端各持一份字面量，且注释引用了并不存在的 {@code TenantClaimNameConsistencyTest}
+     * （与「门禁自己从未被调用」同源：注释把未兑现的承诺当既成事实）。
      */
-    public static final String CLAIM_TENANT_ID = "tenantId";
+    public static final String CLAIM_TENANT_ID = TenantClaims.TENANT_ID_CLAIM;
 
     /**
      * 默认租户。与 V14 迁移的 {@code DEFAULT 'default'} 及

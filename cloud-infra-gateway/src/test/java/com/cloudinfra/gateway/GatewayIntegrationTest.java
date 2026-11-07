@@ -2,7 +2,6 @@ package com.cloudinfra.gateway;
 
 import com.cloudinfra.gateway.config.GatewayConfig;
 import com.cloudinfra.gateway.config.OpenApiAggregationConfig;
-import com.cloudinfra.gateway.config.PermissionCache;
 import com.cloudinfra.test.BaseIntegrationTest;
 import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
@@ -48,14 +47,10 @@ class GatewayIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private OpenApiAggregationConfig openApiAggregationConfig;
 
-    @Autowired
-    private PermissionCache permissionCache;
-
     @Test
     void contextLoads() {
         assertThat(gatewayConfig).isNotNull();
         assertThat(openApiAggregationConfig).isNotNull();
-        assertThat(permissionCache).isNotNull();
     }
 
     @Test
@@ -74,11 +69,4 @@ class GatewayIntegrationTest extends BaseIntegrationTest {
         assertThat(openApiAggregationConfig).isNotNull();
     }
 
-    @Test
-    void shouldHavePermissionCache() {
-        // Given: 权限缓存组件
-        // When: 获取权限缓存
-        // Then: 组件注入成功
-        assertThat(permissionCache).isNotNull();
-    }
 }

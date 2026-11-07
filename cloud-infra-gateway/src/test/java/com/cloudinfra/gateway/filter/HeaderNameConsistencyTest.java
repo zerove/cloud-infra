@@ -17,10 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 跨模块断言"由注释声称存在、实际并不存在"的守护。
  *
- * <p>{@code SecurityFilter} 的 {@code TENANT_HEADER} 注释写着
+ * <p>历史：{@code SecurityFilter} 的 {@code TENANT_HEADER} 注释曾写着
  * "由 {@code TenantHeaderNameConsistencyTest} 做跨模块一致性断言"，
  * 但该测试<b>从未存在</b>。这与本仓库记录的「门禁自己从未被调用」同源：
  * 注释把一个未兑现的承诺当既成事实写下，下一个人便不会再补。
+ * 2026-10-18 修复后网关不再复制租户头字面量，改为直接引用 common 的
+ * {@code TenantContextFilter.TENANT_HEADER}；本测试守护"保持引用而非拷贝"这一结构。
  *
  * <p>trace 头曾出现同类缺陷且已实际发生：
  * 网关注入 {@code traceId}，而下游 {@code TraceIdFilter} /
@@ -54,10 +56,15 @@ class HeaderNameConsistencyTest {
             "cloud-infra-framework/framework-web/src/main/java/com/cloudinfra/framework/web/filter/TraceIdFilter.java";
 
     @Test
-    void tenantHeaderNameIsIdenticalInGatewayAndCommon() {
-        assertThat(constantOf(SECURITY_FILTER, "TENANT_HEADER"))
-                .as("网关注入的租户头名必须与 TenantContextFilter 读取的一致")
-                .isEqualTo(constantOf(TENANT_CONTEXT_FILTER, "TENANT_HEADER"));
+    void tenantHeaderNameIsSharedNotCopied() {
+        // 值相等可以靠巧合, 引用同一常量才是结构性保证: 改 common 一处, 网关自动跟随。
+        // 若有人退回"复制字面量"的写法, 即便值暂时相同, 也在这里报红。
+        assertThat(read(SECURITY_FILTER))
+                .as("网关应引用 common 的租户头常量, 而非再复制一份字面量")
+                .contains("String TENANT_HEADER = TenantContextFilter.TENANT_HEADER;");
+        assertThat(constantOf(TENANT_CONTEXT_FILTER, "TENANT_HEADER"))
+                .as("租户头的唯一字面量在 TenantContextFilter, 且线上协议名锁定为 X-Tenant-Id")
+                .isEqualTo("X-Tenant-Id");
     }
 
     @Test
