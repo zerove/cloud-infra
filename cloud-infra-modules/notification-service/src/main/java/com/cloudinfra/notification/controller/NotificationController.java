@@ -16,9 +16,13 @@ import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.common.util.SecurityUtils;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
+import com.cloudinfra.notification.domain.UserNotificationPreference;
+import com.cloudinfra.notification.domain.dto.NotificationPreferenceRequest;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
+import java.util.List;
 import com.cloudinfra.notification.service.INotificationService;
 import com.cloudinfra.notification.service.NotificationQuotaService;
+import com.cloudinfra.notification.service.UserNotificationPreferenceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -41,6 +45,7 @@ public class NotificationController implements NotificationApi {
 
     private final INotificationService notificationService;
     private final NotificationQuotaService quotaService;
+    private final UserNotificationPreferenceService preferenceService;
 
     @Override
     @Operation(summary = "发送通知")
@@ -150,6 +155,23 @@ public class NotificationController implements NotificationApi {
     @GetMapping("/quota")
     public Result<NotificationQuotaService.QuotaStatus> getQuota() {
         return Result.success(quotaService.getQuotaStatus(SecurityUtils.getUserId()));
+    }
+
+    @Operation(summary = "查询当前用户通知偏好")
+    @PreAuthorize("@ss.hasPermi('notification:read')")
+    @GetMapping("/preferences")
+    public Result<List<UserNotificationPreference>> getPreferences() {
+        Long userId = SecurityUtils.getUserId();
+        return Result.success(preferenceService.listByUserId(userId));
+    }
+
+    @Operation(summary = "保存当前用户通知偏好（按类型+渠道 upsert）")
+    @PreAuthorize("@ss.hasPermi('notification:read')")
+    @PutMapping("/preferences")
+    public Result<List<UserNotificationPreference>> savePreferences(
+            @Valid @RequestBody List<NotificationPreferenceRequest> requests) {
+        Long userId = SecurityUtils.getUserId();
+        return Result.success(preferenceService.saveForUser(userId, requests));
     }
 }
 

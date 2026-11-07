@@ -5,6 +5,7 @@ import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.notification.service.INotificationService;
 import com.cloudinfra.notification.service.NotificationQuotaService;
+import com.cloudinfra.notification.service.UserNotificationPreferenceService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,13 +41,15 @@ class NotificationControllerMarkAsReadTest {
     private INotificationService notificationService;
     @Mock
     private NotificationQuotaService quotaService;
+    @Mock
+    private UserNotificationPreferenceService preferenceService;
 
     private NotificationController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        controller = new NotificationController(notificationService, quotaService);
+        controller = new NotificationController(notificationService, quotaService, preferenceService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         LoginUser loginUser = LoginUser.builder().userId(AUTHENTICATED_USER_ID).build();
         SecurityContextHolder.getContext().setAuthentication(
