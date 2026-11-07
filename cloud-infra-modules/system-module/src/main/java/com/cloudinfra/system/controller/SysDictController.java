@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
@@ -75,8 +76,14 @@ public class SysDictController {
     @Operation(summary = "根据字典类型查询字典数据")
     @PreAuthorize("hasAuthority('system:dict:query')")
     @GetMapping("/data/type/{dictType}")
-    public List<SysDictData> dictDataByType(@PathVariable String dictType) {
-        return dictService.selectDictDataByType(dictType);
+    public List<SysDictData> dictDataByType(
+            @PathVariable String dictType,
+            @RequestParam(required = false) String dictValue) {
+        List<SysDictData> list = dictService.selectDictDataByType(dictType);
+        if (dictValue == null || dictValue.isBlank()) {
+            return list;
+        }
+        return list.stream().filter(d -> dictValue.equals(d.getDictValue())).toList();
     }
 
     @Operation(summary = "根据字典类型与值查询字典标签")
