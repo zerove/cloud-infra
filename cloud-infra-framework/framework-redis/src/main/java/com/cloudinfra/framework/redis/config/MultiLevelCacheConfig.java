@@ -49,12 +49,6 @@ public class MultiLevelCacheConfig {
             "notification:inbox", 4
     );
 
-    private final RedisConnectionFactory connectionFactory;
-
-    public MultiLevelCacheConfig(RedisConnectionFactory connectionFactory) {
-        this.connectionFactory = connectionFactory;
-    }
-
     @Bean
     @Primary
     @ConditionalOnMissingBean(name = "caffeineCacheManager")
