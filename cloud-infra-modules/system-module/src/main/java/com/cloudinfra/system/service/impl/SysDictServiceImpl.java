@@ -92,6 +92,19 @@ public class SysDictServiceImpl implements ISysDictService {
     }
 
     @Override
+    public String selectDictLabel(String dictType, String dictValue) {
+        if (dictType == null || dictValue == null) {
+            return null;
+        }
+        for (SysDictData data : selectDictDataByType(dictType)) {
+            if (dictValue.equals(data.getDictValue())) {
+                return data.getDictLabel();
+            }
+        }
+        return null;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int insertDictData(SysDictData dictData) {
         int result = dictDataMapper.insert(dictData);

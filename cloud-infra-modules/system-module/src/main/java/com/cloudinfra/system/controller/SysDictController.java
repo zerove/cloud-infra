@@ -77,6 +77,13 @@ public class SysDictController {
         return dictService.selectDictDataByType(dictType);
     }
 
+    @Operation(summary = "根据字典类型与值查询字典标签")
+    @PreAuthorize("hasAuthority('system:dict:query')")
+    @GetMapping("/data/label/{dictType}/{dictValue}")
+    public String dictLabel(@PathVariable String dictType, @PathVariable String dictValue) {
+        return dictService.selectDictLabel(dictType, dictValue);
+    }
+
     @Operation(summary = "新增字典数据")
     @PreAuthorize("hasAuthority('system:dict:add')")
     @AuditLog(module = "DICT_DATA", action = "ADD")
