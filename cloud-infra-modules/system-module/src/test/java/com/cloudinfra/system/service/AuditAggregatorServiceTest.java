@@ -52,7 +52,7 @@ public class AuditAggregatorServiceTest {
     void failedOperLogIsReportedAsFail() {
         SysOperLog failed = operLog(1, LocalDateTime.of(2026, 10, 17, 10, 0));
         when(operLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of(failed));
-        when(notificationApi.getLogs(eq(100L), any(PageQuery.class))).thenReturn(Result.success(PageResult.empty()));
+        when(notificationApi.getInternalLogs(eq(100L), any(PageQuery.class))).thenReturn(Result.success(PageResult.empty()));
 
         List<UnifiedAuditRecord> timeline = auditAggregatorService.getUnifiedTimeline(100L);
 
@@ -65,7 +65,7 @@ public class AuditAggregatorServiceTest {
     void successfulOperLogIsReportedAsSuccess() {
         SysOperLog ok = operLog(0, LocalDateTime.of(2026, 10, 17, 10, 0));
         when(operLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of(ok));
-        when(notificationApi.getLogs(eq(100L), any(PageQuery.class))).thenReturn(Result.success(PageResult.empty()));
+        when(notificationApi.getInternalLogs(eq(100L), any(PageQuery.class))).thenReturn(Result.success(PageResult.empty()));
 
         List<UnifiedAuditRecord> timeline = auditAggregatorService.getUnifiedTimeline(100L);
 
@@ -83,7 +83,7 @@ public class AuditAggregatorServiceTest {
         failedNotification.setCreateTime(LocalDateTime.of(2026, 10, 17, 11, 0));
 
         when(operLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
-        when(notificationApi.getLogs(eq(100L), any(PageQuery.class)))
+        when(notificationApi.getInternalLogs(eq(100L), any(PageQuery.class)))
             .thenReturn(Result.success(PageResult.of(List.of(failedNotification), 1L, 1L, 100L)));
 
         List<UnifiedAuditRecord> timeline = auditAggregatorService.getUnifiedTimeline(100L);

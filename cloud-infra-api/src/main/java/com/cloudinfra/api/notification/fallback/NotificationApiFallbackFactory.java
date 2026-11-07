@@ -86,6 +86,11 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             public Result<List<NotificationPreferenceDTO>> savePreferences(List<NotificationPreferenceSaveRequest> requests) {
                 return Result.fail(503, "通知服务暂不可用");
             }
+
+            @Override
+            public Result<PageResult<NotificationLogDTO>> getInternalLogs(Long userId, PageQuery pageQuery) {
+                return Result.success(PageResult.empty());
+            }
         };
     }
 }

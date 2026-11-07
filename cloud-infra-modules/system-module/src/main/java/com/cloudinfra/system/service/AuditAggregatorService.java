@@ -74,8 +74,9 @@ public class AuditAggregatorService {
                         PageQuery pageQuery = new PageQuery();
                         pageQuery.setPageNum(pageNum);
                         pageQuery.setPageSize(pageSize);
+                        // S2-B3: 用户端 logs 禁止跨用户；审计聚合走内部 HMAC 契约端点
                         Result<PageResult<NotificationLogDTO>> result =
-                            notificationApi.getLogs(userId, pageQuery);
+                            notificationApi.getInternalLogs(userId, pageQuery);
                         if (result == null || result.getData() == null || result.getData().getRecords() == null
                                 || result.getData().getRecords().isEmpty()) {
                             break;

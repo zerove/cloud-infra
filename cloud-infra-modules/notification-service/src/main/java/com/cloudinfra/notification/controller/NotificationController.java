@@ -1,6 +1,5 @@
 package com.cloudinfra.notification.controller;
 
-import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
@@ -45,13 +44,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/notification")
 @RequiredArgsConstructor
-public class NotificationController implements NotificationApi {
+public class NotificationController {
 
     private final INotificationService notificationService;
     private final NotificationQuotaService quotaService;
     private final UserNotificationPreferenceService preferenceService;
 
-    @Override
     @Operation(summary = "发送通知")
     @PreAuthorize("@ss.hasPermi('notification:send')")
     @PostMapping("/send")
@@ -75,7 +73,6 @@ public class NotificationController implements NotificationApi {
      *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
      */
     @Deprecated(since = "S2-compat", forRemoval = false)
-    @Override
     @Operation(summary = "查询通知历史")
     @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/history")
@@ -95,7 +92,6 @@ public class NotificationController implements NotificationApi {
                 n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
     }
 
-    @Override
     @Operation(summary = "将通知标记为已读")
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @PutMapping("/read/{id}")
@@ -120,7 +116,6 @@ public class NotificationController implements NotificationApi {
         }
     }
 
-    @Override
     @Operation(summary = "根据关键词搜索通知")
     @PreAuthorize("@ss.hasPermi('notification:search')")
     @GetMapping("/search")
@@ -135,7 +130,6 @@ public class NotificationController implements NotificationApi {
      *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
      */
     @Deprecated(since = "S2-compat", forRemoval = false)
-    @Override
     @Operation(summary = "获取特定用户的发送审计日志")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/logs")
@@ -173,7 +167,6 @@ public class NotificationController implements NotificationApi {
         return dto;
     }
 
-    @Override
     @Operation(summary = "查询当日通知发送配额")
     @PreAuthorize("@ss.hasPermi('notification:send')")
     @GetMapping("/quota")
@@ -182,7 +175,6 @@ public class NotificationController implements NotificationApi {
         return Result.success(new NotificationQuotaStatusDTO(s.used(), s.limit(), s.remaining(), s.resetInSeconds()));
     }
 
-    @Override
     @Operation(summary = "查询当前用户通知偏好")
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @GetMapping("/preferences")
@@ -191,7 +183,6 @@ public class NotificationController implements NotificationApi {
         return Result.success(toPreferenceDtos(preferenceService.listByUserId(userId)));
     }
 
-    @Override
     @Operation(summary = "保存当前用户通知偏好（按类型+渠道 upsert）")
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @PutMapping("/preferences")
@@ -214,7 +205,6 @@ public class NotificationController implements NotificationApi {
             .collect(Collectors.toList());
     }
 
-    @Override
     @Operation(summary = "查询当前用户通知历史（兼容安全路径，不接受 userId 参数）")
     @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/my/history")
@@ -229,7 +219,6 @@ public class NotificationController implements NotificationApi {
                 n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
     }
 
-    @Override
     @Operation(summary = "查询当前用户发送审计日志（兼容安全路径，不接受 userId 参数）")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/my/logs")
@@ -237,5 +226,6 @@ public class NotificationController implements NotificationApi {
         Long userId = SecurityUtils.getUserId();
         return Result.success(notificationService.getLogs(userId, pageQuery).map(this::mapToLogDTO));
     }
+
 }
 

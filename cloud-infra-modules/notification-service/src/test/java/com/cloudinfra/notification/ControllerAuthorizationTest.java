@@ -36,14 +36,13 @@ class ControllerAuthorizationTest {
     /**
      * 允许不带 {@code @PreAuthorize} 的路径前缀。
      *
-     * <p>本模块<b>零例外</b>: notification 没有 {@code /internal/} 服务间端点,
-     * 全部端点都是用户面 API。因此这里刻意留空 —— 一旦将来出现例外,
-     * 下面的 {@code allowlistStaysMinimal} 会立刻变红, 迫使提出者说明理由。</p>
+     * <p>{@code /internal/}：服务间契约端点，由 {@code NotificationSecurityConfig} 的
+     * HMAC 单点鉴权保护（网关无路由），语义为调用方身份而非用户权限。</p>
      */
-    private static final List<String> UNPROTECTED_ALLOWLIST = List.of();
+    private static final List<String> UNPROTECTED_ALLOWLIST = List.of("/internal/");
 
     @Test
-    @DisplayName("所有端点都必须带 @PreAuthorize")
+    @DisplayName("所有非 /internal/ 端点都必须带 @PreAuthorize")
     void everyEndpointRequiresAuthorization() throws Exception {
         Set<String> gaps = new TreeSet<>();
         int total = 0;
@@ -80,8 +79,8 @@ class ControllerAuthorizationTest {
     @DisplayName("允许清单必须保持最小（防止被当成绕过鉴权的后门）")
     void allowlistStaysMinimal() {
         assertThat(UNPROTECTED_ALLOWLIST)
-            .as("notification 无 /internal/ 端点, 新增例外前请先说明该端点为何真的不需要权限判定")
-            .isEmpty();
+            .as("新增例外前请先确认: 该端点是否真的不需要任何用户权限判定（内部 HMAC/网关隔离）")
+            .containsExactly("/internal/");
     }
 
     private static Set<BeanDefinition> scanControllers() {

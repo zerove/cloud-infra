@@ -121,4 +121,13 @@ public interface NotificationApi {
     @PutMapping("/notification/preferences")
     @CircuitBreaker(name = "notificationService")
     Result<List<NotificationPreferenceDTO>> savePreferences(@RequestBody List<NotificationPreferenceSaveRequest> requests);
+
+    /**
+     * 获取指定用户的发送审计日志（内部 Feign 契约，HMAC 保护，不经网关暴露）。
+     * 用于跨服务审计聚合等可信场景；用户端请使用 {@code /notification/my/logs} 或同用户 legacy 路径。
+     */
+    @GetMapping("/internal/notification/logs")
+    Result<PageResult<NotificationLogDTO>> getInternalLogs(
+            @RequestParam Long userId,
+            @SpringQueryMap PageQuery pageQuery);
 }
