@@ -17,8 +17,10 @@ serviceAccount:
 
 podAnnotations:
   prometheus.io/scrape: "true"
-  prometheus.io/port: "8081"
-  prometheus.io/path: "/actuator/prometheus"
+  # 管理端口 9301 + base-path=/management —— 原写 8081 + /actuator/prometheus,
+  # 两个值都错(业务端口 & 已被 base-path 取代的路径), 注解抓取恒 404。
+  prometheus.io/port: "9301"
+  prometheus.io/path: "/management/prometheus"
 
 podSecurityContext:
   runAsNonRoot: true
@@ -45,7 +47,9 @@ managementService:
 resources:
   limits:
     cpu: 1000m
-    memory: 512Mi
+    # 与 compose mem_limit(1g) 对齐 —— 512Mi 装不下
+    # 堆 256m + 堆外上限 448m, 属会被 cgroup OOM-kill 的组合
+    memory: 1Gi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -80,8 +84,6 @@ env:
       secretKeyRef:
         name: cloud-infra-secrets
         key: internalCall.secret
-  - name: SPRING_PROFILES_ACTIVE
-    value: "k8s"
   - name: NACOS_ADDR
     valueFrom:
       configMapKeyRef:
@@ -128,7 +130,9 @@ env:
   - name: AUTH_JWT_CACHE_TTL
     value: "300"
   - name: JAVA_OPTS
-    value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+    # native 内存四项上限与 compose 逐字一致 —— 缺失时 JVM 默认预留约 2.15GB,
+    # 由 deploy/tests/check_jvm_native_memory_bounds.py 与 test_k8s_values_alignment.py 守护
+    value: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
 
 livenessProbe:
   httpGet:
@@ -195,7 +199,8 @@ configMap:
           web:
             base-path: /management
             exposure:
-              include: health,info,prometheus,metrics,env,beans,conditions,refresh
+              # 与 Nacos 真源(deploy/config/actuator-config.yaml)一致: env/beans/conditions 不暴露
+              include: health,info,prometheus,metrics,refresh
         # ⚠️ 此处原有一处被遮蔽的 `tracing:` 重复键(仅含 sampling.probability),
         # 后面的 tracing 块会静默覆盖它, 使前者的配置从未生效。
         # 已删除 —— 行为完全等价(后一个块同样设了 sampling.probability),
@@ -206,7 +211,7 @@ configMap:
         tracing:
           enabled: true
           sampling:
-            probability: 1.0
+            probability: 0.2
           zipkin:
             enabled: true
             endpoint: http://zipkin:9411/api/v2/spans

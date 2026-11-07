@@ -12,7 +12,8 @@ serviceAccount:
   name: ''
 podAnnotations:
   prometheus.io/scrape: 'true'
-  prometheus.io/port: '8084'
+  # /management/prometheus 在管理端口 9301(原 8084 是业务端口, 抓取恒 404)
+  prometheus.io/port: '9301'
   prometheus.io/path: /management/prometheus
 podSecurityContext:
   runAsNonRoot: true
@@ -35,7 +36,8 @@ managementService:
 resources:
   limits:
     cpu: 1000m
-    memory: 512Mi
+    # 与 compose mem_limit(640m) 对齐(堆 256m + 堆外上限 448m 需要 >512Mi)
+    memory: 640Mi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -70,8 +72,6 @@ env:
     secretKeyRef:
       name: cloud-infra-secrets
       key: internalCall.secret
-- name: SPRING_PROFILES_ACTIVE
-  value: k8s
 - name: NACOS_ADDR
   valueFrom:
     configMapKeyRef:
@@ -112,7 +112,8 @@ env:
 - name: SPRING_RABBITMQ_PASSWORD
   value: guest
 - name: JAVA_OPTS
-  value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+  # native 内存四项上限与 compose 逐字一致(守护: deploy/tests/test_k8s_values_alignment.py)
+  value: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
 livenessProbe:
   httpGet:
     path: /management/health/liveness
@@ -136,7 +137,9 @@ startupProbe:
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
-  failureThreshold: 30
+  # 10 + 40×10 = 410s >= compose start_period 360s
+  # (notification 实测启动 304.3s, 原 30×10=300s 覆盖不住)
+  failureThreshold: 40
 configMap:
   enabled: true
   data:
@@ -158,9 +161,9 @@ configMap:
       \ ${SPRING_RABBITMQ_HOST}\n    port: 5672\n    username: ${SPRING_RABBITMQ_USERNAME}\n\
       \    password: ${SPRING_RABBITMQ_PASSWORD}\nmanagement:\n  server:\n    port:\
       \ 9301\n  endpoints:\n    web:\n      base-path: /management\n      exposure:\n\
-      \        include: \"*\"\n  tracing:\n    sampling:\n      probability: 1.0\n\
+      \        include: health,info,prometheus,metrics,refresh\n  tracing:\n    sampling:\n      probability: 0.2\n\
       \  otlp:\n    tracing:\n      endpoint: http://otel-collector:4317\n  tracing:\n\
-      \    enabled: true\n    sampling:\n      probability: 1.0\n    zipkin:\n   \
+      \    enabled: true\n    sampling:\n      probability: 0.2\n    zipkin:\n   \
       \   enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n      sender:\n\
       \        type: web\n    otel:\n      exporter:\n        zipkin:\n          endpoint:\
       \ http://zipkin:9411/api/v2/spans\n        otlp:\n          endpoint: http://otel-collector:4317\n"
