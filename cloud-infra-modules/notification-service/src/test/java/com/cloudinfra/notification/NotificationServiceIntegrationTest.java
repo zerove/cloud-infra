@@ -456,9 +456,10 @@ public class NotificationServiceIntegrationTest {
             insertNotification(10L, NotificationType.SMS, NotificationStatus.UNREAD, "未读 " + i);
         }
 
-        // When - 第 1 页 (pageNum=1, pageSize=10)
+        // When - 第 1 页 (pageNum=1, pageSize=10)；S2-B3: legacy history 仅允许本人，故认证身份与 userId 对齐
         webTestClient.get()
                 .uri("/notification/history?userId=10&pageNum=1&pageSize=10")
+                .header("X-User-Id", "10")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
@@ -473,6 +474,7 @@ public class NotificationServiceIntegrationTest {
         // When - 第 2 页 (pageNum=2, pageSize=10) 只剩 7 条, total 不变
         webTestClient.get()
                 .uri("/notification/history?userId=10&pageNum=2&pageSize=10")
+                .header("X-User-Id", "10")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
@@ -492,9 +494,10 @@ public class NotificationServiceIntegrationTest {
         insertNotification(30L, NotificationType.EMAIL, NotificationStatus.UNREAD, "未读B");
         insertNotification(30L, NotificationType.EMAIL, NotificationStatus.READ, "已读C");
 
-        // When - 仅按 status 过滤
+        // When - 仅按 status 过滤（S2-B3: 认证身份与 userId 对齐）
         webTestClient.get()
                 .uri("/notification/history?userId=30&status=UNREAD")
+                .header("X-User-Id", "30")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
@@ -505,6 +508,7 @@ public class NotificationServiceIntegrationTest {
         // When - 仅按 type 过滤
         webTestClient.get()
                 .uri("/notification/history?userId=30&type=EMAIL")
+                .header("X-User-Id", "30")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
@@ -515,6 +519,7 @@ public class NotificationServiceIntegrationTest {
         // When - status + type 组合过滤
         webTestClient.get()
                 .uri("/notification/history?userId=30&status=UNREAD&type=EMAIL")
+                .header("X-User-Id", "30")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
@@ -534,12 +539,13 @@ public class NotificationServiceIntegrationTest {
         Notification n21 = insertNotification(21L, NotificationType.EMAIL, NotificationStatus.SENT, "他人通知");
         insertLog(n21.getId(), "websocket", "SUCCESS", null);
 
-        // When/Then - 按日志行分页: pageSize=1 共 2 页
+        // When/Then - 按日志行分页: pageSize=1 共 2 页（S2-B3: 认证身份与 userId 对齐）
         List<String> seenChannels = new ArrayList<>();
         for (int pageNum = 1; pageNum <= 2; pageNum++) {
             int page = pageNum;
             webTestClient.get()
                     .uri("/notification/logs?userId=20&pageNum=" + page + "&pageSize=1")
+                    .header("X-User-Id", "20")
                     .exchange()
                     .expectStatus().isOk()
                     .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationLogDTO>>>() {})
