@@ -101,26 +101,15 @@ spring:
     clean-disabled: true
     out-of-order: false
 
-  # gRPC 服务配置
+  # gRPC: 真正生效的配置位置是 cloudinfra.grpc（CloudInfraGrpcProperties 的 @ConfigurationProperties 前缀）。
+# 此前这里写的是 spring.grpc.* —— 本仓库未引入 spring-grpc starter，那一整块
+# （server.port / reflection / flow-control-window / client.* 等）从未被读取，
+# gRPC server 一直用 properties 默认端口 9090，与 gateway 同端口时会 BindException。
+# 现只保留 properties 类真正声明的键（port 可配），其余"看起来像配置"的死键已删除。
+# 默认值与删除前实际生效值一致（9090 / 4MB / 30s），即本次不改变运行时行为，只让端口可覆盖。
+cloudinfra:
   grpc:
-    server:
-      port: 9090
-      reflection: true
-      max-inbound-message-size: 10485760
-      max-inbound-metadata-size: 8192
-      keep-alive-time: 30
-      keep-alive-timeout: 10
-      permit-keep-alive-time: 10
-      max-connection-idle: 300
-      max-connection-age: 3600
-      max-connection-age-grace: 120
-      flow-control-window: 1048576
-      min-time-between-keep-alive: 10
-    client:
-      max-inbound-message-size: 10485760
-      keep-alive-time: 30
-      keep-alive-timeout: 10
-      keep-alive-without-calls: true
+    port: ${CLOUDINFRA_GRPC_PORT:9090}
 
 # 追踪配置由 management.tracing 与 management.otlp 统一管理
 
@@ -134,4 +123,4 @@ management:
         include: health,info,prometheus,metrics,env,beans,conditions,refresh
   tracing:
     sampling:
-      probability: 1.0
+      probability: 0.2

@@ -82,6 +82,28 @@ class GrpcServerLifecycleIntegrationTest {
         }
     }
 
+    /**
+     * 守护"死键"这件事本身: {@code cloudinfra.grpc.server.port} 必须不被绑定。
+     *
+     * <p>2026-11-06 修前, 各模块配置写的是 {@code spring.grpc.server.port} /
+     * {@code cloudinfra.grpc.server.port} —— 两种写法都无人读取, gRPC server 一直用
+     * 默认 9090, 与 gateway 同端口时 BindException。光把配置改成正确的键还不够:
+     * 需要一条测试证明"老写法确实是死的", 否则下一个人可能又把它当成有效键写回去。
+     *
+     * <p>用 in-process server 避免占用真实端口。
+     */
+    @Test
+    void deadServerSubKeyIsNotBound() {
+        String name = UUID.randomUUID().toString();
+        try (var context = context(Map.of(
+            "cloudinfra.grpc.in-process-server-name", name,
+            "cloudinfra.grpc.server.port", "0"))) {
+            var properties = context.getBean(CloudInfraGrpcProperties.class);
+            assertEquals(9090, properties.getPort(),
+                "cloudinfra.grpc.server.port 不应生效 —— CloudInfraGrpcProperties 没有 server 子类");
+        }
+    }
+
     @Test
     void emptyServiceCollectionStillAllowsLifecycle() {
         try (var context = new AnnotationConfigApplicationContext()) {
