@@ -42,8 +42,18 @@
 
 ## 4. 验证记录（本次会话）
 
-- 偏好服务补充空用户校验与单次批量上限（`MAX_PREFERENCE_ITEMS=100`）；`notification-service` 定向测试（含 `UserNotificationPreferenceServiceTest`、`NotificationControllerMarkAsReadTest`、`ControllerAuthorizationTest`）**BUILD SUCCESS**，Jacoco 通过。
-- 门禁：`test_gate_semantics_selftest`、`test_gate_wiring` 通过；`verify-e2e.sh --self-test` 在收口阶段通过（合并前建议在最终 HEAD 重跑）。
+- 偏好服务补充空用户校验与单次批量上限（`MAX_PREFERENCE_ITEMS=100`）；`notification-service` 定向测试（含 `UserNotificationPreferenceServiceTest`、`NotificationControllerMarkAsReadTest`、`NotificationControllerMyEndpointsTest`、`ControllerAuthorizationTest`）**BUILD SUCCESS**，Jacoco 通过。
+- 门禁：`test_gate_semantics_selftest`、`test_gate_wiring` **PASS**；`verify-e2e.sh --self-test` 收口阶段通过（合并前建议在最终 HEAD 重跑）。
+
+### 4.1 定向验证矩阵（本轮扩展，`-DskipITs`）
+
+| 模块 | 命令/范围 | 结果 | 备注 |
+|---|---|---|---|
+| notification-service | test-compile；`NotificationControllerMyEndpointsTest,UserNotificationPreferenceServiceTest,NotificationControllerMarkAsReadTest,ControllerAuthorizationTest` | **PASS** | 含 `/my/*` 与偏好作用域契约 |
+| file-service | test-compile；`FileServiceConfigKeyAlignmentTest,TenantFilterSecretWiringTest` | **PASS**（`-Djacoco.skip=true`） | 子集运行触发模块级 JaCoCo 阈值；生产代码未改，仅补 `@Disabled` 骨架 |
+| search-service | `SearchControllerValidationTest` | **PASS** |  |
+| system-module | test-compile；`MonitoringServiceTest,ControllerAuthorizationTest` | **PASS** |  |
+| 门禁 | `test_gate_semantics_selftest` / `test_gate_wiring` | **PASS** |  |
 
 ## 5. 后续开发计划（建议执行序列）
 
