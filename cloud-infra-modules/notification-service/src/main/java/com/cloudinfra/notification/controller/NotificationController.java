@@ -8,7 +8,12 @@ import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
+import com.cloudinfra.common.core.domain.PageQuery;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.exception.BusinessException;
+import com.cloudinfra.common.core.exception.ErrorCode;
+import com.cloudinfra.common.util.SecurityUtils;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
@@ -26,9 +31,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Tag(name = "通知管理")
 @RestController
@@ -61,22 +63,16 @@ public class NotificationController implements NotificationApi {
     @Operation(summary = "查询通知历史")
     @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/history")
-    public Result<List<NotificationHistoryResponse>> getHistory(
+    public Result<PageResult<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
-        
-        // 校验分页参数（size 上限 100，防止大分页拖垮 DB）
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.min(Math.max(size, 1), 100);
-        List<Notification> notifications = notificationService.getNotificationHistory(userId, safePage, safeSize);
-        List<NotificationHistoryResponse> responses = notifications.stream()
-                .map(n -> new NotificationHistoryResponse(
-                    n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime()))
-                .collect(Collectors.toList());
-        return Result.success(responses);
+            PageQuery pageQuery) {
+        // 分页窗口的缺省/钳制统一由 PageQuery 处理, 控制器不再内联 Math.min/max
+        PageResult<Notification> notifications =
+                notificationService.getNotificationHistory(userId, status, type, pageQuery);
+        return Result.success(notifications.map(n -> new NotificationHistoryResponse(
+                n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
     }
 
     @Override
@@ -84,38 +80,44 @@ public class NotificationController implements NotificationApi {
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @PutMapping("/read/{id}")
     public Result<Void> markAsRead(@PathVariable("id") Long id) {
-        // 暂未在 Service 实现
-        return Result.success();
+        try {
+            // 当前用户取自验签后的安全上下文 (HeaderAuthenticationFilter 注入),
+            // 绝不接受客户端参数 —— 否则可标记他人通知
+            notificationService.markAsRead(id, SecurityUtils.getUserId());
+            return Result.success();
+        } catch (BusinessException e) {
+            // service 的 BusinessException 经 GlobalExceptionHandler 会恒按 500 处理,
+            // 权限/不存在这类语义失败不应被读成"服务故障", 故显式映射 (FileController.remove 同规)。
+            // 按 ErrorCode 枚举比对: 裸数字 1005/1006 一旦调整会静默失配退化为 500。
+            if (ErrorCode.NO_PERMISSION.getCode().equals(e.getCode())) {
+                return Result.fail(403, e.getMessage());
+            }
+            if (ErrorCode.RESOURCE_NOT_FOUND.getCode().equals(e.getCode())) {
+                return Result.fail(404, e.getMessage());
+            }
+            // 未预期错误码不在此吞掉, 交全局处理器
+            throw e;
+        }
     }
 
     @Override
     @Operation(summary = "根据关键词搜索通知")
     @PreAuthorize("@ss.hasPermi('notification:search')")
     @GetMapping("/search")
-    public Result<List<NotificationDTO>> searchNotifications(
+    public Result<PageResult<NotificationDTO>> searchNotifications(
             @RequestParam String keyword,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
-        List<Notification> notifications =
-                notificationService.searchNotifications(keyword, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
-        return Result.success(notifications.stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList()));
+            PageQuery pageQuery) {
+        return Result.success(notificationService.searchNotifications(keyword, pageQuery).map(this::mapToDTO));
     }
 
     @Override
     @Operation(summary = "获取特定用户的发送审计日志")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/logs")
-    public Result<List<NotificationLogDTO>> getLogs(
+    public Result<PageResult<NotificationLogDTO>> getLogs(
             @RequestParam Long userId,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
-        List<NotificationLog> logs =
-                notificationService.getLogs(userId, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
-        return Result.success(logs.stream()
-                .map(this::mapToLogDTO)
-                .collect(Collectors.toList()));
+            PageQuery pageQuery) {
+        return Result.success(notificationService.getLogs(userId, pageQuery).map(this::mapToLogDTO));
     }
 
     private NotificationDTO mapToDTO(Notification n) {

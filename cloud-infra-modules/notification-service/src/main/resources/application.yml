@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: notification-service
+  config:
+    import:
+      - optional:nacos:actuator-config.yaml?group=DEFAULT_GROUP
 
   # 默认 Redis 配置
   data:
@@ -38,28 +41,25 @@ spring:
               auto-bind-dlq: true
               dlq-name: user.events.dlq
               republish-to-dlq: true
-    threads:
-      virtual:
-        enabled: true
-    task:
-      scheduling:
-        # Spring Boot 默认 pool.size=1, 即全模块共用一个调度线程。
-        # NotificationDispatchRecoveryTask 的扫描会 join() 等待整批 MQ 投递完成,
-        # broker 不可达时单条可阻塞到连接超时, 于是补扫一旦卡住就会连带
-        # 拖住本模块所有其他 @Scheduled 任务。给两个线程让它们互不阻塞。
-        pool:
-          size: 2
-        thread-name-prefix: notif-sched-
-    datasource:
-      driver-class-name: org.postgresql.Driver
-      url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-      username: ${SPRING_DATASOURCE_USERNAME:postgres}
-      password: ${SPRING_DATASOURCE_PASSWORD:password}
-    main:
-      allow-bean-definition-overriding: true
-  config:
-    import:
-      - optional:nacos:actuator-config.yaml
+  threads:
+    virtual:
+      enabled: true
+  task:
+    scheduling:
+      # Spring Boot 默认 pool.size=1, 即全模块共用一个调度线程。
+      # NotificationDispatchRecoveryTask 的扫描会 join() 等待整批 MQ 投递完成,
+      # broker 不可达时单条可阻塞到连接超时, 于是补扫一旦卡住就会连带
+      # 拖住本模块所有其他 @Scheduled 任务。给两个线程让它们互不阻塞。
+      pool:
+        size: 2
+      thread-name-prefix: notif-sched-
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+  main:
+    allow-bean-definition-overriding: true
 
 management:
   server:

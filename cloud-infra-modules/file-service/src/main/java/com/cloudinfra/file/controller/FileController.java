@@ -7,12 +7,10 @@ import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
+import com.cloudinfra.file.service.FileStorageUrlService;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.file.service.FilePermissionService;
 import com.cloudinfra.file.util.FileValidator;
-import io.minio.GetPresignedObjectUrlArgs;
-import io.minio.http.Method;
-import io.minio.MinioClient;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
@@ -21,6 +19,10 @@ import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,18 +48,18 @@ import java.security.InvalidKeyException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Tag(name = "文件管理")
 @RestController
 @RequestMapping("/file")
+@Validated
 @RequiredArgsConstructor
 public class FileController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FileController.class);
     private final IFileService fileService;
     private final FileValidator fileValidator;
     private final FilePermissionService permissionService;
-    private final MinioClient minioClient;
+    private final FileStorageUrlService storageUrlService;
 
     /**
      * 申请上传预签名 URL (前端直传 MinIO, 不经过 file-service 中转)
@@ -74,9 +77,9 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/presign-upload")
     public Result<Map<String, String>> presignUpload(
-            @RequestParam("filename") String filename,
-            @RequestParam("contentType") String contentType,
-            @RequestParam(value = "size", required = false) Long size,
+            @RequestParam("filename") @NotBlank(message = "文件名不能为空") String filename,
+            @RequestParam("contentType") @NotBlank(message = "文件类型不能为空") String contentType,
+            @RequestParam(value = "size", required = false) @Positive(message = "文件大小必须为正数") Long size,
             @RequestAttribute(value = "userId", required = false) Long requestUserId)
             throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
             NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
@@ -90,13 +93,7 @@ public class FileController {
 
         // 5 分钟过期
         int expirySeconds = 300;
-        String uploadUrl = minioClient.getPresignedObjectUrl(
-            GetPresignedObjectUrlArgs.builder()
-                .method(Method.PUT)
-                .bucket("cloud-infra-files")
-                .object(objectKey)
-                .expiry(expirySeconds, TimeUnit.SECONDS)
-                .build());
+        String uploadUrl = storageUrlService.presignPut(objectKey, expirySeconds);
 
         Map<String, String> result = new HashMap<>();
         result.put("objectKey", objectKey);
@@ -128,13 +125,7 @@ public class FileController {
 
         // 10 分钟过期
         int expirySeconds = 600;
-        String downloadUrl = minioClient.getPresignedObjectUrl(
-            GetPresignedObjectUrlArgs.builder()
-                .method(Method.GET)
-                .bucket("cloud-infra-files")
-                .object(objectKey)
-                .expiry(expirySeconds, TimeUnit.SECONDS)
-                .build());
+        String downloadUrl = storageUrlService.presignGet(objectKey, expirySeconds);
 
         Map<String, String> result = new HashMap<>();
         result.put("fileId", String.valueOf(fileId));
@@ -160,17 +151,16 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/presign-multipart-init")
     public Result<Map<String, Object>> presignMultipartInit(
-            @RequestParam("filename") String filename,
-            @RequestParam("contentType") String contentType,
-            @RequestParam("totalSize") Long totalSize,
-            @RequestParam("partCount") int partCount,
+            @RequestParam("filename") @NotBlank(message = "文件名不能为空") String filename,
+            @RequestParam("contentType") @NotBlank(message = "文件类型不能为空") String contentType,
+            @RequestParam("totalSize") @Positive(message = "文件大小必须为正数") Long totalSize,
+            @RequestParam("partCount")
+            @Min(value = 1, message = "分片数必须大于等于 1")
+            @Max(value = 1000, message = "分片数不能超过 1000") int partCount,
             @RequestAttribute(value = "userId", required = false) Long requestUserId)
             throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
             NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
             InternalException {
-        if (partCount < 1 || partCount > 1000) {
-            return Result.fail(400, "分片数必须在 1-1000 之间");
-        }
         Long userId = resolveUserId(requestUserId);
         fileValidator.validate(filename, contentType, totalSize);
 
@@ -187,14 +177,7 @@ public class FileController {
         int partExpiry = 300;
         Map<String, String> partUrls = new HashMap<>();
         for (int i = 1; i <= partCount; i++) {
-            String partUrl = minioClient.getPresignedObjectUrl(
-                GetPresignedObjectUrlArgs.builder()
-                    .method(Method.PUT)
-                    .bucket("cloud-infra-files")
-                    // S3 multipart URL 格式: objectKey + ?partNumber=N&uploadId=XXX
-                    .object(objectKey)
-                    .expiry(partExpiry, TimeUnit.SECONDS)
-                    .build());
+            String partUrl = storageUrlService.presignPut(objectKey, partExpiry);
             partUrls.put("part" + i, partUrl);
         }
 
@@ -398,12 +381,11 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:search')")
     @GetMapping("/search")
     public Result<IPage<FileMetadataVO>> search(
-            @RequestParam String keyword,
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize) {
-        if (keyword == null || keyword.isBlank()) {
-            return Result.fail(400, "搜索关键词不能为空");
-        }
+            @RequestParam @NotBlank(message = "搜索关键词不能为空") String keyword,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于等于 1") long pageNum,
+            @RequestParam(defaultValue = "10")
+            @Min(value = 1, message = "每页大小必须大于等于 1")
+            @Max(value = 100, message = "每页大小不能超过 100") long pageSize) {
         return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
     }
 }

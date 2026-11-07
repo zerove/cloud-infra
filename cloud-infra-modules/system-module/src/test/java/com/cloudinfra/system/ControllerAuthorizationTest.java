@@ -30,7 +30,19 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ControllerAuthorizationTest {
 
-    private static final String SCAN_PACKAGE = "com.cloudinfra.system";
+    /**
+     * 扫描范围。
+     *
+     * <p>2026-10-17 起由 {@code com.cloudinfra.system} 放宽到 {@code com.cloudinfra}:
+     * 原范围只看本模块, 于是 {@code cloud-infra-common} 的 {@code ErrorCodeController}
+     * 结构性不可见 —— 它被每个应用的 {@code scanBasePackages("com.cloudinfra")} 扫入,
+     * 却在全部服务上无 {@code @PreAuthorize} 暴露了完整错误码表, 而守护全绿。
+     *
+     * <p>类路径上只含 system-module 及其依赖 (common / framework / api), 因此放宽后
+     * 实际覆盖 system + common + framework 中的控制器; gateway 与 auth 不在本模块
+     * 类路径上, 由各自模块的守护负责。
+     */
+    private static final String SCAN_PACKAGE = "com.cloudinfra";
 
     /**
      * 允许不带 {@code @PreAuthorize} 的路径前缀。空列表 = 零例外。
@@ -46,10 +58,12 @@ class ControllerAuthorizationTest {
     @DisplayName("所有非 /internal/ 端点都必须带 @PreAuthorize")
     void everyEndpointRequiresAuthorization() throws Exception {
         Set<String> gaps = new TreeSet<>();
+        Set<String> scannedControllers = new TreeSet<>();
         int total = 0;
 
         for (BeanDefinition definition : scanControllers()) {
             Class<?> type = Class.forName(definition.getBeanClassName());
+            scannedControllers.add(type.getSimpleName());
             String prefix = prefixOf(type);
             boolean classLevelAuth = AnnotatedElementUtils.hasAnnotation(type, PreAuthorize.class);
 
@@ -71,6 +85,9 @@ class ControllerAuthorizationTest {
         }
 
         assertThat(total).as("扫描到的端点总数, 非 0 说明扫描失效").isGreaterThan(0);
+        assertThat(scannedControllers)
+            .as("扫描到的控制器应含 common 下的 ErrorCodeController —— 若缺失说明扫描范围又被收窄")
+            .contains("ErrorCodeController");
         assertThat(gaps)
             .as("以下端点只要求'已认证'而不要求任何权限 —— 认证通过即可越权读")
             .isEmpty();

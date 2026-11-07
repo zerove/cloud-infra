@@ -39,20 +39,9 @@ public class UserSessionRevoker {
         if (userId == null) {
             return;
         }
-        String pattern = SESSION_PREFIX + userId + ":*";
-        List<String> keys = new ArrayList<>();
-        try (Cursor<String> cursor = redisTemplate.scan(
-                ScanOptions.scanOptions().match(pattern).count(100).build())) {
-            while (cursor.hasNext()) {
-                keys.add(cursor.next());
-            }
-        } catch (org.springframework.data.redis.RedisConnectionFailureException
-                | org.springframework.data.redis.RedisSystemException e) {
-            // 会话扫描失败不阻断吊销主流程：键残留由 TTL 兜底过期
-            log.warn("扫描用户会话失败, userId={}", userId, e);
-        }
-        for (String key : keys) {
-            redisService.delete(key);
+        List<String> keys = scanKeys(SESSION_PREFIX + userId + ":*");
+        if (!keys.isEmpty()) {
+            redisService.delete(keys);
         }
         // 通知下游失效权限/用户上下文缓存（与 RBAC 变更同一通道）
         permissionInvalidationService.invalidateUser(userId);
@@ -61,10 +50,48 @@ public class UserSessionRevoker {
 
     /**
      * 批量吊销多个用户的会话。
+     *
+     * 原实现是 {@code userIds.forEach(this::revokeAllSessions)}, 即 N 个用户 = N 次全库 SCAN。
+     * 现合并为**一次** SCAN: Redis 的 glob 支持 {@code {a,b,c}} 选支, 让服务端按集合过滤,
+     * 客户端只遍历命中的键。
      */
     public void revokeAllSessions(List<Long> userIds) {
-        if (userIds != null) {
-            userIds.forEach(this::revokeAllSessions);
+        if (userIds == null || userIds.isEmpty()) {
+            return;
         }
+        List<Long> distinct = userIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (distinct.isEmpty()) {
+            return;
+        }
+        if (distinct.size() == 1) {
+            revokeAllSessions(distinct.getFirst());
+            return;
+        }
+        String alternation = distinct.stream().map(String::valueOf)
+                .reduce((a, b) -> a + "," + b).orElseThrow();
+        List<String> keys = scanKeys(SESSION_PREFIX + "{" + alternation + "}:*");
+
+        if (!keys.isEmpty()) {
+            redisService.delete(keys);
+        }
+        for (Long userId : distinct) {
+            permissionInvalidationService.invalidateUser(userId);
+        }
+        log.info("已批量吊销用户会话, users={}, 会话数={}", distinct.size(), keys.size());
+    }
+
+    /** 遍历匹配 pattern 的键; 连接异常时降级为空并告警, 不阻断吊销主流程 (键残留由 TTL 兜底)。 */
+    private List<String> scanKeys(String pattern) {
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(
+                ScanOptions.scanOptions().match(pattern).count(100).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
+            }
+        } catch (org.springframework.data.redis.RedisConnectionFailureException
+                | org.springframework.data.redis.RedisSystemException e) {
+            log.warn("扫描用户会话失败, pattern={}", pattern, e);
+        }
+        return keys;
     }
 }

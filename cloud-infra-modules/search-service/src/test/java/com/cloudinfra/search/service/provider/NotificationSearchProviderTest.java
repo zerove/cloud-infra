@@ -2,6 +2,8 @@ package com.cloudinfra.search.service.provider;
 
 import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
+import com.cloudinfra.common.core.domain.PageQuery;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.search.domain.UnifiedSearchResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,7 +36,8 @@ class NotificationSearchProviderTest {
         NotificationDTO dto = new NotificationDTO(
                 5L, 1L, null, "系统升级通知", "今晚 23:00 维护",
                 null, LocalDateTime.of(2026, 8, 17, 9, 0), null);
-        given(notificationApi.searchNotifications("升级", 1, 10)).willReturn(Result.success(List.of(dto)));
+        given(notificationApi.searchNotifications("升级", pageQuery(10)))
+            .willReturn(Result.success(PageResult.of(List.of(dto), 1L, 1L, 10L)));
 
         List<UnifiedSearchResult> results = provider.search("升级", 10);
 
@@ -54,7 +57,8 @@ class NotificationSearchProviderTest {
                 1L, 1L, null, "t1", "c1", null, LocalDateTime.now(), null);
         NotificationDTO dto2 = new NotificationDTO(
                 2L, 1L, null, "t2", "c2", null, LocalDateTime.now(), null);
-        given(notificationApi.searchNotifications("x", 1, 1)).willReturn(Result.success(List.of(dto1, dto2)));
+        given(notificationApi.searchNotifications("x", pageQuery(1)))
+            .willReturn(Result.success(PageResult.of(List.of(dto1, dto2), 2L, 1L, 1L)));
 
         List<UnifiedSearchResult> results = provider.search("x", 1);
 
@@ -64,21 +68,30 @@ class NotificationSearchProviderTest {
 
     @Test
     void search_whenResultNull_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x", 1, 5)).willReturn(null);
+        given(notificationApi.searchNotifications("x", pageQuery(5))).willReturn(null);
 
         assertThat(provider.search("x", 5)).isEmpty();
     }
 
     @Test
     void search_whenDataNull_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x", 1, 5)).willReturn(Result.success(null));
+        given(notificationApi.searchNotifications("x", pageQuery(5))).willReturn(Result.success(null));
+
+        assertThat(provider.search("x", 5)).isEmpty();
+    }
+
+    @Test
+    void search_whenPageRecordsNull_shouldReturnEmptyList() {
+        PageResult<NotificationDTO> nullRecords = new PageResult<>();
+        nullRecords.setRecords(null);
+        given(notificationApi.searchNotifications("x", pageQuery(5))).willReturn(Result.success(nullRecords));
 
         assertThat(provider.search("x", 5)).isEmpty();
     }
 
     @Test
     void search_whenApiThrows_shouldReturnEmptyList() {
-        given(notificationApi.searchNotifications("x", 1, 5)).willThrow(new RuntimeException("feign down"));
+        given(notificationApi.searchNotifications("x", pageQuery(5))).willThrow(new RuntimeException("feign down"));
 
         assertThat(provider.search("x", 5)).isEmpty();
     }
@@ -87,5 +100,11 @@ class NotificationSearchProviderTest {
     void resourceTypeAndWeight_shouldBeNotification() {
         assertThat(provider.getResourceType()).isEqualTo("NOTIFICATION");
         assertThat(provider.getWeight()).isEqualTo(1.0);
+    }
+
+    private static PageQuery pageQuery(int pageSize) {
+        PageQuery pageQuery = new PageQuery();
+        pageQuery.setPageSize(pageSize);
+        return pageQuery;
     }
 }

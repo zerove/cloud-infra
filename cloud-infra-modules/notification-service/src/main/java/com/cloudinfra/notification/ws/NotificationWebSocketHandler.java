@@ -147,6 +147,11 @@ public class NotificationWebSocketHandler {
     /**
      * 向指定用户的所有活跃连接推送通知 (静态方法, 可被任意 service 调用)
      */
+    /** 实例入口: 供 {@code NotificationPushGateway} 注入调用, 使服务层无需静态 import。 */
+    public int push(Long userId, Object payload) {
+        return pushToUser(userId, payload);
+    }
+
     public static int pushToUser(Long userId, Object payload) {
         Set<Session> userSessions = sessions.get(userId);
         if (userSessions == null || userSessions.isEmpty()) {

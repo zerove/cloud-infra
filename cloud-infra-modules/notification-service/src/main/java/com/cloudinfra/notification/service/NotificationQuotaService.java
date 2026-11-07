@@ -45,4 +45,15 @@ public class NotificationQuotaService {
             throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
     }
+
+    /**
+     * 归还一次配额占用 (供调用方在承载本次扣减的事务回滚时补偿)。
+     *
+     * <p>与 {@link #checkQuota} 超限路径的回退不同: 那是「拒绝」时的自补偿;
+     * 本方法服务于「校验已通过、但后续环节失败导致事务回滚」的补偿 ——
+     * Redis 计数不受 DB 事务管理, 不归还则失败请求白占额度, 客户端重试持续消耗。</p>
+     */
+    public void refundQuota(Long userId) {
+        redisTemplate.opsForValue().decrement(QUOTA_KEY_PREFIX + userId);
+    }
 }

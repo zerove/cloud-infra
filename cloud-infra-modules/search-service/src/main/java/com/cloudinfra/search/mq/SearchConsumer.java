@@ -45,6 +45,7 @@ public class SearchConsumer {
                 log.info("操作日志已成功同步至 ES: {}", operLog.getOperId());
             } catch (Exception e) {
                 log.error("同步操作日志至 ES 失败: {}", operLog.getOperId(), e);
+                throw new RuntimeException("操作日志同步失败, 转交重试/DLQ", e);
             }
         };
     }

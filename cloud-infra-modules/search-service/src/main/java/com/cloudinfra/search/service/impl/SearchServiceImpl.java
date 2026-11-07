@@ -6,7 +6,9 @@ import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.api.search.dto.OperLogDTO;
 import com.cloudinfra.search.domain.query.OperLogQuery;
 import com.cloudinfra.search.domain.query.SearchQueryBuilder;
+import com.cloudinfra.search.repository.DeviceTelemetryRepository;
 import com.cloudinfra.search.repository.OperLogRepository;
+import com.cloudinfra.search.domain.DeviceTelemetryDocument;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.service.SearchService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,7 +27,13 @@ import java.util.stream.Collectors;
 public class SearchServiceImpl implements SearchService {
 
     private final OperLogRepository operLogRepository;
+    private final DeviceTelemetryRepository telemetryRepository;
     private final SearchQueryBuilder queryBuilder;
+
+    @Override
+    public List<DeviceTelemetryDocument> findTelemetryHistory(String deviceId, LocalDateTime start, LocalDateTime end) {
+        return telemetryRepository.findByDeviceIdAndTimestampBetween(deviceId, start, end);
+    }
 
     @Override
     public SearchResponse<OperLogDTO> searchOperLog(SearchRequest request) {

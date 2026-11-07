@@ -2,6 +2,8 @@ package com.cloudinfra.system.service;
 
 import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.common.core.domain.PageQuery;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.system.domain.UnifiedAuditRecord;
@@ -55,7 +57,7 @@ public class AuditAggregatorService {
                     userId.toString(),
                     log.getTitle(),
                     log.getOperUrl(),
-                    "SUCCESS", 
+                    mapOperLogStatus(log.getStatus()),
                     log.getOperName(),
                     "SYSTEM"
                 )).collect(Collectors.toList());
@@ -68,13 +70,18 @@ public class AuditAggregatorService {
                     final int pageSize = 100;
                     final int maxPages = 50;
                     List<UnifiedAuditRecord> collected = new ArrayList<>();
-                    for (int page = 1; page <= maxPages; page++) {
-                        Result<List<NotificationLogDTO>> result =
-                            notificationApi.getLogs(userId, page, pageSize);
-                        if (result == null || result.getData() == null || result.getData().isEmpty()) {
+                    for (int pageNum = 1; pageNum <= maxPages; pageNum++) {
+                        PageQuery pageQuery = new PageQuery();
+                        pageQuery.setPageNum(pageNum);
+                        pageQuery.setPageSize(pageSize);
+                        Result<PageResult<NotificationLogDTO>> result =
+                            notificationApi.getLogs(userId, pageQuery);
+                        if (result == null || result.getData() == null || result.getData().getRecords() == null
+                                || result.getData().getRecords().isEmpty()) {
                             break;
                         }
-                        result.getData().forEach(log -> collected.add(new UnifiedAuditRecord(
+                        List<NotificationLogDTO> records = result.getData().getRecords();
+                        records.forEach(log -> collected.add(new UnifiedAuditRecord(
                             log.getCreateTime(),
                             userId.toString(),
                             "发送通知 [" + log.getChannelCode() + "]",
@@ -83,13 +90,13 @@ public class AuditAggregatorService {
                             log.getErrorMessage(),
                             "NOTIFICATION"
                         )));
-                        if (result.getData().size() < pageSize) {
+                        if (records.size() < pageSize) {
                             break;
                         }
                     }
                     return collected;
                 } catch (Exception e) {
-                    log.error("拉取通知审计日志失败: {}", e.getMessage());
+                    log.error("拉取通知审计日志失败", e);
                     return Collections.emptyList();
                 }
             }, executor);
@@ -103,8 +110,18 @@ public class AuditAggregatorService {
                 .collect(Collectors.toList()))
                 .join(); // 最终 join 在虚拟线程中可接受
         } catch (Exception e) {
-            log.error("审计聚合异常: {}", e.getMessage());
+            // 返回空集合会让"聚合整体失败"与"确实没有审计记录"在界面上无法区分;
+            // 补全堆栈是最低要求 —— 仅打 getMessage() 会丢掉 Caused by 链, 排障时无从追起。
+            log.error("审计聚合异常, 返回空结果", e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * SysOperLog.status 为 0/1 编码 (0=正常, 1=异常, 约定见 LogAspect)。
+     * 修复前此处硬编码 "SUCCESS", 会把失败操作伪装成成功 —— 审计数据失真。
+     */
+    private static String mapOperLogStatus(Integer status) {
+        return Integer.valueOf(1).equals(status) ? "FAIL" : "SUCCESS";
     }
 }

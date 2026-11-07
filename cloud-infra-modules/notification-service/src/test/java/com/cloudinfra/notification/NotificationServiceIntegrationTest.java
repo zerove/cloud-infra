@@ -3,8 +3,12 @@ package com.cloudinfra.notification;
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
 import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
+import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
+import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
 import com.cloudinfra.notification.domain.Notification;
@@ -48,6 +52,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -443,82 +448,115 @@ public class NotificationServiceIntegrationTest {
 
     @Test
     void getHistory_shouldReturnPagedResults() {
-        // Given - 预插入测试数据
+        // Given - 预插入 17 条: 15 EMAIL/SENT + 2 SMS/UNREAD
         for (int i = 0; i < 15; i++) {
-            Notification n = new Notification();
-            n.setUserId(10L);
-            n.setTitle("通知 " + i);
-            n.setContent("内容 " + i);
-            n.setType(NotificationType.EMAIL);
-            n.setStatus(NotificationStatus.SENT);
-            notificationMapper.insert(n);
+            insertNotification(10L, NotificationType.EMAIL, NotificationStatus.SENT, "通知 " + i);
+        }
+        for (int i = 0; i < 2; i++) {
+            insertNotification(10L, NotificationType.SMS, NotificationStatus.UNREAD, "未读 " + i);
         }
 
-        // When - 第 1 页 (page=1, size=10)
+        // When - 第 1 页 (pageNum=1, pageSize=10)
         webTestClient.get()
-                .uri("/notification/history?userId=10&page=1&size=10")
+                .uri("/notification/history?userId=10&pageNum=1&pageSize=10")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})
+                .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
                 .consumeWith(result -> {
-                    Result<List<Object>> response = result.getResponseBody();
+                    Result<PageResult<NotificationHistoryResponse>> response = result.getResponseBody();
                     assertThat(response).isNotNull();
                     assertThat(response.isSuccess()).isTrue();
-                    assertThat(response.getData()).hasSize(10);
+                    assertThat(response.getData().getRecords()).hasSize(10);
+                    assertThat(response.getData().getTotal()).isEqualTo(17L);
                 });
 
-        // When - 第 2 页 (page=2, size=10)
+        // When - 第 2 页 (pageNum=2, pageSize=10) 只剩 7 条, total 不变
         webTestClient.get()
-                .uri("/notification/history?userId=10&page=2&size=10")
+                .uri("/notification/history?userId=10&pageNum=2&pageSize=10")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})
+                .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
                 .consumeWith(result -> {
-                    Result<List<Object>> response = result.getResponseBody();
+                    Result<PageResult<NotificationHistoryResponse>> response = result.getResponseBody();
                     assertThat(response).isNotNull();
                     assertThat(response.isSuccess()).isTrue();
-                    assertThat(response.getData()).hasSize(5);
+                    assertThat(response.getData().getRecords()).hasSize(7);
+                    assertThat(response.getData().getTotal()).isEqualTo(17L);
                 });
     }
 
     @Test
-    void getLogs_shouldReturnChannelLogs() {
-        // Given
-        Notification n = new Notification();
-        n.setUserId(20L);
-        n.setTitle("日志测试");
-        n.setContent("内容");
-        n.setType(NotificationType.EMAIL);
-        n.setStatus(NotificationStatus.SENT);
-        notificationMapper.insert(n);
+    void getHistory_shouldApplyStatusAndTypeFilters() {
+        // Given - 用户 30: 2 条 EMAIL/UNREAD + 1 条 EMAIL/READ
+        insertNotification(30L, NotificationType.EMAIL, NotificationStatus.UNREAD, "未读A");
+        insertNotification(30L, NotificationType.EMAIL, NotificationStatus.UNREAD, "未读B");
+        insertNotification(30L, NotificationType.EMAIL, NotificationStatus.READ, "已读C");
 
-        NotificationLog log1 = new NotificationLog();
-        log1.setNotificationId(n.getId());
-        log1.setChannelCode("email");
-        log1.setStatus("SUCCESS");
-        log1.setDuration(100L);
-        logMapper.insert(log1);
-
-        NotificationLog log2 = new NotificationLog();
-        log2.setNotificationId(n.getId());
-        log2.setChannelCode("sms");
-        log2.setStatus("FAIL");
-        log2.setErrorMessage("余额不足");
-        log2.setDuration(200L);
-        logMapper.insert(log2);
-
-        // When
+        // When - 仅按 status 过滤
         webTestClient.get()
-                .uri("/notification/logs?userId=20")
+                .uri("/notification/history?userId=30&status=UNREAD")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})
-                .consumeWith(result -> {
-                    Result<List<Object>> response = result.getResponseBody();
-                    assertThat(response).isNotNull();
-                    assertThat(response.isSuccess()).isTrue();
-                    assertThat(response.getData()).hasSize(2);
-                });
+                .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
+                .consumeWith(result -> assertThat(result.getResponseBody().getData().getTotal())
+                        .as("status=UNREAD 应命中 2 条, 若过滤被忽略则为 3")
+                        .isEqualTo(2L));
+
+        // When - 仅按 type 过滤
+        webTestClient.get()
+                .uri("/notification/history?userId=30&type=EMAIL")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
+                .consumeWith(result -> assertThat(result.getResponseBody().getData().getTotal())
+                        .as("type=EMAIL 应命中全部 3 条")
+                        .isEqualTo(3L));
+
+        // When - status + type 组合过滤
+        webTestClient.get()
+                .uri("/notification/history?userId=30&status=UNREAD&type=EMAIL")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationHistoryResponse>>>() {})
+                .consumeWith(result -> assertThat(result.getResponseBody().getData().getTotal())
+                        .as("UNREAD+EMAIL 应命中 2 条")
+                        .isEqualTo(2L));
+    }
+
+    @Test
+    void getLogs_shouldPaginateByLogRowAndIsolateUsers() {
+        // Given - 用户 20: 1 条通知 + email/sms 两条日志
+        Notification n20 = insertNotification(20L, NotificationType.EMAIL, NotificationStatus.SENT, "日志测试");
+        insertLog(n20.getId(), "email", "SUCCESS", null);
+        insertLog(n20.getId(), "sms", "FAIL", "余额不足");
+
+        // 用户 21: 1 条通知 + websocket 日志 (绝不得出现在用户 20 的结果里)
+        Notification n21 = insertNotification(21L, NotificationType.EMAIL, NotificationStatus.SENT, "他人通知");
+        insertLog(n21.getId(), "websocket", "SUCCESS", null);
+
+        // When/Then - 按日志行分页: pageSize=1 共 2 页
+        List<String> seenChannels = new ArrayList<>();
+        for (int pageNum = 1; pageNum <= 2; pageNum++) {
+            int page = pageNum;
+            webTestClient.get()
+                    .uri("/notification/logs?userId=20&pageNum=" + page + "&pageSize=1")
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(new ParameterizedTypeReference<Result<PageResult<NotificationLogDTO>>>() {})
+                    .consumeWith(result -> {
+                        Result<PageResult<NotificationLogDTO>> response = result.getResponseBody();
+                        assertThat(response).isNotNull();
+                        assertThat(response.isSuccess()).isTrue();
+                        assertThat(response.getData().getTotal())
+                                .as("total 必须是用户 20 自己的日志行数 (2); 若越权混入他人日志则为 3")
+                                .isEqualTo(2L);
+                        assertThat(response.getData().getRecords()).hasSize(1);
+                        seenChannels.add(response.getData().getRecords().get(0).getChannelCode());
+                    });
+        }
+        assertThat(seenChannels)
+                .as("两页并集应恰为用户 20 的两个渠道, 不含他人的 websocket")
+                .containsExactlyInAnyOrder("email", "sms");
     }
 
     @Test
@@ -545,5 +583,145 @@ public class NotificationServiceIntegrationTest {
 
         // Then - notification 表不应写入
         assertThat(notificationMapper.selectList(null)).isEmpty();
+    }
+
+    // ---- markAsRead 端到端 (issue 12): 真库走完 HTTP -> 过滤器 -> service -> DB ----
+
+    @Test
+    void markAsRead_unreadOwnedNotification_shouldPersistReadStateViaHttp() {
+        // Given - 属于请求者 (默认 X-User-Id: 1) 的未读通知, 带分发字段
+        Notification n = new Notification();
+        n.setUserId(1L);
+        n.setType(NotificationType.EMAIL);
+        n.setTitle("原标题");
+        n.setContent("内容");
+        n.setStatus(NotificationStatus.UNREAD);
+        n.setDispatchStatus(DispatchStatus.DISPATCHED);
+        n.setDispatchAttempts(1);
+        n.setChannels("email");
+        notificationMapper.insert(n);
+
+        // When - 经真实 HTTP 链路标记已读
+        webTestClient.put()
+                .uri("/notification/read/" + n.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<Object>>() {})
+                .consumeWith(result -> {
+                    Result<Object> response = result.getResponseBody();
+                    assertThat(response).isNotNull();
+                    assertThat(response.isSuccess()).isTrue();
+                });
+
+        // Then - 状态翻转; 局部更新不得触碰分发字段
+        Notification reloaded = notificationMapper.selectById(n.getId());
+        assertThat(reloaded.getStatus()).isEqualTo(NotificationStatus.READ);
+        assertThat(reloaded.getReadTime()).isNotNull();
+        assertThat(reloaded.getTitle()).isEqualTo("原标题");
+        assertThat(reloaded.getDispatchStatus()).isEqualTo(DispatchStatus.DISPATCHED);
+        assertThat(reloaded.getDispatchAttempts()).isEqualTo(1);
+        assertThat(reloaded.getChannels()).isEqualTo("email");
+    }
+
+    @Test
+    void markAsRead_whenIdNotFound_shouldReturnBodyCode404() {
+        // When - 不存在的 id: HTTP 200 + body code 404 (语义失败不伪装成服务故障)
+        webTestClient.put()
+                .uri("/notification/read/999999")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<Object>>() {})
+                .consumeWith(result -> {
+                    Result<Object> response = result.getResponseBody();
+                    assertThat(response).isNotNull();
+                    assertThat(response.isSuccess()).isFalse();
+                    assertThat(response.getCode()).isEqualTo(404);
+                    assertThat(response.getMessage()).contains("通知不存在");
+                });
+    }
+
+    @Test
+    void markAsRead_whenNotOwner_shouldReturnBodyCode403AndKeepState() {
+        // Given - 通知属于用户 2; 请求者是默认身份 1, 必须被拒
+        Notification n = new Notification();
+        n.setUserId(2L);
+        n.setType(NotificationType.EMAIL);
+        n.setTitle("他人通知");
+        n.setContent("内容");
+        n.setStatus(NotificationStatus.UNREAD);
+        notificationMapper.insert(n);
+
+        // When
+        webTestClient.put()
+                .uri("/notification/read/" + n.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<Object>>() {})
+                .consumeWith(result -> {
+                    Result<Object> response = result.getResponseBody();
+                    assertThat(response).isNotNull();
+                    assertThat(response.isSuccess()).isFalse();
+                    assertThat(response.getCode()).isEqualTo(403);
+                });
+
+        // Then - 越权尝试不得改动目标行
+        Notification reloaded = notificationMapper.selectById(n.getId());
+        assertThat(reloaded.getStatus()).isEqualTo(NotificationStatus.UNREAD);
+        assertThat(reloaded.getReadTime()).isNull();
+    }
+
+    @Test
+    void markAsRead_whenAlreadyRead_shouldPreserveFirstReadTime() {
+        // Given - 已读通知带两小时前的首次已读时间 (截到毫秒: PG TIMESTAMP 只到微秒,
+        // 不截的话纳秒被就近舍入, 相等断言会假红)
+        java.time.LocalDateTime firstRead = java.time.LocalDateTime.now()
+                .minusHours(2).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        Notification n = new Notification();
+        n.setUserId(1L);
+        n.setType(NotificationType.EMAIL);
+        n.setTitle("已读通知");
+        n.setContent("内容");
+        n.setStatus(NotificationStatus.READ);
+        n.setReadTime(firstRead);
+        notificationMapper.insert(n);
+
+        // When - 再次标记已读 (幂等路径)
+        webTestClient.put()
+                .uri("/notification/read/" + n.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Result<Object>>() {})
+                .consumeWith(result -> {
+                    Result<Object> response = result.getResponseBody();
+                    assertThat(response).isNotNull();
+                    assertThat(response.isSuccess()).isTrue();
+                });
+
+        // Then - 首次已读时间不被覆盖
+        Notification reloaded = notificationMapper.selectById(n.getId());
+        assertThat(reloaded.getStatus()).isEqualTo(NotificationStatus.READ);
+        assertThat(reloaded.getReadTime()).isEqualTo(firstRead);
+    }
+
+    private Notification insertNotification(Long userId, NotificationType type,
+            NotificationStatus status, String title) {
+        Notification n = new Notification();
+        n.setUserId(userId);
+        n.setTitle(title);
+        n.setContent("内容");
+        n.setType(type);
+        n.setStatus(status);
+        notificationMapper.insert(n);
+        return n;
+    }
+
+    private void insertLog(Long notificationId, String channelCode, String status, String errorMessage) {
+        NotificationLog log = new NotificationLog();
+        log.setNotificationId(notificationId);
+        log.setChannelCode(channelCode);
+        log.setStatus(status);
+        log.setErrorMessage(errorMessage);
+        log.setDuration(100L);
+        logMapper.insert(log);
     }
 }

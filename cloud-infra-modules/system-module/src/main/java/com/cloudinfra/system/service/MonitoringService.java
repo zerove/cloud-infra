@@ -1,12 +1,18 @@
 package com.cloudinfra.system.service;
 
-import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
+import com.cloudinfra.system.mapper.PlatformMetricsMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 
 /**
@@ -14,50 +20,144 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MonitoringService {
 
+    /**
+     * DB 派生指标的 TTL (#18)。
+     *
+     * <p>快照端点 ({@code /system/monitoring/snapshot}) 由面板轮询, 而三个聚合
+     * —— {@code sys_user} COUNT、{@code sys_storage_quota} SUM、{@code sys_notification_log}
+     * GROUP BY —— 都是全表扫描。此前每次调用都重打一遍, 面板一刷新就是三次全表扫描。
+     * 30s 内复用同一份结果, 把重复轮询合并为一次查询。
+     *
+     * <p>线程指标**不缓存** —— 它必须是调用瞬间的真实值。
+     */
+    private static final long METRICS_TTL_NANOS = Duration.ofSeconds(30).toNanos();
+
     private final SysUserMapper userMapper;
-    private final NotificationApi notificationApi;
+    private final PlatformMetricsMapper metricsMapper;
+    private final LongSupplier nanoClock;
+
+    private volatile CacheEntry cacheEntry;
+
+    @Autowired
+    public MonitoringService(SysUserMapper userMapper, PlatformMetricsMapper metricsMapper) {
+        this(userMapper, metricsMapper, System::nanoTime);
+    }
+
+    /** 测试用: 注入可控时钟以验证 TTL 边界。 */
+    MonitoringService(SysUserMapper userMapper, PlatformMetricsMapper metricsMapper, LongSupplier nanoClock) {
+        this.userMapper = userMapper;
+        this.metricsMapper = metricsMapper;
+        this.nanoClock = nanoClock;
+    }
 
     /**
      * 生成平台实时健康快照
      */
     public PlatformHealthSnapshot getHealthSnapshot() {
-        // 1. 基础计数
-        long totalUsers = userMapper.selectCount(null);
-        long totalDevices = 0; // 实际应调用 IoT 接口
+        DbMetrics db = dbMetrics();
 
-        // 2. 计算存储利用率
-        double storageUtilization = calculateStorageUtilization();
-
-        // 3. 计算通知成功率与分布
-        NotificationStats stats = calculateNotificationStats();
-
-        // 4. 虚拟线程指标 (模拟获取)
-        int pinnedCount = 0; 
+        ThreadStats threads = currentThreadStats();
 
         return new PlatformHealthSnapshot(
-            totalUsers,
-            totalDevices,
-            storageUtilization,
-            stats.successRate,
+            db.totalUsers(),
             0L,
-            pinnedCount,
-            stats.distribution
+            db.storageUtilization(),
+            db.notificationSuccessRate(),
+            threads.activeVirtual(),
+            threads.blockedVirtual(),
+            db.channelDistribution()
         );
     }
 
+    /**
+     * 读取 DB 派生指标, 命中 TTL 则直接复用。
+     *
+     * <p>无锁: 并发未命中最多触发几次重复查询, 不影响正确性; 而 {@code synchronized}
+     * 会让虚拟线程被钉住 (见 AGENTS.md 技术栈陷阱)。整条缓存条目放在单个 volatile
+     * 引用里, 读到的 metrics 与时间戳必然成对。
+     */
+    private DbMetrics dbMetrics() {
+        long now = nanoClock.getAsLong();
+        CacheEntry entry = cacheEntry;
+        if (entry != null && now - entry.atNanos() < METRICS_TTL_NANOS) {
+            return entry.metrics();
+        }
+        DbMetrics fresh = loadMetrics();
+        cacheEntry = new CacheEntry(fresh, now);
+        return fresh;
+    }
+
+    private DbMetrics loadMetrics() {
+        long totalUsers = userMapper.selectCount(null);
+        NotificationStats notifications = calculateNotificationStats();
+        Map<String, Long> distribution =
+            Collections.unmodifiableMap(new LinkedHashMap<>(notifications.distribution()));
+        return new DbMetrics(totalUsers, calculateStorageUtilization(), notifications.successRate(), distribution);
+    }
+
     private double calculateStorageUtilization() {
-        // 存储利用率应通过调用 file-service API 获取
-        // 目前暂时返回模拟值以保证构建成功
-        return 0.42;
+        PlatformMetricsMapper.StorageUsage usage = metricsMapper.selectStorageUsage();
+        if (usage == null || usage.total() <= 0) {
+            return 0.0;
+        }
+        return Math.min(1.0, (double) usage.used() / usage.total());
     }
 
     private NotificationStats calculateNotificationStats() {
-        // 实际应从 notificationApi.getLogs() 聚合或从 Redis 统计
-        return new NotificationStats(0.98, Map.of("email", 500L, "sms", 200L, "websocket", 1200L));
+        List<PlatformMetricsMapper.ChannelDelivery> stats = metricsMapper.selectChannelDeliveryStats();
+        if (stats == null || stats.isEmpty()) {
+            return new NotificationStats(1.0, Map.of());
+        }
+        long total = 0;
+        long success = 0;
+        Map<String, Long> distribution = new LinkedHashMap<>();
+        for (PlatformMetricsMapper.ChannelDelivery row : stats) {
+            total += row.total();
+            success += row.success();
+            distribution.put(row.channelCode(), row.total());
+        }
+        return new NotificationStats(total == 0 ? 1.0 : (double) success / total, distribution);
     }
 
-    private record NotificationStats(double successRate, Map<String, Long> distribution) {}
+    /**
+     * 虚拟线程现状: 活跃数 + 处于 BLOCKED 的数量。
+     *
+     * <p>此前 pinnedThreadCount 写死为 0, 使 {@code HealthWatcher} 的并发告警成为死代码。
+     * 这里以「阻塞中的虚拟线程」作为钉住风险的可观测代理 —— 在 synchronized 等监视器上
+     * 等待的虚拟线程正是钉住问题的典型表现。采集不到时返回 0, 不伪造数字。
+     */
+    private ThreadStats currentThreadStats() {
+        try {
+            int active = 0;
+            int blocked = 0;
+            for (Thread thread : Thread.getAllStackTraces().keySet()) {
+                if (!thread.isVirtual()) {
+                    continue;
+                }
+                active++;
+                if (thread.getState() == Thread.State.BLOCKED) {
+                    blocked++;
+                }
+            }
+            return new ThreadStats(active, blocked);
+        } catch (RuntimeException e) {
+            log.warn("采集虚拟线程指标失败, 本轮按 0 计", e);
+            return new ThreadStats(0, 0);
+        }
+    }
+
+    private record CacheEntry(DbMetrics metrics, long atNanos) {
+    }
+
+    private record DbMetrics(long totalUsers, double storageUtilization, double notificationSuccessRate,
+                             Map<String, Long> channelDistribution) {
+    }
+
+    private record ThreadStats(int activeVirtual, int blockedVirtual) {
+    }
+
+    private record NotificationStats(double successRate, Map<String, Long> distribution) {
+    }
 }

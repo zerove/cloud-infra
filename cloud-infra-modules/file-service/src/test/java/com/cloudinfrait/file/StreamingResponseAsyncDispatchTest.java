@@ -64,8 +64,13 @@ import static org.assertj.core.api.Assertions.assertThat;
         properties = {
                 "spring.cloud.nacos.config.enabled=false",
                 "spring.cloud.nacos.discovery.enabled=false",
-                "cloud-infra.security.verify-internal-sign=true"
-        })
+                "cloud-infra.security.verify-internal-sign=true",
+                // RedissonConfig 是无条件 @AutoConfiguration (bean 创建即连 localhost:6379),
+                // 靠 imports 而非组件扫描加载 —— 所以收窄 scanBasePackages 拦不住它, 只有 exclude 有效。
+                // 含 Redis 的端到端由 FileHttpFlowIntegrationTest 经 Testcontainers 覆盖。
+                "spring.autoconfigure.exclude="
+                        + "com.cloudinfra.framework.redis.config.RedissonConfig"
+})
 @ActiveProfiles("test")
 class StreamingResponseAsyncDispatchTest {
 

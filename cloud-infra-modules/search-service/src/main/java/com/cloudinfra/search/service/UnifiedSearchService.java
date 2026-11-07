@@ -77,7 +77,7 @@ public class UnifiedSearchService {
 
             return allResultsFuture.join(); // 最终 join 在虚拟线程中可接受
         } catch (Exception e) {
-            log.error("统一搜索编排异常: {}", e.getMessage());
+            log.error("统一搜索编排异常, 返回空结果", e);
             return Collections.emptyList();
         }
     }

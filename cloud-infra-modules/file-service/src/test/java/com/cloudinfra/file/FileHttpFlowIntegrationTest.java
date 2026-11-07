@@ -1,6 +1,7 @@
 package com.cloudinfra.file;
 
 import com.cloudinfra.common.core.domain.model.LoginUser;
+import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.test.BaseIntegrationTest;
 import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import com.cloudinfra.framework.mybatis.config.MybatisPlusConfig;
@@ -441,6 +442,38 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(false)
                 .jsonPath("$.code").isEqualTo(404);
+    }
+
+    /**
+     * 请求参数校验端到端覆盖 (#15)。
+     *
+     * <p>验证 {@code @Validated} + 参数约束在真实 MVC + 真实 GlobalExceptionHandler
+     * (经 GlobalExceptionAutoConfiguration 装配) 下确实拦截非法输入并返回
+     * HTTP 400 + 业务码 PARAM_ERROR, 而非把语义失败读成 500。</p>
+     */
+    @Test
+    @Order(7)
+    void invalidSearchParamsAreRejectedWith400() {
+        // 空/纯空白关键词: @NotBlank 触发
+        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "   ").build())
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isEqualTo(400)
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(ErrorCode.PARAM_ERROR.getCode());
+
+        // 每页大小越界 (pageSize=0): @Min(1) 触发
+        client.get().uri(b -> b.path("/file/search")
+                        .queryParam("keyword", "x").queryParam("pageSize", "0").build())
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isEqualTo(400)
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(ErrorCode.PARAM_ERROR.getCode());
     }
 
     /** 从上传响应 JSON 提取 fileId（避免引入完整反序列化依赖）。 */

@@ -103,7 +103,7 @@ public class NotificationScheduler {
                 
                 log.info("调度任务 {} 发送成功", task.getId());
             } catch (Exception e) {
-                log.error("调度任务 {} 执行失败: {}", task.getId(), e.getMessage());
+                log.error("调度任务 {} 执行失败, 不重试", task.getId(), e);
                 // 失败不重试：保持 processed=true（同 sendNotification 失败语义），
                 // 避免失败任务无限循环重发；如需重试可引入退避重试状态机。
             }

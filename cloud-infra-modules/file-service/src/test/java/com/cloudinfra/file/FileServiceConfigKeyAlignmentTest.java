@@ -174,44 +174,34 @@ class FileServiceConfigKeyAlignmentTest {
                 .doesNotContain("file.upload");
     }
 
+    /**
+     * 桶名唯一性守护 (2026-10-17 反转)。
+     *
+     * <p>原判据是"配置默认值 == FileController 里硬编码的桶名"，用于防住
+     * MinioStorageStrategy 与 FileController 各取一个桶的隐患。2026-10-17 起
+     * FileController 不再触碰 MinioClient，预签名统一由 FileStorageUrlService 生成，
+     * 桶名从 {@code file.storage.minio.bucket} 单点读取 —— 于是"两份取值必须相等"
+     * 这个约束已经不存在，取而代之的是更强的约束：**控制器里不允许再出现硬编码桶名**。
+     */
     @Test
-    @DisplayName("MinIO 桶名必须与 FileController 签名直传硬编码的桶一致")
-    void bucketMustMatchPresignedUpload() throws Exception {
-        Map<String, Object> root = loadYaml();
-        Object configuredBucket = dig(root, "file.storage.minio.bucket");
-        assertThat(configuredBucket)
+    @DisplayName("FileController 不得硬编码 MinIO 桶名 (桶名单一来源)")
+    void controllerMustNotHardcodeBucket() throws Exception {
+        assertThat(Files.exists(FILE_CONTROLLER)).as("找不到 %s", FILE_CONTROLLER).isTrue();
+        String source = Files.readString(FILE_CONTROLLER);
+
+        assertThat(source)
+                .as("FileController 出现硬编码桶名 —— 预签名应经 FileStorageUrlService 生成, "
+                        + "桶名由 file.storage.minio.bucket 单点提供。硬编码会让"
+                        + "「签名的桶」与「实际写入的桶」可能不一致")
+                .doesNotContain(".bucket(\"");
+
+        assertThat(source)
+                .as("FileController 应已改为经 service 层获取预签名 URL")
+                .doesNotContain("minioClient");
+
+        assertThat(dig(loadYaml(), "file.storage.minio.bucket"))
                 .as("file.storage.minio.bucket 必须在配置中显式声明")
                 .isNotNull();
-
-        // 从代码里提取硬编码桶名, 而不是硬编码在测试中
-        assertThat(Files.exists(FILE_CONTROLLER)).as("找不到 %s", FILE_CONTROLLER).isTrue();
-        Matcher m = Pattern.compile("\\.bucket\\(\"([^\"]+)\"\\)").matcher(Files.readString(FILE_CONTROLLER));
-        java.util.Set<String> codeBuckets = new java.util.LinkedHashSet<>();
-        while (m.find()) {
-            codeBuckets.add(m.group(1));
-        }
-        assertThat(codeBuckets)
-                .as("守护前提: 应从 FileController 提取到硬编码桶名。"
-                        + "提取到 0 个说明代码已改为读配置 —— 那时本测试的判据需重写")
-                .isNotEmpty();
-
-        // 配置值形如 ${MINIO_BUCKET:cloud-infra-files}, 取其默认值部分。
-        // 不能用 lastIndexOf(':') —— 那个冒号在 "${" 内, 切开会得到
-        // "cloud-infra-files}" (带结尾花括号)。2026-10-06 实测踩到过。
-        String raw = String.valueOf(configuredBucket).trim();
-        String effective;
-        if (raw.startsWith("${") && raw.endsWith("}")) {
-            String body = raw.substring(2, raw.length() - 1);
-            int colon = body.indexOf(':');
-            effective = (colon >= 0 ? body.substring(colon + 1) : body).trim();
-        } else {
-            effective = raw;
-        }
-        assertThat(codeBuckets)
-                .as("配置默认桶名 '" + effective + "' 与代码硬编码桶名 " + codeBuckets + " 不一致。"
-                        + "后果: 签名直传写进 A 桶、常规上传读 B 桶, 大文件报 NoSuchBucket, "
-                        + "而小文件走本地存储故不受影响 —— 缺陷只在部分路径上暴露")
-                .contains(effective);
     }
 
     @Test
