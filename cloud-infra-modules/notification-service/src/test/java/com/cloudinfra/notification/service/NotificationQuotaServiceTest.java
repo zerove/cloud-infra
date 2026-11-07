@@ -68,4 +68,27 @@ class NotificationQuotaServiceTest {
 
         then(valueOps).should().decrement(DAILY_KEY_USER_1);
     }
+
+    @Test
+    void getQuotaStatus_readsValueWithoutMutation() {
+        given(valueOps.get(DAILY_KEY_USER_1)).willReturn("42");
+
+        NotificationQuotaService.QuotaStatus status = quotaService.getQuotaStatus(1L);
+
+        org.assertj.core.api.Assertions.assertThat(status.used()).isEqualTo(42L);
+        org.assertj.core.api.Assertions.assertThat(status.limit()).isEqualTo(1000L);
+        org.assertj.core.api.Assertions.assertThat(status.remaining()).isEqualTo(958L);
+        then(valueOps).should(never()).increment(DAILY_KEY_USER_1);
+        then(valueOps).should(never()).decrement(DAILY_KEY_USER_1);
+    }
+
+    @Test
+    void getQuotaStatus_missingOrInvalid_returnsZeroUsed() {
+        given(valueOps.get(DAILY_KEY_USER_1)).willReturn(null);
+
+        NotificationQuotaService.QuotaStatus status = quotaService.getQuotaStatus(1L);
+
+        org.assertj.core.api.Assertions.assertThat(status.used()).isEqualTo(0L);
+        org.assertj.core.api.Assertions.assertThat(status.remaining()).isEqualTo(1000L);
+    }
 }

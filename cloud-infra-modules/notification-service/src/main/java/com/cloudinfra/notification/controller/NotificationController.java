@@ -18,6 +18,7 @@ import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import com.cloudinfra.notification.service.INotificationService;
+import com.cloudinfra.notification.service.NotificationQuotaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController implements NotificationApi {
 
     private final INotificationService notificationService;
+    private final NotificationQuotaService quotaService;
 
     @Override
     @Operation(summary = "发送通知")
@@ -141,6 +143,13 @@ public class NotificationController implements NotificationApi {
         dto.setErrorMessage(l.getErrorMessage());
         dto.setCreateTime(l.getCreateTime());
         return dto;
+    }
+
+    @Operation(summary = "查询当日通知发送配额")
+    @PreAuthorize("@ss.hasPermi('notification:send')")
+    @GetMapping("/quota")
+    public Result<NotificationQuotaService.QuotaStatus> getQuota() {
+        return Result.success(quotaService.getQuotaStatus(SecurityUtils.getUserId()));
     }
 }
 
