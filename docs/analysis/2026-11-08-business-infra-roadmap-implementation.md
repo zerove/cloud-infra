@@ -63,7 +63,7 @@
 |---|---|---|---|---|
 | S1 | **P0 交付闭环** | PR #78 真实 CI 绿并合并到 `master` | 恢复 Billing；解决 `CONFLICTING/DIRTY`；`classify_gh_run.sh` 判定 `steps>0` | CI run 记录（非计费阻塞）；merge commit/策略记录 |
 | S2 | **通知契约与作用域决策** | 明确旧 `history/logs(userId)` 的最终语义（本人/管理员/Feign 兼容窗口）与下线计划 | 产品/调用方确认；梳理 `cloud-infra-api`/Feign 使用点 | ADR/issue 决策；兼容期双路径；最终收口 PR + 测试 |
-| S3 | **API 契约按需对齐** | 仅当出现跨服务调用：补 `quota/preferences/my/*` 的 Feign DTO/接口与 fallback | S2 决策；真实消费方 | 合约测试/集成调用证据 |
+| S3 | **API 契约按需对齐** | 已做 **additive** 对齐：`cloud-infra-api` 增加 quota/偏好 DTO 与 `/my/*`、`/quota`、`/preferences` Feign 方法+fallback；旧签名保留。后续仅在出现真实消费方时补集成/契约证据 | S2 决策（旧接口最终语义）；真实消费方 | 编译+定向测试通过；集成调用证据待补 |
 | S4 | **运行时证据（租户）** | `file/notification/system` 各 1 条真实路径证明 `JWT→TenantContext→SQL` 跨租户隔离 | 测试环境/容器；数据准备 | IT 或可复现手工证据 + 记录；失败则修复 |
 | S5 | **运行时证据（通知偏好）** | 真实库/服务下验证表、权限、租户过滤、upsert 幂等 | 环境可用；必要时补迁移/种子（按既有流程） | 端到端请求证据或 IT |
 | S6 | **P2 native A/B** | `NATIVE_BUILD_XMX/MAXRAM` 受控实验并定案 | CI/runner 可用；固定镜像与负载 | 成功率/时长/Peak RSS/p99 对比；回填 perf audit |

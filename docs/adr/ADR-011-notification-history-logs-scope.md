@@ -34,6 +34,10 @@
 
 短期采用 **B 的准备态**：保持旧接口不变 + 推广 `/my/*`；完成调用方盘点后实施 B（需权限决策）。同步更新 `NotificationApi` 时保持**向后兼容**（新增方法，不删除旧签名直至迁移完成）。
 
+## 实施记录（增量）
+
+- **S3（additive）**：`cloud-infra-api` 已新增 `NotificationQuotaStatusDTO`、`NotificationPreferenceDTO`、`NotificationPreferenceSaveRequest`，并在 `NotificationApi`/`FallbackFactory` 增加 `/my/history`、`/my/logs`、`/quota`、`/preferences`（GET/PUT）；`notification-service` controller 已对齐 DTO 映射。旧 `history/logs(userId)`、`send/read/search` 保持不变。
+
 ## 验证要求（实施 B 时）
 
 - 单元/契约测试：本人、他人无权限拒绝、他人有权限放行（若采纳）。
