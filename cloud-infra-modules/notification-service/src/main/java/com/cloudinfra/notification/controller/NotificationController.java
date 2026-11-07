@@ -4,6 +4,9 @@ import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
+import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
@@ -20,6 +23,7 @@ import com.cloudinfra.notification.domain.UserNotificationPreference;
 import com.cloudinfra.notification.domain.dto.NotificationPreferenceRequest;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
 import java.util.List;
+import java.util.stream.Collectors;
 import com.cloudinfra.notification.service.INotificationService;
 import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.service.UserNotificationPreferenceService;
@@ -150,30 +154,48 @@ public class NotificationController implements NotificationApi {
         return dto;
     }
 
+    @Override
     @Operation(summary = "查询当日通知发送配额")
     @PreAuthorize("@ss.hasPermi('notification:send')")
     @GetMapping("/quota")
-    public Result<NotificationQuotaService.QuotaStatus> getQuota() {
-        return Result.success(quotaService.getQuotaStatus(SecurityUtils.getUserId()));
+    public Result<NotificationQuotaStatusDTO> getQuota() {
+        var s = quotaService.getQuotaStatus(SecurityUtils.getUserId());
+        return Result.success(new NotificationQuotaStatusDTO(s.used(), s.limit(), s.remaining(), s.resetInSeconds()));
     }
 
+    @Override
     @Operation(summary = "查询当前用户通知偏好")
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @GetMapping("/preferences")
-    public Result<List<UserNotificationPreference>> getPreferences() {
+    public Result<List<NotificationPreferenceDTO>> getPreferences() {
         Long userId = SecurityUtils.getUserId();
-        return Result.success(preferenceService.listByUserId(userId));
+        return Result.success(toPreferenceDtos(preferenceService.listByUserId(userId)));
     }
 
+    @Override
     @Operation(summary = "保存当前用户通知偏好（按类型+渠道 upsert）")
     @PreAuthorize("@ss.hasPermi('notification:read')")
     @PutMapping("/preferences")
-    public Result<List<UserNotificationPreference>> savePreferences(
-            @Valid @RequestBody List<NotificationPreferenceRequest> requests) {
+    public Result<List<NotificationPreferenceDTO>> savePreferences(
+            @Valid @RequestBody List<NotificationPreferenceSaveRequest> requests) {
         Long userId = SecurityUtils.getUserId();
-        return Result.success(preferenceService.saveForUser(userId, requests));
+        List<NotificationPreferenceRequest> moduleRequests = requests == null ? List.of()
+            : requests.stream()
+                .map(r -> new NotificationPreferenceRequest(r.notificationType(), r.channelCode(), r.enabled()))
+                .collect(Collectors.toList());
+        return Result.success(toPreferenceDtos(preferenceService.saveForUser(userId, moduleRequests)));
     }
 
+    private List<NotificationPreferenceDTO> toPreferenceDtos(List<UserNotificationPreference> prefs) {
+        if (prefs == null || prefs.isEmpty()) {
+            return List.of();
+        }
+        return prefs.stream()
+            .map(p -> new NotificationPreferenceDTO(p.getNotificationType(), p.getChannelCode(), p.getEnabled()))
+            .collect(Collectors.toList());
+    }
+
+    @Override
     @Operation(summary = "查询当前用户通知历史（兼容安全路径，不接受 userId 参数）")
     @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/my/history")
@@ -188,6 +210,7 @@ public class NotificationController implements NotificationApi {
                 n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
     }
 
+    @Override
     @Operation(summary = "查询当前用户发送审计日志（兼容安全路径，不接受 userId 参数）")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/my/logs")

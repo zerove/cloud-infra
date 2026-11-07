@@ -4,6 +4,9 @@ import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
+import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
@@ -11,6 +14,7 @@ import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.PageQuery;
 import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
+import java.util.List;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +59,32 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             @Override
             public Result<PageResult<NotificationLogDTO>> getLogs(Long userId, PageQuery pageQuery) {
                 return Result.success(PageResult.empty());
+            }
+
+            @Override
+            public Result<PageResult<NotificationHistoryResponse>> getMyHistory(NotificationStatus status,
+                    NotificationType type, PageQuery pageQuery) {
+                return Result.success(PageResult.empty());
+            }
+
+            @Override
+            public Result<PageResult<NotificationLogDTO>> getMyLogs(PageQuery pageQuery) {
+                return Result.success(PageResult.empty());
+            }
+
+            @Override
+            public Result<NotificationQuotaStatusDTO> getQuota() {
+                return Result.fail(503, "通知服务暂不可用");
+            }
+
+            @Override
+            public Result<List<NotificationPreferenceDTO>> getPreferences() {
+                return Result.fail(503, "通知服务暂不可用");
+            }
+
+            @Override
+            public Result<List<NotificationPreferenceDTO>> savePreferences(List<NotificationPreferenceSaveRequest> requests) {
+                return Result.fail(503, "通知服务暂不可用");
             }
         };
     }

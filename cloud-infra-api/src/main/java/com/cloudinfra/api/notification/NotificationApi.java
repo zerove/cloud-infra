@@ -3,6 +3,9 @@ package com.cloudinfra.api.notification;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
+import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
+import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
@@ -14,6 +17,7 @@ import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
+import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.cloud.openfeign.SpringQueryMap;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -75,4 +79,46 @@ public interface NotificationApi {
     Result<PageResult<NotificationLogDTO>> getLogs(
             @RequestParam Long userId,
             @SpringQueryMap PageQuery pageQuery);
+
+    /**
+     * 查询当前用户通知历史（不接受 userId，兼容安全路径）
+     */
+    @GetMapping("/notification/my/history")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<PageResult<NotificationHistoryResponse>> getMyHistory(
+            @RequestParam(required = false) NotificationStatus status,
+            @RequestParam(required = false) NotificationType type,
+            @SpringQueryMap PageQuery pageQuery);
+
+    /**
+     * 查询当前用户发送审计日志（不接受 userId）
+     */
+    @GetMapping("/notification/my/logs")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<PageResult<NotificationLogDTO>> getMyLogs(@SpringQueryMap PageQuery pageQuery);
+
+    /**
+     * 查询当日通知发送配额（当前用户）
+     */
+    @GetMapping("/notification/quota")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<NotificationQuotaStatusDTO> getQuota();
+
+    /**
+     * 查询当前用户通知偏好
+     */
+    @GetMapping("/notification/preferences")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<List<NotificationPreferenceDTO>> getPreferences();
+
+    /**
+     * 保存当前用户通知偏好
+     */
+    @PutMapping("/notification/preferences")
+    @CircuitBreaker(name = "notificationService")
+    Result<List<NotificationPreferenceDTO>> savePreferences(@RequestBody List<NotificationPreferenceSaveRequest> requests);
 }
