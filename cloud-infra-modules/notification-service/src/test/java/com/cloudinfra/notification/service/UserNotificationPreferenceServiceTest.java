@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.cloudinfra.common.core.exception.BusinessException;
 import com.cloudinfra.notification.domain.UserNotificationPreference;
 import com.cloudinfra.notification.domain.dto.NotificationPreferenceRequest;
 import com.cloudinfra.notification.mapper.UserNotificationPreferenceMapper;
@@ -42,6 +43,12 @@ class UserNotificationPreferenceServiceTest {
         assertThat(captor.getValue().getNotificationType()).isEqualTo("SYSTEM_ALERT");
         assertThat(captor.getValue().getChannelCode()).isEqualTo("email");
         assertThat(captor.getValue().getEnabled()).isTrue();
+    }
+
+    @Test
+    void listByUserId_requiresUserId() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.listByUserId(null))
+            .isInstanceOf(BusinessException.class);
     }
 
     @Test
