@@ -50,6 +50,16 @@ public class IndexAdminController {
     }
 
     /**
+     * 查询索引文档数（轻量视图，复用详情查询）
+     */
+    @Operation(summary = "查询索引文档数")
+    @PreAuthorize("@ss.hasPermi('search:index:detail')")
+    @GetMapping("/indexes/{indexName}/doc-count")
+    public Result<Long> getIndexDocCount(@PathVariable String indexName) {
+        return Result.success(indexAdminService.getIndexDetail(indexName).getDocCount());
+    }
+
+    /**
      * 重建索引: 清空并按 @Document 定义重建(仅支持平台已知业务索引)
      */
     @Operation(summary = "重建索引(清空数据)")
