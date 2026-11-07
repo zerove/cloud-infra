@@ -85,7 +85,7 @@ public class MonitoringService {
         double utilization = db.storageTotalBytes() <= 0
             ? 0.0
             : Math.min(1.0, (double) db.storageUsedBytes() / db.storageTotalBytes());
-        return new StorageUsageView(db.storageUsedBytes(), db.storageTotalBytes(), utilization);
+        return new StorageUsageView(db.storageUsedBytes(), db.storageTotalBytes(), utilization, utilization * 100.0);
     }
 
     /**
