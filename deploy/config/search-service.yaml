@@ -66,4 +66,5 @@ management:
         include: health,info,prometheus,metrics,env,beans,conditions,refresh
   tracing:
     sampling:
-      probability: 1.0
+      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
+      probability: 0.2

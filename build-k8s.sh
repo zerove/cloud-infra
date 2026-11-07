@@ -35,6 +35,9 @@ for item in "${SERVICES[@]}"; do
 done
 
 echo ">>> 重新部署 Kubernetes 资源..."
-kubectl apply -f deploy/manifests/base/
+# 2026-10-17: 原为 `kubectl apply -f deploy/manifests/base/` —— 该路径从未存在
+# (仓库里只有 manifests/base/, 没有 deploy/manifests/), 即此脚本的部署步骤一直是坏的。
+# 现走 Helm 面, 与 deploy-k8s.sh 一致。
+./deploy-k8s.sh "${ENV:-dev}"
 kubectl rollout restart deployment
 kubectl get pods -w

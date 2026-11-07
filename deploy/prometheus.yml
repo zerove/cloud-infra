@@ -46,4 +46,6 @@ global:
   evaluation_interval: 15s
 
 rule_files:
-  - /etc/prometheus/rules/*.yml
+  # 宽匹配 yml/yaml: 此前写死 *.yml, 导致同目录的 gateway-alerts.yaml 从未被加载。
+  # 由 deploy/tests/test_prometheus_rule_files.py 守护 —— 该目录下的每个文件都必须命中此 glob。
+  - /etc/prometheus/rules/*.y*ml

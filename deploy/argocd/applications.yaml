@@ -12,7 +12,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/gateway
     helm:
       valueFiles:
@@ -50,7 +50,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/auth
     helm:
       valueFiles:
@@ -88,7 +88,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/system
     helm:
       valueFiles:
@@ -126,7 +126,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/file
     helm:
       valueFiles:
@@ -164,7 +164,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/notification
     helm:
       valueFiles:
@@ -202,7 +202,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/search
     helm:
       valueFiles:
@@ -240,7 +240,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/zerove/cloud-infra.git
-    targetRevision: HEAD
+    targetRevision: main
     path: deploy/k8s/infra
     helm:
       valueFiles:

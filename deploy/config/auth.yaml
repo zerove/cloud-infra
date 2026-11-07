@@ -19,7 +19,8 @@ management:
         enabled: true
   tracing:
     sampling:
-      probability: 1.0
+      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
+      probability: 0.2
 spring:
   rabbitmq:
     host: cloud-rabbitmq
@@ -52,36 +53,10 @@ spring:
           password: ${RABBITMQ_PASSWORD:guest}
     nacos:
       discovery:
-        server-addr: cloud-nacos:8848
+        server-addr: ${NACOS_DISCOVERY_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
         enabled: true
       config:
-        server-addr: cloud-nacos:8848
-  datasource:
-    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:password}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:20}
-      minimum-idle: ${HIKARI_MIN_IDLE:5}
-      idle-timeout: ${HIKARI_IDLE_TIMEOUT:30000}
-      max-lifetime: ${HIKARI_MAX_LIFETIME:600000}
-      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT:30000}
-      validation-timeout: ${HIKARI_VALIDATION_TIMEOUT:5000}
-      leak-detection-threshold: ${HIKARI_LEAK_DETECTION:60000}
-      connection-test-query: ${HIKARI_TEST_QUERY:SELECT 1}
-      pool-name: cloud-infra-auth-hikari-pool
-      read-only: false
-      # 预编译语句缓存
-      data-source-properties:
-        cachePrepStmts: true
-        prepStmtCacheSize: 250
-        prepStmtCacheSqlLimit: 2048
-        useServerPrepStmts: true
-        # PostgreSQL 批量插入优化
-        reWriteBatchedInserts: true
-        # 连接参数
-        ApplicationName: cloud-infra-auth
+        server-addr: ${NACOS_CONFIG_ADDR:${NACOS_ADDR:cloud-nacos:8848}}
   data:
     redis:
       host: cloud-redis

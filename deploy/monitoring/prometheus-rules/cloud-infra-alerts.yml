@@ -1,5 +1,6 @@
 # Cloud-Infra 本地环境 Prometheus 告警规则
-# 生产 K8s 规则见 deploy/k8s/infra 下的 PrometheusRule
+# 本目录每个文件都直接被 deploy/prometheus.yml 的 rule_files glob 加载, 且必须是原生
+# Prometheus 规则格式 (顶层 groups:)。不要放 PrometheusRule CRD —— 仓库内无 prometheus-operator。
 groups:
   - name: cloud-infra-services.rules
     interval: 30s

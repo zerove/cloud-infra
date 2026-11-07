@@ -63,6 +63,18 @@
         <!-- 测试分离控制：单测走 surefire，集成测试走 failsafe -->
         <skipUnitTests>false</skipUnitTests>
         <skipITs>true</skipITs>
+
+        <!--
+          JaCoCo prepare-agent 把 agent 参数写入 `argLine` 属性。
+          surefire/failsafe 若显式配置 <argLine>, 必须用 @{argLine} 延迟替换把它引回,
+          否则字面 <argLine> 会覆盖该属性 → 不生成 target/jacoco.exec →
+          jacoco report/check 静默 "Skipping due to missing execution data file",
+          覆盖率门禁形同不存在(本仓库 2026-10-18 实测确认)。
+
+          此处提供空默认值: 未声明 jacoco 的模块 @{argLine} 解析为空串,
+          而不是把字面量 @{argLine} 传给 JVM 导致启动失败。
+        -->
+        <argLine></argLine>
     </properties>
 
     <modules>
@@ -383,6 +395,7 @@
                         <exclude>**/*IT.java</exclude>
                     </excludes>
                     <argLine>
+                        @{argLine}
                         -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar
                         -XX:+EnableDynamicAgentLoading
                     </argLine>
@@ -546,7 +559,9 @@
             <id>native</id>
             <properties>
                 <spring-boot.aot.skip>false</spring-boot.aot.skip>
-<native.image.skip>true</native.image.skip>
+                <!-- 此前此处写死 true, 与属性默认值 (false)、gateway 自己的 native
+                     profile (false) 三处冲突, 语义互相抵消。native 意味着"要构建",
+                     故此处不再反向覆盖, 由属性默认值统一决定。 -->
                 <!-- Buildpacks Native Image 构建配置 -->
                 <spring-boot.build-image.builder>paketobuildpacks/builder:tiny</spring-boot.build-image.builder>
                 <spring-boot.build-image.env.BP_NATIVE_IMAGE>true</spring-boot.build-image.env.BP_NATIVE_IMAGE>

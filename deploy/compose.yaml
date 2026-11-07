@@ -61,7 +61,7 @@ services:
       MODE: standalone
       PREFER_HOST_MODE: hostname
       NACOS_AUTH_ENABLE: "false"
-      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
+      NACOS_AUTH_TOKEN: "${NACOS_AUTH_TOKEN:?必填 nacos 3.x 需 Base64 令牌, 留空会导致容器 exit 255 重启循环}"
       NACOS_AUTH_IDENTITY_KEY: serverIdentity
       NACOS_AUTH_IDENTITY_VALUE: security
       # 启用 v1/v2 客户端 API 兼容 (up.sh 配置同步与运维脚本依赖 v1 API)
@@ -493,11 +493,14 @@ services:
   #   其唯一 exporter 是 `debug`, trace 打到容器自身 stdout 后即丢弃;
   #   而 6 个业务服务以 `management.tracing.sampling.probability=1.0`(**100% 采样**)
   #   持续向它上报 —— 每请求做一次序列化与网络往返, 收益为零。
+  #   【2026-11-06 更新】上面这句描述的是移除当时(2026-10-13)的状态。模块级
+  #   `application.yml` 的 `probability` 已从 1.0 对齐到 0.2(与 deploy/config、
+  #   Helm values 一致), 现在回退层与部署层不再互相矛盾。
   #   ⚠️ 前缀陷阱: Spring Boot 4.1.0 的属性前缀是 `management.opentelemetry.*`
   #      (OpenTelemetryTracingProperties / OtlpTracingProperties),
   #      **`management.otlp.*` 不会被读取** —— 仓库里曾有一批 `management.otlp.tracing.*`
   #      配置, 它们既无效又指向这个死 collector, 已一并删除。
-  #   ⚠️ deploy/k8s/** 未动: k8s 侧 helmfile 另行声明了 cloud-infra-zipkin 与
+  #   ⚠️ deploy/k8s/** 未动: k8s 侧 Helm chart 另行声明了 cloud-infra-zipkin 与
   #      cloud-infra-otel-collector chart, 出口可能真实存在, 需在集群内另行核实后再动。
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
@@ -713,7 +716,7 @@ services:
     #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
     #   后者的正解仍是降低同时运行的服务数。
     restart: unless-stopped
-    mem_limit: 640m
+    mem_limit: 512m
     ports:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
@@ -799,7 +802,7 @@ services:
     #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
     #   后者的正解仍是降低同时运行的服务数。
     restart: unless-stopped
-    mem_limit: 768m
+    mem_limit: 1g
     ports:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
@@ -976,7 +979,7 @@ services:
     #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
     #   后者的正解仍是降低同时运行的服务数。
     restart: unless-stopped
-    mem_limit: 640m
+    mem_limit: 512m
     ports:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
@@ -1079,7 +1082,7 @@ services:
     #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
     #   后者的正解仍是降低同时运行的服务数。
     restart: unless-stopped
-    mem_limit: 640m
+    mem_limit: 512m
     ports:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
@@ -1171,7 +1174,7 @@ services:
     #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
     #   后者的正解仍是降低同时运行的服务数。
     restart: unless-stopped
-    mem_limit: 640m
+    mem_limit: 512m
     ports:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)

@@ -241,11 +241,6 @@ cloud-infra:
   tenant:
     enabled: false
     require-tenant: false
-  outbox:
-    enabled: true
-    poll-interval-ms: 1000
-    batch-size: 100
-    cleanup-days: 7
 
 management:
   server:
@@ -256,8 +251,10 @@ management:
       exposure:
         include: "*"
   tracing:
+    # 2026-11-08: 模板层与四个业务模块基线对齐 (0.2)。
+    # 1.0 曾是全量采样的根因之一 —— 每个新生成服务都会把该反模式带回去。
     sampling:
-      probability: 1.0
+      probability: 0.2
   otlp:
     tracing:
       endpoint: http://otel-collector:4317
@@ -312,7 +309,7 @@ sed -i "s/PORT/$PORT/g" "$SERVICE_DIR/Dockerfile"
 
 # ========== Helm Chart ==========
 mkdir -p "$SERVICE_DIR/deploy/k8s"
-cat > "$SERVICE_DIR/deploy/k8s/values.yaml" << HELM_EOF
+cat > "$SERVICE_DIR/deploy/k8s/values-$SERVICE_NAME.yaml" << HELM_EOF
 replicaCount: 2
 image:
   repository: $SERVICE_NAME

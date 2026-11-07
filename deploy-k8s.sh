@@ -1,21 +1,49 @@
 #!/bin/bash
-set -e
+# 按环境部署 cloud-infra 到 Kubernetes (Helm 面)。
+#
+# 2026-10-17: 原实现走 kustomize (manifests/overlays/$ENV), 该目录已删除 ——
+# 仓库现以 deploy/k8s/<service>/ 为唯一 K8s 部署面, 环境差异由
+# deploy/environments/<env>/values-*.yaml 承载。
+set -euo pipefail
 
-# 设置环境参数，默认为 dev
 ENV=${1:-dev}
-MANIFEST_PATH="manifests/overlays/$ENV"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+CHART_ROOT="$ROOT/deploy/k8s"
+ENV_VALUES="$ROOT/deploy/environments/$ENV"
+NAMESPACE="cloud-infra"
 
-if [ ! -d "$MANIFEST_PATH" ]; then
-    echo "错误: 指定的环境目录不存在: $MANIFEST_PATH"
+if [ ! -d "$ENV_VALUES" ]; then
+    echo "错误: 指定的环境不存在: $ENV_VALUES (可选: dev|staging|prod)" >&2
     exit 1
 fi
 
-echo ">>> 正在将 $ENV 环境的 Kubernetes 配置提交至集群..."
-kubectl apply -k "$MANIFEST_PATH"
+# 基础设施先行, 再业务服务 —— 与原 kustomize 的分层意图一致
+TIER_INFRA=(infra)
+TIER_APP=(auth gateway system file notification search)
 
-echo ">>> 等待服务就绪..."
-# 检查 pod 的标签是否在预定义列表中
-kubectl wait --for=condition=ready pod -l "app in (gateway, auth, system, notification, search)" --timeout=300s
+deploy_chart() {
+    local name=$1
+    local values_file="${2:-}"
+    if [ ! -d "$CHART_ROOT/$name" ]; then
+        echo "跳过 $name: $CHART_ROOT/$name 不存在"
+        return 0
+    fi
+    echo ">>> 安装 $name ($ENV)"
+    helm upgrade --install "$name" "$CHART_ROOT/$name" \
+        --namespace "$NAMESPACE" --create-namespace \
+        -f "$ENV_VALUES/values-common.yaml" \
+        -f "$ENV_VALUES/values-secrets.yaml" \
+        ${values_file:+-f "$ENV_VALUES/values-$values_file.yaml"} \
+        --wait --timeout 10m --atomic
+}
 
-echo ">>> $ENV 环境服务部署完成。"
-kubectl get pods
+for name in "${TIER_INFRA[@]}"; do deploy_chart "$name"; done
+for name in "${TIER_APP[@]}"; do deploy_chart "$name" "$name"; done
+
+echo ">>> 等待业务服务就绪..."
+kubectl wait --namespace "$NAMESPACE" \
+    --for=condition=ready pod \
+    -l "app.kubernetes.io/part-of=cloud-infra" --timeout=300s
+
+echo ">>> $ENV 环境部署完成。"
+kubectl get pods --namespace "$NAMESPACE"

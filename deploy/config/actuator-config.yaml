@@ -24,7 +24,7 @@ management:
       enabled: true
   tracing:
     sampling:
-      probability: ${TRACE_SAMPLING_PROBABILITY:1.0}
+      probability: ${TRACE_SAMPLING_PROBABILITY:0.1}
 
 # ⚠️ 勿在此处加 `feign.client.config.*`：该 legacy 前缀在 Spring Cloud 2025.x
 # (openfeign 5.0.1) 已不被任何类读取 —— FeignClientProperties 前缀只有

@@ -47,12 +47,12 @@ mvn clean package \
 
 mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-gateway
 mvn native:compile -Pnative -DskipTests \
-    -Dnative.image.args="-J-Xmx8g" \
+    -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" \
     -pl cloud-infra-gateway
 
 mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-auth
 mvn native:compile -Pnative -DskipTests \
-    -Dnative.image.args="-J-Xmx8g" \
+    -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" \
     -pl cloud-infra-auth
 
 echo -e "${GREEN}>>> Native 二进制文件构建完成。${NC}"
