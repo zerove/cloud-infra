@@ -96,6 +96,7 @@ class MonitoringServiceTest {
 
         assertThat(view.usedBytes()).isEqualTo(50);
         assertThat(view.totalBytes()).isEqualTo(100);
+        assertThat(view.freeBytes()).isEqualTo(50);
         assertThat(view.utilization()).isEqualTo(0.5);
         assertThat(view.utilizationPercent()).isEqualTo(50.0);
     }
