@@ -117,7 +117,8 @@ management:
         enabled: true
   tracing:
     sampling:
-      probability: 1.0
+      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
+      probability: 0.2
 # Resilience4j 弹性设计配置
 #
 # ⚠️ 阈值必须嵌在 configs.default / instances.<name> 之下。属性类
