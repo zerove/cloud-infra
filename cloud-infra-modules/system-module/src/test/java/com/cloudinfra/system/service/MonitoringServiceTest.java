@@ -1,5 +1,6 @@
 package com.cloudinfra.system.service;
 
+import com.cloudinfra.system.domain.MonitoringSummaryView;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
@@ -133,5 +134,24 @@ class MonitoringServiceTest {
         verify(userMapper, times(0)).selectCount(any());
         verify(metricsMapper, times(0)).selectStorageUsage();
         verify(metricsMapper, times(0)).selectChannelDeliveryStats();
+    }
+
+    @Test
+    @DisplayName("摘要视图: 聚合 DB 指标与线程采样，DB 指标复用 TTL 缓存")
+    void summaryAggregatesMetricsAndSharesTtlCache() {
+        MonitoringService service = newService();
+
+        MonitoringSummaryView first = service.getSummary();
+        nanoTime.addAndGet(TTL.minusSeconds(1).toNanos());
+        MonitoringSummaryView second = service.getSummary();
+
+        assertThat(first.totalUsers()).isEqualTo(42L);
+        assertThat(first.storageUtilization()).isEqualTo(0.5);
+        assertThat(first.notificationSuccessRate()).isEqualTo(0.8);
+        assertThat(first.activeVirtualThreads()).isGreaterThanOrEqualTo(0);
+        assertThat(second.totalUsers()).isEqualTo(42L);
+        verify(userMapper, times(1)).selectCount(any());
+        verify(metricsMapper, times(1)).selectStorageUsage();
+        verify(metricsMapper, times(1)).selectChannelDeliveryStats();
     }
 }

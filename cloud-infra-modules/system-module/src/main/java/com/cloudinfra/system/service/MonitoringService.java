@@ -1,5 +1,6 @@
 package com.cloudinfra.system.service;
 
+import com.cloudinfra.system.domain.MonitoringSummaryView;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
@@ -9,8 +10,6 @@ import com.cloudinfra.system.mapper.SysUserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import com.cloudinfra.system.domain.VirtualThreadStatsView;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -105,6 +104,21 @@ public class MonitoringService {
     public VirtualThreadStatsView getVirtualThreadStats() {
         ThreadStats threads = currentThreadStats();
         return new VirtualThreadStatsView(threads.activeVirtual(), threads.blockedVirtual());
+    }
+
+    /**
+     * 轻量监控摘要：DB 派生指标复用 TTL 缓存，线程为实时采样。
+     */
+    public MonitoringSummaryView getSummary() {
+        DbMetrics db = dbMetrics();
+        ThreadStats threads = currentThreadStats();
+        return new MonitoringSummaryView(
+            db.totalUsers(),
+            db.storageUtilization(),
+            db.notificationSuccessRate(),
+            threads.activeVirtual(),
+            threads.blockedVirtual()
+        );
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.system.domain.MonitoringSummaryView;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
@@ -52,5 +53,14 @@ public class MonitoringController {
     @GetMapping("/threads")
     public VirtualThreadStatsView getVirtualThreadStats() {
         return monitoringService.getVirtualThreadStats();
+    }
+
+    /**
+     * 获取轻量监控摘要（DB 指标复用 TTL 缓存，线程实时采样）
+     */
+    @PreAuthorize("@ss.hasPermi('system:monitoring:list')")
+    @GetMapping("/summary")
+    public MonitoringSummaryView getSummary() {
+        return monitoringService.getSummary();
     }
 }
