@@ -8,8 +8,10 @@ package com.cloudinfra.system.domain;
 public record MonitoringSummaryView(
     long totalUsers,
     double storageUtilization,
+    double storageUtilizationPercent,
     double notificationSuccessRate,
     long activeVirtualThreads,
     int blockedVirtualThreads
 ) {
 }
+

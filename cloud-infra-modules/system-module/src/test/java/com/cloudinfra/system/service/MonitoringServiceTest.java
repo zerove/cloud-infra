@@ -148,6 +148,7 @@ class MonitoringServiceTest {
 
         assertThat(first.totalUsers()).isEqualTo(42L);
         assertThat(first.storageUtilization()).isEqualTo(0.5);
+        assertThat(first.storageUtilizationPercent()).isEqualTo(50.0);
         assertThat(first.notificationSuccessRate()).isEqualTo(0.8);
         assertThat(first.activeVirtualThreads()).isGreaterThanOrEqualTo(0);
         assertThat(second.totalUsers()).isEqualTo(42L);

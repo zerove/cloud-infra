@@ -115,6 +115,7 @@ public class MonitoringService {
         return new MonitoringSummaryView(
             db.totalUsers(),
             db.storageUtilization(),
+            db.storageUtilization() * 100.0,
             db.notificationSuccessRate(),
             threads.activeVirtual(),
             threads.blockedVirtual()
