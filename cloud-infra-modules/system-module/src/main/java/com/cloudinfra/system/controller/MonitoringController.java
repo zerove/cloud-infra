@@ -3,6 +3,7 @@ package com.cloudinfra.system.controller;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
+import com.cloudinfra.system.domain.VirtualThreadStatsView;
 import com.cloudinfra.system.service.MonitoringService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -42,5 +43,14 @@ public class MonitoringController {
     @GetMapping("/notifications")
     public NotificationDeliveryStats getNotificationDeliveryStats() {
         return monitoringService.getNotificationDeliveryStats();
+    }
+
+    /**
+     * 获取虚拟线程运行时观测（调用瞬间采样，不走 TTL 缓存）
+     */
+    @PreAuthorize("@ss.hasPermi('system:monitoring:list')")
+    @GetMapping("/threads")
+    public VirtualThreadStatsView getVirtualThreadStats() {
+        return monitoringService.getVirtualThreadStats();
     }
 }

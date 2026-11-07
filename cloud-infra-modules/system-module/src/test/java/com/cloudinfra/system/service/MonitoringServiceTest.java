@@ -3,6 +3,7 @@ package com.cloudinfra.system.service;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
+import com.cloudinfra.system.domain.VirtualThreadStatsView;
 import com.cloudinfra.system.mapper.PlatformMetricsMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -118,5 +119,19 @@ class MonitoringServiceTest {
         service.getStorageUsage();
 
         verify(metricsMapper, times(1)).selectStorageUsage();
+    }
+
+    @Test
+    @DisplayName("虚拟线程观测: 返回非负采样值且不依赖 DB 指标")
+    void virtualThreadStatsAreSampledWithoutDbDependency() {
+        MonitoringService service = newService();
+
+        VirtualThreadStatsView stats = service.getVirtualThreadStats();
+
+        assertThat(stats.activeVirtual()).isGreaterThanOrEqualTo(0);
+        assertThat(stats.blockedVirtual()).isGreaterThanOrEqualTo(0);
+        verify(userMapper, times(0)).selectCount(any());
+        verify(metricsMapper, times(0)).selectStorageUsage();
+        verify(metricsMapper, times(0)).selectChannelDeliveryStats();
     }
 }

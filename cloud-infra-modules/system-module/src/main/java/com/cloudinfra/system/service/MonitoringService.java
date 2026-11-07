@@ -3,11 +3,14 @@ package com.cloudinfra.system.service;
 import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
 import com.cloudinfra.system.domain.StorageUsageView;
+import com.cloudinfra.system.domain.VirtualThreadStatsView;
 import com.cloudinfra.system.mapper.PlatformMetricsMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.cloudinfra.system.domain.VirtualThreadStatsView;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -94,6 +97,14 @@ public class MonitoringService {
     public NotificationDeliveryStats getNotificationDeliveryStats() {
         DbMetrics db = dbMetrics();
         return new NotificationDeliveryStats(db.notificationSuccessRate(), db.channelDistribution());
+    }
+
+    /**
+     * 虚拟线程运行时观测（调用瞬间采样，不走 TTL 缓存）。
+     */
+    public VirtualThreadStatsView getVirtualThreadStats() {
+        ThreadStats threads = currentThreadStats();
+        return new VirtualThreadStatsView(threads.activeVirtual(), threads.blockedVirtual());
     }
 
     /**
