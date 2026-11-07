@@ -608,7 +608,7 @@ services:
       - SW_HEALTH_CHECKER=default
       - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
-      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m
+      - JAVA_OPTS=-Xms384m -Xmx768m -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m
       # 堆 1024m + 容器限额 2048m = 1024m 堆外余量, 供metaspace 与 300+ 线程栈使用。
     depends_on:
       # ⚠️ 依赖对象已随存储切换改为 postgres。
