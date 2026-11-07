@@ -1,6 +1,8 @@
 package com.cloudinfra.system.controller;
 
+import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
+import com.cloudinfra.system.domain.StorageUsageView;
 import com.cloudinfra.system.service.MonitoringService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,5 +24,23 @@ public class MonitoringController {
     @GetMapping("/snapshot")
     public PlatformHealthSnapshot getSnapshot() {
         return monitoringService.getHealthSnapshot();
+    }
+
+    /**
+     * 获取存储配额使用情况（字节级使用/总量 + 利用率）
+     */
+    @PreAuthorize("@ss.hasPermi('system:monitoring:list')")
+    @GetMapping("/storage")
+    public StorageUsageView getStorageUsage() {
+        return monitoringService.getStorageUsage();
+    }
+
+    /**
+     * 获取通知投递成功率与各渠道投递量分布
+     */
+    @PreAuthorize("@ss.hasPermi('system:monitoring:list')")
+    @GetMapping("/notifications")
+    public NotificationDeliveryStats getNotificationDeliveryStats() {
+        return monitoringService.getNotificationDeliveryStats();
     }
 }

@@ -1,6 +1,8 @@
 package com.cloudinfra.system.service;
 
+import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
+import com.cloudinfra.system.domain.StorageUsageView;
 import com.cloudinfra.system.mapper.PlatformMetricsMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +74,29 @@ public class MonitoringService {
     }
 
     /**
+     * 存储配额使用情况(字节级使用/总量 + 利用率)。
+     *
+     * <p>与快照端点共用同一份 TTL 缓存的 {@link DbMetrics}, 查询侧轮询不会放大全表扫描。
+     */
+    public StorageUsageView getStorageUsage() {
+        DbMetrics db = dbMetrics();
+        double utilization = db.storageTotalBytes() <= 0
+            ? 0.0
+            : Math.min(1.0, (double) db.storageUsedBytes() / db.storageTotalBytes());
+        return new StorageUsageView(db.storageUsedBytes(), db.storageTotalBytes(), utilization);
+    }
+
+    /**
+     * 通知投递成功率与各渠道投递量分布。
+     *
+     * <p>同样复用 TTL 缓存的 {@link DbMetrics}, 语义与快照中的通知指标一致。
+     */
+    public NotificationDeliveryStats getNotificationDeliveryStats() {
+        DbMetrics db = dbMetrics();
+        return new NotificationDeliveryStats(db.notificationSuccessRate(), db.channelDistribution());
+    }
+
+    /**
      * 读取 DB 派生指标, 命中 TTL 则直接复用。
      *
      * <p>无锁: 并发未命中最多触发几次重复查询, 不影响正确性; 而 {@code synchronized}
@@ -94,15 +119,10 @@ public class MonitoringService {
         NotificationStats notifications = calculateNotificationStats();
         Map<String, Long> distribution =
             Collections.unmodifiableMap(new LinkedHashMap<>(notifications.distribution()));
-        return new DbMetrics(totalUsers, calculateStorageUtilization(), notifications.successRate(), distribution);
-    }
-
-    private double calculateStorageUtilization() {
         PlatformMetricsMapper.StorageUsage usage = metricsMapper.selectStorageUsage();
-        if (usage == null || usage.total() <= 0) {
-            return 0.0;
-        }
-        return Math.min(1.0, (double) usage.used() / usage.total());
+        long usedBytes = usage == null ? 0L : usage.used();
+        long totalBytes = usage == null || usage.total() <= 0 ? 0L : usage.total();
+        return new DbMetrics(totalUsers, usedBytes, totalBytes, notifications.successRate(), distribution);
     }
 
     private NotificationStats calculateNotificationStats() {
@@ -151,8 +171,15 @@ public class MonitoringService {
     private record CacheEntry(DbMetrics metrics, long atNanos) {
     }
 
-    private record DbMetrics(long totalUsers, double storageUtilization, double notificationSuccessRate,
+    private record DbMetrics(long totalUsers, long storageUsedBytes, long storageTotalBytes, double notificationSuccessRate,
                              Map<String, Long> channelDistribution) {
+
+        double storageUtilization() {
+            if (storageTotalBytes <= 0) {
+                return 0.0;
+            }
+            return Math.min(1.0, (double) storageUsedBytes / storageTotalBytes);
+        }
     }
 
     private record ThreadStats(int activeVirtual, int blockedVirtual) {

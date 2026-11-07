@@ -1,6 +1,8 @@
 package com.cloudinfra.system.service;
 
+import com.cloudinfra.system.domain.NotificationDeliveryStats;
 import com.cloudinfra.system.domain.PlatformHealthSnapshot;
+import com.cloudinfra.system.domain.StorageUsageView;
 import com.cloudinfra.system.mapper.PlatformMetricsMapper;
 import com.cloudinfra.system.mapper.SysUserMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -81,5 +83,40 @@ class MonitoringServiceTest {
         assertThat(snapshot.storageUtilization()).isEqualTo(0.5);
         assertThat(snapshot.notificationSuccessRate()).isEqualTo(0.8);
         assertThat(snapshot.channelDistribution()).containsEntry("EMAIL", 10L);
+    }
+
+    @Test
+    @DisplayName("存储配额视图: 字节级使用/总量与利用率映射正确")
+    void storageUsageMapsBytesAndUtilization() {
+        MonitoringService service = newService();
+
+        StorageUsageView view = service.getStorageUsage();
+
+        assertThat(view.usedBytes()).isEqualTo(50);
+        assertThat(view.totalBytes()).isEqualTo(100);
+        assertThat(view.utilization()).isEqualTo(0.5);
+    }
+
+    @Test
+    @DisplayName("投递指标: 成功率与渠道分布映射正确")
+    void deliveryStatsMapSuccessRateAndDistribution() {
+        MonitoringService service = newService();
+
+        NotificationDeliveryStats stats = service.getNotificationDeliveryStats();
+
+        assertThat(stats.successRate()).isEqualTo(0.8);
+        assertThat(stats.channelDistribution()).containsEntry("EMAIL", 10L);
+    }
+
+    @Test
+    @DisplayName("存储/投递指标查询与快照共用同一份 TTL 缓存")
+    void queriesShareTtlCache() {
+        MonitoringService service = newService();
+
+        service.getStorageUsage();
+        nanoTime.addAndGet(TTL.minusSeconds(1).toNanos());
+        service.getStorageUsage();
+
+        verify(metricsMapper, times(1)).selectStorageUsage();
     }
 }
