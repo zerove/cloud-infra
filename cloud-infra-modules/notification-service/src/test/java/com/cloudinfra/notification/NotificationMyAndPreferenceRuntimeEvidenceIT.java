@@ -1,8 +1,8 @@
 package com.cloudinfra.notification;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 /**
  * S5 运行时证据骨架（通知偏好 / `/my/*` / 配额路径）。
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>完成后移除 {@link Disabled}，并补充触发/端到端证据记录（AGENTS 第三条硬规则）。
  */
-@Disabled("S5 evidence skeleton: enable with real infra and replace with runtime assertions")
+@EnabledIfSystemProperty(named = "evidence.it", matches = "true")
 class NotificationMyAndPreferenceRuntimeEvidenceIT {
 
     @Test

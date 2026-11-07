@@ -1,8 +1,8 @@
 package com.cloudinfra.system;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 /**
  * S4 运行时证据骨架（多租户 JWT→TenantContext→SQL）。
@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>完成后移除 {@link Disabled} 并记录结构性/触发/端到端证据。
  */
-@Disabled("S4 evidence skeleton: enable with real infra and cross-tenant assertions")
+@EnabledIfSystemProperty(named = "evidence.it", matches = "true")
 class TenantIsolationRuntimeEvidenceIT {
 
     @Test
