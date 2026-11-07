@@ -98,6 +98,32 @@ class NotificationControllerMyEndpointsTest {
     }
 
     @Test
+    void legacyHistory_passesExplicitUserId_forCompatibility() throws Exception {
+        // S2: 旧接口暂保留 userId 参数语义（兼容窗口）；/my/* 为安全迁移路径
+        given(notificationService.getNotificationHistory(eq(999L), isNull(), isNull(), any(PageQuery.class)))
+            .willReturn(PageResult.empty());
+
+        mockMvc.perform(get("/notification/history").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        then(notificationService).should()
+            .getNotificationHistory(eq(999L), isNull(), isNull(), any(PageQuery.class));
+    }
+
+    @Test
+    void legacyLogs_passesExplicitUserId_forCompatibility() throws Exception {
+        given(notificationService.getLogs(eq(999L), any(PageQuery.class)))
+            .willReturn(PageResult.empty());
+
+        mockMvc.perform(get("/notification/logs").param("userId", "999").param("pageNum", "1").param("pageSize", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        then(notificationService).should().getLogs(eq(999L), any(PageQuery.class));
+    }
+
+    @Test
     void savePreferences_usesAuthenticatedUser() throws Exception {
         given(preferenceService.saveForUser(eq(AUTHENTICATED_USER_ID), any())).willReturn(List.of());
 
