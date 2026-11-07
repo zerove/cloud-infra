@@ -173,5 +173,27 @@ public class NotificationController implements NotificationApi {
         Long userId = SecurityUtils.getUserId();
         return Result.success(preferenceService.saveForUser(userId, requests));
     }
+
+    @Operation(summary = "查询当前用户通知历史（兼容安全路径，不接受 userId 参数）")
+    @PreAuthorize("@ss.hasPermi('notification:history')")
+    @GetMapping("/my/history")
+    public Result<PageResult<NotificationHistoryResponse>> getMyHistory(
+            @RequestParam(required = false) NotificationStatus status,
+            @RequestParam(required = false) NotificationType type,
+            PageQuery pageQuery) {
+        Long userId = SecurityUtils.getUserId();
+        PageResult<Notification> notifications =
+                notificationService.getNotificationHistory(userId, status, type, pageQuery);
+        return Result.success(notifications.map(n -> new NotificationHistoryResponse(
+                n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
+    }
+
+    @Operation(summary = "查询当前用户发送审计日志（兼容安全路径，不接受 userId 参数）")
+    @PreAuthorize("@ss.hasPermi('notification:logs')")
+    @GetMapping("/my/logs")
+    public Result<PageResult<NotificationLogDTO>> getMyLogs(PageQuery pageQuery) {
+        Long userId = SecurityUtils.getUserId();
+        return Result.success(notificationService.getLogs(userId, pageQuery).map(this::mapToLogDTO));
+    }
 }
 
