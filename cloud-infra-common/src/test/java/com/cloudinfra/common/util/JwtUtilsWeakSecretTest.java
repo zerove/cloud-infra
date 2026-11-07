@@ -34,6 +34,16 @@ class JwtUtilsWeakSecretTest {
             "sNU5JnRxwBiHxl7k5j1ZWKxhpeOKNCV4Y5wBdTeGbQMakSouGdvjDKmGWtpNXqpu";
     private static final String LEGACY_WEAK_SECRET =
             "CloudInfraSecretKey123456789012345678901234567890";
+    /**
+     * {@code .env.example} 曾长期使用的 JWT 占位值 (49 字符)。
+     *
+     * <p>它<b>能通过 32 字符长度校验</b>, 因此"长度够"曾被误当作"安全"。所有照抄模板
+     * 部署、或手工 {@code cp .env.example .env} 的环境都共享同一个可猜到的签名密钥 ——
+     * 任何读过本仓库的人都能据此伪造管理员 token。2026-11-06 把模板改为留空,
+     * 并把该值纳入黑名单, 让仍带着它的存量部署<b>启动时即失败</b>而不是继续裸奔。</p>
+     */
+    private static final String TEMPLATE_PLACEHOLDER_SECRET =
+            "your_very_secure_jwt_secret_key_at_least_32_chars";
 
     private JwtUtils jwtUtilsWith(String secret) {
         JwtUtils utils = new JwtUtils();
@@ -51,6 +61,13 @@ class JwtUtilsWeakSecretTest {
     @Test
     void legacyWeakSecretIsRejected() {
         assertThatThrownBy(() -> jwtUtilsWith(LEGACY_WEAK_SECRET).init())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("公开弱默认值");
+    }
+
+    @Test
+    void templatePlaceholderSecretIsRejected() {
+        assertThatThrownBy(() -> jwtUtilsWith(TEMPLATE_PLACEHOLDER_SECRET).init())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("公开弱默认值");
     }

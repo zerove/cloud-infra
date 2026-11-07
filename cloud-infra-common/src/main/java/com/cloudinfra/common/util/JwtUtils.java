@@ -22,7 +22,9 @@ public class JwtUtils {
      */
     private static final java.util.Set<String> WEAK_DEFAULT_SECRET_SHA256 = java.util.Set.of(
         "dbdee59805378a4a029accf391ef980c902e718d68484b3891e881c39b574c00",
-        "5d0b67992bf54d45b8d2404847d1bf40e75dcca71933274cbb172043c1c08f40"
+        "5d0b67992bf54d45b8d2404847d1bf40e75dcca71933274cbb172043c1c08f40",
+        // .env.example 曾长期使用的占位值 (49 字符, 能通过长度校验) —— 2026-11-06 纳入
+        "11474eaa2a5c0bf6d1506e023d1c83f605d5d2dfaaf0dddbc5a54541cc9cfa6a"
     );
     private static final int MIN_SECRET_LENGTH = 32;
 
