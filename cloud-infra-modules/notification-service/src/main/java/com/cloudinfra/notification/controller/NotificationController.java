@@ -70,6 +70,10 @@ public class NotificationController implements NotificationApi {
         return Result.success(new NotificationResponse(null, "SENT"));
     }
 
+    /**
+     * @deprecated S2 兼容窗口：优先使用 {@link #getMyHistory}；最终收口见 ADR-011（需权限/兼容决策）。
+     */
+    @Deprecated(since = "S2-compat", forRemoval = false)
     @Override
     @Operation(summary = "查询通知历史")
     @PreAuthorize("@ss.hasPermi('notification:history')")
@@ -121,6 +125,10 @@ public class NotificationController implements NotificationApi {
         return Result.success(notificationService.searchNotifications(keyword, pageQuery).map(this::mapToDTO));
     }
 
+    /**
+     * @deprecated S2 兼容窗口：优先使用 {@link #getMyLogs}；最终收口见 ADR-011（需权限/兼容决策）。
+     */
+    @Deprecated(since = "S2-compat", forRemoval = false)
     @Override
     @Operation(summary = "获取特定用户的发送审计日志")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
