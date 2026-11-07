@@ -23,7 +23,7 @@ public class NotificationQuotaService {
     private static final String QUOTA_KEY_PREFIX = "notification:quota:daily:";
     private static final long DEFAULT_DAILY_LIMIT = 1000L; // 默认每日发送上限 1000 条
 
-    public record QuotaStatus(long used, long limit, long remaining) {
+    public record QuotaStatus(long used, long limit, long remaining, long resetInSeconds) {
     }
 
     /**
@@ -42,7 +42,9 @@ public class NotificationQuotaService {
         }
         long limit = DEFAULT_DAILY_LIMIT;
         long remaining = Math.max(0L, limit - used);
-        return new QuotaStatus(used, limit, remaining);
+        Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+        long resetInSeconds = (ttl == null || ttl < 0) ? 0L : ttl;
+        return new QuotaStatus(used, limit, remaining, resetInSeconds);
     }
 
     /**
