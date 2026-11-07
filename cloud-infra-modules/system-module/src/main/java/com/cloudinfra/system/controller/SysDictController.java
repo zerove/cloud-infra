@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "字典管理")
 @RestController
@@ -82,6 +84,19 @@ public class SysDictController {
     @GetMapping("/data/label/{dictType}/{dictValue}")
     public String dictLabel(@PathVariable String dictType, @PathVariable String dictValue) {
         return dictService.selectDictLabel(dictType, dictValue);
+    }
+
+    @Operation(summary = "根据字典类型查询字典值-标签映射")
+    @PreAuthorize("hasAuthority('system:dict:query')")
+    @GetMapping("/data/map/{dictType}")
+    public Map<String, String> dictDataMap(@PathVariable String dictType) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (SysDictData data : dictService.selectDictDataByType(dictType)) {
+            if (data.getDictValue() != null) {
+                map.put(data.getDictValue(), data.getDictLabel());
+            }
+        }
+        return map;
     }
 
     @Operation(summary = "新增字典数据")
