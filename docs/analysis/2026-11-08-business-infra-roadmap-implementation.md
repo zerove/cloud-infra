@@ -62,7 +62,7 @@
 | 序号 | 主题 | 目标/产出 | 依赖与前置 | 验收/证据 |
 |---|---|---|---|---|
 | S1 | **P0 交付闭环** | PR #78 真实 CI 绿并合并到 `master` | 恢复 Billing；解决 `CONFLICTING/DIRTY`；`classify_gh_run.sh` 判定 `steps>0` | CI run 记录（非计费阻塞）；merge commit/策略记录 |
-| S2 | **通知契约与作用域决策** | **B3 已实施**：旧 `history/logs` 禁止跨用户（403），本人兼容；`/my/*` 为安全路径；管理员代查延期至 B1（显式权限+审计） | 调用方若仍跨用户调用需迁移 | ADR-011 Accepted；控制器+契约回归测试；真实跨服务调用证据待补 |
+| S2 | **通知契约与作用域决策** | **B3 已实施**：旧 `history/logs` 禁止跨用户（403），本人兼容；`/my/*` 为安全路径；新增内部 HMAC `getInternalLogs` 供 `AuditAggregatorService` 等可信审计聚合（不放宽用户端）；管理员代查延期至 B1（显式权限+审计） | 调用方若仍跨用户调用需迁移 | ADR-011 Accepted；控制器/授权/审计聚合回归测试；真实 Feign+HMAC 运行时证据待补 |
 | S3 | **API 契约按需对齐** | 已做 **additive** 对齐：`cloud-infra-api` 增加 quota/偏好 DTO 与 `/my/*`、`/quota`、`/preferences` Feign 方法+fallback；旧签名保留 | 真实消费方 | 编译+定向测试通过；集成调用证据待补 |
 | S4 | **运行时证据（租户）** | 模板已就绪（`-Devidence.it=true`，缺 env assume 跳过、缺断言显式失败）；需真实环境补 3 条路径断言 | 测试环境/容器；租户 A/B 数据与认证 | IT 通过+证据记录（非 assume/非空测） |
 | S5 | **运行时证据（通知偏好）** | 模板已就绪（同上）；需真实库/服务验证偏好、`/my/*`、quota/reset、B3 运行时行为 | 环境可用 | 端到端证据或 IT |

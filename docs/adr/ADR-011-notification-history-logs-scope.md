@@ -35,6 +35,7 @@
 
 - **S3（additive）**：`cloud-infra-api` 已新增 `NotificationQuotaStatusDTO`、`NotificationPreferenceDTO`、`NotificationPreferenceSaveRequest`，并在 `NotificationApi`/`FallbackFactory` 增加 `/my/history`、`/my/logs`、`/quota`、`/preferences`（GET/PUT）；`notification-service` controller 已对齐 DTO 映射。旧 `history/logs(userId)`、`send/read/search` 保持不变。
 - **S2-B3（已实施）**：`NotificationController` 对旧 `history/logs` 强制 `userId == currentUser`，否则 403；`/my/*`、同用户旧路径、配额/偏好当前用户绑定均有控制器/授权回归测试。S4/S5 IT 模板改为 `evidence.it=true` opt-in，缺环境变量 assume 跳过、缺断言显式失败（不产假绿）。
+- **审计聚合兼容（已实施）**：B3 会影响可信服务间跨用户日志聚合。已新增内部契约 `GET /internal/notification/logs`（`NotificationApi.getInternalLogs`，additive），由 `NotificationSecurityConfig` `/internal/**` HMAC 单点决策保护（网关无路由）；`InternalNotificationController` 提供实现，`AuditAggregatorService` 改用内部契约。用户端 B3/`/my/*` 语义不变。
 
 ## 验证要求（实施 B 时）
 
