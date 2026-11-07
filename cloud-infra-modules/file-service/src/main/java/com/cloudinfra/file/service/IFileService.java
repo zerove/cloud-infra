@@ -33,6 +33,11 @@ public interface IFileService {
      */
     IPage<FileMetadataVO> searchFiles(String keyword, long pageNum, long pageSize);
 
+    /**
+     * 获取文件元数据（含权限校验，READ 语义）
+     */
+    FileMetadataVO getMetadata(Long fileId, Long userId);
+
     boolean delete(Long fileId, Long userId);
 
     /**

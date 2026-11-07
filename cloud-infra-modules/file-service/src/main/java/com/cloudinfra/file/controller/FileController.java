@@ -388,4 +388,14 @@ public class FileController {
             @Max(value = 100, message = "每页大小不能超过 100") long pageSize) {
         return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
     }
+
+    @Operation(summary = "获取文件元数据")
+    @PreAuthorize("@ss.hasPermi('file:file:download')")
+    @GetMapping("/metadata/{fileId}")
+    public Result<FileMetadataVO> getMetadata(
+            @PathVariable @Positive(message = "文件 ID 必须为正数") Long fileId,
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+        Long userId = resolveUserId(requestUserId);
+        return Result.success(fileService.getMetadata(fileId, userId));
+    }
 }

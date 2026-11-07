@@ -335,4 +335,16 @@ public class FileServiceImpl implements IFileService {
         // 返回 MinIO object key (即 file_path), 不返回 InputStream
         return metadata.getFilePath();
     }
+
+    @Override
+    public FileMetadataVO getMetadata(Long fileId, Long userId) {
+        FileMetadata metadata = metadataMapper.selectById(fileId);
+        if (metadata == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "File not found");
+        }
+        if (!permissionService.hasAccess(userId, fileId, "READ")) {
+            throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to access this file");
+        }
+        return mapToVo(metadata);
+    }
 }
