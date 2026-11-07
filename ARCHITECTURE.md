@@ -1,8 +1,8 @@
 # 架构定义 (ARCHITECTURE.md)
 
 > **当前状态**: v1.0.0 (2026-09-01) — Production-Ready Release
-> **关键能力**: 11 个 ADR, 101 tests pass, P0-3b JWT blacklist 端到端 401 实测, M5-03 业务告警 Counter 运行时实测 (Counter 7.0)
-> **git tag**: v1.0.0 on origin (e6b786d, 0 commit drift)
+> **关键能力**: 10 个现行 ADR (+1 归档), 516 tests pass, P0-3b JWT blacklist 端到端 401 实测, M5-03 业务告警 Counter 运行时实测 (Counter 7.0)
+> **git tag**: v1.0.0 on origin (e6b786d) —— 注意其后已有 410 个提交, "0 commit drift" 的旧表述已于 2026-10-17 更正
 
 ## 📐 分层结构 (Layering)
 - **API Layer**: 
@@ -18,7 +18,8 @@
 - `cloud-infra-modules` $\rightarrow$ `cloud-infra-starter` (原因: 框架层能力经 starter **传递**引入)
 - `cloud-infra-modules` $\rightarrow$ `cloud-infra-common` (原因: 依赖通用工具类及全局异常定义)
 - `cloud-infra-modules` $\rightarrow$ `cloud-infra-api` (原因: 调用其他服务的 Feign 接口)
-- `cloud-infra-gateway` $\rightarrow$ `cloud-infra-auth` (原因: 依赖认证中心进行 Token 校验与身份验证)
+- 网关**不依赖** auth 模块: `cloud-infra-gateway/pom.xml` 只有 `cloud-infra-api` 与 `framework-security`。
+  Token 校验由网关本地完成 (HMAC + Redis 会话), 无服务间调用
 
 > **2026-10-13 更正**: 本文档原写 `cloud-infra-modules → cloud-infra-framework`（直接依赖）。
 > 实测(pom 逐个反查)是**无任何模块直接依赖任何 `framework-*` 模块**, 全部经
@@ -57,7 +58,7 @@
 
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
-- **决策 2**: 启用 **Generational ZGC** $\rightarrow$ [理由: 维持微秒级 GC 停顿，确保高并发下的低延迟响应]
+- **决策 2**: 启用 **G1GC** (堆 256m) $\rightarrow$ [理由: 小堆下 G1GC 兼顾吞吐与开销; Generational ZGC 曾被多处文档声称, 但运行态从未采用 —— 其唯一出处是一个自陈"已失效"的根 Dockerfile, 已于 2026-10-17 删除]
 - **决策 3**: 采用 **Nacos** 作为配置/注册中心 $\rightarrow$ [理由: 实现动态配置秒级生效，简化微服务治理]
 - **决策 4**: 部分模块（Gateway/Auth）构建 **Native Image** $\rightarrow$ [理由: 极速启动与极低内存占用，优化 K8s 弹性伸缩]
 

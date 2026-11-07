@@ -43,7 +43,8 @@ ES 8.x 服务端不认 -> 400。
 ## 负向对照
 
   · 把 compose 里的 ES 版本改回 8.x -> 必须失败
-  · 三处配置（compose / manifests / k8s values）不一致 -> 必须失败
+  · 各处配置（compose / k8s values）不一致 -> 必须失败
+  · 任一声明的配置文件不存在 -> 必须失败（声明与实际不符 ≠ 通过）
 """
 import re
 import subprocess
@@ -52,12 +53,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 承载 ES 镜像的服务端配置。三处都要查 —— 只查 compose 的话,
-# K8s 部署仍会踩同一个坑（这正是它长期存在的原因: 没人同时看三处）。
+# 承载 ES 镜像的服务端配置。两处都要查 —— 只查 compose 的话,
+# K8s 部署仍会踩同一个坑（这正是它长期存在的原因: 没人同时看两处）。
+# ⚠️ 2026-11-07 原来的第三项 `manifests/base/elasticsearch.yaml` 已随 kustomize 面删除:
+#    该条目此前会被 `if not f.exists(): continue` 静默跳过 —— 也就是说,
+#    从 manifests 被删那天起, 这个"三处核对"已经悄悄变成"两处核对"。
+#    现改为: 声明了的文件必须真实存在且被解析到, 否则直接报红。
 SERVER_CONFIGS = [
     ("deploy/compose.yaml", re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
-    ("manifests/base/elasticsearch.yaml",
-     re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
     ("deploy/k8s/infra/values.yaml",
      re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
 ]
@@ -92,16 +95,26 @@ def client_major() -> tuple[int, str]:
     return -1, ""
 
 
-def server_majors() -> list[tuple[str, int]]:
+def server_majors() -> tuple[list[tuple[str, int]], list[str]]:
+    """返回 (解析到的 (路径, 主版本) 列表, 未找到/未解析到的声明路径列表)。
+
+    声明了的配置文件必须真实存在且能解析到版本号:
+    静默跳过会把"声明 N 处但实际只扫到 1 处"的假绿合法化 —— 路径写错、
+    或某个部署面被移走时, 守护会像没事一样继续报 PASS。
+    """
     out = []
+    missing = []
     for rel, pat in SERVER_CONFIGS:
         f = ROOT / rel
         if not f.exists():
+            missing.append(f"{rel} (文件不存在)")
             continue
         m = pat.search(f.read_text(encoding="utf-8"))
         if m:
             out.append((rel, int(m.group(1))))
-    return out
+        else:
+            missing.append(f"{rel} (存在但解析不到 elasticsearch image 版本)")
+    return out, missing
 
 
 def main() -> int:
@@ -113,9 +126,14 @@ def main() -> int:
         return 1
     print(f"INFO ES 客户端主版本 = {cmajor}  (来源: {csrc})")
 
-    servers = server_majors()
+    servers, missing = server_majors()
+    if missing:
+        print("FAIL: 声明的 ES 服务端配置未全部解析到位 (声明 ≠ 实际, 不能判绿):")
+        for f in missing:
+            print(f"  - {f}")
+        return 1
     if not servers:
-        print("FAIL 三处配置里一处都没扫到 ES 版本 —— 扫描器坏了, 不能判绿")
+        print("FAIL 声明的配置里一处都没扫到 ES 版本 —— 扫描器坏了, 不能判绿")
         return 1
 
     for rel, major in servers:
@@ -128,7 +146,7 @@ def main() -> int:
         else:
             print(f"PASS {rel}: 服务端主版本 {major} 与客户端一致")
 
-    # 三处之间也必须一致 —— 否则换个部署方式又踩一遍
+    # 各处之间也必须一致 —— 否则换个部署方式又踩一遍
     majors = {m for _, m in servers}
     if len(majors) > 1:
         detail = ", ".join(f"{r}={m}" for r, m in servers)

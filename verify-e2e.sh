@@ -704,20 +704,22 @@ STUB
     fi
   done
 
-  # 阻断型门禁必须真被执行, 不能被 `|| true` 吞掉。
-  # ⚠️ 泛化成列表: 原先只查 check_sw_oap_config 一个。新的阻断型门禁若被后人
-  #    随手加 `|| true`, 就从"会中止 E2E"退化成"只打印一行"—— 而它的失败形态
-  #    (容器起不来)极具误导性, 极易被当成环境问题忽略。
-  #    "定义了 + 被调用了"都可能同时为真而门禁已是假门禁(第三课)。
-  # ⚠️ 判据必须覆盖**两种**合法阻断形态, 并排除 `|| true`:
-  #    (a) 裸调用             —— `check_xxx` 独占一行, return 1 即中止
-  #    (b) if 包裹的否定形式 —— `if ! { ...; check_xxx; }; then`
-  #    只认其一, 另一形态会**静默漏判**。
+  # 阻断型门禁必须真被执行, 不能被 `|| true` 吞掉, 也不能"看起来像阻断"。
+  # ⚠️ 本脚本 set -uo pipefail **没有 -e**(第 15 行) —— 裸调用 `check_xxx`
+  #    失败只会打印一行字然后继续跑。旧判据把"独占一行的裸调用"当成合法
+  #    阻断形态(a), 于是三个裸调用的门禁(schema_standalone / startup_budget /
+  #    es_wait_strategy)被自检放行而实际从未中止过 —— 判据与运行形态脱节,
+  #    又一次"判据只知道文件参照自身, 不知道 bash 参照 set -e"(2026-11-08 查明)。
+  # ⚠️ 合法阻断形态只剩两种, 都是**显式**把 rc 变成脚本退出:
+  #    (a) `check_xxx || exit 1`           —— 失败即退出
+  #    (b) `if ! { ...; check_xxx; }; then` —— then 分支里 exit
+  #    裸调用**不再**被认可为阻断; `|| true` 一律排除。反向论证:
+  #    自检只会更严, 不会漏 —— 调用被删/形态换成非阻断时, 两种形态都匹配不到。
   # ⚠️ 这里绝不能写成 `<门禁名>; \};` —— 那要求它是 for 列表的**最后一项**;
   #    原列表只有一项所以"碰巧"成立, 往中间插一项就静默失效。
   # ⚠️ 只用 index() 不用正则: 调用行含中文, mawk 下 `[;{]` 这类锚点会匹配失败
   #    (实测三个条件同时返回 0 而行内容是对的) —— 又一次探针失效长得像被检对象有问题。
-  for _gate in check_sw_oap_config check_container_startup_budget_gate; do
+  for _gate in check_sw_oap_config check_schema_standalone check_schema_init_wiring check_container_startup_budget_gate check_es_wait_strategy check_compose_dangling_deps check_otel_pipeline_refs check_port_conflicts check_v18_watchdog check_commit_runtime_guard check_native_alloc_evidence check_grpc_port_placeholder check_start_period_covers_startup check_feign_timeout; do
     _hit="$(awk -v s="$self_start" -v e="$self_end" -v g="$_gate" '
         NR >= s && NR <= e { next }
         /^[ \t]*#/ { next }
@@ -725,15 +727,16 @@ STUB
         {
           line = $0
           sub(/^[ \t]+/, "", line)
-          if (line == g) { found = NR; next }
-          if (index(line, g ";") > 0) { found = NR; next }
+          if (index(line, g " || exit 1") > 0) { found = NR; next }
+          if (index(line, g ";") > 0 && index(line, "if !") > 0) { found = NR; next }
         }
         END { print found + 0 }
       ' "$SCRIPT_DIR/verify-e2e.sh")"
     if [ "$_hit" -ne 0 ]; then
-      echo "  PASS $_gate 以阻断方式执行 (第 $_hit 行, 未被 || true 吞掉)"
+      echo "  PASS $_gate 以阻断方式执行 (第 $_hit 行, 失败会退出 E2E)"
     else
-      echo "  FAIL $_gate 没有裸调用/if 包裹调用 —— 该门禁的失败将不再中止 E2E" >&2
+      echo "  FAIL $_gate 没有阻断形态的调用 —— 裸调用在本脚本(无 set -e)下不会中止" >&2
+      echo "        改为 \"$_gate || exit 1\" 或 \"if ! { ...; $_gate; }; then\"" >&2
       failures=$((failures+1))
     fi
   done
@@ -1037,7 +1040,9 @@ check_schema_standalone() {
   case "$rc" in
     1) fail "schema.sql 不能在空库独立执行, 或列与实体不对齐（详见上方）"; return 1 ;;
     2) fail "schema 空库自检**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
-    3) warn "本地无 H2 jar, 空库自包含性未判定（非通过）"; return 0 ;;
+    3) echo "  ⚠️  本地无 H2 jar, 空库自包含性未判定（非通过）" >&2; return 0 ;;
+       # ⚠️ 原写 warn: 本脚本从未定义 warn()(只有 ok/fail, 见 31-32 行),
+       #    实际会打出 "command not found" —— 未判定被伪装成一条报错噪声(2026-11-08 修正)。
     0) ok "schema.sql 均可在空库独立执行且列与实体对齐"; return 0 ;;
     *) fail "空库自检返回未预期 rc=$rc"; return 1 ;;
   esac
@@ -1195,7 +1200,13 @@ check_resource_optimization || true
 # 但登记进 run_gate_selftest —— 不登记就等于没人跑（第三课）。
 check_docs_probe_scripts || true
 check_lesson_tables || true
-check_port_conflicts || true
+
+# 端口抢占**不属于**"文档可信度"(旧注释把三者归成一类是错的):
+# rc=1 = compose 端口已被外部进程占用, rc=2 = 探针不可信 —— 两者都被
+# 函数显式判红(见 check_port_conflicts 注释 886-890 行), 但调用处一直
+# 用 || true 吞掉。2026-11-08 接地: rc=1/2 阻断 —— 否则端口冲突会拖到
+# 容器创建阶段才爆发, 且日志不会指出"被谁抢占"。
+check_port_conflicts || exit 1
 
 # ⚠️ 这条**阻断**而非 `|| true`: 它守护的是"V18 迁移测试能否在挂死时结束"。
 #    失败意味着该测试一旦挂死就会**永久占用一个 CPU 核**, 进而让整个宿主的
@@ -1215,19 +1226,27 @@ echo
 # 但必须在服务起来之前判红 —— 否则缺表会被 healthcheck 掩盖(实测 file-service
 # 4 张表全缺, 容器仍是 healthy)。
 echo "[前置] 检查各服务 schema.sql 有执行机制 ..."
-check_schema_init_wiring || true
+check_schema_init_wiring || exit 1
+# ⚠️ 下面三个曾是**裸调用**: 旧 self-test 判据把"独占一行"当成合法阻断形态,
+#    但本脚本 set -uo pipefail **没有 -e**, 裸调用失败只会打印一行字继续跑
+#    —— 自检放行而实际从未中止, 判据与运行形态脱节(2026-11-08 查明并接地)。
+#    另两处同理: compose_dangling_deps / otel_pipeline_refs 的函数注释
+#    自述"阻断", 调用处却写 || true —— 全部改为显式 || exit 1。
 echo "[前置] 检查各服务 schema.sql 能在空库独立执行且列与实体对齐 ..."
-check_schema_standalone
+check_schema_standalone || exit 1
 echo "[前置] 检查测试容器声明均有显式启动预算 ..."
-check_container_startup_budget_gate
+check_container_startup_budget_gate || exit 1
 echo "[前置] 检查 ES 等待策略在真实 ES 日志上命中 ..."
-check_es_wait_strategy
+check_es_wait_strategy || exit 1
+# start_period 不足会让"服务最终可用但 health 永远 unhealthy"(2026-10-06 实测
+# 5/6 服务踩中), 且 E2E 的 600s 等待预算会把正常服务误报成失败 —— 纯静态判定,
+# 2026-11-08 收归阻断(原 `|| true` + "留待定夺"注释已删除)。
 echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
-check_start_period_covers_startup || true
+check_start_period_covers_startup || exit 1
 echo "[前置] 检查 compose 依赖图无悬空引用 ..."
-check_compose_dangling_deps || true
+check_compose_dangling_deps || exit 1
 echo "[前置] 检查 otel-collector pipeline 引用可解析 ..."
-check_otel_pipeline_refs || true
+check_otel_pipeline_refs || exit 1
 echo "[前置] 检查 Testcontainers 运行时预检 ..."
 check_testcontainers_runtime || true
 echo
@@ -1280,19 +1299,23 @@ fi
 #   为什么**只警告不阻断**: 与 check_jvm_opts_keys 同一个理由 ——
 #   commit 高不等于服务已坏, 阻断会把"环境紧张"这个次要事实变成 E2E 的失败结论,
 #   反而掩盖真实状态。阈值 92% 落在实测正常区间 (82%~91%) 与崩溃点 (99.6%) 之间。
+#   2026-11-08 备注: 早期"只警告"的时代阈值还在 85(会误伤 82%~91% 正常区间);
+#   阈值校准到 92 后, 该降级理由不再成立 —— 92 落在"正常区间之上、崩溃点之下"
+#   的空档, 不会误报。接线因此应为显式 `|| exit 1`(已是), 下文"仅告警/非阻断"
+#   的两处文案已同步更正, 防止下一个读者按旧文案把接线改回去。
 check_commit_runtime_guard() {
   local out rc
   out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_runtime_guard.py" 2>&1); rc=$?
   printf '%s\n' "$out" | sed 's/^/  /'
   if [ "$rc" -eq 1 ]; then
-    fail "运行期 commit 预算吃紧 —— 6 服务可能随机崩溃(非阻断, 仅记录)"
+    fail "运行期 commit 预算 ≥92% —— 6 服务可能随机崩溃, 本次 E2E 结果不可信, 阻断"
     return 1
   fi
   ok "运行期 commit 预算有余量"
   return 0
 }
 
-echo "[前置] 检查运行期 commit 预算 (仅告警) ..."
+echo "[前置] 检查运行期 commit 预算 (≥92% 阻断, 阈值已校准避开误报区间) ..."
 check_commit_runtime_guard || exit 1
 echo
 
@@ -1329,7 +1352,9 @@ check_native_alloc_evidence() {
 }
 
 echo "[前置] 检查 native 分配失败的实证信号 ..."
-check_native_alloc_evidence || true
+# 设计(见上): rc=1 实证失败 -> 阻断; rc=2 探针失效 -> 函数内 return 0 且不判绿。
+# 调用处却长期 || true, 把缺失的那次实证阻断吞掉 —— 2026-11-08 接地。
+check_native_alloc_evidence || exit 1
 echo
 
 # ⚠️ 已删除的“堆外余量门禁” (2026-10-05) —— 记录它的错误与正确结论,
@@ -1545,6 +1570,114 @@ check_commit_runtime() {
     echo "         没有任何单个进程值得杀。有效方向是降低 -Xms/-Xmx 或减少同时运行的 JVM 数。" >&2
   fi
 }
+
+# ---- 业务源码安全边界（catch(Exception) 数量门禁）---------------------------
+#
+# 安全边界逐跳检查：业务源码 catch(Exception) 数量超过安全阈值，真实异常被吞掉。
+#   负向对照：阈值调到 150 以下 → 应报红；恢复 → 应绿。
+check_catch_exception_count() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_catch_exception_count.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "catch(Exception) 超过安全阈值 —— 真实异常被吞掉"; return 1; fi
+  ok "catch(Exception) 数量未超阈值"
+  return 0
+}
+
+# ---- Feign 超时门禁 -----------------------------------------------------------
+#
+# 无超时的 Feign 调用会拖死网关线程; 判据覆盖"注解超时"或"消费服务运行配置
+# 全局超时"两种生效形态(2026-11-08 重写, 原实现因扫描根漂移永远扫到 0 个)。
+# 纯静态判定, 与 check_grpc_port_placeholder 同类 => 收归阻断。
+check_feign_timeout() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_feign_timeout.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "@FeignClient 无任何生效超时 —— 可能阻塞网关"; return 1; fi
+  ok "@FeignClient 均有生效超时"
+  return 0
+}
+
+# ---- gRPC port 占位符门禁 ---------------------------------------------------
+#
+# 写死裸值触发 BindException。
+check_grpc_port_placeholder() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_grpc_port_placeholder.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "gRPC port 为裸值 —— 会触发 BindException"; return 1; fi
+  ok "所有模块 grpc server port 已显式占位"
+  return 0
+}
+
+# ---- Redis 裸 keys() 调用门禁（非阻断告警）-----------------------------------
+#
+# 历史数据：实测无裸 keys() 调用 → PASS。
+check_keys_not_used() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_keys_not_used.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  ⚠️  裸 keys() 调用存在(非阻断告警)"; return 0; fi
+  ok "全仓业务源码未发现裸 keys() 调用"
+  return 0
+}
+
+# ---- Nacos 配置子块对齐门禁（非阻断告警）-------------------------------------
+#
+# 缺失视为"对齐缺口"，提示但不破坏性阻止——由人工判断是否需合并。
+check_nacos_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_nacos_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  ⚠️  对齐缺口(非阻断告警)"; return 0; fi
+  ok "各 service nacos.* 子块与 deploy/config 对齐"
+  return 0
+}
+
+# ---- 共享 config import 门禁（非阻断告警）------------------------------------
+#
+# 未引用的视为"仍未对齐"，提示但不强制破坏性迁移。
+check_shared_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_shared_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  ⚠️  共享 config 未 import actuator-config.yaml(非阻断告警)"; return 0; fi
+  ok "共享 config 已显式 import actuator-config.yaml"
+  return 0
+}
+
+# ---- 业务源码安全边界（catch(Exception) 数量门禁）---------------------------
+echo "[前置] 检查 catch(Exception) 数量不超过安全阈值 ..."
+check_catch_exception_count || true
+echo
+
+# ---- Feign 超时门禁 -----------------------------------------------------------
+echo "[前置] 检查 @FeignClient 有生效超时 ..."
+check_feign_timeout || exit 1
+echo
+
+# ---- gRPC port 占位符门禁 ---------------------------------------------------
+echo "[前置] 检查 grpc server port 为占位变量而非裸值 ..."
+# 纯静态判定(判定失败必现 BindException, 与 check_compose_dangling_deps 同类),
+# 失败不再吞掉(2026-11-08: `|| true` -> `|| exit 1`, 并已纳入 self-test 阻断清单)。
+check_grpc_port_placeholder || exit 1
+echo
+
+# ---- Redis 裸 keys() 调用门禁（非阻断告警）-----------------------------------
+echo "[前置] 检查业务源码无裸 keys() 调用 ..."
+check_keys_not_used || true
+echo
+
+# ---- Nacos 配置子块对齐门禁（非阻断告警）-------------------------------------
+echo "[前置] 检查各 service nacos.* 子块与 deploy/config 对齐 ..."
+check_nacos_config_alignment || true
+echo
+
+# ---- 共享 config import 门禁（非阻断告警）------------------------------------
+echo "[前置] 检查共享 config import actuator-config.yaml ..."
+check_shared_config_alignment || true
+echo
+
 while :; do
   check_commit_runtime
   MISSING=""

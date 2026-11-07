@@ -360,7 +360,6 @@ case "${1:-}" in
   --probe-only)    PROBE="probe" ;;
   --cleanup-probe) PROBE="cleanup" ;;
 esac
-[ -n "$PROBE" ] && DB="v18_cleanup_probe"
 
 # 只报告版本: 不杀任何进程, 仅在 stdout 标记
 watchdog_report_only() {
@@ -386,7 +385,12 @@ new_progress_file
 MIGDIR="$ROOT/cloud-infra-modules/system-module/src/main/resources/db/migration"
 MIG="$MIGDIR/V18__fix_notification_status_column_type.sql"
 V13="$MIGDIR/V13__add_notification_main_table.sql"
-DB="v18_migration_test"
+DB="${V18_TEST_DB:-v18_migration_test}"
+# 探针必须用自己的库名: 它会在不走主流程的路径上执行 drop_db。
+# ⚠️ 此赋值必须放在默认值**之后**。此前它写在 PROBE 段(默认值之前),
+#    随后被这里的默认值覆盖 ⇒ 死赋值, 探针实际操作的是主测试库。
+#    容忍并行运行时, 用 V18_TEST_DB 给每轮一个唯一库名。
+[ -n "$PROBE" ] && DB="v18_cleanup_probe"
 FAIL=0
 
 # ── podman exec 的真实开销决定了本脚本的设计 ──────────────────────────

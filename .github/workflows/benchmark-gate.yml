@@ -1,6 +1,8 @@
 # ============================================================
 # 基准测试门禁
-# 在 main 合并前运行, 对比性能基线, 防止性能回归
+# 在 master 合并前运行, 对比性能基线, 防止性能回归
+# ⚠️ 触发器原写 branches:[main, develop] —— 本仓库默认分支是 master,
+#    该组合永不匹配, 门禁自建立起从未触发过(2026-10-18 修正)。
 #
 # 实际阈值(唯一真源是下方 "Compare with baseline" 里的变量, 不是本注释):
 #   启动 < 15000ms, 内存 < 512MB, 吞吐 > 100 RPS, p99 < 1000ms
@@ -13,7 +15,7 @@ name: Benchmark Gate
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [master]
     types: [opened, synchronize, labeled]
 
 jobs:

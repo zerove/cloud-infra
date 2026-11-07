@@ -53,28 +53,68 @@ ROOT = Path(__file__).resolve().parents[2]
 H2_URL = "jdbc:h2:mem:schema_gate_check;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
 
 
+def _modules_with_h2_tests() -> set[Path]:
+    """测试数据源是 H2 的模块根目录。
+
+    用 `jdbc:h2:` 作为判据而非手写模块清单: 手写清单会与配置漂移,
+    而"这份 schema 会被加载进哪个库"才是本门禁的判定对象。
+    """
+    mods: set[Path] = set()
+    for cfg in ROOT.rglob("src/test/resources/*.yml"):
+        if "target" in cfg.parts:
+            continue
+        try:
+            text = cfg.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "jdbc:h2:" in text:
+            # <module>/src/test/resources/x.yml -> parents[0]=resources,
+            # [1]=test, [2]=src, [3]=<module>
+            mods.add(cfg.parents[3])
+    return mods
+
+
 def schema_files() -> list[Path]:
-    """只取会被 `spring.sql.init` 真正加载的 schema*.sql。
+    """只取会被 `spring.sql.init` 真正加载进 H2 空库的 schema*.sql。
 
-    ⚠️ 范围三处都是**实测**划定的, 不是推断:
+    ⚠️ 扫描范围的历史变化（2026-11-06 修正）:
 
-    1. 只取 `src/main/resources` —— `src/test/resources/schema.sql` 是测试
-       自己准备的数据集, 由测试决定建什么, 不受本门禁约束。
-    2. 排除 `target/` —— 编译产物, 与源文件重复。
-    3. 排除 `schema-seata.sql` —— **全仓零引用**(grep 全仓无任何
-       yml/java/properties 提及它), 且 Seata 在本项目已停用
-       (AGENTS.md: "Seata disabled")。它是死文件, 不会被
-       `spring.sql.init` 加载; 纳入扫描只会得到"MySQL 反引号语法在 H2 下报错"
-       这类与被测目标无关的误报。
+    原版只扫 `src/main/resources`, 因为当时的缺陷文件是
+    `notification-service/src/main/resources/schema.sql`。
+    commit `777e6842`("schema 收敛为 Flyway 单一所有者") 已**有意删除**
+    该文件, schema 改由 `src/test/resources/schema.sql` 承载并由
+    `spring.sql.init.mode=always` 加载到 H2 —— 原扫描范围因此恒为 0,
+    门禁自身报"扫描器失效"。
+
+    **判据仍是"实际会被加载的文件", 而不是"以前那个路径"**:
+
+    1. 测试资源配置了 `jdbc:h2:` 的模块 —— 取其
+       `src/test/resources/schema*.sql`; 这些文件会由 Spring Boot
+       的 `spring.sql.init` 在空 H2 库上执行。
+    2. 保留 `src/main/resources/schema*.sql` 扫描(生产 schema 若存在,
+       仍应能独立初始化), 但当前仅剩 `schema-seata.sql`。
+    3. 排除 `schema-seata.sql` —— 全仓零引用, Seata 已停用, 是死文件;
+       纳入只会得到"MySQL 反引号语法在 H2 下报错"的无关误报。
+    4. 排除 system-module 的测试 schema —— 其测试数据源是
+       PostgreSQL(`application-test.yml` 为 `jdbc:postgresql://`),
+       不是 H2, 也不由 `spring.sql.init` 加载; 用 H2 判它属方言误报。
 
     **误报的代价**: 判红一个无关文件会训练人忽略本门禁输出,
     比漏判更危险 —— 与 `run_gate_selftest` 的教训同源。
     """
-    files = [
-        p
-        for p in ROOT.rglob("src/main/resources/schema*.sql")
+    files: set[Path] = set()
+    for module in _modules_with_h2_tests():
+        test_res = module / "src/test/resources"
+        if not test_res.is_dir():
+            continue
+        files.update(
+            p for p in test_res.glob("schema*.sql")
+            if "seata" not in p.name.lower()
+        )
+    files.update(
+        p for p in ROOT.rglob("src/main/resources/schema*.sql")
         if "target" not in p.parts and "seata" not in p.name.lower()
-    ]
+    )
     return sorted(files)
 
 
@@ -262,15 +302,22 @@ COLUMN_CHECKED_TABLES = (
 )
 
 
-def check_columns(jar: Path) -> int:
+def check_columns(jar: Path, files: list[Path]) -> int:
     """对每个有本地写路径的表, 比对**实体声明列**与**schema 实测列**。
 
     覆盖多张表的原因: 补完 sys_notification 后, IT 立刻暴露出
     `relation "sys_notification_preference" does not exist` —— 同型问题,
     只是排在后面。只守护第一张表会让下一个同型缺陷继续漏过。
+
+    ⚠️ 不再硬编码 `src/main/resources/schema.sql`: 该文件已随
+    `777e6842` 删除, 现在由 notification 的测试资源承载。从上面已判定的
+    `files` 里按模块归属定位, 让"被执行的"与"被比对列的"是同一个文件。
     """
-    notif = ROOT / "cloud-infra-modules/notification-service/src/main/resources/schema.sql"
-    if not notif.exists():
+    notif = next(
+        (p for p in files if "notification-service" in p.parts),
+        None,
+    )
+    if notif is None:
         print("FAIL: 找不到 notification schema.sql —— 探针失效, 不能判绿", file=sys.stderr)
         return 2
     body = notif.read_text(encoding="utf-8", errors="replace")
@@ -312,7 +359,8 @@ def main() -> int:
     files = schema_files()
     if not files:
         # 扫描器失效 ≠ 通过
-        print("FAIL: 未找到任何 src/main/resources/schema*.sql —— 扫描器失效", file=sys.stderr)
+        print("FAIL: 未找到任何会被 spring.sql.init 加载的 schema*.sql —— 扫描器失效",
+              file=sys.stderr)
         return 2
 
     jar = find_h2_jar()
@@ -352,7 +400,7 @@ def main() -> int:
         print(f"\nFAIL: {failures}/{len(files)} 个 schema.sql 不能独立初始化空库", file=sys.stderr)
         return 1
 
-    rc = check_columns(jar)
+    rc = check_columns(jar, files)
     if rc:
         return rc
     print(f"\nPASS: {len(files)} 个 schema.sql 均可在空库独立执行, 且列与实体对齐")

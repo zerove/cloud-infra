@@ -270,6 +270,14 @@ def real_es_log() -> tuple[str | None, str]:
     subprocess.run(["podman", "rm", "-f", name], capture_output=True, timeout=120)
     run = subprocess.run(
         ["podman", "run", "--rm", "--name", name,
+         # 宿主代理变量不得注入探针容器: 127.0.0.1 在容器内指向容器自己,
+         # 会令 ES 的外网请求打到宿主的无监听代理端口。compose 侧同样显式清空。
+         "-e", "http_proxy=",
+         "-e", "https_proxy=",
+         "-e", "HTTP_PROXY=",
+         "-e", "HTTPS_PROXY=",
+         "-e", "no_proxy=*",
+         "-e", "NO_PROXY=*",
          "-e", "discovery.type=single-node",
          "-e", "xpack.security.enabled=false",
          "-e", "ES_JAVA_OPTS=-Xms512m -Xmx512m",
@@ -277,20 +285,26 @@ def real_es_log() -> tuple[str | None, str]:
         capture_output=True, text=True, timeout=240)
     if run.returncode != 0:
         return None, f"podman run rc={run.returncode}: {run.stderr.strip()[:200]}"
-    logs = ""
-    deadline = time.time() + ES_READY_TIMEOUT
-    while time.time() < deadline:
-        p = subprocess.run(["podman", "logs", name],
-                           capture_output=True, text=True, timeout=60)
-        logs = (p.stdout or "") + (p.stderr or "")
-        if ES_READY_ANCHOR in logs:
-            return logs, "ok"
-        st = subprocess.run(["podman", "inspect", "--format", "{{.State.Status}}", name],
-                            capture_output=True, text=True, timeout=60)
-        if st.stdout.strip() == "exited":
-            return None, "ES 容器在 ready 前退出"
-        time.sleep(5)
-    return None, f"{ES_READY_TIMEOUT}s 内未捕获锚点"
+    try:
+        logs = ""
+        deadline = time.time() + ES_READY_TIMEOUT
+        while time.time() < deadline:
+            p = subprocess.run(["podman", "logs", name],
+                               capture_output=True, text=True, timeout=60)
+            logs = (p.stdout or "") + (p.stderr or "")
+            if ES_READY_ANCHOR in logs:
+                return logs, "ok"
+            st = subprocess.run(["podman", "inspect", "--format", "{{.State.Status}}", name],
+                                capture_output=True, text=True, timeout=60)
+            if st.stdout.strip() == "exited":
+                return None, "ES 容器在 ready 前退出"
+            time.sleep(5)
+        return None, f"{ES_READY_TIMEOUT}s 内未捕获锚点"
+    finally:
+        # `--rm` 只在容器退出时生效。本脚本成功时容器仍在运行,
+        # 不主动删除就会长期残留 —— 实测残留 10 小时后被
+        # check_proxy_env 判为"容器继承宿主代理"。
+        subprocess.run(["podman", "rm", "-f", name], capture_output=True, timeout=120)
 
 
 def java_match(pattern: str, log_path: str) -> tuple[bool, str]:

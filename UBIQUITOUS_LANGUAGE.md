@@ -22,7 +22,7 @@ This document defines the canonical terminology used across the `cloud-infra` pr
 | **Binding** | A named channel used by Spring Cloud Stream to connect an application to an external messaging system. **Deprecated**. | Messaging (Legacy) |
 | **Shared Config** | Configuration files stored in Nacos (e.g., `actuator-config.yaml`, `feign timeouts`, `otlp endpoint`) that are imported by multiple services to ensure consistency. | Configuration |
 | **Distributed Transaction** | A transaction that spans multiple services, managed by the `framework-seata` module. Disabled by default for system-module. | Data Consistency |
-| **Virtual Threads** | JDK 25 lightweight threads enabled globally (`spring.threads.virtual.enabled=true`), paired with Generational ZGC for microsecond GC pauses. | Concurrency |
+| **Virtual Threads** | JDK 25 lightweight threads enabled globally (`spring.threads.virtual.enabled=true`), paired with G1GC (heap 256m) — note: ZGC was never actually in the runtime path. | Concurrency |
 | **Header Authentication Filter** | Spring Security filter that reads `X-User-Id`/`X-User-Name` headers (injected by Gateway) and populates SecurityContext with permissions. | Security |
 | **Internal Call Signature** | HMAC-signed headers (`X-Internal-Call-Sign`, `X-Internal-Call-Timestamp`, `X-Internal-Call-Nonce`) used to authorize internal Feign endpoints (e.g., `/system/user/**`). | Security |
 

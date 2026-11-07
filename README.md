@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-504%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-516%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
 
 > ⚠️ **进度口径说明** (2026-09-30): 徽章中的 `ROADMAP 1/6` 按项目级完成定义统计,
 > 即**被真实业务使用的能力数**。若按传统“条目打勾”口径计, M6/M7 看起来接近全绿 ——
@@ -36,7 +36,7 @@ bash e2e-test.sh            # 6/6 业务断言 PASS
 ## 🚀 技术栈
 
 - **核心**: Spring Boot 4.1.0 | JDK 25 (启用虚拟线程 Virtual Threads)
-- **云生态**: Spring Cloud 2025.1.2 | Spring Cloud Alibaba 2025.1.0.0
+- **云生态**: Spring Cloud 2025.1.3 | Spring Cloud Alibaba 2025.1.0.0
 - **注册与配置**: Nacos
 - **持久化**: MyBatis Plus 3.5.17 | PostgreSQL 16 | MySQL 8.4
 - **缓存与分布**: Redisson 4.7.0 | Redis 7.2
@@ -62,7 +62,7 @@ bash e2e-test.sh            # 6/6 业务断言 PASS
 ## 📈 可观测性
 
 - **链路追踪**: 每个请求在网关处被分配一个 `traceId`，并通过 Micrometer Tracing 在所有微服务间传播。
-- **监控**: Prometheus 抓取各服务的 `/actuator/prometheus` 端点，提供实时健康状态和性能指标。
+- **监控**: Prometheus 抓取各服务的 `/management/prometheus` 端点 (管理端口 9301)，提供实时健康状态和性能指标。
 - **日志**: 标准化日志格式，包含 `traceId` 以实现分布式日志关联。
 
 ## 🛡️ 关键修复记录 (2026-08)
