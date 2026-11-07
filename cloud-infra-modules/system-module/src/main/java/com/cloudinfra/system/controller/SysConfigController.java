@@ -52,6 +52,13 @@ public class SysConfigController {
         return configService.selectConfigByKey(configKey);
     }
 
+    @Operation(summary = "判断参数键名是否存在")
+    @PreAuthorize("hasAuthority('system:config:query')")
+    @GetMapping("/configKey/{configKey}/exists")
+    public boolean existsConfigKey(@PathVariable String configKey) {
+        return configService.selectConfigByKey(configKey) != null;
+    }
+
     @Operation(summary = "新增参数配置")
     @PreAuthorize("hasAuthority('system:config:add')")
     @AuditLog(module = "CONFIG", action = "ADD")
