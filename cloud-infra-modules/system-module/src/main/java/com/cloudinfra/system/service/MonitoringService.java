@@ -103,7 +103,7 @@ public class MonitoringService {
      */
     public VirtualThreadStatsView getVirtualThreadStats() {
         ThreadStats threads = currentThreadStats();
-        return new VirtualThreadStatsView(threads.activeVirtual(), threads.blockedVirtual());
+        return new VirtualThreadStatsView(threads.activeVirtual(), threads.blockedVirtual(), System.currentTimeMillis());
     }
 
     /**

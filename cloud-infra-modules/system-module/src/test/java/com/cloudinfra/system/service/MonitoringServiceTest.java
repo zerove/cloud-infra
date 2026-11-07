@@ -132,6 +132,7 @@ class MonitoringServiceTest {
 
         assertThat(stats.activeVirtual()).isGreaterThanOrEqualTo(0);
         assertThat(stats.blockedVirtual()).isGreaterThanOrEqualTo(0);
+        assertThat(stats.sampledAtEpochMs()).isPositive();
         verify(userMapper, times(0)).selectCount(any());
         verify(metricsMapper, times(0)).selectStorageUsage();
         verify(metricsMapper, times(0)).selectChannelDeliveryStats();

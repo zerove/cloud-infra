@@ -6,5 +6,6 @@ package com.cloudinfra.system.domain;
  * <p>{@code blockedVirtual} 作为“钉住风险”的可观测代理：处于 {@link Thread.State#BLOCKED}
  * 的虚拟线程通常对应 synchronized/监视器等待。
  */
-public record VirtualThreadStatsView(int activeVirtual, int blockedVirtual) {
+public record VirtualThreadStatsView(int activeVirtual, int blockedVirtual, long sampledAtEpochMs) {
 }
+
