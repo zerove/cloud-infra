@@ -45,14 +45,18 @@ mvn clean package \
     -pl cloud-infra-gateway,cloud-infra-auth \
     -am
 
+# P2 受控实验（perf-audit 2026-11-05）：默认值保留实测证据配置；可通过 env 覆盖做实验
+NATIVE_BUILD_XMX="${NATIVE_BUILD_XMX:-4g}"
+NATIVE_BUILD_MAXRAM="${NATIVE_BUILD_MAXRAM:-14g}"
+
 mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-gateway
 mvn native:compile -Pnative -DskipTests \
-    -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" \
+    -Dnative.image.args="-J-Xmx${NATIVE_BUILD_XMX} -J-XX:MaxRAM=${NATIVE_BUILD_MAXRAM}" \
     -pl cloud-infra-gateway
 
 mvn spring-boot:process-aot -Pnative -DskipTests -pl cloud-infra-auth
 mvn native:compile -Pnative -DskipTests \
-    -Dnative.image.args="-J-Xmx4g -J-XX:MaxRAM=14g" \
+    -Dnative.image.args="-J-Xmx${NATIVE_BUILD_XMX} -J-XX:MaxRAM=${NATIVE_BUILD_MAXRAM}" \
     -pl cloud-infra-auth
 
 echo -e "${GREEN}>>> Native 二进制文件构建完成。${NC}"

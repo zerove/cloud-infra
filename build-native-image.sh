@@ -126,6 +126,10 @@ echo "=== 8. 生成最终 classpath ==="
 { echo -n "spring-aot-resources.jar:spring-aot-classes:BOOT-INF/classes:"; paste -sd: cp_list.txt; } > cp.txt
 
 echo "=== 8. 启动 native-image 构建 ==="
+# P2 受控实验（perf-audit 2026-11-05 / AGENTS 2026-10-01）：默认值来自 gateway+auth 实测证据
+# （gateway 需 -Xmx4g -XX:MaxRAM=14g 才稳定）。降低堆/MaxRAM 属实验，需单独验证。
+NATIVE_BUILD_XMX="${NATIVE_BUILD_XMX:-4g}"
+NATIVE_BUILD_MAXRAM="${NATIVE_BUILD_MAXRAM:-14g}"
 setsid native-image \
     -cp @cp.txt \
     -H:ReflectionConfigurationFiles="$BUILD_DIR/aot-reflect-config.json" \
@@ -135,6 +139,6 @@ setsid native-image \
     -H:+SharedArenaSupport \
     com.cloudinfra.gateway.GatewayApplication \
     -o cloud-infra-gateway-binary \
-    -J-Xmx4g -J-XX:MaxRAM=14g -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
+    -J-Xmx"$NATIVE_BUILD_XMX" -J-XX:MaxRAM="$NATIVE_BUILD_MAXRAM" -J-XX:CICompilerCount=2 > native-build.log 2>&1 &
 echo "native-image 已在后台启动 (PID=$!)"
 echo "监控: tail -f $BUILD_DIR/native-build.log"
