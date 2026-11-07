@@ -137,6 +137,20 @@ class NotificationControllerMyEndpointsTest {
     }
 
     @Test
+    void getQuota_usesAuthenticatedUser() throws Exception {
+        given(quotaService.getQuotaStatus(AUTHENTICATED_USER_ID))
+            .willReturn(new NotificationQuotaService.QuotaStatus(1, 1000, 999, 3600));
+
+        mockMvc.perform(get("/notification/quota"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.used").value(1))
+            .andExpect(jsonPath("$.data.remaining").value(999));
+
+        then(quotaService).should().getQuotaStatus(AUTHENTICATED_USER_ID);
+    }
+
+    @Test
     void myLogs_usesAuthenticatedUser_notClientUserIdParam() throws Exception {
         given(notificationService.getLogs(eq(AUTHENTICATED_USER_ID), any(PageQuery.class)))
             .willReturn(PageResult.empty());
