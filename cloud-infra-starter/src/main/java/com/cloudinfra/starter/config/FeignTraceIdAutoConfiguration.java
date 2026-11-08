@@ -17,8 +17,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConditionalOnClass(feign.RequestInterceptor.class)
 // 排除 cloud-infra-auth 模块，该模块自行配置 feignAuthInterceptor
-// matchIfMissing=true: 当 spring.application.name 缺失或不为 cloud-infra-auth 时生效
-@ConditionalOnProperty(prefix = "spring.application", name = "name", havingValue = "cloud-infra-auth", matchIfMissing = false)
+// 当 spring.application.name 缺失或不为 cloud-infra-auth 时生效
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression(
+    "!'cloud-infra-auth'.equals('${spring.application.name:}')")
 public class FeignTraceIdAutoConfiguration {
 
     @Autowired
