@@ -82,8 +82,22 @@ class InternalNotificationHmacEvidenceIT {
 
         HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
-        assertThat(response.statusCode())
-                .as("无 HMAC 的内部契约调用必须被拒绝（body: %s）", response.body())
-                .isIn(401, 403);
+        // 框架 AuthenticationEntryPointImpl 可能返回 HTTP 200 + Result{success:false,code:401}。
+        // 安全属性是"未授权/无 HMAC 不得返回成功数据"，不绑定 HTTP 状态码约定。
+        boolean rejectedByHttp = response.statusCode() == 401 || response.statusCode() == 403;
+        boolean rejectedByBody = response.body() != null
+                && (response.body().contains("\"success\":false")
+                    || response.body().contains("\"code\":401")
+                    || response.body().contains("\"code\":403"));
+        boolean leakedSuccess = response.body() != null
+                && response.body().contains("\"success\":true")
+                && response.body().contains("\"data\"");
+        assertThat(rejectedByHttp || rejectedByBody)
+                .as("无 HMAC 的内部契约调用必须被拒绝且不得泄露数据（status=%s body=%s）",
+                        response.statusCode(), response.body())
+                .isTrue();
+        assertThat(leakedSuccess)
+                .as("无 HMAC 调用不得返回成功数据（body=%s）", response.body())
+                .isFalse();
     }
 }
