@@ -454,9 +454,10 @@ public class NotificationServiceIntegrationTest {
             notificationMapper.insert(n);
         }
 
-        // When - 第 1 页 (page=1, size=10)
+        // When - 第 1 页 (page=1, size=10) — B3: legacy 端点仅允许本人
         webTestClient.get()
                 .uri("/notification/history?userId=10&page=1&size=10")
+                .header("X-User-Id", "10")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})
@@ -470,6 +471,7 @@ public class NotificationServiceIntegrationTest {
         // When - 第 2 页 (page=2, size=10)
         webTestClient.get()
                 .uri("/notification/history?userId=10&page=2&size=10")
+                .header("X-User-Id", "10")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})
@@ -507,9 +509,10 @@ public class NotificationServiceIntegrationTest {
         log2.setDuration(200L);
         logMapper.insert(log2);
 
-        // When
+        // When — B3: legacy 端点仅允许本人
         webTestClient.get()
                 .uri("/notification/logs?userId=20")
+                .header("X-User-Id", "20")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(new ParameterizedTypeReference<Result<List<Object>>>() {})

@@ -36,11 +36,10 @@ class ControllerAuthorizationTest {
     /**
      * 允许不带 {@code @PreAuthorize} 的路径前缀。
      *
-     * <p>本模块<b>零例外</b>: notification 没有 {@code /internal/} 服务间端点,
-     * 全部端点都是用户面 API。因此这里刻意留空 —— 一旦将来出现例外,
-     * 下面的 {@code allowlistStaysMinimal} 会立刻变红, 迫使提出者说明理由。</p>
+     * <p>{@code /internal/} 由 {@code NotificationSecurityConfig} 的 HMAC 单点签名决策保护，
+     * 不走用户 {@code @PreAuthorize} 权限语义（与 system-module 一致）。</p>
      */
-    private static final List<String> UNPROTECTED_ALLOWLIST = List.of();
+    private static final List<String> UNPROTECTED_ALLOWLIST = List.of("/internal/");
 
     @Test
     @DisplayName("所有端点都必须带 @PreAuthorize")
@@ -63,7 +62,8 @@ class ControllerAuthorizationTest {
                 if (classLevelAuth || AnnotatedElementUtils.hasAnnotation(method, PreAuthorize.class)) {
                     continue;
                 }
-                if (UNPROTECTED_ALLOWLIST.stream().anyMatch(full::startsWith)) {
+                if (UNPROTECTED_ALLOWLIST.stream().anyMatch(full::startsWith)
+                        || UNPROTECTED_ALLOWLIST.stream().anyMatch(path::startsWith)) {
                     continue;
                 }
                 gaps.add(type.getSimpleName() + "  " + full);
@@ -80,8 +80,8 @@ class ControllerAuthorizationTest {
     @DisplayName("允许清单必须保持最小（防止被当成绕过鉴权的后门）")
     void allowlistStaysMinimal() {
         assertThat(UNPROTECTED_ALLOWLIST)
-            .as("notification 无 /internal/ 端点, 新增例外前请先说明该端点为何真的不需要权限判定")
-            .isEmpty();
+            .as("仅允许 /internal/（HMAC 契约）豁免；新增例外前请先说明该端点为何不需要用户权限判定")
+            .containsExactly("/internal/");
     }
 
     private static Set<BeanDefinition> scanControllers() {

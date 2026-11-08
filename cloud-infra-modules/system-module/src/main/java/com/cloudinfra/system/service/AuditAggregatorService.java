@@ -63,7 +63,8 @@ public class AuditAggregatorService {
             // 2. 异步拉取通知发送日志 (远程 API)
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
                 try {
-                    Result<List<NotificationLogDTO>> result = notificationApi.getLogs(userId);
+                    // B3/S2: 用户端 /notification/logs 禁止跨用户；审计聚合走内部 HMAC 契约
+                    Result<List<NotificationLogDTO>> result = notificationApi.getInternalLogs(userId);
                     if (result == null || result.getData() == null) {
                         return Collections.emptyList();
                     }
