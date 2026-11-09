@@ -6,6 +6,7 @@ import com.cloudinfra.framework.plugin.IServicePlugin;
 import com.cloudinfra.system.plugin.PluginManager;
 import com.cloudinfra.system.plugin.PluginRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,10 +18,19 @@ import java.util.Map;
 
 /**
  * 插件管理控制器
+ *
+ * <p><b>2026-11-09 修正</b>: 必须与 {@link PluginManager} 同条件。
+ * 此前控制器无条件依赖管理器, 而管理器自 ADR-010 起是
+ * {@code @ConditionalOnProperty(cloud-infra.plugin.enabled=true, matchIfMissing=true)}。
+ * 2026-10-15 起 Nacos 配置把该开关改为默认 {@code false}（fail-closed 安全基线）,
+ * 于是 system-module 启动即失败:
+ * {@code Parameter 0 of constructor in PluginController required a bean of type
+ * 'PluginManager' that could not be found}。禁用插件管理时接口整体不暴露（404）。</p>
  */
 @RestController
 @RequestMapping("/system/plugins")
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "cloud-infra.plugin.enabled", havingValue = "true", matchIfMissing = true)
 public class PluginController {
 
     private final PluginManager pluginManager;
