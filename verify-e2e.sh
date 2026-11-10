@@ -623,8 +623,14 @@ if [ ! -f .env ]; then
     # Nacos 3.2 容器在 NACOS_AUTH_ENABLE=false 下仍要求 NACOS_AUTH_TOKEN 为合法 Base64 串,
     # compose 将其 default 为 "" -> 容器 entrypoint 校验失败 exit 255 -> 基础设施启动失败。
     # 因此 .env 生成时必须补一个随机 token（.env.example 里没有该键）。
-    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
-    grep -q '^NACOS_AUTH_TOKEN=' .env && sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${_nats_tok}|" .env || echo "NACOS_AUTH_TOKEN=${_nats_tok}" >> .env
+    # token 必须带合法 Base64 格式 (含填充), 否则 Nacos 校验报
+    # "env NACOS_AUTH_TOKEN must be set with Base64 String"。
+    _nats_tok=$(head -c 24 /dev/urandom | base64 | tr -d '\n')
+    if grep -q '^NACOS_AUTH_TOKEN=' .env; then
+      sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${_nats_tok}|" .env
+    else
+      printf '\nNACOS_AUTH_TOKEN=%s\n' "$_nats_tok" >> .env
+    fi
     ok ".env 已生成 (密钥随机化)"
   else
     fail ".env 缺失且 .env.example 不存在"
