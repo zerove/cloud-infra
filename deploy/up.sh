@@ -323,7 +323,10 @@ fi
 
 echo "=== 1. 停止并清理旧环境 ==="
 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true
-echo "  已停止旧环境 (保留数据卷)"
+# 清理 Nacos Derby 数据避免自锁/损坏状态（配置每次从 deploy/config 重新同步，
+# 服务注册为运行时状态，清空不影响正确性；但可避免 Derby 半初始化导致的重启循环）。
+rm -rf "$SCRIPT_DIR/nacos/data/derby-data" "$SCRIPT_DIR/nacos/data/protocol" 2>/dev/null || true
+echo "  已停止旧环境 (保留数据卷, 已重置 Nacos 本地状态)"
 
 # ⚠️ 两阶段启动的原因 (2026-10-02, CI E2E run 37050526759 的根因):
 #   原来只有一次 `podman-compose up -d`, 把基础设施和 6 个微服务一起拉起,
@@ -367,9 +370,11 @@ for i in $(seq 1 90); do
     sleep 2
 done
 if [ "$NACOS_READY" -ne 1 ]; then
-    NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+    NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
     echo "❌ Nacos 启动超时 (180s) [$NACOS_STATE]" >&2
     podman logs --tail 40 cloud-nacos 2>&1 || true
+    echo "--- nacos 内部日志 tail ---" >&2
+    podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out 2>/dev/null || echo "(无 nacos.log/start.out)"' 2>&1 || true
     exit 1
 fi
 
@@ -425,7 +430,24 @@ for attempt in $(seq 1 15); do
   sleep 2
 done
 if [ "$CONFIG_READY" -eq 1 ]; then
-  echo "  ✓ 全部配置可读, 微服务可以安全启动"
+  echo "  ✓ 全部配置可读"
+  # Nacos 在同步后可能因 Derby/资源问题重启导致配置丢失；做短暂稳定性确认。
+  sleep 3
+  for i in $(seq 1 30); do
+    if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+      echo "  ✓ Nacos 同步后仍可用 ($((i*2))s 内确认)"
+      break
+    fi
+    [ $i -eq 30 ] && {
+      NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
+      podman logs --tail 40 cloud-nacos 2>&1 || true
+      podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out 2>/dev/null || echo "(无 nacos.log/start.out)"' 2>&1 || true
+      exit 1
+    }
+    sleep 2
+  done
+  echo "  ✓ 微服务可以安全启动"
 else
   # 这里必须 exit: 带着空配置启动服务, 失败会以"业务 bug"的面貌出现在
   # 服务日志里, 而不是以"配置没同步好"的面貌出现在这里。

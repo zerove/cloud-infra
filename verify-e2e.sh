@@ -767,6 +767,8 @@ wait_nacos_ready() {
   state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
   echo "  Nacos 未在预期时间内可用 [$state]" >&2
   podman logs --tail 30 cloud-nacos >&2 2>&1 || true
+  echo "--- nacos 内部日志 tail ---" >&2
+  podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log 2>/dev/null || echo "(无内部日志)"' >&2 2>&1 || true
   return 1
 }
 if ! wait_nacos_ready; then
