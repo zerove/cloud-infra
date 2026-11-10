@@ -735,10 +735,10 @@ else
   fi
   echo "--- 日志首 5 行(失败消息通常在这里, 不在末尾) ---" >&2
   head -5 "$UP_LOG" >&2 || true
-  echo "--- 日志中疑似失败行(❌/启动超时/exit/error) ---" >&2
-  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2|compose up -d 失败|Error:|ERROR:|Failed|failed|Cannot |No such|Traceback' "$UP_LOG" 2>/dev/null | tail -30 >&2 || echo "  (无匹配行)" >&2
-  echo "--- 日志末尾 80 行 ---" >&2
-  tail -80 "$UP_LOG" >&2 || true
+  echo "--- 日志中疑似失败行(❌/启动超时/exit) ---" >&2
+  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2' "$UP_LOG" 2>/dev/null | tail -20 >&2 || echo "  (无匹配行)" >&2
+  echo "--- 日志末尾 40 行 ---" >&2
+  tail -40 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
   podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
   dump_container_diagnostics
@@ -747,12 +747,45 @@ fi
 echo
 
 # 4. 漂移检测 (必须在上一步之后: Nacos 没起来时所有配置都会被判"漂移")
+#
+# ⚠️ up.sh --full 在 3c 已做回读验证, 但 Nacos 可能在其后重启/未稳定
+# (CI 实测: 配置同步后 nacos 重启, Derby 状态丢失导致全部配置"不存在")。
+# 先确认 Nacos 可读再做漂移检测; 若检测失败则等待就绪后尝试一次重同步再判定。
 echo "[4/7] Nacos 配置漂移检测 ..."
-if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
+wait_nacos_ready() {
+  local i state
+  for i in $(seq 1 45); do
+    if curl -sf "http://localhost:8848/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+      return 0
+    fi
+    if [ $((i % 10)) -eq 0 ]; then
+      state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      echo "  等待 Nacos 可用... ($i/45) [$state]" >&2
+    fi
+    sleep 2
+  done
+  state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+  echo "  Nacos 未在预期时间内可用 [$state]" >&2
+  podman logs --tail 30 cloud-nacos >&2 2>&1 || true
+  return 1
+}
+if ! wait_nacos_ready; then
+  fail "Nacos 在漂移检测前不可用"
+elif ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
   ok "Nacos 配置 0 漂移"
 else
-  fail "Nacos 配置存在漂移"
-  ./deploy/up.sh --check 2>&1 | tail -3 >&2
+  echo "  首次漂移检测失败, 等待 Nacos 稳定后尝试重同步..." >&2
+  if wait_nacos_ready && ./deploy/up.sh --sync >/dev/null 2>&1 && wait_nacos_ready; then
+    if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
+      ok "Nacos 配置 0 漂移 (重同步后)"
+    else
+      fail "Nacos 配置存在漂移 (重同步后仍不一致)"
+      ./deploy/up.sh --check 2>&1 | tail -5 >&2
+    fi
+  else
+    fail "Nacos 配置存在漂移且重同步失败"
+    ./deploy/up.sh --check 2>&1 | tail -5 >&2 || true
+  fi
 fi
 echo
 

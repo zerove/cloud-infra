@@ -261,11 +261,17 @@ nacos_config_upload() {
   local filename
   filename=$(basename "$file")
   local resp
+  local ctype="yaml"
+  case "$filename" in
+    *.json) ctype="json" ;;
+    *.properties) ctype="properties" ;;
+    *.xml) ctype="xml" ;;
+  esac
   resp=$(curl -sf -X POST "$NACOS_URL/nacos/v3/admin/cs/config" \
     --data-urlencode "dataId=$filename" \
     --data-urlencode "groupName=DEFAULT_GROUP" \
     --data-urlencode "namespaceId=public" \
-    --data-urlencode "type=yaml" \
+    --data-urlencode "type=$ctype" \
     --data-urlencode "content@${file}" 2>/dev/null) || { echo "  ⚠️  导入 $filename 失败 (curl error)"; return 1; }
   # v3 API 返回 {"code":0,"message":"success","data":true} 表示成功
   if echo "$resp" | grep -q '"code":0'; then
@@ -329,13 +335,7 @@ echo "  已停止旧环境 (保留数据卷)"
 echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
   # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
-  # 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
-  if ! podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d; then
-    rc=$?
-    echo "❌ 基础设施 compose up -d 失败 (exit=$rc)" >&2
-    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps -a >&2 2>&1 || true
-    exit "$rc"
-  fi
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
 fi
 
 # 等待 Nacos 就绪
