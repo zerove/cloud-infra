@@ -442,7 +442,7 @@ if [ "$CONFIG_READY" -eq 1 ]; then
       NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
       echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
       podman logs --tail 40 cloud-nacos 2>&1 || true
-      podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out 2>/dev/null || echo "(无 nacos.log/start.out)"' 2>&1 || true
+      podman exec cloud-nacos sh -c 'for f in /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log /home/nacos/logs/config-fatal.log /home/nacos/logs/naming-server.log /home/nacos/logs/alipay-jraft.log /home/nacos/logs/protocol-raft.log; do [ -f "$f" ] && echo "==> $f <==" && tail -n 60 "$f"; done; echo "--- nacos error grep ---"; grep -nE "ERROR|FATAL|Exception|Caused by|OutOfMemory|Address already|BindException|Login timeout|derby" /home/nacos/logs/*.log 2>/dev/null | tail -40 || echo "(no error matches)"' 2>&1 || true
       exit 1
     }
     sleep 2
