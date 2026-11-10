@@ -620,6 +620,11 @@ if [ ! -f .env ]; then
     sed -i "s|^AUTH_JWT_SECRET=.*|AUTH_JWT_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)|" .env
     sed -i "s|^INTERNAL_CALL_SECRET=.*|INTERNAL_CALL_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)|" .env
     sed -i "s|^AUTH_CAPTCHA_FIXED_CODE=.*|AUTH_CAPTCHA_FIXED_CODE=1234|" .env
+    # Nacos 3.2 容器在 NACOS_AUTH_ENABLE=false 下仍要求 NACOS_AUTH_TOKEN 为合法 Base64 串,
+    # compose 将其 default 为 "" -> 容器 entrypoint 校验失败 exit 255 -> 基础设施启动失败。
+    # 因此 .env 生成时必须补一个随机 token（.env.example 里没有该键）。
+    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
+    grep -q '^NACOS_AUTH_TOKEN=' .env && sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${_nats_tok}|" .env || echo "NACOS_AUTH_TOKEN=${_nats_tok}" >> .env
     ok ".env 已生成 (密钥随机化)"
   else
     fail ".env 缺失且 .env.example 不存在"
