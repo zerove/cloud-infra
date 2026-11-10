@@ -180,6 +180,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Install reactor artifacts (module SNAPSHOT deps must be resolvable)
+        # native:compile 对 `mvn -pl cloud-infra-gateway --batch-mode` 这种**单模块**
+        # 下解析同 reactor 的 SNAPSHOT (gateway -> cloud-infra-common/api/framework-*) 需要
+        # 这些构件在本地 Maven 仓库可见。clean runner 上默认没有 -> 报错:
+        #   Could not resolve dependencies for project cloud-infra-gateway:jar:1.0.0-SNAPSHOT
+        #   Could not find artifact com.cloudinfra:cloud-infra-common:jar:1.0.0-SNAPSHOT
+        # quality-gate job 的 install 步骤不会在本 job 里执行, 故这里显式补一次
+        # (2026-11-10 CI run 42738441187 实证)。
+        run: mvn install -DskipTests -DskipITs -Dcheckstyle.skip=true -Dspotbugs.skip=true --batch-mode
+
       - name: Build Native Images
         # 2026-10-02 四次实测得到的事实（勿凭猜测再改）:
         #
