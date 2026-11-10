@@ -735,10 +735,10 @@ else
   fi
   echo "--- 日志首 5 行(失败消息通常在这里, 不在末尾) ---" >&2
   head -5 "$UP_LOG" >&2 || true
-  echo "--- 日志中疑似失败行(❌/启动超时/exit) ---" >&2
-  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2' "$UP_LOG" 2>/dev/null | tail -20 >&2 || echo "  (无匹配行)" >&2
-  echo "--- 日志末尾 40 行 ---" >&2
-  tail -40 "$UP_LOG" >&2 || true
+  echo "--- 日志中疑似失败行(❌/启动超时/exit/error) ---" >&2
+  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2|compose up -d 失败|Error:|ERROR:|Failed|failed|Cannot |No such|Traceback' "$UP_LOG" 2>/dev/null | tail -30 >&2 || echo "  (无匹配行)" >&2
+  echo "--- 日志末尾 80 行 ---" >&2
+  tail -80 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
   podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
   dump_container_diagnostics
