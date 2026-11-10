@@ -735,6 +735,8 @@ else
   fi
   echo "--- 日志首 5 行(失败消息通常在这里, 不在末尾) ---" >&2
   head -5 "$UP_LOG" >&2 || true
+  echo "--- 日志中疑似失败行(❌/启动超时/exit) ---" >&2
+  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2' "$UP_LOG" 2>/dev/null | tail -20 >&2 || echo "  (无匹配行)" >&2
   echo "--- 日志末尾 40 行 ---" >&2
   tail -40 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
