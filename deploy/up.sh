@@ -329,7 +329,13 @@ echo "  已停止旧环境 (保留数据卷)"
 echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
   # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
+  # 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
+  if ! podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d; then
+    rc=$?
+    echo "❌ 基础设施 compose up -d 失败 (exit=$rc)" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps -a >&2 2>&1 || true
+    exit "$rc"
+  fi
 fi
 
 # 等待 Nacos 就绪

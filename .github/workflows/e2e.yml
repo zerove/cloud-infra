@@ -236,6 +236,9 @@ jobs:
             .e2e-up.log
             .e2e-up-ok.log
             .e2e-up-final.log
+            **/.e2e-up.log
+            **/.e2e-up-ok.log
+            **/.e2e-up-final.log
             deploy/nacos/conf/
             **/target/surefire-reports/
           retention-days: 7
