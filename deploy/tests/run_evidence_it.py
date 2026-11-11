@@ -200,6 +200,9 @@ def main() -> int:
     p.add_argument("--user-id-other", default=os.environ.get("EVIDENCE_USER_ID_OTHER", "999"))
     p.add_argument("--file-id", default=os.environ.get("EVIDENCE_FILE_ID"))
     p.add_argument("--tenant-b-token", default=os.environ.get("EVIDENCE_TENANT_B_TOKEN"))
+    p.add_argument("--tenant-b-token-file", default=os.environ.get("EVIDENCE_FIXTURE_FILE"),
+                   help="从 prepare_evidence_fixture.py 产出的 JSON 里取 tenant_b_token "
+                        "(避免 token 出现在命令行/进程列表里)")
     p.add_argument("--tenant-a-user-id", default=os.environ.get("EVIDENCE_TENANT_A_USER_ID"))
     p.add_argument("--require-notification-source", action="store_true",
                    help="要求审计时间线含 source=NOTIFICATION")
@@ -210,6 +213,18 @@ def main() -> int:
     args = p.parse_args()
 
     scope = SCOPES[args.scope]
+
+    # token 从文件读: 命令行参数会出现在进程列表(/proc/*/cmdline) 里, 文件更安全
+    if args.tenant_b_token_file and not args.tenant_b_token:
+        try:
+            with open(args.tenant_b_token_file, "r", encoding="utf-8") as f:
+                args.tenant_b_token = (json.load(f) or {}).get("tenant_b_token")
+        except Exception as e:
+            log(f"FAIL 读取 {args.tenant_b_token_file} 失败: {e}")
+            return 2
+        if not args.tenant_b_token:
+            log(f"FAIL {args.tenant_b_token_file} 里没有 tenant_b_token")
+            return 2
 
     log(f"scope={args.scope} module={scope['module']}")
 
