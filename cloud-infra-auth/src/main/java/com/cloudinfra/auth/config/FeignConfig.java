@@ -20,7 +20,7 @@ public class FeignConfig {
     void initSecret() { this.internalCallSecret = secretProvider.getSecret(); }
 
     @Bean
-    public RequestInterceptor feignAuthInterceptor() {
+    public FeignAuthInterceptor authFeignAuthInterceptor() {
         return new FeignAuthInterceptor(internalCallSecret);
     }
 }
