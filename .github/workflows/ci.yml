@@ -56,9 +56,12 @@ jobs:
         env:
           # GitHub runner Docker daemon (>=29) 拒绝 docker-java/Testcontainers 1.21 默认协商的旧 API 1.32,
           # 报 "client version 1.32 is too old. Minimum supported API version is 1.40"。
-          # 显式设置兼容版本以让 Testcontainers 能连接 Docker 环境。
+          # DOCKER_API_VERSION 在本栈未被采纳; docker-java 读取 ~/.docker-java.properties 的 api.version。
           DOCKER_API_VERSION: "1.44"
-        run: mvn test-compile failsafe:integration-test failsafe:verify -DskipITs=false --batch-mode
+        run: |
+          mkdir -p "$HOME/.docker"
+          printf 'api.version=1.44\n' > "$HOME/.docker-java.properties"
+          mvn test-compile failsafe:integration-test failsafe:verify -DskipITs=false --batch-mode
 
       - name: Upload test reports
         if: always()
