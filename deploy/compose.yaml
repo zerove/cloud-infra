@@ -893,8 +893,10 @@ services:
     logging: *default-logging
 
   minio:
-    # 固定 release tag: 避免 :latest 拉取策略变化导致 CI 不稳定(曾出现 docker.io denied/quay unauthorized)。
-    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    # 文件存储依赖: E2E/完整环境随 --full 启动, 避免默认基础设施启动阶段因镜像拉取
+    # 不稳定(历史: docker.io :latest denied, quay.io 在 CI 上偶发 unauthorized)阻塞核心链路。
+    profiles: ["full"]
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     container_name: cloud-minio
     mem_limit: 512m
     ports:
