@@ -1,7 +1,6 @@
 package com.cloudinfra.auth.config;
 
 import com.cloudinfra.framework.web.interceptor.FeignAuthInterceptor;
-import feign.RequestInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
