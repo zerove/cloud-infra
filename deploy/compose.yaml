@@ -292,6 +292,10 @@ services:
     logging: *default-logging
 
   promtail:
+    # 可观测性日志采集组件, 非微服务启动/健康前置依赖。
+    # 默认 infra 启动不包含它, 避免宿主机特定路径(/run/user/1000, /home/zeron/...)
+    # 在 CI 等环境不存在时阻塞整个 compose up。
+    profiles: ["observability"]
     image: grafana/promtail:3.4.2
     restart: unless-stopped
     stop_grace_period: 30s
@@ -889,7 +893,8 @@ services:
     logging: *default-logging
 
   minio:
-    image: minio/minio:latest
+    # 固定 release tag: 避免 :latest 拉取策略变化导致 CI 不稳定(曾出现 docker.io denied/quay unauthorized)。
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
     container_name: cloud-minio
     mem_limit: 512m
     ports:

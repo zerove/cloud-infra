@@ -346,10 +346,15 @@ echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控
 if [ "$CHECK_ONLY" -ne 1 ]; then
   # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
   # 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
-  if ! podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d; then
-    rc=$?
+  # ⚠️ 不能在 `if ! cmd; then rc=$?` 里取 rc —— `!` 使分支内 $? 恒为 0，
+  # 会把真实失败伪装成成功退出（2026-11-11 E2E run 42974155608 实证）。
+  set +e
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
     echo "❌ 基础设施 compose up -d 失败 (exit=$rc)" >&2
-    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps -a >&2 2>&1 || true
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps >&2 2>&1 || true
     exit "$rc"
   fi
 fi
@@ -494,7 +499,7 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   sleep 2
   if ! check_microservices_exist; then
     echo "  ⚠️ 首次启动后微服务容器未全部存在 (rc=$UP_RC, 缺: ${MISSING_SVCS[*]})" >&2
-    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps -a >&2 2>&1 || true
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps >&2 2>&1 || true
     # 兜底: 若走的是 profile 路径且部分/全部缺失, 再尝试显式点名服务名。
     # podman-compose 1.5.0 支持 --profile, 但在某些依赖/状态组合下 up 可能未创建
     # profiled 服务; 显式点名在多版本中通常可绕过 profile 过滤。
@@ -515,7 +520,7 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
     echo "   排查: FULL=$FULL, compose_supports_profile=$PROFILE_MODE, primary_rc=${UP_RC:-?}, fallback_rc=${FB_RC:-n/a}" >&2
     echo "   实际 primary 参数: ${COMPOSE_ARGS[*]-} ${UP_ARGS[*]}" >&2
     podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-      ps -a >&2 2>&1 || true
+      ps >&2 2>&1 || true
     for svc in "${FULL_SERVICES[@]}"; do
       echo "--- podman inspect/create 状态: cloud-$svc ---" >&2
       podman inspect --format '{{.State.Status}} exit={{.State.ExitCode}} restart={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "cloud-$svc" 2>&1 || echo "(不存在)" >&2

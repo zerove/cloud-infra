@@ -734,7 +734,7 @@ if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
     echo "--- podman ps -a (cloud-*) ---" >&2
     podman ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | grep '^cloud-' >&2 || true
     echo "--- podman-compose ps ---" >&2
-    podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps -a >&2 2>&1 || true
+    podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
     dump_container_diagnostics
     exit 1
   fi
@@ -950,7 +950,7 @@ else
       echo "  ⚠️ 有容器状态为 absent —— 它们从未被创建, 故障在 podman-compose 启动," >&2
       echo "     而不在服务内部。compose 自己的输出:" >&2
       echo "--- podman-compose ps ---" >&2
-      podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps -a >&2 2>&1 || true
+      podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
       echo "--- up.sh 完整日志（成功路径留档）---" >&2
       if [ -s "$SCRIPT_DIR/.e2e-up-ok.log" ]; then
         # 只取 2b 段: 前面是基础设施 up 的刷屏, 与本故障无关。
