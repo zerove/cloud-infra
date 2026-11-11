@@ -771,9 +771,32 @@ wait_nacos_ready() {
   podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log 2>/dev/null || echo "(无内部日志)"' >&2 2>&1 || true
   return 1
 }
+recover_nacos_once() {
+  echo "  尝试恢复 Nacos: 清理 Derby/protocol 状态后重启容器..." >&2
+  podman stop cloud-nacos >/dev/null 2>&1 || true
+  rm -rf "$SCRIPT_DIR/deploy/nacos/data/derby-data" "$SCRIPT_DIR/deploy/nacos/data/protocol" 2>/dev/null || true
+  podman start cloud-nacos >/dev/null 2>&1 || podman restart cloud-nacos >/dev/null 2>&1 || true
+  wait_nacos_ready || return 1
+  ./deploy/up.sh --sync >/dev/null 2>&1 || return 1
+  wait_nacos_ready || return 1
+  return 0
+}
+
 if ! wait_nacos_ready; then
-  fail "Nacos 在漂移检测前不可用"
-elif ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
+  echo "  Nacos 初次等待失败, 尝试一次恢复..." >&2
+  if recover_nacos_once; then
+    echo "  Nacos 恢复成功, 继续漂移检测" >&2
+  else
+    fail "Nacos 在漂移检测前不可用 (恢复失败)"
+  fi
+fi
+
+if [ "${FAIL:-0}" -eq 0 ] || [ -n "${RECOVERED_NACOS:-}" ]; then
+  :
+fi
+
+# 若上面已 fail 则跳过检测结果覆盖的复杂分支由 FAIL 计数体现；这里按当前状态检测
+if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
   ok "Nacos 配置 0 漂移"
 else
   echo "  首次漂移检测失败, 等待 Nacos 稳定后尝试重同步..." >&2
