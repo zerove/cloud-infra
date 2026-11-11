@@ -220,6 +220,13 @@ ensure_env() {
   else
     echo "=== 使用现有 .env (如需重置请删除后重跑) ==="
   fi
+  # Nacos 3.2.3+ 在 NACOS_AUTH_ENABLE=false 下仍会初始化 token 管理器，要求
+  # NACOS_AUTH_TOKEN 为 Base64 且解码后 >= 32 bytes(256 bits)，否则 crash-loop。
+  if ! grep -q '^NACOS_AUTH_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
+    printf '\nNACOS_AUTH_TOKEN=%s\n' "$_nats_tok" >> "$ENV_FILE"
+    echo "  ✓ 已补充 NACOS_AUTH_TOKEN (Base64, >=256 bits)"
+  fi
   # shellcheck disable=SC1090
   # JAVA_OPTS 含空格与引号, 直接 source 会触发 "command not found";
   # 用 process substitution 过滤掉, 仅导出其余变量

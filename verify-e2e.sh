@@ -625,7 +625,9 @@ if [ ! -f .env ]; then
     # 因此 .env 生成时必须补一个随机 token（.env.example 里没有该键）。
     # token 必须带合法 Base64 格式 (含填充), 否则 Nacos 校验报
     # "env NACOS_AUTH_TOKEN must be set with Base64 String"。
-    _nats_tok=$(head -c 24 /dev/urandom | base64 | tr -d '\n')
+    # Nacos 3.2.3+ 校验 secret key >= 256 bits (32 bytes) 且为 Base64；24 bytes(192 bits) 会导致
+    # JwtTokenManager 抛 IllegalArgumentException 并使 Nacos crash-loop (E2E 实证)。
+    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
     if grep -q '^NACOS_AUTH_TOKEN=' .env; then
       sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${_nats_tok}|" .env
     else
