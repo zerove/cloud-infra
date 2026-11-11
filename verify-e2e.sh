@@ -720,6 +720,24 @@ if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
   # $UP_LOG 被后续流程覆盖, artifact 里查不到 podman-compose 的真实输出,
   # 只能靠猜。保留一份不花钱, 省掉的是一整轮 CI。
   cp "$UP_LOG" "$SCRIPT_DIR/.e2e-up-ok.log"
+  # 即时断言: up.sh 报成功且其内部存在性检查应已通过, 但容器可能在此后
+  # 立即消失(崩溃/被移除/compose 行为异常)。在 [5/7] 前先抓住能节省 ~10 分钟
+  # 空转, 并保留 up-ok.log 与当前容器状态作为证据。
+  MISSING_NOW=""
+  for svc in "${MICROSERVICES[@]}"; do
+    podman container exists "cloud-$svc" >/dev/null 2>&1 || MISSING_NOW="$MISSING_NOW $svc"
+  done
+  if [ -n "$MISSING_NOW" ]; then
+    fail "up.sh --full 返回成功, 但微服务容器当前不存在:$MISSING_NOW"
+    echo "--- up.sh 完整日志（成功路径留档, 可能包含 2b 启动细节）---" >&2
+    tail -120 "$UP_LOG" >&2 || true
+    echo "--- podman ps -a (cloud-*) ---" >&2
+    podman ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | grep '^cloud-' >&2 || true
+    echo "--- podman-compose ps ---" >&2
+    podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps -a >&2 2>&1 || true
+    dump_container_diagnostics
+    exit 1
+  fi
 else
   # ⚠️ 措辞不要写成 "compose 启动失败": up.sh --full 后面还有 9 步等待
   # (Nacos / PostgreSQL / Redis / RabbitMQ / ES / Prometheus / Sentinel / 配置同步),
@@ -867,6 +885,7 @@ while :; do
   check_commit_runtime
   MISSING=""
   round_fail=0
+  round_absent=0
   for svc in "${MICROSERVICES[@]}"; do
     # ⚠️ 必须加 timeout（2026-10-04）。
     #   实测 `podman inspect --format '{{.State.Health.Status}}'` 单次耗时
@@ -874,20 +893,32 @@ while :; do
     #   也就是说循环体本身就超过间隔 —— 一旦 podman 变慢(Podman 状态损坏时
     #   单次可到数十秒), 这个循环会**长时间不返回**, 600s 预算形同虚设。
     #
-    #   更危险的是: `|| echo absent` 把"探针取不到值"与"容器真的不存在"
-    #   混为一谈。前者应重试, 后者才是故障。混为一谈会让预算在 podman
-    #   响应变慢时被提前耗尽, 报出一个**与真实原因无关**的失败。
+    #   更危险的是: "探针取不到值"与"容器真的不存在"必须分开。
+    #   前者(podman 慢/超时)应重试且不应消耗“服务未就绪”判定语义；
+    #   后者是确定性事实(absent), 应立即作为真实失败信号暴露。
+    #   2026-10-x E2E 实证: 6 个微服务容器全部不存在时, podman inspect
+    #   立即失败(rc!=0)却被误归类为 probe-timeout, 导致 558 轮空转并输出
+    #   "非服务健康问题"的误导性结论。
     state=$(timeout 15 podman inspect --format '{{.State.Health.Status}}' "cloud-$svc" 2>/dev/null)
     rc=$?
     if [ "$rc" -ne 0 ] || [ -z "$state" ]; then
-      state="probe-timeout"
-      round_fail=1
-      PROBE_FAILS=$((PROBE_FAILS+1))
+      if ! timeout 10 podman container exists "cloud-$svc" >/dev/null 2>&1; then
+        state="absent"
+        round_absent=1
+      else
+        state="probe-timeout"
+        round_fail=1
+        PROBE_FAILS=$((PROBE_FAILS+1))
+      fi
     fi
     [ "$state" = "healthy" ] || MISSING="$MISSING $svc=$state"
   done
   [ "$round_fail" -eq 0 ] && PROBE_FAILS=0
   [ -z "$MISSING" ] && break
+  # 容器确定不存在是真实失败: 不再空转, 立即进入失败诊断分支。
+  if [ "$round_absent" -eq 1 ]; then
+    break
+  fi
   # 探针不可用时**不**消耗判定预算: 继续等, 直到能真正读到状态。
   # 否则报出的 "未 healthy" 是在说探针坏了, 不是在说服务坏了。
   if [ "$round_fail" -eq 1 ]; then

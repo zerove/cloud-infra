@@ -466,33 +466,60 @@ fi
 # 配置已在 Nacos 里, 此时才允许拉起微服务。
 if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   echo "=== 2b. 启动微服务 (配置已就绪) ==="
+  PROFILE_MODE=$(compose_supports_profile && echo yes || echo no)
+  echo "  podman-compose profile 支持: $PROFILE_MODE"
+
+  check_microservices_exist() {
+    MISSING_SVCS=()
+    for svc in "${FULL_SERVICES[@]}"; do
+      podman container exists "cloud-$svc" 2>/dev/null || MISSING_SVCS+=("$svc")
+    done
+    [ "${#MISSING_SVCS[@]}" -eq 0 ]
+  }
+
   mapfile -t UP_ARGS < <(compose_up_args)
+  echo "  尝试启动微服务 [primary]: podman-compose -f $SCRIPT_DIR/compose.yaml --env-file $ENV_FILE ${COMPOSE_ARGS[*]-} ${UP_ARGS[*]}" >&2
+  # ⚠️ 保持 podman-compose + UP_ARGS/--profile full 在同一逻辑命令中:
+  # deploy/tests/test_config_sync_order.py 静态识别"微服务启动点"依赖该模式。
+  set +e
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
     ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+  UP_RC=$?
+  set -e
+  echo "  compose 返回码 [primary]: $UP_RC" >&2
 
   # ⚠️ podman-compose 返回 0 **不等于**微服务起来了（2026-10-03, CI run 37064502008）。
-  #   那次 up.sh 报 PASS、verify-e2e.sh 也据此判 PASS, 而 6 个微服务容器
-  #   全部 absent —— 压根没被创建。compose 1.0.6 在 profile 过滤等情形下
-  #   会"安静地什么都不做"却仍然 exit 0。
-  #
-  #   不加断言的后果: 这是一条**假门禁** —— 上游报成功、下游才发现没起来,
-  #   而两者之间的日志已被重定向丢弃, 排障只能靠猜。
-  #   故这里必须验证"容器确实存在", 而不能只信退出码。
-  #
-  # 只判存在不判 healthy: 健康是另一回事, 由后续就绪等待与 E2E 门禁负责。
-  # 也不打印 podman-compose 的输出(刷屏且无信息量), 有缺失才报。
-  sleep 1
-  MISSING_SVCS=()
-  for svc in "${FULL_SERVICES[@]}"; do
-    podman container exists "cloud-$svc" 2>/dev/null || MISSING_SVCS+=("$svc")
-  done
+  # 也可能返回非 0 但容器已部分/全部创建。两种情况都以容器实际存在性为准，
+  # 同时保留命令/返回码证据。
+  sleep 2
+  if ! check_microservices_exist; then
+    echo "  ⚠️ 首次启动后微服务容器未全部存在 (rc=$UP_RC, 缺: ${MISSING_SVCS[*]})" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps -a >&2 2>&1 || true
+    # 兜底: 若走的是 profile 路径且部分/全部缺失, 再尝试显式点名服务名。
+    # podman-compose 1.5.0 支持 --profile, 但在某些依赖/状态组合下 up 可能未创建
+    # profiled 服务; 显式点名在多版本中通常可绕过 profile 过滤。
+    if [ "$PROFILE_MODE" = "yes" ]; then
+      echo "  尝试兜底: 显式启动 6 个微服务 (不依赖 --profile)..." >&2
+      set +e
+      podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d "${FULL_SERVICES[@]}"
+      FB_RC=$?
+      set -e
+      echo "  compose 返回码 [fallback-explicit]: $FB_RC" >&2
+      sleep 2
+      check_microservices_exist || true
+    fi
+  fi
+
   if [ "${#MISSING_SVCS[@]}" -gt 0 ]; then
     echo "❌ 微服务容器未创建: ${MISSING_SVCS[*]}" >&2
-    echo "   compose 已 exit 0 但这些容器不存在 ⇒ 启动参数被静默忽略。" >&2
-    echo "   排查: FULL=$FULL, compose_supports_profile=$(compose_supports_profile && echo yes || echo no)" >&2
-    echo "   实际 up 参数: ${UP_ARGS[*]}" >&2
+    echo "   排查: FULL=$FULL, compose_supports_profile=$PROFILE_MODE, primary_rc=${UP_RC:-?}, fallback_rc=${FB_RC:-n/a}" >&2
+    echo "   实际 primary 参数: ${COMPOSE_ARGS[*]-} ${UP_ARGS[*]}" >&2
     podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
       ps -a >&2 2>&1 || true
+    for svc in "${FULL_SERVICES[@]}"; do
+      echo "--- podman inspect/create 状态: cloud-$svc ---" >&2
+      podman inspect --format '{{.State.Status}} exit={{.State.ExitCode}} restart={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "cloud-$svc" 2>&1 || echo "(不存在)" >&2
+    done
     exit 1
   fi
   echo "  ✓ ${#FULL_SERVICES[@]} 个微服务容器已创建"
