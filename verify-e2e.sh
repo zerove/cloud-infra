@@ -620,6 +620,19 @@ if [ ! -f .env ]; then
     sed -i "s|^AUTH_JWT_SECRET=.*|AUTH_JWT_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)|" .env
     sed -i "s|^INTERNAL_CALL_SECRET=.*|INTERNAL_CALL_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)|" .env
     sed -i "s|^AUTH_CAPTCHA_FIXED_CODE=.*|AUTH_CAPTCHA_FIXED_CODE=1234|" .env
+    # Nacos 3.2 容器在 NACOS_AUTH_ENABLE=false 下仍要求 NACOS_AUTH_TOKEN 为合法 Base64 串,
+    # compose 将其 default 为 "" -> 容器 entrypoint 校验失败 exit 255 -> 基础设施启动失败。
+    # 因此 .env 生成时必须补一个随机 token（.env.example 里没有该键）。
+    # token 必须带合法 Base64 格式 (含填充), 否则 Nacos 校验报
+    # "env NACOS_AUTH_TOKEN must be set with Base64 String"。
+    # Nacos 3.2.3+ 校验 secret key >= 256 bits (32 bytes) 且为 Base64；24 bytes(192 bits) 会导致
+    # JwtTokenManager 抛 IllegalArgumentException 并使 Nacos crash-loop (E2E 实证)。
+    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
+    if grep -q '^NACOS_AUTH_TOKEN=' .env; then
+      sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${_nats_tok}|" .env
+    else
+      printf '\nNACOS_AUTH_TOKEN=%s\n' "$_nats_tok" >> .env
+    fi
     ok ".env 已生成 (密钥随机化)"
   else
     fail ".env 缺失且 .env.example 不存在"
@@ -707,6 +720,24 @@ if ./deploy/up.sh --full > "$UP_LOG" 2>&1; then
   # $UP_LOG 被后续流程覆盖, artifact 里查不到 podman-compose 的真实输出,
   # 只能靠猜。保留一份不花钱, 省掉的是一整轮 CI。
   cp "$UP_LOG" "$SCRIPT_DIR/.e2e-up-ok.log"
+  # 即时断言: up.sh 报成功且其内部存在性检查应已通过, 但容器可能在此后
+  # 立即消失(崩溃/被移除/compose 行为异常)。在 [5/7] 前先抓住能节省 ~10 分钟
+  # 空转, 并保留 up-ok.log 与当前容器状态作为证据。
+  MISSING_NOW=""
+  for svc in "${MICROSERVICES[@]}"; do
+    podman container exists "cloud-$svc" >/dev/null 2>&1 || MISSING_NOW="$MISSING_NOW $svc"
+  done
+  if [ -n "$MISSING_NOW" ]; then
+    fail "up.sh --full 返回成功, 但微服务容器当前不存在:$MISSING_NOW"
+    echo "--- up.sh 完整日志（成功路径留档, 可能包含 2b 启动细节）---" >&2
+    tail -120 "$UP_LOG" >&2 || true
+    echo "--- podman ps -a (cloud-*) ---" >&2
+    podman ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | grep '^cloud-' >&2 || true
+    echo "--- podman-compose ps ---" >&2
+    podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
+    dump_container_diagnostics
+    exit 1
+  fi
 else
   # ⚠️ 措辞不要写成 "compose 启动失败": up.sh --full 后面还有 9 步等待
   # (Nacos / PostgreSQL / Redis / RabbitMQ / ES / Prometheus / Sentinel / 配置同步),
@@ -715,6 +746,8 @@ else
   # 失败消息位于日志**第一行**, 而 tail -N 取的是**末尾** N 行, 于是"末尾 25 行"
   # 里只剩后续步骤的等待输出, 真正的错误反被截掉 —— 这才是当时"看起来日志为空"的成因。
   fail "deploy/up.sh --full 未完成(可能在 compose 启动, 也可能在后续就绪等待), 末尾 40 行:"
+  # 失败时始终留档一份完整 UP_LOG, 便于从文件定位失败步
+  cp "$UP_LOG" "$SCRIPT_DIR/.e2e-up-final.log" 2>/dev/null || true
   # 排障前提: 即使日志为空也要说清楚, 否则"末尾 N 行"后面接空白会被误读成
   # "脚本没输出任何东西"。
   if [ ! -s "$UP_LOG" ]; then
@@ -722,8 +755,10 @@ else
   fi
   echo "--- 日志首 5 行(失败消息通常在这里, 不在末尾) ---" >&2
   head -5 "$UP_LOG" >&2 || true
-  echo "--- 日志末尾 40 行 ---" >&2
-  tail -40 "$UP_LOG" >&2 || true
+  echo "--- 日志中疑似失败行(❌/启动超时/exit/error) ---" >&2
+  grep -nE '❌|启动超时|未就绪|不可读|放弃启动|超时 \(|exit 1|exit 2|compose up -d 失败|Error:|ERROR:|Failed|failed|Cannot |No such|Traceback' "$UP_LOG" 2>/dev/null | tail -30 >&2 || echo "  (无匹配行)" >&2
+  echo "--- 日志末尾 80 行 ---" >&2
+  tail -80 "$UP_LOG" >&2 || true
   echo "--- compose ps ---" >&2
   podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
   dump_container_diagnostics
@@ -732,12 +767,70 @@ fi
 echo
 
 # 4. 漂移检测 (必须在上一步之后: Nacos 没起来时所有配置都会被判"漂移")
+#
+# ⚠️ up.sh --full 在 3c 已做回读验证, 但 Nacos 可能在其后重启/未稳定
+# (CI 实测: 配置同步后 nacos 重启, Derby 状态丢失导致全部配置"不存在")。
+# 先确认 Nacos 可读再做漂移检测; 若检测失败则等待就绪后尝试一次重同步再判定。
 echo "[4/7] Nacos 配置漂移检测 ..."
+wait_nacos_ready() {
+  local i state
+  for i in $(seq 1 45); do
+    if curl -sf "http://localhost:8848/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+      return 0
+    fi
+    if [ $((i % 10)) -eq 0 ]; then
+      state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      echo "  等待 Nacos 可用... ($i/45) [$state]" >&2
+    fi
+    sleep 2
+  done
+  state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+  echo "  Nacos 未在预期时间内可用 [$state]" >&2
+  podman logs --tail 30 cloud-nacos >&2 2>&1 || true
+  echo "--- nacos 内部日志 tail ---" >&2
+  podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log 2>/dev/null || echo "(无内部日志)"' >&2 2>&1 || true
+  return 1
+}
+recover_nacos_once() {
+  echo "  尝试恢复 Nacos: 清理 Derby/protocol 状态后重启容器..." >&2
+  podman stop cloud-nacos >/dev/null 2>&1 || true
+  rm -rf "$SCRIPT_DIR/deploy/nacos/data/derby-data" "$SCRIPT_DIR/deploy/nacos/data/protocol" 2>/dev/null || true
+  podman start cloud-nacos >/dev/null 2>&1 || podman restart cloud-nacos >/dev/null 2>&1 || true
+  wait_nacos_ready || return 1
+  ./deploy/up.sh --sync >/dev/null 2>&1 || return 1
+  wait_nacos_ready || return 1
+  return 0
+}
+
+if ! wait_nacos_ready; then
+  echo "  Nacos 初次等待失败, 尝试一次恢复..." >&2
+  if recover_nacos_once; then
+    echo "  Nacos 恢复成功, 继续漂移检测" >&2
+  else
+    fail "Nacos 在漂移检测前不可用 (恢复失败)"
+  fi
+fi
+
+if [ "${FAIL:-0}" -eq 0 ] || [ -n "${RECOVERED_NACOS:-}" ]; then
+  :
+fi
+
+# 若上面已 fail 则跳过检测结果覆盖的复杂分支由 FAIL 计数体现；这里按当前状态检测
 if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
   ok "Nacos 配置 0 漂移"
 else
-  fail "Nacos 配置存在漂移"
-  ./deploy/up.sh --check 2>&1 | tail -3 >&2
+  echo "  首次漂移检测失败, 等待 Nacos 稳定后尝试重同步..." >&2
+  if wait_nacos_ready && ./deploy/up.sh --sync >/dev/null 2>&1 && wait_nacos_ready; then
+    if ./deploy/up.sh --check 2>&1 | tail -1 | grep -q "无漂移"; then
+      ok "Nacos 配置 0 漂移 (重同步后)"
+    else
+      fail "Nacos 配置存在漂移 (重同步后仍不一致)"
+      ./deploy/up.sh --check 2>&1 | tail -5 >&2
+    fi
+  else
+    fail "Nacos 配置存在漂移且重同步失败"
+    ./deploy/up.sh --check 2>&1 | tail -5 >&2 || true
+  fi
 fi
 echo
 
@@ -792,6 +885,7 @@ while :; do
   check_commit_runtime
   MISSING=""
   round_fail=0
+  round_absent=0
   for svc in "${MICROSERVICES[@]}"; do
     # ⚠️ 必须加 timeout（2026-10-04）。
     #   实测 `podman inspect --format '{{.State.Health.Status}}'` 单次耗时
@@ -799,20 +893,32 @@ while :; do
     #   也就是说循环体本身就超过间隔 —— 一旦 podman 变慢(Podman 状态损坏时
     #   单次可到数十秒), 这个循环会**长时间不返回**, 600s 预算形同虚设。
     #
-    #   更危险的是: `|| echo absent` 把"探针取不到值"与"容器真的不存在"
-    #   混为一谈。前者应重试, 后者才是故障。混为一谈会让预算在 podman
-    #   响应变慢时被提前耗尽, 报出一个**与真实原因无关**的失败。
+    #   更危险的是: "探针取不到值"与"容器真的不存在"必须分开。
+    #   前者(podman 慢/超时)应重试且不应消耗“服务未就绪”判定语义；
+    #   后者是确定性事实(absent), 应立即作为真实失败信号暴露。
+    #   2026-10-x E2E 实证: 6 个微服务容器全部不存在时, podman inspect
+    #   立即失败(rc!=0)却被误归类为 probe-timeout, 导致 558 轮空转并输出
+    #   "非服务健康问题"的误导性结论。
     state=$(timeout 15 podman inspect --format '{{.State.Health.Status}}' "cloud-$svc" 2>/dev/null)
     rc=$?
     if [ "$rc" -ne 0 ] || [ -z "$state" ]; then
-      state="probe-timeout"
-      round_fail=1
-      PROBE_FAILS=$((PROBE_FAILS+1))
+      if ! timeout 10 podman container exists "cloud-$svc" >/dev/null 2>&1; then
+        state="absent"
+        round_absent=1
+      else
+        state="probe-timeout"
+        round_fail=1
+        PROBE_FAILS=$((PROBE_FAILS+1))
+      fi
     fi
     [ "$state" = "healthy" ] || MISSING="$MISSING $svc=$state"
   done
   [ "$round_fail" -eq 0 ] && PROBE_FAILS=0
   [ -z "$MISSING" ] && break
+  # 容器确定不存在是真实失败: 不再空转, 立即进入失败诊断分支。
+  if [ "$round_absent" -eq 1 ]; then
+    break
+  fi
   # 探针不可用时**不**消耗判定预算: 继续等, 直到能真正读到状态。
   # 否则报出的 "未 healthy" 是在说探针坏了, 不是在说服务坏了。
   if [ "$round_fail" -eq 1 ]; then
@@ -844,7 +950,7 @@ else
       echo "  ⚠️ 有容器状态为 absent —— 它们从未被创建, 故障在 podman-compose 启动," >&2
       echo "     而不在服务内部。compose 自己的输出:" >&2
       echo "--- podman-compose ps ---" >&2
-      podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps -a >&2 2>&1 || true
+      podman-compose -f "$SCRIPT_DIR/deploy/compose.yaml" --env-file "$SCRIPT_DIR/.env" ps >&2 2>&1 || true
       echo "--- up.sh 完整日志（成功路径留档）---" >&2
       if [ -s "$SCRIPT_DIR/.e2e-up-ok.log" ]; then
         # 只取 2b 段: 前面是基础设施 up 的刷屏, 与本故障无关。

@@ -63,4 +63,31 @@ public interface NotificationApi {
      */
     @GetMapping("/notification/logs")
     Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId);
+
+    /**
+     * 查询当前用户通知历史（不接受 userId，兼容安全路径）
+     */
+    @GetMapping("/notification/my/history")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<List<NotificationHistoryResponse>> getMyHistory(
+            @RequestParam(required = false) NotificationStatus status,
+            @RequestParam(required = false) NotificationType type,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size);
+
+    /**
+     * 查询当前用户发送审计日志（不接受 userId，兼容安全路径）
+     */
+    @GetMapping("/notification/my/logs")
+    @CircuitBreaker(name = "notificationService")
+    @Retry(name = "notificationService")
+    Result<List<NotificationLogDTO>> getMyLogs();
+
+    /**
+     * 获取指定用户发送审计日志（内部 Feign 契约，HMAC 保护，不经网关暴露）。
+     * 形状与 master {@code getLogs(userId)} 对齐，供可信审计聚合使用。
+     */
+    @GetMapping("/internal/notification/logs")
+    Result<List<NotificationLogDTO>> getInternalLogs(@RequestParam Long userId);
 }

@@ -233,6 +233,12 @@ jobs:
           name: e2e-logs-${{ github.run_id }}
           path: |
             /tmp/e2e.log
+            .e2e-up.log
+            .e2e-up-ok.log
+            .e2e-up-final.log
+            **/.e2e-up.log
+            **/.e2e-up-ok.log
+            **/.e2e-up-final.log
             deploy/nacos/conf/
             **/target/surefire-reports/
           retention-days: 7

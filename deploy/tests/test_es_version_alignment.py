@@ -62,7 +62,81 @@ SERVER_CONFIGS = [
      re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
 ]
 
-BOOT_VERSION = "4.1.0"
+def _repo_boot_version() -> str:
+    """Spring Boot 版本从仓库根 pom 读 —— 不手写常量(会与 pom 漂移)。"""
+    txt = (ROOT / "pom.xml").read_text(encoding="utf-8")
+    m = re.search(r"<spring-boot\.version>([^<]+)<", txt)
+    return m.group(1) if m else ""
+
+
+def _mvn_client_major(offline: bool) -> tuple[int, str] | None:
+    """跑一次 dependency:tree; 拿不到则返回 None。
+
+    ⚠️ 必须用 `-DoutputFile`: 原实现带 `-q` 并读 stdout, 而 dependency:tree
+    的输出走 Maven 日志, `-q` 会把它整段吞掉 -> 该路径**从未真正取到过版本**,
+    每次都静默降级到 BOM。守护的第一来源形同虚设。
+    """
+    import tempfile
+    fd = tempfile.NamedTemporaryFile(
+        mode="r", suffix=".es-tree.txt", delete=False, encoding="utf-8"
+    )
+    fd.close()
+    args = ["mvn", "--batch-mode"]
+    if offline:
+        args.append("-o")
+    args += [
+        "-q", "-pl", "cloud-infra-modules/search-service",
+        "dependency:tree", "-Dincludes=co.elastic.clients:elasticsearch-java",
+        f"-DoutputFile={fd.name}",
+    ]
+    try:
+        subprocess.run(
+            args, capture_output=True, text=True, cwd=str(ROOT), timeout=600,
+        )
+        tree = Path(fd.name).read_text(encoding="utf-8", errors="ignore")
+    except (subprocess.SubprocessError, OSError):
+        tree = ""
+    finally:
+        Path(fd.name).unlink(missing_ok=True)
+    m = re.search(r"elasticsearch-java:jar:(\d+)\.", tree)
+    if m:
+        return int(m.group(1)), "mvn dependency:tree" + (" (offline)" if offline else "")
+    return None
+
+
+def _bom_client_major() -> tuple[int, str] | None:
+    """从 spring-boot-dependencies BOM 的 `<elasticsearch-client.version>` 取版本。
+
+    先查本地 ~/.m2; 再按需从 Maven Central 取那个 pom（CI 首次运行 ~/.m2 为空,
+    但网络可用）。只取一个 pom, 比跑完整 dependency:tree 快得多。
+    """
+    boot = _repo_boot_version()
+    if not boot:
+        return None
+    txt = ""
+    local = (
+        Path.home() / ".m2/repository/org/springframework/boot"
+        / "spring-boot-dependencies" / boot / f"spring-boot-dependencies-{boot}.pom"
+    )
+    if local.is_file():
+        txt = local.read_text(encoding="utf-8", errors="ignore")
+        src = local.name
+    if "<elasticsearch-client.version>" not in txt:
+        import urllib.request
+        url = (
+            "https://repo1.maven.org/maven2/org/springframework/boot"
+            f"/spring-boot-dependencies/{boot}/spring-boot-dependencies-{boot}.pom"
+        )
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                txt = r.read().decode("utf-8", "ignore")
+            src = f"central:{local.name}"
+        except Exception:
+            return None
+    mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
+    if mm:
+        return int(mm.group(1).split(".")[0]), src
+    return None
 
 
 def client_major() -> tuple[int, str]:
@@ -70,25 +144,19 @@ def client_major() -> tuple[int, str]:
 
     返回 (major, 来源说明)。
     """
-    # 1) 权威来源: Maven 实际解析结果
-    p = subprocess.run(
-        ["mvn", "-o", "-q", "-pl", "cloud-infra-modules/search-service",
-         "dependency:tree", "-Dincludes=co.elastic.clients:elasticsearch-java"],
-        capture_output=True, text=True, cwd=str(ROOT), timeout=300,
-    )
-    m = re.search(r"elasticsearch-java:jar:(\d+)\.", p.stdout)
-    if m:
-        return int(m.group(1)), "mvn dependency:tree"
+    # 1) 权威来源: Maven 实际解析结果。
+    #    先离线(本地快), 再在线 —— **不能只写 -o**: E2E 在编译前跑本守护,
+    #    runner 的 ~/.m2 为空, 离线必然拿不到依赖树, 守护会误报"自身失效"。
+    #    2026-11-10 CI run 42678273812 即此形态。
+    for offline in (True, False):
+        got = _mvn_client_major(offline)
+        if got:
+            return got
 
-    # 2) 降级: 直接读 BOM
-    import glob
-    pat = str(Path.home() / ".m2/repository/org/springframework/boot"
-              / "spring-boot-dependencies" / BOOT_VERSION / "*.pom")
-    for pom in glob.glob(pat):
-        txt = Path(pom).read_text(encoding="utf-8", errors="ignore")
-        mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
-        if mm:
-            return int(mm.group(1).split(".")[0]), f"{Path(pom).name}"
+    # 2) 降级: 直接读 BOM (本地 ~/.m2 有就用, 没有就从 Maven Central 取该 pom)
+    got = _bom_client_major()
+    if got:
+        return got
     return -1, ""
 
 

@@ -54,6 +54,22 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             public Result<List<NotificationLogDTO>> getLogs(Long userId) {
                 return Result.success(Collections.emptyList());
             }
+
+            @Override
+            public Result<List<NotificationHistoryResponse>> getMyHistory(NotificationStatus status,
+                    NotificationType type, Integer page, Integer size) {
+                return Result.success(Collections.emptyList());
+            }
+
+            @Override
+            public Result<List<NotificationLogDTO>> getMyLogs() {
+                return Result.success(Collections.emptyList());
+            }
+
+            @Override
+            public Result<List<NotificationLogDTO>> getInternalLogs(Long userId) {
+                return Result.success(Collections.emptyList());
+            }
         };
     }
 }

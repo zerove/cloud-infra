@@ -220,6 +220,13 @@ ensure_env() {
   else
     echo "=== 使用现有 .env (如需重置请删除后重跑) ==="
   fi
+  # Nacos 3.2.3+ 在 NACOS_AUTH_ENABLE=false 下仍会初始化 token 管理器，要求
+  # NACOS_AUTH_TOKEN 为 Base64 且解码后 >= 32 bytes(256 bits)，否则 crash-loop。
+  if ! grep -q '^NACOS_AUTH_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
+    printf '\nNACOS_AUTH_TOKEN=%s\n' "$_nats_tok" >> "$ENV_FILE"
+    echo "  ✓ 已补充 NACOS_AUTH_TOKEN (Base64, >=256 bits)"
+  fi
   # shellcheck disable=SC1090
   # JAVA_OPTS 含空格与引号, 直接 source 会触发 "command not found";
   # 用 process substitution 过滤掉, 仅导出其余变量
@@ -261,11 +268,17 @@ nacos_config_upload() {
   local filename
   filename=$(basename "$file")
   local resp
+  local ctype="yaml"
+  case "$filename" in
+    *.json) ctype="json" ;;
+    *.properties) ctype="properties" ;;
+    *.xml) ctype="xml" ;;
+  esac
   resp=$(curl -sf -X POST "$NACOS_URL/nacos/v3/admin/cs/config" \
     --data-urlencode "dataId=$filename" \
     --data-urlencode "groupName=DEFAULT_GROUP" \
     --data-urlencode "namespaceId=public" \
-    --data-urlencode "type=yaml" \
+    --data-urlencode "type=$ctype" \
     --data-urlencode "content@${file}" 2>/dev/null) || { echo "  ⚠️  导入 $filename 失败 (curl error)"; return 1; }
   # v3 API 返回 {"code":0,"message":"success","data":true} 表示成功
   if echo "$resp" | grep -q '"code":0'; then
@@ -317,7 +330,10 @@ fi
 
 echo "=== 1. 停止并清理旧环境 ==="
 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true
-echo "  已停止旧环境 (保留数据卷)"
+# 清理 Nacos Derby 数据避免自锁/损坏状态（配置每次从 deploy/config 重新同步，
+# 服务注册为运行时状态，清空不影响正确性；但可避免 Derby 半初始化导致的重启循环）。
+rm -rf "$SCRIPT_DIR/nacos/data/derby-data" "$SCRIPT_DIR/nacos/data/protocol" 2>/dev/null || true
+echo "  已停止旧环境 (保留数据卷, 已重置 Nacos 本地状态)"
 
 # ⚠️ 两阶段启动的原因 (2026-10-02, CI E2E run 37050526759 的根因):
 #   原来只有一次 `podman-compose up -d`, 把基础设施和 6 个微服务一起拉起,
@@ -329,21 +345,50 @@ echo "  已停止旧环境 (保留数据卷)"
 echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
   # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
+  # 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
+  # ⚠️ 不能在 `if ! cmd; then rc=$?` 里取 rc —— `!` 使分支内 $? 恒为 0，
+  # 会把真实失败伪装成成功退出（2026-11-11 E2E run 42974155608 实证）。
+  set +e
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    echo "❌ 基础设施 compose up -d 失败 (exit=$rc)" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps >&2 2>&1 || true
+    exit "$rc"
+  fi
 fi
 
 # 等待 Nacos 就绪
 echo "=== 3. 等待 Nacos 就绪 ==="
 NACOS_URL="http://localhost:8848"
-for i in $(seq 1 30); do
+NACOS_READY=0
+# CI/全新环境下 Nacos 3.2 + Derby 首启可能 >60s（初始化 schema + 启动 Console/API），
+# 原 30*2s=60s 预算过紧且超时后静默继续，导致后续“上传成功/回读失败”难以归因。
+# 180s 与 ES 首启预算对齐；失败必须显式 exit，不能带着未就绪 Nacos 继续。
+for i in $(seq 1 90); do
     # Nacos 3.2+ 移除 v1 HTTP API, 使用 v3 open API 探测
     if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
-        echo "Nacos 已就绪"
+        echo "Nacos 已就绪 (等待 $((i*2))s)"
+        NACOS_READY=1
         break
     fi
-    echo "等待 Nacos... ($i/30)"
+    if [ $((i % 10)) -eq 0 ]; then
+        NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+        echo "  等待 Nacos... ($i/90, ${i}s) [$NACOS_STATE]"
+    else
+        echo "等待 Nacos... ($i/90)"
+    fi
     sleep 2
 done
+if [ "$NACOS_READY" -ne 1 ]; then
+    NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+    echo "❌ Nacos 启动超时 (180s) [$NACOS_STATE]" >&2
+    podman logs --tail 40 cloud-nacos 2>&1 || true
+    echo "--- nacos 内部日志 tail ---" >&2
+    podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out 2>/dev/null || echo "(无 nacos.log/start.out)"' 2>&1 || true
+    exit 1
+fi
 
 # 同步配置到 Nacos —— 必须在微服务容器启动之前 (见步骤 1 处的说明)。
 # 用 v3 admin API, --data-urlencode content@$file 保证原文多行/中文/转义正确。
@@ -397,7 +442,24 @@ for attempt in $(seq 1 15); do
   sleep 2
 done
 if [ "$CONFIG_READY" -eq 1 ]; then
-  echo "  ✓ 全部配置可读, 微服务可以安全启动"
+  echo "  ✓ 全部配置可读"
+  # Nacos 在同步后可能因 Derby/资源问题重启导致配置丢失；做短暂稳定性确认。
+  sleep 3
+  for i in $(seq 1 30); do
+    if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+      echo "  ✓ Nacos 同步后仍可用 ($((i*2))s 内确认)"
+      break
+    fi
+    [ $i -eq 30 ] && {
+      NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
+      podman logs --tail 40 cloud-nacos 2>&1 || true
+      podman exec cloud-nacos sh -c 'for f in /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log /home/nacos/logs/config-fatal.log /home/nacos/logs/naming-server.log /home/nacos/logs/alipay-jraft.log /home/nacos/logs/protocol-raft.log; do [ -f "$f" ] && echo "==> $f <==" && tail -n 60 "$f"; done; echo "--- nacos error grep ---"; grep -nE "ERROR|FATAL|Exception|Caused by|OutOfMemory|Address already|BindException|Login timeout|derby" /home/nacos/logs/*.log 2>/dev/null | tail -40 || echo "(no error matches)"' 2>&1 || true
+      exit 1
+    }
+    sleep 2
+  done
+  echo "  ✓ 微服务可以安全启动"
 else
   # 这里必须 exit: 带着空配置启动服务, 失败会以"业务 bug"的面貌出现在
   # 服务日志里, 而不是以"配置没同步好"的面貌出现在这里。
@@ -409,33 +471,60 @@ fi
 # 配置已在 Nacos 里, 此时才允许拉起微服务。
 if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
   echo "=== 2b. 启动微服务 (配置已就绪) ==="
+  PROFILE_MODE=$(compose_supports_profile && echo yes || echo no)
+  echo "  podman-compose profile 支持: $PROFILE_MODE"
+
+  check_microservices_exist() {
+    MISSING_SVCS=()
+    for svc in "${FULL_SERVICES[@]}"; do
+      podman container exists "cloud-$svc" 2>/dev/null || MISSING_SVCS+=("$svc")
+    done
+    [ "${#MISSING_SVCS[@]}" -eq 0 ]
+  }
+
   mapfile -t UP_ARGS < <(compose_up_args)
+  echo "  尝试启动微服务 [primary]: podman-compose -f $SCRIPT_DIR/compose.yaml --env-file $ENV_FILE ${COMPOSE_ARGS[*]-} ${UP_ARGS[*]}" >&2
+  # ⚠️ 保持 podman-compose + UP_ARGS/--profile full 在同一逻辑命令中:
+  # deploy/tests/test_config_sync_order.py 静态识别"微服务启动点"依赖该模式。
+  set +e
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
     ${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"} "${UP_ARGS[@]}"
+  UP_RC=$?
+  set -e
+  echo "  compose 返回码 [primary]: $UP_RC" >&2
 
   # ⚠️ podman-compose 返回 0 **不等于**微服务起来了（2026-10-03, CI run 37064502008）。
-  #   那次 up.sh 报 PASS、verify-e2e.sh 也据此判 PASS, 而 6 个微服务容器
-  #   全部 absent —— 压根没被创建。compose 1.0.6 在 profile 过滤等情形下
-  #   会"安静地什么都不做"却仍然 exit 0。
-  #
-  #   不加断言的后果: 这是一条**假门禁** —— 上游报成功、下游才发现没起来,
-  #   而两者之间的日志已被重定向丢弃, 排障只能靠猜。
-  #   故这里必须验证"容器确实存在", 而不能只信退出码。
-  #
-  # 只判存在不判 healthy: 健康是另一回事, 由后续就绪等待与 E2E 门禁负责。
-  # 也不打印 podman-compose 的输出(刷屏且无信息量), 有缺失才报。
-  sleep 1
-  MISSING_SVCS=()
-  for svc in "${FULL_SERVICES[@]}"; do
-    podman container exists "cloud-$svc" 2>/dev/null || MISSING_SVCS+=("$svc")
-  done
+  # 也可能返回非 0 但容器已部分/全部创建。两种情况都以容器实际存在性为准，
+  # 同时保留命令/返回码证据。
+  sleep 2
+  if ! check_microservices_exist; then
+    echo "  ⚠️ 首次启动后微服务容器未全部存在 (rc=$UP_RC, 缺: ${MISSING_SVCS[*]})" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps >&2 2>&1 || true
+    # 兜底: 若走的是 profile 路径且部分/全部缺失, 再尝试显式点名服务名。
+    # podman-compose 1.5.0 支持 --profile, 但在某些依赖/状态组合下 up 可能未创建
+    # profiled 服务; 显式点名在多版本中通常可绕过 profile 过滤。
+    if [ "$PROFILE_MODE" = "yes" ]; then
+      echo "  尝试兜底: 显式启动 6 个微服务 (不依赖 --profile)..." >&2
+      set +e
+      podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d "${FULL_SERVICES[@]}"
+      FB_RC=$?
+      set -e
+      echo "  compose 返回码 [fallback-explicit]: $FB_RC" >&2
+      sleep 2
+      check_microservices_exist || true
+    fi
+  fi
+
   if [ "${#MISSING_SVCS[@]}" -gt 0 ]; then
     echo "❌ 微服务容器未创建: ${MISSING_SVCS[*]}" >&2
-    echo "   compose 已 exit 0 但这些容器不存在 ⇒ 启动参数被静默忽略。" >&2
-    echo "   排查: FULL=$FULL, compose_supports_profile=$(compose_supports_profile && echo yes || echo no)" >&2
-    echo "   实际 up 参数: ${UP_ARGS[*]}" >&2
+    echo "   排查: FULL=$FULL, compose_supports_profile=$PROFILE_MODE, primary_rc=${UP_RC:-?}, fallback_rc=${FB_RC:-n/a}" >&2
+    echo "   实际 primary 参数: ${COMPOSE_ARGS[*]-} ${UP_ARGS[*]}" >&2
     podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-      ps -a >&2 2>&1 || true
+      ps >&2 2>&1 || true
+    for svc in "${FULL_SERVICES[@]}"; do
+      echo "--- podman inspect/create 状态: cloud-$svc ---" >&2
+      podman inspect --format '{{.State.Status}} exit={{.State.ExitCode}} restart={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "cloud-$svc" 2>&1 || echo "(不存在)" >&2
+    done
     exit 1
   fi
   echo "  ✓ ${#FULL_SERVICES[@]} 个微服务容器已创建"
