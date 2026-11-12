@@ -42,9 +42,11 @@ CREATE TABLE IF NOT EXISTS sys_notification_log (
     status VARCHAR(16) NOT NULL,
     error_message TEXT,
     duration BIGINT,
-    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    tenant_id VARCHAR(50) NOT NULL DEFAULT 'default'
 );
 CREATE INDEX IF NOT EXISTS idx_notification_log_nid ON sys_notification_log(notification_id);
+CREATE INDEX IF NOT EXISTS idx_sys_notification_log_tenant_id ON sys_notification_log(tenant_id);
 
 -- 通知模板表
 CREATE TABLE IF NOT EXISTS sys_notification_template (
