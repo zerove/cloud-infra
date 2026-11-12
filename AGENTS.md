@@ -593,8 +593,7 @@ if [[ "$IMG" =~ ^9\. ]]; then 判红; else 判绿; fi
 
 违反上述任一条即视为过度设计。详见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
 
-> **当前存量提醒** (2026-10-01 更新): 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
-> 幂等 500 + codegen 2464)。保留但暂停投入。
+> **当前存量提醒** (2026-10-17 更新): 历史上的零业务引用代码（编排引擎、Outbox、幂等、codegen）已在后续清理中移除或处置；新增能力继续遵循“先有真实业务用例与引用再抽象”的准入原则。
 > **Outbox 的业务负担已于 issue 29 解除**: opt-in 失效已修,
 > `deploy/config/search-service.yaml` 里那个“并不生效”的规避开关与对应死配置已删除。
 
@@ -645,7 +644,6 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
 | `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
 | `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层。**鉴权覆盖由 `ControllerAuthorizationTest` 守护** (2026-09-30 审计发现 3 个端点"认证即可读", 已修; 非 `/internal/` 端点必须有 `@PreAuthorize`, 例外清单必须保持最小)。**多租户已在部署态开启** (`deploy/config` 三个服务), 租户来自 JWT claim 而非客户端请求头, 详见下方“第四课” |
-| `cloud-infra-codegen` | 代码生成框架 (`⚪` 可选工具, 非路线图能力) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块; 仅 `sys_post` 一表验证过, **停止新增模板** |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
 ### 3. 核心业务流程
@@ -892,11 +890,11 @@ native 修好后，`Build & Push Docker Images` 首次真正执行，立刻失�
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30); **该开关已改为默认 fail-closed (true), 两侧同默认, commit `2c4e528`** —— 此前默认 false 使 `isTrustedInternalRequest` 首行恒真、验签代码不可达。守护测试 `*DefaultFailClosedTest` x2 走真实 Spring 装配断言默认值, `WebSocketIdentityTrustIT` 提供端到端证据
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
-- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
+- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient)
 - **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
-- **代码生成**: `cloud-infra-codegen` (`⚪` 可选工具) 含 10+ 模板, 支持 Maven 插件/CLI/编程式三种调用, 基于 Flyway DDL 解析。**不再投入**
+- **历史清理**: `cloud-infra-codegen`（历史可选工具，零业务引用）已移除，不再作为可用能力或路线图投入项
 
 ## Agent skills
 
