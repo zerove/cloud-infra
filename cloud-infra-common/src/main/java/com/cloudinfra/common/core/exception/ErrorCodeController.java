@@ -1,5 +1,6 @@
 package com.cloudinfra.common.core.exception;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,10 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/error-codes")
+// 该控制器位于 cloud-infra-common, 会被每个应用的 scanBasePackages("com.cloudinfra") 扫入,
+// 于是 /api/error-codes 此前在**全部服务**上无鉴权暴露。仓库规则是"非 /internal/ 端点必须
+// 有 @PreAuthorize", 而 ControllerAuthorizationTest 只扫 com.cloudinfra.system, 看不见这里。
+@PreAuthorize("hasAuthority('system:error-code:list')")
 public class ErrorCodeController {
 
     private final ErrorCodeRegistry registry;
