@@ -4,6 +4,7 @@ import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
+import com.cloudinfra.common.core.tenant.TenantContext;
 import com.cloudinfra.system.domain.UnifiedAuditRecord;
 import com.cloudinfra.system.mapper.SysOperLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -44,31 +45,43 @@ public class AuditAggregatorService {
             
             // 1. 异步拉取系统操作日志 (本地 DB)
             CompletableFuture<List<UnifiedAuditRecord>> operLogsFuture = CompletableFuture.supplyAsync(() -> {
-                return operLogMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysOperLog>()
-                        .eq(SysOperLog::getUserId, userId)
-                        .orderByDesc(SysOperLog::getCreateTime)
-                        .last("LIMIT " + OPER_LOG_LIMIT)
-                ).stream().map(log -> new UnifiedAuditRecord(
-                    log.getCreateTime(),
-                    userId.toString(),
-                    log.getTitle(),
-                    log.getOperUrl(),
-                    "SUCCESS", 
-                    log.getOperName(),
-                    "SYSTEM"
-                )).collect(Collectors.toList());
+                // issue 36 深化防御: supplyAsync 提交到 virtual thread executor, ThreadLocal 不继承,
+                // 必须先捕获再 set 回 TenantContext, 使 @TenantFilter 的租户过滤真正生效.
+                String tenantId = TenantContext.getTenantIdOrDefault();
+                TenantContext.setTenantId(tenantId);
+                try {
+                    return operLogMapper.selectList(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysOperLog>()
+                            .eq(SysOperLog::getUserId, userId)
+                            .orderByDesc(SysOperLog::getCreateTime)
+                            .last("LIMIT " + OPER_LOG_LIMIT)
+                    ).stream().map(log -> new UnifiedAuditRecord(
+                        log.getCreateTime(),
+                        userId.toString(),
+                        log.getTitle(),
+                        log.getOperUrl(),
+                        "SUCCESS", 
+                        log.getOperName(),
+                        "SYSTEM"
+                    )).collect(Collectors.toList());
+                } finally {
+                    TenantContext.clear();
+                }
             }, executor);
 
             // 2. 异步拉取通知发送日志 (远程 API)
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     // B3/S2: 用户端 /notification/logs 禁止跨用户；审计聚合走内部 HMAC 契约
+                    // issue 36 深化防御: 在 virtual thread 内注入租户上下文, 经 FeignAuthInterceptor
+                    // 透传 X-Tenant-Id, 由下游 TenantContextFilter (验签后) 装配.
+                    String tenantId = TenantContext.getTenantIdOrDefault();
+                    TenantContext.setTenantId(tenantId);
                     Result<List<NotificationLogDTO>> result = notificationApi.getInternalLogs(userId);
                     if (result == null || result.getData() == null) {
                         return Collections.emptyList();
                     }
-                    
+
                     return result.getData().stream().map(log -> new UnifiedAuditRecord(
                         log.getCreateTime(),
                         userId.toString(),
@@ -81,6 +94,8 @@ public class AuditAggregatorService {
                 } catch (Exception e) {
                     log.error("拉取通知审计日志失败: {}", e.getMessage());
                     return Collections.emptyList();
+                } finally {
+                    TenantContext.clear();
                 }
             }, executor);
 

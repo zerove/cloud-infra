@@ -29,4 +29,7 @@ public class SysOperLog implements Serializable {
     private String errorMsg;
     private LocalDateTime createTime;
     private Long costTime;
+
+    /** 租户 ID (M6-01 多租户隔离; issue 36 纵深防御 - V24 补列) */
+    private String tenantId;
 }
