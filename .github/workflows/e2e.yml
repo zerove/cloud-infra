@@ -170,6 +170,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Gate self-tests (deploy/tests/test_*)
+        # 聚合执行全部 test_* 守护脚本（纯静态/桩数据，不碰容器）。
+        # 逐个写 run: 步骤会让"漏接"完全无声（第四类假门禁）；改为通配聚合，
+        # 由 test_gate_wiring.py 反查并报红。
+        run: |
+          set -euo pipefail
+          for t in deploy/tests/test_*.sh deploy/tests/test_*.py; do
+            echo "::group::$(basename "$t")"
+            case "$t" in
+              *.sh) bash "$t" ;;
+              *.py) python3 "$t" ;;
+            esac
+            echo "::endgroup::"
+          done
+        shell: bash
+
+      - name: Guard gate wiring (no unreferenced gate scripts)
+        # 守护上面的聚合步骤与 check_* 调用方接线：新增/遗忘的门禁脚本在此报红。
+        run: python3 deploy/tests/test_gate_wiring.py
+        shell: bash
+
+      - name: Quick audit (tenancy + trust chain)
+        # 2026-11-02 Session 四条核验的可执行固化版（deploy/tests/quick_audit.sh）。
+        # 覆盖多租户启用、框架残留归零、Controller @PreAuthorize 覆盖率、
+        # 过滤器 order 与信任链。
+        run: bash deploy/tests/quick_audit.sh
+        shell: bash
+
       - name: Start Podman system service (rootless)
         # GitHub runner 默认有 podman, 但 rootless 模式需 lingering 启动守护进程
         run: |
