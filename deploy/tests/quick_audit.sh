@@ -76,10 +76,10 @@ PYEOF
 
 echo "==== 站 0: 多租户已真正启用 ===="
 tcf=$(extract_order "$REPO/cloud-infra-common/src/main/java/com/cloudinfra/common/core/tenant/TenantContextFilter.java")
-n=$(rg -c "@TenantFilter" --type java cloud-infra-modules | awk -F: '{s+=$2} END{print s}')
+n=$(grep -R --include="*.java" -c "@TenantFilter" cloud-infra-modules 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')
 switches=0
 for f in deploy/config/{system-module,file-service,notification-service}.yaml; do
-  if rg -q "^  tenant:" "$f"; then switches=$((switches+1)); fi
+  if grep -q "^  tenant:" "$f"; then switches=$((switches+1)); fi
 done
 if [[ "$n" -ge 9 ]] && [[ "$switches" -eq 3 ]] && [[ -n "$tcf" ]]; then
   echo "PASS TenantContextFilter 与 @TenantFilter 注解数(≥9)、部署态开关(3)均满足。"
@@ -88,7 +88,7 @@ else
 fi
 
 echo "==== 站 1: 已删除框架残留归零 ===="
-hits=$(rg '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' --type java cloud-infra-modules | wc -l)
+hits=$(grep -R --include='*.java' -nE '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' cloud-infra-modules 2>/dev/null | wc -l)
 if [[ "$hits" -eq 0 ]]; then
   echo "PASS 0 命中。"
 else
