@@ -46,6 +46,11 @@ public class NotificationLog {
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
+    /**
+     * 租户 ID (M6-01 多租户隔离; issue 36 纵深防御 - V24 补列)
+     */
+    private String tenantId;
+
     // Manual getters/setters for Lombok compatibility
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -61,4 +66,7 @@ public class NotificationLog {
     public void setDuration(Long duration) { this.duration = duration; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
 }
