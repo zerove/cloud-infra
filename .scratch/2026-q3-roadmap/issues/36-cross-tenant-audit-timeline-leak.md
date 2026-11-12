@@ -80,6 +80,12 @@ INSERT INTO sys_user_role (user_id,role_id) SELECT user_id,9001 FROM sys_user WH
 
 ## 待定的口径（产品决策，不是实现细节）
 
+> **【2026-11-12 更新】ADR-011 已定性：最终口径 = B（租户级审计）**
+>
+> - 决策内容：租户级审计为最终交付口径；跨租户查询拒绝。
+> - 实施：PR #83（端点前置校验 + Result 修复）+ PR #84（V27 表层纵深防御 + Feign 透传 + aggregator 注入）已合入 master。
+> - A（平台级审计放行）仅作为未来例外路径预留（ADR-011），须另走 ADR，不得绕过租户过滤。
+
 | 口径 | 含义 | 需要的改动 |
 | --- | --- | --- |
 | A. 平台级审计 | 任何持 `system:audit:list` 的账号可跨租户查看（当前行为） | 写进文档/ADR，并用 `-Devidence.s4.tenantIsolation.expectCode=200` 固化契约 |
