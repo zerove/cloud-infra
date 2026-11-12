@@ -51,5 +51,5 @@ issue #36（跨租户审计时间线泄漏）的完整技术链：
 ## 关联
 
 - issue #36: `.scratch/2026-q3-roadmap/issues/36-cross-tenant-audit-timeline-leak.md`
-- 交付归档: `docs/releases/FINAL_DELIVERY-2026-11_12-cross-tenant-audit.md`
+- 交付归档: `docs/releases/FINAL_DELIVERY-2026-11-12-cross-tenant-audit.md`
 - deep defense: PR #84（master `32688660`）
