@@ -161,6 +161,39 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * 修复 2026-10-06：StreamingResponseBody 下载 100% 失败（Premature end of chunk）。
+     *
+     * <p>机制（由生产日志逐帧确认，非推断）：
+     * <ol>
+     *   <li>Controller 方法正常执行完（日志：{@code Status: 200 | Duration: 26ms | User: 1}），
+     *       返回 {@code StreamingResponseBody} 后响应已提交；</li>
+     *   <li>Tomcat 异步派发（{@code AsyncRunnable.run → doInternalDispatch}）
+     *       <b>重跑整条过滤链</b>；</li>
+     *   <li>{@code OncePerRequestFilter} 默认在 ASYNC 派发中<b>跳过</b>本过滤器
+     *       （{@code shouldNotFilterAsyncDispatch} 默认返回 true），
+     *       因此身份不会被重新装配 —— 生产堆栈里本过滤器出现 0 次；</li>
+     *   <li>{@code SecurityContextHolder} 默认 {@code MODE_THREADLOCAL}，异步是新线程
+     *       ⇒ 上下文为空 ⇒ {@code anyRequest().authenticated()} 判否
+     *       ⇒ {@code AuthorizationDeniedException}；</li>
+     *   <li>响应已提交，无法再写 401 ⇒ 半截 chunk 传给网关
+     *       ⇒ {@code Premature end of chunk coded message body}。</li>
+     * </ol>
+     *
+     * <p>为何在此重跑而不是传递 SecurityContext：本过滤器的身份来源是<b>请求头 + HMAC 签名</b>
+     * （无状态），异步派发时请求头依然可读，重跑即可从零重建身份；
+     * 而传递上下文需要额外的 AsyncConfigurer 或 DelegatingSecurityContext 包装，
+     * 且一旦过滤器被跳过则上下文依然会丢 —— 重跑是更贴合"无状态认证"设计的做法。
+     *
+     * <p>安全性：重跑<b>不会</b>削弱验签。{@code isTrustedInternalRequest} 依旧按
+     * {@code X-Internal-Call/Timestamp/Nonce} 三个请求头验 HMAC，
+     * 异步派发时这些头仍在，伪造请求依然会被降级为未认证。
+     */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     /** 关闭校验时恒为可信；开启时要求 (timestamp:nonce) 的 HMAC 签名有效。 */
     private boolean isTrustedInternalRequest(HttpServletRequest request) {
         if (!verifyInternalSign) {
