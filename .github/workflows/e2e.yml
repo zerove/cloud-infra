@@ -162,6 +162,14 @@ jobs:
         run: python3 deploy/tests/test_image_tag_expansion.py
         shell: bash
 
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Gate self-tests (deploy/tests/test_*)
         # 聚合执行全部 test_* 守护脚本（纯静态/桩数据，不碰容器）。
         # 逐个写 run: 步骤会让"漏接"完全无声（第四类假门禁）；改为通配聚合，
@@ -189,14 +197,6 @@ jobs:
         # 过滤器 order 与信任链。
         run: bash deploy/tests/quick_audit.sh
         shell: bash
-
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
 
       - name: Start Podman system service (rootless)
         # GitHub runner 默认有 podman, 但 rootless 模式需 lingering 启动守护进程
