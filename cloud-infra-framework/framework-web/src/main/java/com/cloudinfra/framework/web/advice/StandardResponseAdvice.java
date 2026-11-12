@@ -56,7 +56,16 @@ public class StandardResponseAdvice implements ResponseBodyAdvice<Object> {
         if (body == null) {
             return Result.success(null);
         }
-        
+
+        // 修复(issue 36 取证发现): 返回值本身就是 Result (如 @ExceptionHandler 返回
+        // ResponseEntity<Result> 走异常路径时) —— 不能再用 Result.success(body) 再包一层,
+        // 否则错误响应会变成 {"code":200,"data":{"code":403,...,"success":false},
+        // "message":"操作成功","success":true} 这种 success=true/code=200 的嵌套结构,
+        // 客户端拿不到真实的失败码, 安全拒绝与故障被"看起来成功"掩盖。
+        if (body instanceof Result) {
+            return body;
+        }
+
         // 处理 String 类型的返回值：通过 Jackson 序列化为 JSON 字符串
         // 同时覆盖 Content-Type 头，确保客户端按 JSON 解析
         if (body instanceof String) {
