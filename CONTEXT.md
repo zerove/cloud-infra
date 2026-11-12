@@ -23,9 +23,7 @@ The project follows a modular architecture to decouple core infrastructure capab
     *   `file-service`: Object storage abstraction and file management.
     *   `notification-service`: Distributed message push and notification delivery.
     *   `search-service`: Elasticsearch-based high-performance search.
-*   **`cloud-infra-codegen`** (2026-08 新增): 代码生成框架, 消除 RuoYi 风格手工 CRUD 样板:
-    *   `cloud-infra-codegen-core`: FreeMarker 模板 + 表元数据解析 (含 FlywayDdlParser, 无需 DB 连接).
-    *   `cloud-infra-codegen-maven-plugin`: Maven 插件 (JDK 17 编译, 自包含精简模板).
+*   ~~**`cloud-infra-codegen`**~~ (2026-08 新增, **2026-10 清理移除**): 历史可选代码生成工具，零业务引用，已从仓库删除。
 
 ### 2. Key Technical Decisions
 *   **Configuration Management**: Uses **Nacos** for centralized configuration. Shared configurations (e.g., `actuator-config.yaml`) are used to ensure consistency across services.
@@ -61,7 +59,7 @@ Developers should start by looking at the `docs/superpowers` directory for speci
 ## ✅ Recent Optimizations (2026-09) — v1.0.0 候选
 *   **P0-3b 端到端 401 验证** (commit 370dcd1 + ae06566): JWT blacklist 在直连业务模块场景下实测返回 HTTP 401 (含 X-Blacklist-Jti 响应头).
 *   **Caffeine ClassLoader 死锁修复** (commit ef0d69d): cloud-system 内存 768m→2g + JAVA_OPTS 加 `--enable-native-access=ALL-UNNAMED`, 解决 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁.
-*   **cloud-infra-codegen 模块新增** (commit b9a2a84..1359496): 10+ FreeMarker 模板 + FlywayDdlParser (无需 DB 连接), 15 张表自动生成测试通过.
+*   ~~**cloud-infra-codegen 模块**~~ (commit b9a2a84..1359496, 历史): 曾作为可选工具存在；**2026-10 清理中已从仓库移除**（零业务引用）。
 *   **M5-04b SQL 模板 PG 化** (commit 8b6b6de): MySQL 语法 → PostgreSQL 16 风格 (BIGSERIAL / COMMENT ON / IF NOT EXISTS).
 *   **M5-04c 模板增强** (commit 0ef0005): VO 加 @Schema 注解, UpdateDTO @Size 256→255.
 *   **M5-05 FlywayDdlParser 端到端** (commit 2ff8d50): 15 表自动解析 + 智能识别 @TableLogic + SMALLINT/VARCHAR(N)/UNIQUE/DEFAULT.

@@ -234,7 +234,7 @@ Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此�
 ### 5. Code Generation & Business Alert (2026-09, v1.0.0 候选)
 **Goal:** ~~消除 RuoYi 手工 CRUD 样板~~ + 业务告警闭环。
 codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表验证过), 不再作为交付目标推进。
-- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接). 2464 行 + 26 项自测
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 历史已移除): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接). 2464 行 + 26 项自测
   - ⚪ **2026-09-29 降级为可选工具**: 目标“消除 RuoYi 手工 CRUD 样板”仅在 `sys_post` 一张表上验证过, **其余业务表均为手写**。判定为可选开发工具, **不再占用路线图名额、不再新增模板**。若未来真实表迁移需求出现, 再评估投入
 - [x] 🟢 **codegen 模板 PG 化** (commit 8b6b6de): MySQL → PostgreSQL 16 风格 (BIGSERIAL, COMMENT ON, IF NOT EXISTS) + 回归测试.
 - [x] 🟢 **VO @Schema + UpdateDTO @Size 255** (commit 0ef0005): Swagger 字段描述完整 + 校验合理.
@@ -286,7 +286,7 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 
 ### Milestone 5: v1.0.0 Production-Ready (2026-09, 已发布)
 *Focus: P0 修复 + codegen 价值验证 + 业务告警闭环.*
-- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行) — 2026-09-29 降级为可选开发工具, 不再占路线图名额
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行, 历史已移除) — 2026-09-29 降级为可选开发工具, 后续因零业务引用清理出仓库
 - [x] 🟢 **P0-3b 端到端 401 实测** (commit 5a82318): JWT blacklist 运行时验证
 - [x] 🟢 **codegen 灰度迁移 sys_post** (commit 0ccdf52): 验证 codegen 输出与手写代码语义一致
 - [x] 🟢 **M5-03 业务告警 AOP 化** (commit 8430811 + 2c88ea2): @BusinessMetric 注解 + 运行时 Counter 7.0 实测
