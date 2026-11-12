@@ -101,3 +101,10 @@ INSERT INTO sys_user_role (user_id,role_id) SELECT user_id,9001 FROM sys_user WH
 - 2026-11-12：补做**消歧实验**（非超管的租户 B 审计员，仅 `system:audit:list`）：
   仍能读到 tenant A 的记录 ⇒ 排除"超管特权"解释，缺口与角色无关。
   同时把机制细化到"两层缺失"：端点不校验 userId 归属 + 审计依赖的两张表无租户维度。
+- 2026-11-12（本次会话收尾）：实施口径 B 修复（端点租户校验）+ 发现并修复 `StandardResponseAdvice`
+  双层包装缺陷；修复后 S4 证据 4/4 全绿（strict 租户隔离断言转绿），S5 复跑 3/3 全绿（上次超时属冷启动）。
+- 2026-11-12（deep defense 实施）: PR #84 `fix(audit): tenant deep defense on audit log tables +
+  internal tenant propagation` — Flyway V27 补审计表 tenant_id、实体/M 端点 `@TenantFilter`、
+  Feign 内网 `X-Tenant-Id` 透传、`AuditAggregatorService` virtual-thread 租户注入。
+  修复后 CI(含 Unit IT)与 E2E 全绿（IT schema 补 tenant_id 后恢复），S4 4/4 再次全绿。
+  纵深防御 + 端点前置校验 + 响应结构修复三层，现已全部合入 master。
