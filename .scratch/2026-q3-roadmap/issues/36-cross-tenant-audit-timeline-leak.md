@@ -1,6 +1,6 @@
 # issue 36: 跨租户审计读取未被隔离 —— `/system/audit/timeline` 可读他租户数据
 
-Status: open
+Status: resolved (2026-11-12)
 
 ## 现象（真实运行时证据，2026-11-12，merged master `65ab4111` 镜像 + 真实容器栈）
 
@@ -80,6 +80,12 @@ INSERT INTO sys_user_role (user_id,role_id) SELECT user_id,9001 FROM sys_user WH
 
 ## 待定的口径（产品决策，不是实现细节）
 
+> **【2026-11-12 更新】ADR-011 已定性：最终口径 = B（租户级审计）**
+>
+> - 决策内容：租户级审计为最终交付口径；跨租户查询拒绝。
+> - 实施：PR #83（端点前置校验 + Result 修复）+ PR #84（V27 表层纵深防御 + Feign 透传 + aggregator 注入）已合入 master。
+> - A（平台级审计放行）仅作为未来例外路径预留（ADR-011），须另走 ADR，不得绕过租户过滤。
+
 | 口径 | 含义 | 需要的改动 |
 | --- | --- | --- |
 | A. 平台级审计 | 任何持 `system:audit:list` 的账号可跨租户查看（当前行为） | 写进文档/ADR，并用 `-Devidence.s4.tenantIsolation.expectCode=200` 固化契约 |
@@ -91,8 +97,9 @@ INSERT INTO sys_user_role (user_id,role_id) SELECT user_id,9001 FROM sys_user WH
 ## 证据工具（随 PR #81 引入，已合并 master `ec8e87cc`）
 
 - `NotificationSystemB3EvidenceIT.system_audit_timeline_tenantIsolation_when_configured`
-  - 默认：断言**严格隔离**（被拒绝或查不到 + 无载荷）→ 当前**失败**（缺陷证据）
-  - `-Devidence.s4.tenantIsolation.expectCode=200`：固化当前契约 → 通过
+  - 默认：断言**严格隔离**（被拒绝或查不到 + 无载荷）→ **修复后通过**（原为缺陷证据，现为守护）
+  - `-Devidence.s4.tenantIsolation.expectCode=200`：固化"平台级放行"契约 → 仅在口径 A 下使用
+    （口径 A 已由 ADR-011 定性为**未来例外路径**，默认不再使用该开关）
 - `deploy/tests/run_evidence_it.py`：一键复跑（登录 → 注入参数 → failsafe）
 
 ## Comments
@@ -101,3 +108,17 @@ INSERT INTO sys_user_role (user_id,role_id) SELECT user_id,9001 FROM sys_user WH
 - 2026-11-12：补做**消歧实验**（非超管的租户 B 审计员，仅 `system:audit:list`）：
   仍能读到 tenant A 的记录 ⇒ 排除"超管特权"解释，缺口与角色无关。
   同时把机制细化到"两层缺失"：端点不校验 userId 归属 + 审计依赖的两张表无租户维度。
+- 2026-11-12（本次会话收尾）：实施口径 B 修复（端点租户校验）+ 发现并修复 `StandardResponseAdvice`
+  双层包装缺陷；修复后 S4 证据 4/4 全绿（strict 租户隔离断言转绿），S5 复跑 3/3 全绿（上次超时属冷启动）。
+- 2026-11-12（deep defense 实施）: PR #84 `fix(audit): tenant deep defense on audit log tables +
+  internal tenant propagation` — Flyway V27 补审计表 tenant_id、实体/M 端点 `@TenantFilter`、
+  Feign 内网 `X-Tenant-Id` 透传、`AuditAggregatorService` virtual-thread 租户注入。
+  修复后 CI(含 Unit IT)与 E2E 全绿（IT schema 补 tenant_id 后恢复），S4 4/4 再次全绿。
+  纵深防御 + 端点前置校验 + 响应结构修复三层，现已全部合入 master。
+- 2026-11-12（**关闭**）：ADR-011 定性口径 B（租户级审计）为最终交付口径，
+  平台级放行（A）仅留作未来例外路径（须另走 ADR，不得绕过租户过滤）。
+  交付链 #79 → #81 → #82 → #83 → #84 全部合入 master（HEAD `32688660`），
+  最终证据：单测 system 118 / framework-web 56 / notification 58 全绿；真实容器栈
+  S4 4/4 + S5 3/3 全绿；CI(QG/Unit IT/Native/Notification) 与 E2E 全绿。
+  交付归档：`docs/releases/FINAL_DELIVERY-2026-11-12-cross-tenant-audit.md`；
+  决策记录：`docs/adr/ADR-011-tenant-audit-scope.md`。**本 issue 关闭。**
