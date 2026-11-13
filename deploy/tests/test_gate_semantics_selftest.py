@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""test_gate_semantics_selftest.py — 门禁「语义 × 接线」自检（阻断清单一致性守护）
+
+背景（2026-11-08 第三批假门禁收口后）:
+    本仓已有两层守护:
+      - verify-e2e.sh 内嵌 self-test: 只认"阻断门禁必须以 || exit 1 / if ! 接线"
+        的形态, 清单 14 项 (check_sw_oap_config ... check_feign_timeout)。
+      - deploy/tests/test_gate_wiring.py: 只守"脚本是否被引用"。
+    两层都覆盖不到"** advisory 门禁将来被误升为阻断/反之**"这一类漂移 —
+    即: 一个本该告警的门禁, 在调用处被改成 `|| exit 1`;或一个本该阻断的门禁,
+    又被降回 `|| true`。前者会让 E2E 在非关键缺陷上红灯失控, 后者会重新制造
+    "假阻断"。
+
+本守护补上中间层: **对 verify-e2e.sh 中每个 check_* 调用, 校验其声明语义
+(阻断/告警)与实际接线形态一致**, 并把双方固化为同一份期望清单。
+
+判据:
+  - BLOCKING_GATES (14): 必须以 `check_xxx || exit 1` 接线。
+  - ADVISORY_GATES (11): 必须以 `check_xxx || true` 降级。
+  - 任一不一致 → rc=1（负向对照可证）;当前真实仓库状态 → rc=0。
+
+调用: python3 deploy/tests/test_gate_semantics_selftest.py
+"""
+import re
+import sys
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[2] / "verify-e2e.sh"
+REPO = SCRIPT.parents[0]
+
+# 适配说明（issue 37 / PR #106+ 切片）:
+# 本文件从 archive/local-lineage-2026-11-08 恢复后, 原 14+11 清单与
+# origin/master 当前 verify-e2e.sh 不匹配 —— 大量 lineage 门禁尚未回补。
+# 本次按“当前树适用性”收敛为**已存在且真实接线**的门禁, 保留守护意图:
+# 任何已声明门禁的接线语义（阻断/告警）漂移均须红灯; 新增 gate 应在
+# 接线时同步登记本清单（防止 silent semantic drift）。
+#
+# lineage 清单其余项随对应 check_* / 接线切片恢复后再逐项加入。
+BLOCKING_GATES = (
+    "check_commit_budget",
+)
+
+# 当前 advisory：check_sw_oap_config 因 search/SW 共用 ES 9.x 配置已知不匹配
+# 而以 `|| true` 非阻断接线（见 verify-e2e.sh + issue 37）；ES/config 收敛后
+# 应升为阻断并同步更新此清单与调用点。
+ADVISORY_GATES = (
+    "check_sw_oap_config",
+)
+
+
+def strip_comments(text: str) -> str:
+    """剥掉 # 注释行, 再做调用形态匹配（与 verify-e2e awk 判据同源）。"""
+    out = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def find_blocking_calls(text: str) -> set:
+    """收集 `check_xxx || exit 1` 形态的阻断调用。"""
+    return set(re.findall(r"\b(check_[A-Za-z0-9_]*)\s*\|\|\s*exit\s+1\b", text))
+
+
+def is_blocking(text: str, gate: str) -> bool:
+    """阻断形态二: `if ! { …; check_xxx; }; then` (verify-e2e.sh 第 1287 行即此)。"""
+    pattern = r"if\s*!\s*\{(?:[^}]*?)" + re.escape(gate) + r"(?:[^}]*?)\}\s*;\s*then"
+    return bool(re.search(pattern, text))
+
+
+def find_advisory_calls(text: str) -> set:
+    return set(re.findall(r"\b(check_[A-Za-z0-9_]*)\s*\|\|\s*true\b", text))
+
+
+def main() -> int:
+    if not SCRIPT.is_file():
+        print(f"FAIL: {SCRIPT} 不存在", file=sys.stderr)
+        return 2
+    text = strip_comments(SCRIPT.read_text(encoding="utf-8"))
+    blocking_now = find_blocking_calls(text)
+    advisory_now = find_advisory_calls(text)
+
+    problems = []
+    for g in BLOCKING_GATES:
+        if g not in blocking_now and not is_blocking(text, g):
+            problems.append(f"阻断门禁 {g} 未以阻断形态接线（|| exit 1 / if ! 接线）")
+    for g in ADVISORY_GATES:
+        if g in blocking_now:
+            problems.append(f"advisory 门禁 {g} 却被升为阻断 (`|| exit 1`)")
+        if g not in advisory_now:
+            problems.append(f"advisory 门禁 {g} 未以 `|| true` 降级")
+
+    unexpected_advisory = sorted(advisory_now - set(ADVISORY_GATES))
+    if unexpected_advisory:
+        problems.append(
+            "存在未声明语义的 `|| true` 门禁: " + ", ".join(unexpected_advisory))
+
+    if problems:
+        print("FAILED: 门禁语义接线自检发现不一致:")
+        for p in problems:
+            print("  - " + p)
+        print("        期望阻断形态: " + ", ".join(BLOCKING_GATES))
+        print("        期望 advisory 降级形态: " + ", ".join(ADVISORY_GATES))
+        return 1
+    print(f"PASS: 门禁语义接线自检通过 — {len(BLOCKING_GATES)} 阻断 / "
+          f"{len(ADVISORY_GATES)} advisory, 调用形态一致")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
