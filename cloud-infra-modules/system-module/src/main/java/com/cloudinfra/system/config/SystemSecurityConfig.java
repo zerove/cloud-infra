@@ -5,6 +5,7 @@ import com.cloudinfra.framework.security.handler.AccessDeniedHandlerImpl;
 import com.cloudinfra.framework.security.handler.AuthenticationEntryPointImpl;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.crypto.InternalCallSecretProvider;
+import com.cloudinfra.common.core.crypto.InternalCallVerifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -116,22 +117,15 @@ public class SystemSecurityConfig {
             String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
             String timestampHeader = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
             String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
-            if (timestampHeader == null || nonce == null) {
-                return false;
+            String sec = secretProvider.getSecret();
+            // 判定统一走 InternalCallVerifier (单一真源); 本入口无开关, 校验恒生效。
+            boolean ok = InternalCallVerifier.isTrusted(true, sec, sign, timestampHeader, nonce);
+            if (!ok) {
+                org.slf4j.LoggerFactory.getLogger(SystemSecurityConfig.class)
+                    .debug("internalCallMatcher FAIL: secret.len={} sign={} ts={} nonce={}",
+                        sec==null?0:sec.length(), sign, timestampHeader, nonce);
             }
-            try {
-                long timestamp = Long.parseLong(timestampHeader);
-                String sec = secretProvider.getSecret();
-                boolean ok = InternalCallCrypto.verify(sec, sign, timestamp, nonce);
-                if (!ok) {
-                    org.slf4j.LoggerFactory.getLogger(SystemSecurityConfig.class)
-                        .debug("internalCallMatcher FAIL: secret.len={} sign={} ts={} nonce={}",
-                            sec==null?0:sec.length(), sign, timestamp, nonce);
-                }
-                return ok;
-            } catch (NumberFormatException e) {
-                return false;
-            }
+            return ok;
         };
     }
 }
