@@ -39,6 +39,7 @@ REPO = SCRIPT.parents[0]
 BLOCKING_GATES = (
     "check_commit_budget",
     "check_native_alloc_evidence",
+    "check_feign_timeout",
 )
 
 # 当前 advisory：
