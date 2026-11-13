@@ -1,6 +1,6 @@
 # issue 37: master 与本地 lineage 分叉 —— 远端缺失 2026-10/11 加固波次（部署阻断已解除）
 
-Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核心 gate 恢复/接线、jacoco 覆盖率 gate 落地、零使用 codegen 清理、适用 gate 回补、docs/lessons+analysis+audit 资产对齐、Prometheus 告警加载修复与守护恢复、内部调用验签单一真源收敛、部署模板密钥去公开化与 `up.sh` 随机化、门禁语义接线自检（当前树适配）、K8s 探针路径/镜像 tag/Dockerfile JVM flags/端口抢占/文档探针脚本等守护恢复与部分接线已完成；剩余门禁覆盖与其余文档/资产/配置收敛待推进）
+Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核心 gate 恢复/接线、jacoco 覆盖率 gate 落地、零使用 codegen 清理、适用 gate 回补、docs/lessons+analysis+audit 资产对齐、Prometheus 告警加载修复与守护恢复、内部调用验签单一真源收敛、部署模板密钥去公开化与 `up.sh` 随机化、门禁语义接线自检（当前树适配）、K8s 探针路径/镜像 tag/Dockerfile JVM flags/端口抢占/文档探针脚本/compose depends_on/OTel pipeline 引用/课次表格/native 分配实证等守护恢复与接线已完成；剩余门禁覆盖与其余文档/资产/配置收敛待推进）
 
 ## 一句话
 
@@ -38,7 +38,12 @@ Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核�
 | 2026-11-13 | **方案 A 端口抢占 gate 恢复与接线切片完成**（PR #111, `15c0c369`） | 恢复 `deploy/tests/check_port_conflicts.py`、`deploy/tests/test_port_conflicts.py`；在 `verify-e2e.sh` 接入前置 `check_port_conflicts`（`rc=1/2` 阻断）；CI/E2E/native 全绿 |
 | 2026-11-13 | **方案 A 文档探针脚本 gate 恢复切片完成**（PR #112, `94a69f9f`） | 恢复 `deploy/tests/test_docs_probe_scripts.py`（自包含，24/24 通过）；CI/E2E/native 全绿 |
 
-## 当前状态（2026-11-13，基于 `origin/master@94a69f9f` vs `archive/local-lineage-2026-11-08`）
+| 2026-11-13 | 状态刷新（PR #113, `f900450c`） | 同步 #105/#108-#112 后缺口口径（基线 `origin/master@94a69f9f`） |
+| 2026-11-13 | **方案 A compose/OTel 配置 gate 恢复与接线切片完成**（PR #114, `4c263fa9`） | 恢复 `check_compose_dangling_deps.py`/`test_compose_dangling_deps.sh`、`check_otel_pipeline_refs.py`/`test_otel_pipeline_refs.sh` 并在 `verify-e2e.sh` 接入前置阻断门禁；CI/E2E/native 全绿 |
+| 2026-11-13 | **方案 A 课次表格 gate 恢复与 advisory 接线切片完成**（PR #115, `e8c0d999`） | 恢复 `check_lesson_tables.py`/`test_lesson_tables.py`，`verify-e2e.sh` advisory 接线并同步 `test_gate_semantics_selftest.py`；CI/E2E/native 全绿 |
+| 2026-11-13 | **方案 A native 分配实证 gate 恢复与接线切片完成**（PR #116, `432395fd`） | 恢复 `check_native_alloc_evidence.py`/`test_native_alloc_evidence.py`，`verify-e2e.sh` 前置实证门禁接线（rc=1 阻断、rc=2 未判定不阻断）并同步语义自检；CI/E2E/native 全绿 |
+
+## 当前状态（2026-11-13，基于 `origin/master@432395fd` vs `archive/local-lineage-2026-11-08`）
 
 ### 1. 两条 lineage 仍互不包含
 
@@ -52,13 +57,13 @@ git merge-base master origin/master         # 81e9bf0c
 ```bash
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 | sort > /tmp/A
 git ls-tree -r --name-only origin/master                        | sort > /tmp/B
-comm -23 /tmp/A /tmp/B | wc -l   # 108  仅本地 lineage 有
+comm -23 /tmp/A /tmp/B | wc -l   # 100  仅本地 lineage 有
 comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 ```
 
 **仍仅本地 lineage 有（关键项）**：
-- `deploy/tests/` 大量门禁/守护脚本仍缺失（archive 66 vs origin/master **36**；缺 **33** 个，含 `check_*`/`test_*` 守护与判定脚本）
-  - 已在 `origin/master` 恢复/存在的 lineage 相关项包括：`quick_audit.sh`、`test_gate_wiring.py`、`test_gate_semantics_selftest.py`、`test_jacoco_phase_wiring.py`、`test_attr_restore_pattern.py`、`test_env_example_secrets.py`、`test_internal_call_verifier_wiring.py`、`test_prometheus_rule_files.py`、`test_k8s_probe_paths.py`、`test_image_tag_expansion.py`、`test_dockerfile_jvm_flags.py`、`test_probe_timeout_guard.sh`、`check_port_conflicts.py`、`test_port_conflicts.py`、`test_docs_probe_scripts.py` 等
+- `deploy/tests/` 大量门禁/守护脚本仍缺失（archive 66 vs origin/master **44**；缺 **25** 个，含 `check_*`/`test_*` 守护与判定脚本）
+  - 已在 `origin/master` 恢复/存在的 lineage 相关项包括：`quick_audit.sh`、`test_gate_wiring.py`、`test_gate_semantics_selftest.py`、`test_jacoco_phase_wiring.py`、`test_attr_restore_pattern.py`、`test_env_example_secrets.py`、`test_internal_call_verifier_wiring.py`、`test_prometheus_rule_files.py`、`test_k8s_probe_paths.py`、`test_image_tag_expansion.py`、`test_dockerfile_jvm_flags.py`、`test_probe_timeout_guard.sh`、`check_port_conflicts.py`、`test_port_conflicts.py`、`test_docs_probe_scripts.py`、`check_compose_dangling_deps.py`、`test_compose_dangling_deps.sh`、`check_otel_pipeline_refs.py`、`test_otel_pipeline_refs.sh`、`check_lesson_tables.py`、`test_lesson_tables.py`、`check_native_alloc_evidence.py`、`test_native_alloc_evidence.py` 等
 - `cloud-infra-test-support/.../diagnostics` 宿主负载诊断夹具
 - `file-service` / `gateway` / `system-module` 等剩余加固测试与 domain 视图
 
@@ -78,13 +83,13 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 - ✅ **Prometheus 告警规则可加载性与守护**：`gateway-alerts` 原生规则化，`test_prometheus_rule_files.py` 恢复（#101）。
 - ✅ **内部调用验签单一真源收敛**：`InternalCallVerifier` + 站点委托迁移 + `test_internal_call_verifier_wiring.py`（#103）。
 - ✅ **部署模板密钥去公开化与随机化**：`.env.example`/`deploy/up.sh` 修复，`test_env_example_secrets.py` 守护（#106）。
-- ✅ **适用 gate 回补（近期）**：`test_attr_restore_pattern.py`（#95）、`test_k8s_probe_paths.py`/`test_image_tag_expansion.py`（#109）、`test_dockerfile_jvm_flags.py` + Dockerfile 清理（#110）、`check_port_conflicts.py`/`test_port_conflicts.py` + `verify-e2e` 前置接线（#111）、`test_docs_probe_scripts.py`（#112）；`test_probe_timeout_guard.sh` 已存在于 master 且验证通过。
+- ✅ **适用 gate 回补（近期）**：`test_attr_restore_pattern.py`（#95）、`test_k8s_probe_paths.py`/`test_image_tag_expansion.py`（#109）、`test_dockerfile_jvm_flags.py` + Dockerfile 清理（#110）、`check_port_conflicts.py`/`test_port_conflicts.py` + `verify-e2e` 前置接线（#111）、`test_docs_probe_scripts.py`（#112）、`check_compose_dangling_deps.py`/`test_compose_dangling_deps.sh` 与 `check_otel_pipeline_refs.py`/`test_otel_pipeline_refs.sh` + `verify-e2e` 前置阻断接线（#114）、`check_lesson_tables.py`/`test_lesson_tables.py` + advisory 接线（#115）、`check_native_alloc_evidence.py`/`test_native_alloc_evidence.py` + `verify-e2e` 前置实证接线（#116）；`test_probe_timeout_guard.sh` 已存在于 master 且验证通过。
 
 ### 4. 仍未收敛（方案 A 后续）
 
 | 缺口 | 现状 | 影响/风险 |
 |---|---|---|
-| 门禁脚本覆盖 | lineage 仍有 **33 个** `deploy/tests` 脚本未回补；多项 `check_*` 需真实调用点/语义对齐，部分 `test_*` 依赖当前树不存在的函数/资产/配置或对现状判红 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁或误阻断 |
+| 门禁脚本覆盖 | lineage 仍有 **25 个** `deploy/tests` 脚本未回补；多项 `check_*` 需真实调用点/语义对齐，部分 `test_*` 依赖当前树不存在的函数/资产/配置或对现状判红 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁或误阻断 |
 | 文档/资产偏离 | `docs/analysis/`、`docs/audit/`、`docs/lessons/debugging-log.md` 已恢复；其余 lineage 文档/部分加固测试与 domain 视图仍缺失 | 判据与操作指引仍有分叉，排查/治理资产未完全收敛 |
 | 部署态配置收敛 | `check_sw_oap_config` 对当前 SW OAP/search 共用 ES 9.x 配置仍为已知不匹配（非阻断接线告警） | ES/config 未收敛前无法将该守护升为阻断 |
 | 树级残留差异 | `manifests/base/**`、部分 dashboard/脚本/文档等与本地 lineage 重构或删除不一致 | 交付形态与运维资产未统一，后续收敛需分批审慎对齐 |
@@ -104,7 +109,7 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 | 方案 | 做法 | 状态 |
 |---|---|---|
 | **B. 只补迁移** | 恢复 V24–V26 + 成对守护，解除部署阻断 | ✅ 已完成（#87） |
-| **A. 树收敛** | 分批补回缺失加固、恢复门禁与接线、删除远端残留零引用代码，最终使树一致 | 🔄 进行中（#89 安全、#91/#92/#107 gate 恢复与接线、#94 codegen 清理、#95/#109/#110/#111/#112 适用 gate 回补与接线、#97/#99 docs/lessons+analysis+audit 资产对齐、#101/#103/#105/#106 已落地；剩余门禁覆盖、其余文档/资产与配置/树级残留待分批推进） |
+| **A. 树收敛** | 分批补回缺失加固、恢复门禁与接线、删除远端残留零引用代码，最终使树一致 | 🔄 进行中（#89 安全、#91/#92/#107 gate 恢复与接线、#94 codegen 清理、#95/#109/#110/#111/#112/#114/#115/#116 适用 gate 回补与接线、#97/#99 docs/lessons+analysis+audit 资产对齐、#101/#103/#105/#106 已落地；剩余门禁覆盖、其余文档/资产与配置/树级残留待分批推进） |
 | **C. 重建历史** | 重推本地 lineage | 风险最高，需再次清理密钥泄露；不建议优先 |
 
 > 建议后续按**独立可验证切片**推进 A：优先恢复并接线**当前树直接适用**的 `deploy/tests`（`test_*`/`check_*` 成对、具备真实调用点与负向对照，CI/E2E 全绿）；对依赖缺失函数/资产或与现状不一致的项先做对齐再恢复。`check_sw_oap_config` 应在 ES/config 收敛后恢复阻断；若出现真实平台级审计需求，再按需起 ADR-012（不放宽租户过滤）。
@@ -115,23 +120,23 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 # 文件级差异（当前口径）
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 | sort > /tmp/A
 git ls-tree -r --name-only origin/master                        | sort > /tmp/B
-comm -23 /tmp/A /tmp/B | wc -l   # 108
+comm -23 /tmp/A /tmp/B | wc -l   # 100
 comm -13 /tmp/A /tmp/B | wc -l   # 96
 
 # deploy/tests 覆盖口径
-git ls-tree -r --name-only origin/master -- deploy/tests | wc -l                                      # 36
+git ls-tree -r --name-only origin/master -- deploy/tests | wc -l                                      # 44
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | wc -l                  # 66
 comm -23 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sort) \
-         <(git ls-tree -r --name-only origin/master -- deploy/tests | sort) | wc -l                   # 33
+         <(git ls-tree -r --name-only origin/master -- deploy/tests | sort) | wc -l                   # 25
 comm -13 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sort) \
          <(git ls-tree -r --name-only origin/master -- deploy/tests | sort)                           # prepare_evidence_fixture.py / run_evidence_it.py / test_resilience4j_binder_present.py
 
 # 近期落地指纹
-git ls-tree -r --name-only origin/master -- deploy/tests/test_gate_wiring.py deploy/tests/test_jacoco_phase_wiring.py deploy/tests/check_port_conflicts.py deploy/tests/test_port_conflicts.py deploy/tests/test_docs_probe_scripts.py deploy/tests/test_dockerfile_jvm_flags.py deploy/tests/test_probe_timeout_guard.sh
+git ls-tree -r --name-only origin/master -- deploy/tests/test_gate_wiring.py deploy/tests/test_jacoco_phase_wiring.py deploy/tests/check_port_conflicts.py deploy/tests/test_port_conflicts.py deploy/tests/test_docs_probe_scripts.py deploy/tests/test_dockerfile_jvm_flags.py deploy/tests/test_probe_timeout_guard.sh deploy/tests/check_compose_dangling_deps.py deploy/tests/check_otel_pipeline_refs.py deploy/tests/check_lesson_tables.py deploy/tests/check_native_alloc_evidence.py
 rg -n "check_port_conflicts" verify-e2e.sh
 ```
 
 ## 关联
 
 - issue #36（PR #79–#85，ADR-011）
-- PR #86–#112（方案 B、状态刷新与方案 A 各切片；#105/#108/#109/#110/#111/#112 已合并）
+- PR #86–#116（方案 B、状态刷新与方案 A 各切片；#105/#108–#116 已合并）
