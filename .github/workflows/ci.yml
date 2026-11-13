@@ -133,7 +133,11 @@ jobs:
         #   No tests matching pattern "ArchitectureTest" were executed!
         # 注意: 真正的架构违规会以不同的措辞出现 (Architecture Violation ... was violated),
         # 两者不要混淆 —— 本次是参数名失效, 不是分层被破坏。
-        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false --batch-mode
+        #
+        # 2026-11-13: jacoco report/check 已绑 test 阶段（PR #105），本步仅运行
+        # ArchitectureTest 子集，覆盖率样本不代表模块整体；跳过 jacoco 避免与
+        # 覆盖率门禁目的混淆（覆盖率在全量 test/verify 路径评估）。
+        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true --batch-mode
 
       - name: Upload quality reports
         # 本地与 CI 的静态分析结论曾长期不一致 (本地 ~/.m2 残留历史 SNAPSHOT +
