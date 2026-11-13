@@ -1,10 +1,10 @@
 # issue 37: master 与本地 lineage 分叉 —— 远端缺失 2026-10/11 加固波次（部署阻断已解除）
 
-Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核心 gate 恢复/接线、零使用 codegen 清理、适用 gate 回补、docs/lessons+analysis+audit 资产对齐及 Prometheus 告警加载修复/守护恢复已完成；剩余门禁覆盖与其余文档/资产/配置收敛待推进）
+Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核心 gate 恢复/接线、零使用 codegen 清理、适用 gate 回补、docs/lessons+analysis+audit 资产对齐及 Prometheus 告警加载修复/守护恢复已完成，内部调用验签单一真源收敛（`InternalCallVerifier` + 守护恢复）亦已完成；剩余门禁覆盖与其余文档/资产/配置收敛待推进）
 
 ## 一句话
 
-仓库存在**两条互不包含的 master lineage**：`origin/master`（远端）与本地 `master`（984 commits，2026-11-08，已由 `archive/local-lineage-2026-11-08` 保全）。远端历史在密钥清理改写时**未重放 2026-10-05 → 2026-11-08 的直接提交波次**，导致大量加固内容缺失；其中**迁移集部署阻断已解除**，关键安全/功能修复、核心 gate 恢复与接线、零使用 `cloud-infra-codegen` 清理、首批适用 gate 回补、`docs/lessons`/`docs/analysis`/`docs/audit` 资产对齐及 Prometheus 告警规则加载修复与守护恢复已完成，但门禁脚本覆盖与其余文档/资产/部署配置仍未与 lineage 收敛。
+仓库存在**两条互不包含的 master lineage**：`origin/master`（远端）与本地 `master`（984 commits，2026-11-08，已由 `archive/local-lineage-2026-11-08` 保全）。远端历史在密钥清理改写时**未重放 2026-10-05 → 2026-11-08 的直接提交波次**，导致大量加固内容缺失；其中**迁移集部署阻断已解除**，关键安全/功能修复、核心 gate 恢复与接线、零使用 `cloud-infra-codegen` 清理、首批适用 gate 回补、`docs/lessons`/`docs/analysis`/`docs/audit` 资产对齐及 Prometheus 告警规则加载修复与守护恢复已完成，内部调用验签单一真源收敛（`InternalCallVerifier` + 5 站点委托 + 守护恢复）亦已完成，但门禁脚本覆盖与其余文档/资产/部署配置仍未与 lineage 收敛。
 
 ## 进展
 
@@ -26,8 +26,9 @@ Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核�
 | 2026-11-13 | **方案 A 文档/资产对齐切片完成**（PR #99, `14552c59`） | 恢复 `docs/analysis/` 6 份与 `docs/audit/` 3 份 lineage 资产；CI/E2E/native 全绿；对应路径缺口收敛 |
 | 2026-11-13 | 状态刷新（PR #100, `0cfde30a`） | 同步 #98/#99 后缺口口径（基线 `origin/master@14552c59`） |
 | 2026-11-13 | **方案 A 监控告警修复与 gate 恢复切片完成**（PR #101, `490b8eaa`） | 将 `deploy/monitoring/prometheus-rules/gateway-alerts` 从 PrometheusRule CRD 转为原生规则文件（`.yml`，2 groups / 20 rules），恢复 `deploy/tests/test_prometheus_rule_files.py`；CI/E2E/native 全绿 |
+| 2026-11-13 | **方案 A 内部调用验签单一真源切片完成**（PR #103, `9db7bfa3`） | 远端移植 `InternalCallVerifier`（fail-closed 单一真源）+ `InternalCallVerifierTest` / `InternalCallWeakSecretTest` / `InternalCallCrypto` 弱密钥判定 + 5 站点委托迁移（TenantContextFilter / HeaderAuthenticationFilter / WebSocketAuthFilter / SystemSecurityConfig / GrpcSecurityInterceptor / NotificationSecurityConfig）+ 恢复 `deploy/tests/test_internal_call_verifier_wiring.py`；守护 / 单测 / 编译 / CI / E2E / native 全绿 |
 
-## 当前状态（2026-11-13，基于 `origin/master@490b8eaa` vs `archive/local-lineage-2026-11-08`）
+## 当前状态（2026-11-13，基于 `origin/master@9db7bfa3` vs `archive/local-lineage-2026-11-08`）
 
 ### 1. 两条 lineage 仍互不包含
 
@@ -41,12 +42,12 @@ git merge-base master origin/master         # 81e9bf0c
 ```bash
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 | sort > /tmp/A
 git ls-tree -r --name-only origin/master                        | sort > /tmp/B
-comm -23 /tmp/A /tmp/B | wc -l   # 119  仅本地 lineage 有
+comm -23 /tmp/A /tmp/B | wc -l   # 115  仅本地 lineage 有
 comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 ```
 
 **仍仅本地 lineage 有（关键项）**：
-- `deploy/tests/` 大量门禁/守护脚本仍缺失（本地 66 vs 远端 28；远端缺 **41 个**，含 `check_*`/`test_*` 守护与判定脚本；`quick_audit.sh`、`test_gate_wiring.py`、`test_attr_restore_pattern.py`、`test_prometheus_rule_files.py` 已存在于 `origin/master`）
+- `deploy/tests/` 大量门禁/守护脚本仍缺失（本地 66 vs 远端 **29**；远端缺 **40 个**，含 `check_*`/`test_*` 守护与判定脚本；`quick_audit.sh`、`test_gate_wiring.py`、`test_attr_restore_pattern.py`、`test_prometheus_rule_files.py`、`test_internal_call_verifier_wiring.py` 已存在于 `origin/master`）
 - `cloud-infra-test-support/.../diagnostics` 宿主负载诊断夹具
 - （`docs/analysis/`、`docs/audit/` 及 `docs/lessons/debugging-log.md` 已于 #97/#99 对齐恢复）
 - `file-service` / `gateway` / `system-module` 等剩余加固测试与 domain 视图
@@ -66,11 +67,12 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 - ✅ **零使用残留清理**：`cloud-infra-codegen/**`（32 文件）、`docs/codegen/` 与专用 workflow 已移除，根 pom/CI/PMD/核心文档已对齐（#94）。
 - ✅ **Prometheus 告警规则可加载性修复与守护恢复**：`gateway-alerts` 已由 PrometheusRule CRD（`.yaml`）转为原生规则文件（`.yml`，2 groups / 20 rules），并恢复 `test_prometheus_rule_files.py`（与现有 `*.y*ml` glob 及 e2e 聚合兼容，#101）。
 
+- ✅ **内部调用验签单一真源收敛**：`InternalCallVerifier` 移植为验签唯一实现（fail-closed），5 站点委托迁移，守护 `test_internal_call_verifier_wiring.py` 恢复；本地守护 / 单测 / 编译 / CI / E2E / native 全绿（#103）。
 ### 4. 仍未收敛（方案 A 后续）
 
 | 缺口 | 现状 | 影响/风险 |
 |---|---|---|
-| 门禁脚本覆盖 | lineage 仍有 41 个 `deploy/tests` 脚本未回补（`quick_audit.sh`、`test_gate_wiring.py`、`test_attr_restore_pattern.py`、`test_prometheus_rule_files.py` 已恢复/存在）；多项 `test_*` 依赖缺失配套 `check_*` 或当前树不存在的文档/资产，需按适用性逐项恢复并补齐调用点/负向对照 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁 |
+| 门禁脚本覆盖 | lineage 仍有 40 个 `deploy/tests` 脚本未回补（`quick_audit.sh`、`test_gate_wiring.py`、`test_attr_restore_pattern.py`、`test_prometheus_rule_files.py`、`test_internal_call_verifier_wiring.py` 已恢复/存在）；多项 `test_*` 依赖缺失配套 `check_*` 或当前树不存在的文档/资产，需按适用性逐项恢复并补齐调用点/负向对照 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁 |
 | 文档/资产偏离 | `docs/analysis/`、`docs/audit/`、`docs/lessons/debugging-log.md` 已恢复；其余 lineage 文档/部分加固测试与 domain 视图仍缺失 | 判据与操作指引仍有分叉，排查/治理资产未完全收敛 |
 | 部署态配置收敛 | `check_sw_oap_config` 对 `origin/master` 当前 SW OAP/search 共用 ES 9.x 配置仍报不匹配（已非阻断接线告警） | ES/配置未收敛前无法将该守护升为阻断 |
 | 树级残留差异 | `manifests/base/**`、部分 dashboard/脚本/文档等与本地 lineage 重构或删除不一致 | 交付形态与运维资产未统一，后续收敛需分批审慎对齐 |
@@ -90,7 +92,7 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 | 方案 | 做法 | 状态 |
 |---|---|---|
 | **B. 只补迁移** | 恢复 V24–V26 + 成对守护，解除部署阻断 | ✅ 已完成（#87） |
-| **A. 树收敛** | 分批补回缺失加固、恢复门禁与接线、删除远端残留零引用代码，最终使树一致 | 🔄 进行中（#89 安全、#91/#92 gate 恢复与接线、#94 codegen 清理、#95 适用 gate 回补、#97/#99 docs/lessons+analysis+audit 资产对齐、#101 Prometheus 告警加载修复与守护恢复完成；剩余门禁覆盖、其余文档/资产与配置/树级残留待分批推进） |
+| **A. 树收敛** | 分批补回缺失加固、恢复门禁与接线、删除远端残留零引用代码，最终使树一致 | 🔄 进行中（#89 安全、#91/#92 gate 恢复与接线、#94 codegen 清理、#95 适用 gate 回补、#97/#99 docs/lessons+analysis+audit 资产对齐、#101 Prometheus 告警加载修复与守护恢复完成、#103 内部调用验签单一真源收敛完成；剩余门禁覆盖、其余文档/资产与配置/树级残留待分批推进） |
 | **C. 重建历史** | 重推本地 lineage | 风险最高，需再次清理密钥泄露；不建议优先 |
 
 > 建议后续按**独立可验证切片**推进 A：按适用性恢复并接线缺失 `deploy/tests` 脚本（优先与当前树直接匹配、可配套 `check_*`/调用点/负向对照的项），文档/资产与部署配置/`manifests` 各自成 PR，均要求 CI/E2E 全绿与必要守护。`check_sw_oap_config` 应在 ES/config 收敛后恢复阻断；若出现真实平台级审计需求，再按需起 ADR-012（不放宽租户过滤）。
@@ -101,21 +103,21 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 # 文件级差异（当前口径）
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 | sort > /tmp/A
 git ls-tree -r --name-only origin/master                        | sort > /tmp/B
-comm -23 /tmp/A /tmp/B | wc -l   # 119
+comm -23 /tmp/A /tmp/B | wc -l   # 115
 comm -13 /tmp/A /tmp/B | wc -l   # 96
 
 # deploy/tests 覆盖口径
-git ls-tree -r --name-only origin/master -- deploy/tests | wc -l                                      # 28
+git ls-tree -r --name-only origin/master -- deploy/tests | wc -l                                      # 29
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | wc -l                  # 66
 comm -23 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sort) \
-         <(git ls-tree -r --name-only origin/master -- deploy/tests | sort) | wc -l                   # 41
+         <(git ls-tree -r --name-only origin/master -- deploy/tests | sort) | wc -l                   # 40
 comm -13 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sort) \
          <(git ls-tree -r --name-only origin/master -- deploy/tests | sort)                           # prepare_evidence_fixture.py / run_evidence_it.py / test_resilience4j_binder_present.py
 
 # 已修复项/已恢复 gate 指纹
 git show origin/master:cloud-infra-framework/framework-security/src/main/java/com/cloudinfra/framework/security/service/PermissionService.java | grep equalsIgnoreCase
 git show origin/master:cloud-infra-framework/framework-security/src/main/java/com/cloudinfra/framework/security/filter/HeaderAuthenticationFilter.java | grep -n shouldNotFilterAsyncDispatch
-git ls-tree -r --name-only origin/master -- deploy/tests/quick_audit.sh deploy/tests/test_gate_wiring.py deploy/tests/test_attr_restore_pattern.py deploy/tests/test_prometheus_rule_files.py
+git ls-tree -r --name-only origin/master -- deploy/tests/quick_audit.sh deploy/tests/test_gate_wiring.py deploy/tests/test_attr_restore_pattern.py deploy/tests/test_prometheus_rule_files.py deploy/tests/test_internal_call_verifier_wiring.py
 rg -n "Gate self-tests|test_gate_wiring|Quick audit|check_sw_oap_config" .github/workflows/e2e.yml verify-e2e.sh
 
 # 零使用清理与资产缺口指纹
@@ -128,4 +130,4 @@ git ls-tree -r --name-only origin/master -- docs/audit | wc -l                  
 ## 关联
 
 - issue #36（PR #79–#85，ADR-011）
-- PR #86（落盘 + L3 复现）、#87（方案 B）、#88（状态刷新）、#89（方案 A 安全切片）、#90（状态刷新）、#91（quick_audit 恢复/修复）、#92（gate 接线与聚合守护）、#93（状态刷新）、#94（codegen 零使用清理）、#95（适用 gate 回补）、#96（状态刷新）、#97（docs/lessons 资产对齐）、#98（状态刷新）、#99（docs/analysis、docs/audit 资产对齐）、#100（状态刷新）、#101（Prometheus 告警加载修复与守护恢复）
+- PR #86（落盘 + L3 复现）、#87（方案 B）、#88（状态刷新）、#89（方案 A 安全切片）、#90（状态刷新）、#91（quick_audit 恢复/修复）、#92（gate 接线与聚合守护）、#93（状态刷新）、#94（codegen 零使用清理）、#95（适用 gate 回补）、#96（状态刷新）、#97（docs/lessons 资产对齐）、#98（状态刷新）、#99（docs/analysis、docs/audit 资产对齐）、#100（状态刷新）、#101（Prometheus 告警加载修复与守护恢复）、#102（状态刷新）、#103（内部调用验签单一真源收敛）
