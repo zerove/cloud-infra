@@ -612,6 +612,29 @@ if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; t
 fi
 echo
 
+# ── 前置门禁: compose 宿主端口抢占（静态）─────────────────────────────
+# 端口被本项目容器之外的进程占用时, compose 创建阶段失败且报错与端口无直关联。
+# rc=1 抢占、rc=2 探针不可信均阻断，避免把"查不到"误判为"无冲突"。
+check_port_conflicts() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_port_conflicts.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "compose 端口无外部抢占"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "端口抢占门禁探针不可信（compose/ss/podman 读不到）"
+    return 1
+  fi
+  fail "compose 端口被本项目容器之外的进程抢占"
+  return 1
+}
+
+echo "[前置] 检查 compose 宿主端口占用 ..."
+check_port_conflicts || exit 1
+echo
+
 # ── 前置门禁: SkyWalking OAP 配置对齐（静态）───────────────────────────
 # 判定门禁脚本必须被真实调用并接线（第四类假门禁）。本检查为静态比对，
 # 不碰容器/网络。当前 origin/master 上 SW OAP 与 search 共用 ES 9.x，
