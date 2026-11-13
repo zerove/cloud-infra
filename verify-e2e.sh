@@ -635,6 +635,48 @@ echo "[前置] 检查 compose 宿主端口占用 ..."
 check_port_conflicts || exit 1
 echo
 
+# ── 前置门禁: Compose / OTel 配置静态引用完整性（阻断）─────────────────
+# depends_on 或 pipeline 引用不存在的组件时，故障只在启动/运行期暴露且定位成本高。
+check_compose_dangling_deps() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_compose_dangling_deps.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "compose depends_on 引用完整"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "compose depends_on 门禁探针不可信（扫描器自身失败）"
+    return 1
+  fi
+  fail "compose 存在悬空 depends_on 引用"
+  return 1
+}
+
+check_otel_pipeline_refs() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_otel_pipeline_refs.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "OTel pipeline 引用完整"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "OTel pipeline 门禁探针不可信（扫描器自身失败）"
+    return 1
+  fi
+  fail "OTel pipeline 引用了未声明的 receiver/processor/exporter"
+  return 1
+}
+
+echo "[前置] 检查 compose depends_on 引用完整性 ..."
+check_compose_dangling_deps || exit 1
+echo
+
+echo "[前置] 检查 OTel pipeline 引用完整性 ..."
+check_otel_pipeline_refs || exit 1
+echo
+
 # ── 前置门禁: SkyWalking OAP 配置对齐（静态）───────────────────────────
 # 判定门禁脚本必须被真实调用并接线（第四类假门禁）。本检查为静态比对，
 # 不碰容器/网络。当前 origin/master 上 SW OAP 与 search 共用 ES 9.x，
