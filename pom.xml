@@ -63,8 +63,18 @@
         <!-- 测试分离控制：单测走 surefire，集成测试走 failsafe -->
         <skipUnitTests>false</skipUnitTests>
         <skipITs>true</skipITs>
-    </properties>
 
+        <!--
+          JaCoCo prepare-agent 把 agent 参数写入 `argLine` 属性。
+          surefire/failsafe 若显式配置 <argLine>, 必须用 @{argLine} 延迟替换把它引回,
+          否则字面 <argLine> 会覆盖该属性 -> 不生成 target/jacoco.exec ->
+          覆盖率门禁形同不存在(本仓库 2026-10-18 实测确认)。
+
+          此处提供空默认值: 未声明 jacoco 的模块 @{argLine} 解析为空串,
+          而不是把字面 @{argLine} 传给 JVM 导致启动失败。
+        -->
+        <argLine></argLine>
+    </properties>
     <modules>
         <module>cloud-infra-bom</module>
         <module>cloud-infra-starter</module>
@@ -376,6 +386,7 @@
                         <exclude>**/*IT.java</exclude>
                     </excludes>
                     <argLine>
+                        @{argLine}
                         -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar
                         -XX:+EnableDynamicAgentLoading
                     </argLine>
@@ -403,6 +414,7 @@
                         <include>**/*IT.java</include>
                     </includes>
                     <argLine>
+                        @{argLine}
                         -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar
                         -XX:+EnableDynamicAgentLoading
                     </argLine>
