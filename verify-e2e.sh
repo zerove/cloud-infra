@@ -702,6 +702,28 @@ echo "[前置] 检查 SkyWalking OAP 配置对齐 (静态, 当前非阻断) ..."
 check_sw_oap_config || true
 echo
 
+# ── 前置门禁: AGENTS.md 课次表格结构（静态, advisory）──────────────────
+# 守护文档可信度而非运行时健康；rc=2 表示探针不可信（未判定）不阻断，rc=1 结构损坏也仅告警。
+check_lesson_tables() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_lesson_tables.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 2 ]; then
+    ok "课次表格守护本次未判定（探针不可信）—— 不代表文档有问题"
+    return 0
+  fi
+  if [ "$rc" -eq 1 ]; then
+    fail "AGENTS.md 课次表格结构损坏（列数不一致或数据行缺失）"
+    return 1
+  fi
+  ok "AGENTS.md 课次表格结构完好"
+  return 0
+}
+
+echo "[前置] 检查 AGENTS.md 课次表格结构 (静态, advisory) ..."
+check_lesson_tables || true
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then

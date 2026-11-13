@@ -40,11 +40,13 @@ BLOCKING_GATES = (
     "check_commit_budget",
 )
 
-# 当前 advisory：check_sw_oap_config 因 search/SW 共用 ES 9.x 配置已知不匹配
-# 而以 `|| true` 非阻断接线（见 verify-e2e.sh + issue 37）；ES/config 收敛后
-# 应升为阻断并同步更新此清单与调用点。
+# 当前 advisory：
+# - check_sw_oap_config: search/SW 共用 ES 9.x 配置已知不匹配, 非阻断
+#   （ES/config 收敛后应升为阻断并同步更新清单与调用点）
+# - check_lesson_tables: 文档可信度守护, rc=2 未判定/rc=1 结构损坏均不阻断运行时
 ADVISORY_GATES = (
     "check_sw_oap_config",
+    "check_lesson_tables",
 )
 
 
