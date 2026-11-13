@@ -724,6 +724,33 @@ echo "[前置] 检查 AGENTS.md 课次表格结构 (静态, advisory) ..."
 check_lesson_tables || true
 echo
 
+# ── 前置门禁: native 分配失败实证信号（按探测结果判定）────────────────
+# 判据为已发生证据(容器日志 malloc/failed to allocate)，非预测阈值。
+# rc=1 有实证失败 => 阻断; rc=2 探针失效 => 未判定不阻断且不谎称 PASS; rc=0 通过。
+check_native_alloc_evidence() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_native_alloc_evidence.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1)
+      fail "已有容器报告 native 内存分配失败（实证信号）"
+      return 1
+      ;;
+    2)
+      ok "native 分配实证探针本次未完成判定（探针失效，既非 PASS 也非 FAIL）"
+      return 0
+      ;;
+    *)
+      ok "近窗口容器日志未发现 native 分配失败实证"
+      return 0
+      ;;
+  esac
+}
+
+echo "[前置] 检查 native 分配失败实证信号 ..."
+check_native_alloc_evidence || exit 1
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then
