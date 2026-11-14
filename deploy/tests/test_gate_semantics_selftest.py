@@ -38,6 +38,7 @@ REPO = SCRIPT.parents[0]
 # lineage 清单其余项随对应 check_* / 接线切片恢复后再逐项加入。
 BLOCKING_GATES = (
     "check_commit_budget",
+    "check_commit_runtime_guard",
     "check_native_alloc_evidence",
     "check_feign_timeout",
     "check_grpc_port_placeholder",

@@ -612,6 +612,29 @@ if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; t
 fi
 echo
 
+# ---- 运行期 commit 预算守护（阻断）---------------------------------------------
+#
+# 与 check_commit_budget 的分工: 后者只看"启动前"的静态余量, 而实测崩溃发生在
+# 运行期负载高峰（启动时 64% PASS, 十几分钟后 OAP 仍 malloc 失败）。
+# 本门禁连续采样 Committed_AS/CommitLimit; 严格 overcommit(=2) 下 ≥92% 判红,
+# 非严格模式下只陈述事实不判红（比例不再预测分配失败, 见脚本内实测依据）。
+# rc=3 是探针失效（meminfo 缺字段）, 必须判红 —— 未判定 != 通过。
+check_commit_runtime_guard() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_commit_runtime_guard.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "运行期 commit 预算有余量（非严格模式仅陈述事实）"; return 0 ;;
+    1) fail "运行期 commit 预算 ≥92% —— 6 服务可能随机崩溃, 本次 E2E 结果不可信, 阻断"; return 1 ;;
+    3) fail "运行期 commit 预算探针失效 —— 未判定, 不等于通过"; return 1 ;;
+    *) fail "运行期 commit 预算守护返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
+echo "[前置] 检查运行期 commit 预算采样 ..."
+check_commit_runtime_guard || exit 1
+echo
+
 # ── 前置门禁: compose 宿主端口抢占（静态）─────────────────────────────
 # 端口被本项目容器之外的进程占用时, compose 创建阶段失败且报错与端口无直关联。
 # rc=1 抢占、rc=2 探针不可信均阻断，避免把"查不到"误判为"无冲突"。
