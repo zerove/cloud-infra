@@ -769,6 +769,28 @@ echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
 check_start_period_covers_startup || exit 1
 echo
 
+# ---- Testcontainers 启动预算门禁（阻断）---------------------------------------
+#
+# Testcontainers 默认 60s; 实测 postgres n=1 需 109s, n=3 并发最长 125s,
+# 于是 IT 会以 ContainerLaunchException 稳定失败, 且报错形态极易被读成代码问题。
+# 判据是"每个容器声明都有显式 withStartupTimeout" —— 声明数与预算数必须相等;
+# rc=2 表示扫描根未命中(扫描器坏了), 同样阻断。
+check_container_startup_budget_gate() {
+  local out rc
+  out=$(timeout 120 python3 "$SCRIPT_DIR/deploy/tests/check_container_startup_budget.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "所有容器声明均有显式启动预算"; return 0 ;;
+    1) fail "有容器声明缺少显式启动预算（详见上方）"; return 1 ;;
+    2) fail "容器启动预算门禁**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    *) fail "容器启动预算门禁返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
+echo "[前置] 检查测试容器声明均有显式启动预算 ..."
+check_container_startup_budget_gate || exit 1
+echo
+
 # ---- Feign 超时门禁 -----------------------------------------------------------
 #
 # 无超时的 Feign 调用会拖死网关线程; 判据覆盖"注解超时"或"消费服务运行配置

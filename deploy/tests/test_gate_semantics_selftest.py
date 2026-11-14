@@ -42,6 +42,7 @@ BLOCKING_GATES = (
     "check_feign_timeout",
     "check_grpc_port_placeholder",
     "check_start_period_covers_startup",
+    "check_container_startup_budget_gate",
 )
 
 # 当前 advisory：
