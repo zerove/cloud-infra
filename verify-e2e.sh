@@ -751,6 +751,23 @@ echo "[前置] 检查 native 分配失败实证信号 ..."
 check_native_alloc_evidence || exit 1
 echo
 
+# ---- Feign 超时门禁 -----------------------------------------------------------
+#
+# 无超时的 Feign 调用会拖死网关线程; 判据覆盖"注解超时"或"消费服务运行配置
+# 全局超时"两种生效形态(2026-11-08 重写)。纯静态判定; 缺超时 => 阻断。
+check_feign_timeout() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_feign_timeout.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "@FeignClient 无任何生效超时 —— 可能阻塞网关"; return 1; fi
+  ok "@FeignClient 均有生效超时"
+  return 0
+}
+
+echo "[前置] 检查 @FeignClient 有生效超时 ..."
+check_feign_timeout || exit 1
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then
