@@ -41,6 +41,7 @@ BLOCKING_GATES = (
     "check_native_alloc_evidence",
     "check_feign_timeout",
     "check_grpc_port_placeholder",
+    "check_start_period_covers_startup",
 )
 
 # 当前 advisory：
