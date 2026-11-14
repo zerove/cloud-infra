@@ -868,6 +868,49 @@ echo "[前置] 检查共享 config import actuator-config.yaml ..."
 check_shared_config_alignment || true
 echo
 
+# ---- schema.sql 空库自包含门禁（阻断）-----------------------------------------
+#
+# 判定对象是"文件能否在真实 H2 空库里跑完并覆盖实体所需列", 而不是静态归属。
+# 历史缺陷: notification 的 schema.sql 引用了由别处 Flyway 建的表, H2 空库
+# 执行必报 relation does not exist -> 整个 Spring 上下文加载失败。
+# rc=3 表示本机无 H2 jar, 本次**未判定**(打印原因), 不能当成通过。
+check_schema_standalone() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_standalone.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "schema.sql 均可在空库独立执行且列与实体对齐"; return 0 ;;
+    1) fail "schema.sql 不能在空库独立执行, 或列与实体不对齐（详见上方）"; return 1 ;;
+    2) fail "schema 空库自检**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    3) echo "  ⚠️  本地无 H2 jar, 空库自包含性未判定（非通过）" >&2; return 0 ;;
+    *) fail "空库自检返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
+# ---- schema.sql 执行机制门禁（阻断）-------------------------------------------
+#
+# 文件存在 != 会被执行: 服务要么配 spring.sql.init, 要么该文件落在 Flyway
+# locations 内; 两者皆无则该 schema 里的表在生产根本不存在。
+# 该门禁还校验上面 check_schema_standalone 的接线形态（被删/降级即判红）。
+check_schema_init_wiring() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_init_wiring.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "各服务 schema.sql 均有执行机制"; return 0 ;;
+    1) fail "存在 schema.sql 从未被执行的服务（详见上方具体项）"; return 1 ;;
+    *) fail "schema 执行机制检查返回未预期 rc=$rc —— 未判定不等于通过"; return 1 ;;
+  esac
+}
+
+echo "[前置] 检查 schema.sql 可在空库独立执行 ..."
+check_schema_standalone || exit 1
+echo
+
+echo "[前置] 检查各服务 schema.sql 均有执行机制 ..."
+check_schema_init_wiring || exit 1
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then
