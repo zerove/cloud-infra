@@ -768,6 +768,88 @@ echo "[前置] 检查 @FeignClient 有生效超时 ..."
 check_feign_timeout || exit 1
 echo
 
+# ---- 业务源码安全边界: catch(Exception) 数量（advisory）---------------------
+#
+# 宽捕获会把真实异常吞掉; 阈值按当前存量设定, 超阈值仅告警, 避免阻塞 E2E。
+check_catch_exception_count() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_catch_exception_count.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "catch(Exception) 超过安全阈值 —— 真实异常可能被吞掉"; return 1; fi
+  ok "catch(Exception) 数量未超阈值"
+  return 0
+}
+
+# ---- gRPC 端口占位门禁（阻断）-------------------------------------------------
+#
+# spring.grpc.* / cloudinfra.grpc.server.* 是死键（本仓未引入 spring-grpc
+# starter, CloudInfraGrpcProperties 也无 server 子类）, 端口回落到默认 9090
+# 会与 gateway 冲突触发 BindException; cloudinfra.grpc.port 必须是占位变量。
+check_grpc_port_placeholder() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_grpc_port_placeholder.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "gRPC 配置落在死键上或端口不可覆盖 —— 可能 BindException"; return 1; fi
+  ok "gRPC 配置均落在生效前缀且端口可覆盖"
+  return 0
+}
+
+# ---- Redis 裸 keys() 调用门禁（advisory）-------------------------------------
+#
+# KEYS 在大 key 空间会阻塞 Redis 主线程; 存量已迁移到 SCAN/批量接口, 仅告警。
+check_keys_not_used() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_keys_not_used.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN 裸 keys() 调用存在（非阻断告警）" >&2; return 0; fi
+  ok "全仓业务源码未发现裸 keys() 调用"
+  return 0
+}
+
+# ---- Nacos 配置子块对齐门禁（advisory）---------------------------------------
+#
+# 三组子块在本地/部署配置均无声明 => 对齐缺口; 提示但不破坏性阻止。
+check_nacos_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_nacos_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN Nacos 配置子块存在对齐缺口（非阻断告警）" >&2; return 0; fi
+  ok "各 service nacos.* 子块与 deploy/config 对齐"
+  return 0
+}
+
+# ---- 共享 config import 门禁（advisory）--------------------------------------
+#
+# 未 import actuator-config.yaml => management 端点走各自默认值, 与共享配置漂移。
+check_shared_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_shared_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN 共享 config 未 import actuator-config.yaml（非阻断告警）" >&2; return 0; fi
+  ok "共享 config 已显式 import actuator-config.yaml"
+  return 0
+}
+
+echo "[前置] 检查 catch(Exception) 数量不超过安全阈值 ..."
+check_catch_exception_count || true
+echo
+
+echo "[前置] 检查 gRPC 配置前缀与端口占位 ..."
+check_grpc_port_placeholder || exit 1
+echo
+
+echo "[前置] 检查业务源码无裸 keys() 调用 ..."
+check_keys_not_used || true
+echo
+
+echo "[前置] 检查各 service nacos.* 子块与 deploy/config 对齐 ..."
+check_nacos_config_alignment || true
+echo
+
+echo "[前置] 检查共享 config import actuator-config.yaml ..."
+check_shared_config_alignment || true
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then

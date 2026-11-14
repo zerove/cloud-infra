@@ -40,15 +40,22 @@ BLOCKING_GATES = (
     "check_commit_budget",
     "check_native_alloc_evidence",
     "check_feign_timeout",
+    "check_grpc_port_placeholder",
 )
 
 # 当前 advisory：
 # - check_sw_oap_config: search/SW 共用 ES 9.x 配置已知不匹配, 非阻断
 #   （ES/config 收敛后应升为阻断并同步更新清单与调用点）
 # - check_lesson_tables: 文档可信度守护, rc=2 未判定/rc=1 结构损坏均不阻断运行时
+# - check_catch_exception_count / check_keys_not_used: 源码质量守护，超存量阈值/裸 KEYS 仅告警
+# - check_nacos_config_alignment / check_shared_config_alignment: 配置对齐守护，缺口需人工判断
 ADVISORY_GATES = (
     "check_sw_oap_config",
     "check_lesson_tables",
+    "check_catch_exception_count",
+    "check_keys_not_used",
+    "check_nacos_config_alignment",
+    "check_shared_config_alignment",
 )
 
 
