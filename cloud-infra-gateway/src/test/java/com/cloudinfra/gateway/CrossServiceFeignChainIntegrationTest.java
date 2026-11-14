@@ -147,7 +147,8 @@ class CrossServiceFeignChainIntegrationTest {
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine")

@@ -14,6 +14,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -43,12 +45,14 @@ class GatewayRoutingIntegrationTest extends BaseIntegrationTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
-            .withPassword("password");
+            .withPassword("password")
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     /** Redis for Gateway rate limiting */
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {

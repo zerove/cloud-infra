@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -56,16 +57,19 @@ class NotificationRecoveryMultiReplicaIT {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
         .withDatabaseName("cloud_infra")
         .withUsername("postgres")
-        .withPassword("password");
+        .withPassword("password")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
         .withExposedPorts(6379)
         .waitingFor(org.testcontainers.containers.wait.strategy.Wait
-            .forLogMessage(".*Ready to accept connections.*", 1));
+            .forLogMessage(".*Ready to accept connections.*", 1))
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
-    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine");
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Configuration(proxyBeanMethods = false)
     static class MultiReplicaTestApplication {

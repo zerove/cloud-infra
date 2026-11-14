@@ -27,6 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
@@ -42,7 +43,8 @@ class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {
