@@ -751,6 +751,24 @@ echo "[前置] 检查 native 分配失败实证信号 ..."
 check_native_alloc_evidence || exit 1
 echo
 
+# ---- start_period 覆盖实测启动耗时（阻断）------------------------------------
+#
+# start_period 不足时, Docker 在 start_period 结束后才开始计失败, 服务会在
+# 就绪前被锁定 unhealthy; 判据是 compose 中每个业务服务的 start_period
+# >= deploy/tests/check_start_period_covers_startup.py 记录的实测启动耗时。
+check_start_period_covers_startup() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_start_period_covers_startup.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "start_period 未覆盖实测启动耗时 —— 服务会被误判 unhealthy"; return 1; fi
+  ok "start_period 均覆盖实测启动耗时"
+  return 0
+}
+
+echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
+check_start_period_covers_startup || exit 1
+echo
+
 # ---- Feign 超时门禁 -----------------------------------------------------------
 #
 # 无超时的 Feign 调用会拖死网关线程; 判据覆盖"注解超时"或"消费服务运行配置
