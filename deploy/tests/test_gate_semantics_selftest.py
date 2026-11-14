@@ -43,6 +43,8 @@ BLOCKING_GATES = (
     "check_grpc_port_placeholder",
     "check_start_period_covers_startup",
     "check_container_startup_budget_gate",
+    "check_schema_standalone",
+    "check_schema_init_wiring",
 )
 
 # 当前 advisory：
