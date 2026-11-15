@@ -44,6 +44,7 @@ Status: open（方案 B 完成；方案 A 持续推进中：安全修复、核�
 | 2026-11-13 | **方案 A native 分配实证 gate 恢复与接线切片完成**（PR #116, `432395fd`） | 恢复 `check_native_alloc_evidence.py`/`test_native_alloc_evidence.py`，`verify-e2e.sh` 前置实证门禁接线（rc=1 阻断、rc=2 未判定不阻断）并同步语义自检；CI/E2E/native 全绿 |
 | 2026-11-14 | **方案 A Testcontainers 启动预算 gate 恢复与接线切片完成**（PR #122, `973763c`） | 恢复 `check_container_startup_budget.py`/`test_container_startup_budget.py`（archive 既有, 当前树缺失）；16 个测试文件 26 处容器声明统一补 `withStartupTimeout(Duration.ofMinutes(3))`（与既有 12 处合计 38/38 对应）；`verify-e2e.sh` 前置阻断接线（rc=1/2 均阻断）并同步语义自检；门禁 38/38 通过, 守护 7/7 通过, `TenantInsertIntegrationTest` 2/2 运行时实测通过（本机 postgres n=1 实测 109s > 默认 60s 的实证切片）；7 模块 test-compile BUILD SUCCESS；CI Pipeline + E2E Verify 全绿（E2E 日志确认门禁真实执行 PASS） |
 | 2026-11-14 | **方案 A up.sh 自愈函数恢复切片完成**（PR #124, `f1aed408`） | 恢复 `repair_healthcheck_logs()`（podman healthcheck.log 损坏自愈，archive 既有含注释史）+ down 前调用点；守护 `test_repair_healthcheck_logs.sh` 8/8 通过（含负向对照：判据改坏→守护变红，恢复→复绿）；`up.sh --self-test` 通过；deploy/tests 36/36 全绿；CI Pipeline + E2E Verify 全绿 |
+| 2026-11-15 | 复核修正（无代码改动） | 22:47-23:04 一轮"复核"误在**本地 master（archive lineage）**树上执行，得出"66 文件/缺 0/3 FAIL"等结论，全部为该树形态而非 origin/master 状态；已切回 origin/master 基线重取证：55 文件/缺 14/3 独有，up.sh 自检+守护 8/8+全量 36/36 绿。#125 文档口径行 56/13 更正为 55/14。教训：取证前先 `git branch --show-current` + `git rev-parse HEAD` 与基线对齐，本地 master 是另一条 lineage |
 
 ## 当前状态（2026-11-14，基于工作树 vs `archive/local-lineage-2026-11-08`；文件级差异口径仍以 `origin/master` 为基线）
 
@@ -64,7 +65,7 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 ```
 
 **仍仅本地 lineage 有（关键项）**：
-- `deploy/tests/` 大量门禁/守护脚本仍缺失（archive 66 vs 当前工作树 **56**（含本次回补 2 个）；仅 archive 有 **13** 个，仅当前树有 3 个（`prepare_evidence_fixture.py`/`run_evidence_it.py`/`test_resilience4j_binder_present.py`，与 lineage 集合不一致的残留）；另 `deploy/up.sh` 的 `repair_healthcheck_logs` 自愈函数已随本切片恢复）
+- `deploy/tests/` 大量门禁/守护脚本仍缺失（archive 66 vs 当前工作树 **55**（含本次回补 3 个）；仅 archive 有 **14** 个，仅当前树有 3 个（`prepare_evidence_fixture.py`/`run_evidence_it.py`/`test_resilience4j_binder_present.py`，与 lineage 集合不一致的残留）；另 `deploy/up.sh` 的 `repair_healthcheck_logs` 自愈函数已随本切片恢复）
   - 已在 `origin/master` 恢复/存在的 lineage 相关项包括：`quick_audit.sh`、`test_gate_wiring.py`、`test_gate_semantics_selftest.py`、`test_jacoco_phase_wiring.py`、`test_attr_restore_pattern.py`、`test_env_example_secrets.py`、`test_internal_call_verifier_wiring.py`、`test_prometheus_rule_files.py`、`test_k8s_probe_paths.py`、`test_image_tag_expansion.py`、`test_dockerfile_jvm_flags.py`、`test_probe_timeout_guard.sh`、`check_port_conflicts.py`、`test_port_conflicts.py`、`test_docs_probe_scripts.py`、`check_compose_dangling_deps.py`、`test_compose_dangling_deps.sh`、`check_otel_pipeline_refs.py`、`test_otel_pipeline_refs.sh`、`check_lesson_tables.py`、`test_lesson_tables.py`、`check_native_alloc_evidence.py`、`test_native_alloc_evidence.py` 等
 - `cloud-infra-test-support/.../diagnostics` 宿主负载诊断夹具
 - `file-service` / `gateway` / `system-module` 等剩余加固测试与 domain 视图
@@ -91,7 +92,7 @@ comm -13 /tmp/A /tmp/B | wc -l   # 96   仅 origin/master 有
 
 | 缺口 | 现状 | 影响/风险 |
 |---|---|---|
-| 门禁脚本覆盖 | lineage 仍有 **13 个** `deploy/tests` 脚本未回补（2026-11-14 实测口径，原 15 已回补 `test_repair_healthcheck_logs.sh` 等 2 个；其中 4 个已被在途分支认领：schema x2、commit_runtime x2）；多项 `check_*` 需真实调用点/语义对齐，部分 `test_*` 依赖当前树不存在的函数/资产/配置或对现状判红 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁或误阻断 |
+| 门禁脚本覆盖 | lineage 仍有 **14 个** `deploy/tests` 脚本未回补（2026-11-15 实测口径；其中 4 个已被在途分支认领：schema x2、commit_runtime x2）；多项 `check_*` 需真实调用点/语义对齐，部分 `test_*` 依赖当前树不存在的函数/资产/配置或对现状判红 | 回归风险仍高于 lineage；盲目拷贝易引入不适配/假门禁或误阻断 |
 | 文档/资产偏离 | `docs/analysis/`、`docs/audit/`、`docs/lessons/debugging-log.md` 已恢复；其余 lineage 文档/部分加固测试与 domain 视图仍缺失 | 判据与操作指引仍有分叉，排查/治理资产未完全收敛 |
 | 部署态配置收敛 | `check_sw_oap_config` 对当前 SW OAP/search 共用 ES 9.x 配置仍为已知不匹配（非阻断接线告警） | ES/config 未收敛前无法将该守护升为阻断 |
 | 树级残留差异 | `manifests/base/**`、部分 dashboard/脚本/文档等与本地 lineage 重构或删除不一致 | 交付形态与运维资产未统一，后续收敛需分批审慎对齐 |
@@ -125,11 +126,11 @@ git ls-tree -r --name-only origin/master                        | sort > /tmp/B
 comm -23 /tmp/A /tmp/B | wc -l   # 100
 comm -13 /tmp/A /tmp/B | wc -l   # 96
 
-# deploy/tests 覆盖口径（2026-11-14 实测，工作树含本次回补 4 个）
-find deploy/tests -maxdepth 1 -type f | wc -l                                                    # 56
+# deploy/tests 覆盖口径（2026-11-15 实测，工作树含本次回补 3 个）
+find deploy/tests -maxdepth 1 -type f | wc -l                                                    # 55
 git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | wc -l              # 66
 comm -23 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sed 's|deploy/tests/||' | sort) \
-         <(find deploy/tests -maxdepth 1 -type f -printf '%f\n' | sort) | wc -l                  # 13
+         <(find deploy/tests -maxdepth 1 -type f -printf '%f\n' | sort) | wc -l                  # 14
 comm -13 <(git ls-tree -r --name-only archive/local-lineage-2026-11-08 -- deploy/tests | sed 's|deploy/tests/||' | sort) \
          <(find deploy/tests -maxdepth 1 -type f -printf '%f\n' | sort)                          # prepare_evidence_fixture.py / run_evidence_it.py / test_resilience4j_binder_present.py
 
