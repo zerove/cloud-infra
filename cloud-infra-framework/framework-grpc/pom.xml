@@ -19,7 +19,7 @@
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <protoc.version>4.34.2</protoc.version>
         <!-- Protobuf Java runtime (与 protoc 版本匹配) -->
-        <protobuf-java.version>4.34.2</protobuf-java.version>
+        <protobuf-java.version>4.36.2</protobuf-java.version>
         <!-- grpc-java 版本 (与 Spring Boot 4.1.0 兼容, 本地缓存已有 1.80.0) -->
         <grpc.version>1.80.0</grpc.version>
     </properties>
