@@ -44,12 +44,6 @@ spring:
           default:
             connectTimeout: ${FEIGN_CONNECT_TIMEOUT_MS:10000}
             readTimeout: ${FEIGN_READ_TIMEOUT_MS:5000}
-    stream:
-      rabbit:
-        binder:
-          nodes: cloud-rabbitmq:5672
-          username: ${RABBITMQ_USER:guest}
-          password: ${RABBITMQ_PASSWORD:guest}
     nacos:
       discovery:
         server-addr: cloud-nacos:8848

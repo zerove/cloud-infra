@@ -18,7 +18,7 @@ This document defines the canonical terminology used across the `cloud-infra` pr
 | Term | Definition | Context |
 | :--- | :--- | :--- |
 | **Actuator Engineering** | The practice of standardizing Spring Boot Actuator endpoints across all services (management port 9301, base-path `/management`, exposed endpoints: health,info,prometheus,metrics,env,beans,conditions,refresh). | Observability |
-| **StreamBridge** | **Deprecated** - Previously used Spring Cloud Stream component for async message dispatch. Replaced by direct `@RabbitListener` consumers. | Communication (Legacy) |
+| **StreamBridge** | Spring Cloud Stream component for async message dispatch. Legacy path: still used by system-module (LogEventListener, TxMessageRetryTask); new code should use direct `@RabbitListener` consumers. | Communication (Legacy) |
 | **Binding** | A named channel used by Spring Cloud Stream to connect an application to an external messaging system. **Deprecated**. | Messaging (Legacy) |
 | **Shared Config** | Configuration files stored in Nacos (e.g., `actuator-config.yaml`, `feign timeouts`, `otlp endpoint`) that are imported by multiple services to ensure consistency. | Configuration |
 | **Distributed Transaction** | A transaction that spans multiple services. Not currently used: the platform has no Seata dependency or server, each service manages local transactions only. | Data Consistency |
