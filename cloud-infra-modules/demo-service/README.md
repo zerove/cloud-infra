@@ -167,10 +167,10 @@ helm install demo-service ./deploy/k8s -f deploy/k8s/values.yaml
 
 ## 📚 参考文档
 
-- [开发者指南](../DEVELOPER_GUIDE.md) - 创建新模块标准流程
-- [架构文档](../ARCHITECTURE.md) - 分层、依赖、关键决策
-- [部署指南](../DEPLOYMENT.md) - Native/JRE 混合构建、K8s 部署
-- [API 概览](../API_OVERVIEW.md) - 网关路由、服务端口映射
+- [开发者指南](../../docs/DEVELOPER_GUIDE.md) - 创建新模块标准流程
+- [架构文档](../../ARCHITECTURE.md) - 分层、依赖、关键决策
+- [部署指南](../../docs/DEPLOYMENT.md) - Native/JRE 混合构建、K8s 部署
+- [API 概览](../../docs/API_OVERVIEW.md) - 网关路由、服务端口映射
 
 ---
 

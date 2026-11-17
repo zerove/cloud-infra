@@ -22,9 +22,6 @@ spring:
       host: localhost
       port: 6379
       enabled: false
-  autoconfigure:
-    # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
-    exclude: io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
 
 # 测试用 JWT 密钥（>=32字符）
 auth:
