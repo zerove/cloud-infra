@@ -214,7 +214,7 @@ public class FileController {
     @PostMapping("/upload")
     public Result<FileMetadataVO> upload(
             @RequestParam("file") MultipartFile file,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         try {
             // 生产级安全校验
             fileValidator.validate(file);
@@ -262,7 +262,7 @@ public class FileController {
     public Result<FileMetadataVO> update(
             @PathVariable Long fileId,
             @RequestParam("file") MultipartFile file,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         try {
             fileValidator.validate(file);
             Long userId = resolveUserId(requestUserId);
@@ -285,7 +285,7 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:download')")
     @GetMapping("/download/{fileId}")
     public ResponseEntity<StreamingResponseBody> download(@PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         try {
             Long userId = resolveUserId(requestUserId);
             InputStream is = fileService.download(fileId, userId);
@@ -300,10 +300,12 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             log.warn("文件下载未认证: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
-            log.error("文件下载失败: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
+        // 原先此处 catch(Exception) 一律 403 且 .build() 不带 body, 已移除:
+        // 那会把"文件不存在(404)"、"存储故障(500)"、"权限不足(403)"三种语义
+        // 完全不同的失败压成同一个裸 403, 调用方无从区分。
+        // BusinessException extends BaseException, 交 GlobalExceptionHandler
+        // 按 ErrorCode 经 getSuggestedHttpStatus() 映射 —— 那条路径本就是对的。
     }
 
     @Operation(summary = "下载指定版本文件")
@@ -312,7 +314,7 @@ public class FileController {
     public ResponseEntity<StreamingResponseBody> downloadVersion(
             @PathVariable Long fileId,
             @PathVariable Integer version,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         try {
             Long userId = resolveUserId(requestUserId);
             InputStream is = fileService.downloadVersion(fileId, version, userId);
@@ -326,17 +328,19 @@ public class FileController {
                     .body(responseBody);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
-            log.error("文件版本下载失败: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
+        // 原先此处 catch(Exception) 一律 403 且 .build() 不带 body, 已移除:
+        // 那会把"文件不存在(404)"、"存储故障(500)"、"权限不足(403)"三种语义
+        // 完全不同的失败压成同一个裸 403, 调用方无从区分。
+        // BusinessException extends BaseException, 交 GlobalExceptionHandler
+        // 按 ErrorCode 经 getSuggestedHttpStatus() 映射 —— 那条路径本就是对的。
     }
 
     @Operation(summary = "获取文件版本历史")
     @PreAuthorize("@ss.hasPermi('file:file:history')")
     @GetMapping("/history/{fileId}")
     public Result<List<FileVersion>> history(@PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         try {
             Long userId = resolveUserId(requestUserId);
             if (!permissionService.hasAccess(userId, fileId, "READ")) {
@@ -381,7 +385,7 @@ public class FileController {
     @DeleteMapping("/{fileId}")
     public Result<Void> remove(
             @PathVariable Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
+            @RequestAttribute(value = "userId", required = false) Long requestUserId) throws IOException {
         Long userId = resolveUserId(requestUserId);
         // service 层抛 BusinessException 时由 GlobalExceptionHandler 统一转 Result,
         // 但其 getSuggestedHttpStatus() 恒为 500 —— 权限/不存在这类语义失败
