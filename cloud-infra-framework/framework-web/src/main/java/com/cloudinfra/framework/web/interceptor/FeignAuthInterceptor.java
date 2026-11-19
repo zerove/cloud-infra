@@ -12,12 +12,6 @@ import java.util.UUID;
 
 public class FeignAuthInterceptor implements RequestInterceptor {
 
-    /** 内部服务间调用标识 Header（保留常量供兼容引用） */
-    @Deprecated(forRemoval = true, since = "1.0.0")
-    public static final String INTERNAL_CALL_HEADER = InternalCallCrypto.HEADER_SIGN;
-    @Deprecated(forRemoval = true, since = "1.0.0")
-    public static final String INTERNAL_CALL_VALUE = "true";
-
     private final String internalCallSecret;
 
     public FeignAuthInterceptor(String internalCallSecret) {

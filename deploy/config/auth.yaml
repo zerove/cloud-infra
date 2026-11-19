@@ -28,6 +28,9 @@ spring:
     password: ${RABBITMQ_PASSWORD:guest}
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  threads:
+    virtual:
+      enabled: true
   application:
     name: cloud-auth
   main:
