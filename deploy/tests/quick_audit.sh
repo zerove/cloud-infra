@@ -29,7 +29,7 @@ package com.cloudinfra.system.controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 临时探针: 故意没有 @PreAuthorize, 用于验证 quick_audit 站 2 判红。 */
+// 临时探针注释已清理
 @RestController
 public class ZzSelfTestProbeController {
     @GetMapping("/self-test-probe")

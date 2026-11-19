@@ -21,12 +21,20 @@
 - 网关**不依赖** auth 模块: `cloud-infra-gateway/pom.xml` 只有 `cloud-infra-api` 与 `framework-security`。
   Token 校验由网关本地完成 (HMAC + Redis 会话), 无服务间调用
 
-> **2026-10-13 更正**: 本文档原写 `cloud-infra-modules → cloud-infra-framework`（直接依赖）。
+> **2026-10-13 更正与白盒化设计说明**: 本文档原写 `cloud-infra-modules → cloud-infra-framework`（直接依赖）。
 > 实测(pom 逐个反查)是**无任何模块直接依赖任何 `framework-*` 模块**, 全部经
 > `cloud-infra-starter` 传递:
 > `starter → common + framework-{security,web,mybatis,redis,tracing}`。
-> 该事实有副作用且不显然 —— 从任一业务服务的 pom 里**看不到**它用了 MyBatis 拦截器、
-> Redis 锁或安全过滤, 也就无法按需裁剪。且它使框架层代码更难被察觉地"继承"。
+> 
+> **Starter 聚合的 6 大核心框架能力矩阵**：
+> 1. `cloud-infra-common`: 核心工具与全局异常
+> 2. `framework-security`: 鉴权与安全上下文 (`@PreAuthorize`, `HeaderAuthenticationFilter`)
+> 3. `framework-web`: Web 底座、全局响应 `Result<T>`、虚拟线程适配
+> 4. `framework-mybatis`: MyBatis-Plus、多租户拦截器 (`TenantSqlInterceptor`)、数据权限
+> 5. `framework-redis`: Redis 缓存策略与分布式锁
+> 6. `framework-tracing`: OpenTelemetry 链路追踪 (`X-Trace-Id`)
+> 
+> **架构影响**: 虽然简化了业务服务的 pom 编写，但隐式传递使开发者不易直接察觉其引入的切面与拦截器链。编写服务或排查问题时，应以此 starter 聚合矩阵为白盒依据。
 
 ## ⛔ 已移除的子系统 (2026-10-13)
 
