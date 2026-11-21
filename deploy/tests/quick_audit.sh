@@ -76,11 +76,24 @@ PYEOF
 
 echo "==== 站 0: 多租户已真正启用 ===="
 tcf=$(extract_order "$REPO/cloud-infra-common/src/main/java/com/cloudinfra/common/core/tenant/TenantContextFilter.java")
-n=$(rg -c "@TenantFilter" --type java cloud-infra-modules | awk -F: '{s+=$2} END{print s}')
-switches=0
-for f in deploy/config/{system-module,file-service,notification-service}.yaml; do
-  if rg -q "^  tenant:" "$f"; then switches=$((switches+1)); fi
-done
+# ⚠️ 2026-11-21: CI 宿主 ubuntu-26.04 runner 无 `rg`（实测 `rg: command not found`，
+#   n 为 0 而站 0 红）。计数改用 python3（与 extract_order 同款，见 2026-11-21 修复注释）。
+out=$(python3 - "$REPO" <<'PYEOF' 2>/dev/null
+import glob, re, sys
+root = sys.argv[1]
+n = 0
+for f in glob.glob(root + "/cloud-infra-modules/**/*.java", recursive=True):
+    n += open(f, encoding="utf-8", errors="ignore").read().count("@TenantFilter")
+switches = 0
+for f in ("system-module", "file-service", "notification-service"):
+    t = open(root + "/deploy/config/" + f + ".yaml", encoding="utf-8", errors="ignore").read()
+    if re.search(r"^  tenant:", t, re.M):
+        switches += 1
+print(n, switches)
+PYEOF
+)
+n=$(printf '%s' "$out" | awk '{print $1}')
+switches=$(printf '%s' "$out" | awk '{print $2}')
 if [[ "$n" -ge 9 ]] && [[ "$switches" -eq 3 ]] && [[ -n "$tcf" ]]; then
   echo "PASS TenantContextFilter 与 @TenantFilter 注解数(≥9)、部署态开关(3)均满足。"
 else
@@ -88,7 +101,17 @@ else
 fi
 
 echo "==== 站 1: 已删除框架残留归零 ===="
-hits=$(rg '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' --type java cloud-infra-modules | wc -l)
+hits=$(python3 - "$REPO" <<'PYEOF' 2>/dev/null
+import glob, re, sys
+root = sys.argv[1]
+pat = re.compile("@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi")
+cnt = 0
+for f in glob.glob(root + "/cloud-infra-modules/**/*.java", recursive=True):
+    cnt += len(pat.findall(open(f, encoding="utf-8", errors="ignore").read()))
+print(cnt)
+PYEOF
+)
+hits=${hits:-0}
 if [[ "$hits" -eq 0 ]]; then
   echo "PASS 0 命中。"
 else
