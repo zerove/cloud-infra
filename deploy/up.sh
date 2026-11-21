@@ -768,21 +768,48 @@ echo "  已停止旧环境 (保留数据卷, 已重置 Nacos 本地状态)"
 echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
   # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
+  # ⚠️ 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
+  set +e
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    echo "❌ 基础设施 compose up -d 失败 (exit=$rc)" >&2
+    podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" ps >&2 2>&1 || true
+    exit "$rc"
+  fi
 fi
 
 # 等待 Nacos 就绪
 echo "=== 3. 等待 Nacos 就绪 ==="
 NACOS_URL="http://localhost:8848"
-for i in $(seq 1 30); do
+NACOS_READY=0
+# CI/全新环境下 Nacos 3.2 + Derby 首启可能 >60s（初始化 schema + 启动 Console/API），
+# 30*2s=60s 预算过紧且超时后静默继续（下游"上传成功/回读失败"难以归因），
+# 故 90*2s=180s 与 ES 首启预算对齐；失败必须显式 exit，不能带着未就绪 Nacos 继续。
+for i in $(seq 1 90); do
     # Nacos 3.2+ 移除 v1 HTTP API, 使用 v3 open API 探测
     if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
-        echo "Nacos 已就绪"
+        echo "Nacos 已就绪 (等待 $((i*2))s)"
+        NACOS_READY=1
         break
     fi
-    echo "等待 Nacos... ($i/30)"
+    if [ $((i % 10)) -eq 0 ]; then
+        NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+        echo "  等待 Nacos... ($i/90, ${i}s) [$NACOS_STATE]"
+    else
+        echo "等待 Nacos... ($i/90)"
+    fi
     sleep 2
 done
+if [ "$NACOS_READY" -ne 1 ]; then
+    NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+    echo "❌ Nacos 启动超时 (180s) [$NACOS_STATE]" >&2
+    podman logs --tail 40 cloud-nacos 2>&1 || true
+    echo "--- nacos 内部日志 tail ---" >&2
+    podman exec cloud-nacos sh -c 'tail -n 120 /home/nacos/logs/nacos.log /home/nacos/logs/start.out 2>/dev/null || echo "(无 nacos.log/start.out)"' 2>&1 || true
+    exit 1
+fi
 
 # 同步配置到 Nacos —— 必须在微服务容器启动之前 (见步骤 1 处的说明)。
 # 用 v3 admin API, --data-urlencode content@$file 保证原文多行/中文/转义正确。
@@ -836,7 +863,24 @@ for attempt in $(seq 1 15); do
   sleep 2
 done
 if [ "$CONFIG_READY" -eq 1 ]; then
-  echo "  ✓ 全部配置可读, 微服务可以安全启动"
+  echo "  ✓ 全部配置可读"
+  # Nacos 在同步后可能因 Derby/资源问题重启导致配置丢失；做短暂稳定性确认。
+  sleep 3
+  for i in $(seq 1 30); do
+    if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+      echo "  ✓ Nacos 同步后仍可用 ($((i*2))s 内确认)"
+      break
+    fi
+    if [ "$i" -eq 30 ]; then
+      NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
+      podman logs --tail 40 cloud-nacos 2>&1 || true
+      podman exec cloud-nacos sh -c 'for f in /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log /home/nacos/logs/config-fatal.log /home/nacos/logs/naming-server.log /home/nacos/logs/alipay-jraft.log /home/nacos/logs/protocol-raft.log; do [ -f "$f" ] && echo "==> $f <==" && tail -n 60 "$f"; done; echo "--- nacos error grep ---"; grep -nE "ERROR|FATAL|Exception|Caused by|OutOfMemory|Address already|BindException|Login timeout|derby" /home/nacos/logs/*.log 2>/dev/null | tail -40 || echo "(no error matches)"' 2>&1 || true
+      exit 1
+    fi
+    sleep 2
+  done
+  echo "  ✓ 微服务可以安全启动"
 else
   # 这里必须 exit: 带着空配置启动服务, 失败会以"业务 bug"的面貌出现在
   # 服务日志里, 而不是以"配置没同步好"的面貌出现在这里。
