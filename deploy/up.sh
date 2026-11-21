@@ -863,24 +863,7 @@ for attempt in $(seq 1 15); do
   sleep 2
 done
 if [ "$CONFIG_READY" -eq 1 ]; then
-  echo "  ✓ 全部配置可读"
-  # Nacos 在同步后可能因 Derby/资源问题重启导致配置丢失；做短暂稳定性确认。
-  sleep 3
-  for i in $(seq 1 30); do
-    if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
-      echo "  ✓ Nacos 同步后仍可用 ($((i*2))s 内确认)"
-      break
-    fi
-    if [ "$i" -eq 30 ]; then
-      NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
-      echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
-      podman logs --tail 40 cloud-nacos 2>&1 || true
-      podman exec cloud-nacos sh -c 'for f in /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log /home/nacos/logs/config-fatal.log /home/nacos/logs/naming-server.log /home/nacos/logs/alipay-jraft.log /home/nacos/logs/protocol-raft.log; do [ -f "$f" ] && echo "==> $f <==" && tail -n 60 "$f"; done; echo "--- nacos error grep ---"; grep -nE "ERROR|FATAL|Exception|Caused by|OutOfMemory|Address already|BindException|Login timeout|derby" /home/nacos/logs/*.log 2>/dev/null | tail -40 || echo "(no error matches)"' 2>&1 || true
-      exit 1
-    fi
-    sleep 2
-  done
-  echo "  ✓ 微服务可以安全启动"
+  echo "  ✓ 全部配置可读, 微服务可以安全启动"
 else
   # 这里必须 exit: 带着空配置启动服务, 失败会以"业务 bug"的面貌出现在
   # 服务日志里, 而不是以"配置没同步好"的面貌出现在这里。
@@ -888,6 +871,29 @@ else
   echo "   否则服务会报 Could not resolve placeholder, 误导为业务缺陷。" >&2
   exit 1
 fi
+
+# Nacos 在同步后可能因 Derby/资源问题重启导致配置丢失；做短暂稳定性确认。
+#
+# ⚠️ 位置设计: 置于上面的 `if [ "$CONFIG_READY" -eq 1 ]` 之后。
+#   deploy/tests/test_readback_block_runtime.py 用正则/行匹配从 up.sh
+#   抽取这段回读块执行负向/正向场景(不复制粘贴)，其 break 条件是
+#   "第一个带 exit 1 的 fi" —— 若稳定性检查(含自己的 exit 1)置在
+#   回读块内部, 会提前截断抽取(for 未闭合 → bash 语法错误)。
+sleep 3
+for i in $(seq 1 30); do
+  if curl -sf "$NACOS_URL/nacos/v3/client/cs/config?dataId=health&groupName=DEFAULT_GROUP&namespaceId=public" > /dev/null 2>&1; then
+    echo "  ✓ Nacos 同步后仍可用 ($((i*2))s 内确认)"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    NACOS_STATE=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} oom={{.State.OOMKilled}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+    echo "❌ Nacos 在配置同步后不可用 [$NACOS_STATE]" >&2
+    podman logs --tail 40 cloud-nacos 2>&1 || true
+    podman exec cloud-nacos sh -c 'for f in /home/nacos/logs/nacos.log /home/nacos/logs/start.out /home/nacos/logs/config-server.log /home/nacos/logs/config-fatal.log /home/nacos/logs/naming-server.log /home/nacos/logs/alipay-jraft.log /home/nacos/logs/protocol-raft.log; do [ -f "$f" ] && echo "==> $f <==" && tail -n 60 "$f"; done; echo "--- nacos error grep ---"; grep -nE "ERROR|FATAL|Exception|Caused by|OutOfMemory|Address already|BindException|Login timeout|derby" /home/nacos/logs/*.log 2>/dev/null | tail -40 || echo "(no error matches)"' 2>&1 || true
+    exit 1
+  fi
+  sleep 2
+done
 
 # 配置已在 Nacos 里, 此时才允许拉起微服务。
 if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
