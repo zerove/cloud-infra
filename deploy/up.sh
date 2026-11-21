@@ -987,8 +987,15 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
       #   稳态容量本身是够的: 基础设施稳定后 commit 74%(15813/21122MB),
       #   剩余 5309MB > 六个业务服务所需的~3000MB。
       #   **问题在启动瞬时峰值, 不在稳态容量** —— 故节流而非扩容是正解。
+      #
+      # ⚠️ 不能传 COMPOSE_ARGS（其中含 --profile full, 由 resolve_compose_args 设定）:
+      #   传了会把 minio/redisinsight/gateway/auth/system/file/notification/search
+      #   全部拉入启动集合 —— minio(RELEASE 固定 tag) 在 CI 上会触发
+      #   "Error: no container with name or ID \"cloud-minio\" found: no such container"
+      #   (exit=125, Run H 2026-11-21 实证)。这里只起无 profile 的基础设施;
+      #   6 个业务服务由下方 start_full_services_serial 逐个拉起。
       podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-        "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" --parallel 1 up -d
+        --parallel 1 up -d
     fi
     # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
     #   早前写成两条并列的 for 循环(profile / 非 profile 各一份), 结果守护
