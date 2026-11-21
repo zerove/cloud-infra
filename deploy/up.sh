@@ -767,10 +767,21 @@ echo "  已停止旧环境 (保留数据卷, 已重置 Nacos 本地状态)"
 #   修法: 基础设施先起 -> 等 Nacos 就绪 -> 同步配置 -> 再起微服务。
 echo "=== 2a. 启动基础设施 (Nacos, PostgreSQL, Redis, RabbitMQ, ES, 监控) ==="
 if [ "$CHECK_ONLY" -ne 1 ]; then
-  # 只起基础设施: 不带 --profile full, 微服务因此不会被连带拉起。
-  # ⚠️ 显式捕获退出码：set -e 下直接失败会丢失上下文；这里先打诊断再 exit。
+  # 只起基础设施: 用**显式服务名列表**调 `up -d` (不带 --profile、不依赖裸 up 的
+  # profile 过滤语义).
+  #
+  # ⚠️ 背景 (2026-11-21 三次 E2E 全红同一根因): bare `podman-compose up -d` 在
+  #   CI (apt podman-compose 1.5.0) + 本分支 compose.yaml (minio/promtail 已挂
+  #   profiles: ["full"]/["observability"]) 下, 仍把带 profile 的 minio/promtail
+  #   误拉入启动集合, 随后以
+  #   `Error: no container with name or ID "cloud-minio" found: no such container`
+  #   等形式失败 (exit=125) → up.sh 中止 → E2E 整体红.
+  #   显式列名 = 启动集合由调用方掌控, 与 master 的"profile 过滤"设计等价,
+  #   且不依赖 podman-compose 版本对 profile 语义的解析差异.
   set +e
-  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d
+  podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d \
+    nacos postgres redis rabbitmq elasticsearch prometheus alertmanager grafana \
+    loki sentinel skywalking-oap skywalking-ui
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
