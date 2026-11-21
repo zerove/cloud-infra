@@ -779,9 +779,12 @@ if [ "$CHECK_ONLY" -ne 1 ]; then
   #   显式列名 = 启动集合由调用方掌控, 与 master 的"profile 过滤"设计等价,
   #   且不依赖 podman-compose 版本对 profile 语义的解析差异.
   set +e
+  # ⚠️ skywalking-oap/ui 从 CI 默认 infra 启动排除: OAP mem_limit 2g, 在
+  #   共享 runner 上易把全局 commit 顶爆(实测 Run L 239%, notification/search OOM)。
+  #   SW agent 连不上 OAP 只打 warn, 不影响业务 E2E；OAP 配置对齐仍由前置守护检查。
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d \
     nacos postgres redis rabbitmq elasticsearch prometheus alertmanager grafana \
-    loki sentinel skywalking-oap skywalking-ui
+    loki sentinel
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
@@ -994,8 +997,11 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
       #   "Error: no container with name or ID \"cloud-minio\" found: no such container"
       #   (exit=125, Run H 2026-11-21 实证)。这里只起无 profile 的基础设施;
       #   6 个业务服务由下方 start_full_services_serial 逐个拉起。
+      # 与 step 2a 同一白名单, 排除 skywalking-oap/ui 以降低 CI commit 压力。
       timeout 300 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
-        --parallel 1 up -d
+        --parallel 1 up -d \
+        nacos postgres redis rabbitmq elasticsearch prometheus alertmanager grafana \
+        loki sentinel
     fi
     # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
     #   早前写成两条并列的 for 循环(profile / 非 profile 各一份), 结果守护

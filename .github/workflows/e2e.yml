@@ -213,6 +213,8 @@ jobs:
         env:
           # 让 compose 在 runner 上能找到 Nacos
           JAVA_OPTS: ""
+          # CI runner commit 预算紧: 180s settle * 6 服务过长且持续压内存 (Run L 239%).
+          SETTLE_SECS: "90"
 
       - name: Gate self-tests (deploy/tests/test_*)
         # ⚠️ 2026-11-21 移到 verify-e2e.sh 之后: deploy/tests 里的部分自检

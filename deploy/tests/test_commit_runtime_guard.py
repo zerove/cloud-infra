@@ -109,9 +109,12 @@ def main() -> int:
     check("真实 /proc/meminfo 能解析出 Committed_AS",
           "Committed_AS" in real, f"实际键: {sorted(real)[:8]}")
     check("真实 /proc/meminfo 能解析出 CommitLimit", "CommitLimit" in real)
-    check("真实解析出的 ratio 在合理区间 (0, 2]",
-          real.get("CommitLimit", 0) > 0
-          and 0 < real.get("Committed_AS", 0) / real["CommitLimit"] <= 2)
+    # 上界放宽到 10: CI runner 在重负载下 Committed_AS 可短暂超过 CommitLimit
+    # (overcommit=2 下内核拒绝新 commit, 但计数器与实测口径会出现 >1 甚至 >2)。
+    # 本断言只抓"单位解析错了几个数量级"这种真正 bug, 不把环境压力当测试失败。
+    ratio = real.get("Committed_AS", 0) / real["CommitLimit"] if real.get("CommitLimit", 0) > 0 else -1
+    check("真实解析出的 ratio 在合理区间 (0, 10]",
+          0 < ratio <= 10, f"实际 ratio={ratio:.2f}")
 
     # ---- 正向: 低占用应通过 ----
     code, out = run_with_stub(0.50)
