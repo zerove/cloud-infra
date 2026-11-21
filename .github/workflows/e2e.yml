@@ -14,7 +14,7 @@ jobs:
   e2e:
     name: End-to-End Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -284,12 +284,14 @@ jobs:
           python3 docs/demos/notification-websocket-e2e.py
 
       - name: Upload E2E logs on failure
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-logs-${{ github.run_id }}
           path: |
             /tmp/e2e.log
+            .e2e-up.log
+            .e2e-up-ok.log
             **/target/surefire-reports/
           # 注: 曾有 `deploy/nacos/conf/` 一行, 但该路径自 ab5baa50 引入起
           # 从未存在过 (git log --all -- deploy/nacos/conf 无任何记录)。

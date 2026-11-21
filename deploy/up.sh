@@ -994,7 +994,7 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
       #   "Error: no container with name or ID \"cloud-minio\" found: no such container"
       #   (exit=125, Run H 2026-11-21 实证)。这里只起无 profile 的基础设施;
       #   6 个业务服务由下方 start_full_services_serial 逐个拉起。
-      podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
+      timeout 300 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
         --parallel 1 up -d
     fi
     # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
