@@ -119,10 +119,17 @@ def client_major() -> tuple[int, str]:
                      ("elasticsearch-java jar dirs", _jar_dirs)):
         try:
             v = fn()
-        except Exception:
+        except Exception as e:
             v = -1
+            print(f"[diag] {name} raised: {e!r}")
         if v >= 0:
             return v, name
+    import os
+    m2 = str(Path.home() / ".m2/repository")
+    print("[diag] client_major: all sources failed: "
+          f"Path.home()={Path.home()}, m2_exists={os.path.isdir(m2)}, "
+          f"bom_poms={glob.glob(m2 + '/org/springframework/boot/spring-boot-dependencies/*/*.pom')[:5]}, "
+          f"es_jars={glob.glob(m2 + '/co/elastic/clients/elasticsearch-java/*/elasticsearch-java-*.jar')[:5]}")
     return -1, ""
 
 

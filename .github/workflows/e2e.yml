@@ -64,6 +64,17 @@ jobs:
         run: bash verify-dockerfiles.sh
         shell: bash
 
+      # ⚠️ 移到守护之前: 各 Guard/守护(如 Guard ES version alignment)需要从 m2 读取
+      #    spring-boot-dependencies BOM 拿 ES 客户端版本;此前 cache 在守护之后,
+      #    m2 冷(runner 刚启动),守护找不到版本而红。
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Install Podman + podman-compose
         run: |
           sudo apt-get update
@@ -207,14 +218,6 @@ jobs:
         # 加这一步让它成为真正的门禁而非摆设——改坏一条 order 会红, 改回会绿。
         run: bash deploy/tests/quick_audit.sh
         shell: bash
-
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
 
       - name: Start Podman system service (rootless)
         # GitHub runner 默认有 podman, 但 rootless 模式需 lingering 启动守护进程
