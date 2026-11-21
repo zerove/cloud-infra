@@ -32,7 +32,7 @@ The project follows a modular architecture to decouple core infrastructure capab
     *   **Tracing**: **OpenTelemetry** via OTLP to collector (`otel-collector:4318`), configurable sampling rate (`TRACE_SAMPLING_PROBABILITY`).
 *   **Communication**: Event-driven via **RabbitMQ** (Spring Cloud Stream removed from common). Services use `@RabbitListener` with concurrency tuning.
 *   **Security**: Gateway validates JWT and propagates identity via headers (`X-User-Id`, `X-User-Name`). Downstream services use `@PreAuthorize` with `@ss.hasPermi`.
-*   **Virtual Threads**: Enabled globally (`spring.threads.virtual.enabled=true`), ZGC for microsecond pause.
+*   **Virtual Threads**: Enabled globally (`spring.threads.virtual.enabled=true`), G1GC (`-Xmx256m`) for small-heap containers.
 *   **Dependency Flow**: `common` → `framework` (optional `api`) → `modules/auth/gateway`.
 
 ## 🛠️ Tech Stack

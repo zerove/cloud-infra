@@ -6,6 +6,7 @@ import com.cloudinfra.common.core.domain.PageQuery;
 import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
+import com.cloudinfra.common.core.tenant.TenantContext;
 import com.cloudinfra.system.domain.UnifiedAuditRecord;
 import com.cloudinfra.system.mapper.SysOperLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -44,27 +45,37 @@ public class AuditAggregatorService {
     public List<UnifiedAuditRecord> getUnifiedTimeline(Long userId) {
         // 使用虚拟线程并发拉取不同源的日志
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            
+            // issue 36 深化防御: 必须在**提交任务的请求线程**里捕获租户。
+            // TenantContext 是普通 ThreadLocal, virtual thread 不会继承 ——
+            // 在 lambda 内读只会永远得到 "default", 让非 default 租户的审计静默丢失。
+            final String tenantId = TenantContext.getTenantIdOrDefault();
+
             // 1. 异步拉取系统操作日志 (本地 DB)
             CompletableFuture<List<UnifiedAuditRecord>> operLogsFuture = CompletableFuture.supplyAsync(() -> {
-                return operLogMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysOperLog>()
-                        .eq(SysOperLog::getUserId, userId)
-                        .orderByDesc(SysOperLog::getCreateTime)
-                        .last("LIMIT " + OPER_LOG_LIMIT)
-                ).stream().map(log -> new UnifiedAuditRecord(
-                    log.getCreateTime(),
-                    userId.toString(),
-                    log.getTitle(),
-                    log.getOperUrl(),
-                    mapOperLogStatus(log.getStatus()),
-                    log.getOperName(),
-                    "SYSTEM"
-                )).collect(Collectors.toList());
+                TenantContext.setTenantId(tenantId);
+                try {
+                    return operLogMapper.selectList(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SysOperLog>()
+                            .eq(SysOperLog::getUserId, userId)
+                            .orderByDesc(SysOperLog::getCreateTime)
+                            .last("LIMIT " + OPER_LOG_LIMIT)
+                    ).stream().map(log -> new UnifiedAuditRecord(
+                        log.getCreateTime(),
+                        userId.toString(),
+                        log.getTitle(),
+                        log.getOperUrl(),
+                        mapOperLogStatus(log.getStatus()),
+                        log.getOperName(),
+                        "SYSTEM"
+                    )).collect(Collectors.toList());
+                } finally {
+                    TenantContext.clear();
+                }
             }, executor);
 
             // 2. 异步拉取通知发送日志 (远程 API)
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
+                TenantContext.setTenantId(tenantId);
                 try {
                     // 端点已分页：必须逐页取完, 否则审计聚合会静默丢数据
                     final int pageSize = 100;
@@ -99,6 +110,8 @@ public class AuditAggregatorService {
                 } catch (Exception e) {
                     log.error("拉取通知审计日志失败", e);
                     return Collections.emptyList();
+                } finally {
+                    TenantContext.clear();
                 }
             }, executor);
 

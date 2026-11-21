@@ -1,6 +1,6 @@
-# ADR-001: JDK 25 虚拟线程与 Generational ZGC
+# ADR-001: JDK 25 虚拟线程与 G1GC
 
-**状态**: 已接受  
+**状态**: 已接受（标题与决策中的 ZGC 描述已于 2026-11-21 更正）  
 **日期**: 2026-04-21  
 **提出者**: 架构组  
 **优先级**: 高  
@@ -14,12 +14,18 @@
 
 ## 决策
 
-采用 **JDK 25 虚拟线程（Virtual Threads）** 和 **Generational ZGC** 作为运行环境。
+采用 **JDK 25 虚拟线程（Virtual Threads）** 和 **G1GC** 作为运行环境。
 
 ### 实施细节
 
 1. **虚拟线程**: 通过 `spring.threads.virtual.enabled=true` 全局启用，配合 `VirtualThreadConfig` 配置类将 `@Async` 任务委托给 `Executors.newVirtualThreadPerTaskExecutor()`
-2. **Generational ZGC**: 配置 JVM 参数 `-XX:+UseZGC -XX:+ZGenerational` 实现微秒级 GC 停顿
+2. **G1GC**: 实际运行参数为 `-XX:+UseG1GC` 且堆上限 256m
+
+> **2026-11-21 对照更正**：本 ADR 早已反复叙述 ZGC（标题、决策、实施细节），但**运行态
+> 一直是 G1GC**（compose 六个服务均 `-XX:+UseG1GC`，见 `deploy/compose.yaml`；ZGC
+> 仅存在于已删除的根 Dockerfile 自陈"已失效"，实测从未生效）。本次更正只把标题与
+> 决策文字改正，不改变初始决策的虚拟线程部分。G1 + 小堆（`-Xmx256m`）仍延续了
+> AGENTS.md 十几年"G1GC + 256m"的既有测量口径。
 3. **避免 synchronized**: 在框架代码中禁止使用 `synchronized` 块，改用 `ReentrantLock`，防止虚拟线程钉住（pinning）
 4. **钉住监控**: 通过 JFR 监听 `jdk.VirtualThreadPinned` 事件，使用 `VirtualThreadPinnedMonitor` 将钉住事件记录到 Micrometer Prometheus 指标 `jvm.threads.virtual.pinned`
 

@@ -1,7 +1,7 @@
 # 架构定义 (ARCHITECTURE.md)
 
 > **当前状态**: v1.0.0 (2026-09-01) — Production-Ready Release
-> **关键能力**: 10 个现行 ADR (+1 归档), 516 tests pass, P0-3b JWT blacklist 端到端 401 实测, M5-03 业务告警 Counter 运行时实测 (Counter 7.0)
+> **关键能力**: 11 个现行 ADR (+1 归档), 625 unit tests + 116 IT tests, P0-3b JWT blacklist 端到端 401 实测, M5-03 业务告警 Counter 运行时实测 (Counter 7.0)
 > **git tag**: v1.0.0 on origin (e6b786d) —— 注意其后已有 410 个提交, "0 commit drift" 的旧表述已于 2026-10-17 更正
 
 ## 📐 分层结构 (Layering)

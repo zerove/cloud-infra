@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-516%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-625%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
 
 > ⚠️ **进度口径说明** (2026-09-30): 徽章中的 `ROADMAP 1/6` 按项目级完成定义统计,
 > 即**被真实业务使用的能力数**。若按传统“条目打勾”口径计, M6/M7 看起来接近全绿 ——
