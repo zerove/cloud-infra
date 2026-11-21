@@ -1,5 +1,6 @@
 package com.cloudinfra.system.mapper;
 
+import com.cloudinfra.common.core.tenant.TenantFilter;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
@@ -12,9 +13,14 @@ import java.util.List;
  * {@code HealthWatcher} 的三条告警在任何情况下都不可能触发 —— 阈值再严也没用。
  * 此处提供真实聚合, 让告警重新具备可达性。
  *
+ * <p>类级 {@code @TenantFilter}: 多租户深化(2026-11-21)后, 带 {@code tenant_id}
+ * 的表(如 {@code sys_notification_log})必须显式标注 ——
+ * {@code TenantSqlInterceptor} 对无注解 Mapper 是放行(fail-open), 不标会跨租户。
+ *
  * <p>不映射实体: 都是聚合结果, 没有对应的 POJO。
  */
 @Mapper
+@TenantFilter
 public interface PlatformMetricsMapper {
 
     /** 存储配额汇总。{@code used}/{@code total} 即利用率分子分母。 */
