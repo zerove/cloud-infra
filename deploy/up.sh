@@ -753,7 +753,10 @@ repair_healthcheck_logs
 
 echo "=== 1. 停止并清理旧环境 ==="
 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true
-echo "  已停止旧环境 (保留数据卷)"
+# 清理 Nacos Derby 数据避免自锁/损坏状态（配置每次从 deploy/config 重新同步，
+# 服务注册为运行时状态，清空不影响正确性；但可避免 Derby 半初始化导致的重启循环）。
+rm -rf "$SCRIPT_DIR/nacos/data/derby-data" "$SCRIPT_DIR/nacos/data/protocol" 2>/dev/null || true
+echo "  已停止旧环境 (保留数据卷, 已重置 Nacos 本地状态)"
 
 # ⚠️ 两阶段启动的原因 (2026-10-02, CI E2E run 37050526759 的根因):
 #   原来只有一次 `podman-compose up -d`, 把基础设施和 6 个微服务一起拉起,
