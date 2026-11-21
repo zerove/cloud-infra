@@ -69,29 +69,60 @@ BOOT_VERSION = "4.1.0"
 
 
 def client_major() -> tuple[int, str]:
-    """ES 客户端主版本。优先 mvn dependency:tree, 失败则读 BOM pom。
+    """ES 客户端主版本。多源取值, 全部失败返回 (-1, "")。
+
+    来源(顺序): ①mvn dependency:tree ②BOM pom(任何版本目录, 取最大)
+    ③本地仓库里实际下载的 elasticsearch-java jar 版本目录(取最大)。
 
     返回 (major, 来源说明)。
     """
-    # 1) 权威来源: Maven 实际解析结果
-    p = subprocess.run(
-        ["mvn", "-o", "-q", "-pl", "cloud-infra-modules/search-service",
-         "dependency:tree", "-Dincludes=co.elastic.clients:elasticsearch-java"],
-        capture_output=True, text=True, cwd=str(ROOT), timeout=300,
-    )
-    m = re.search(r"elasticsearch-java:jar:(\d+)\.", p.stdout)
-    if m:
-        return int(m.group(1)), "mvn dependency:tree"
-
-    # 2) 降级: 直接读 BOM
     import glob
-    pat = str(Path.home() / ".m2/repository/org/springframework/boot"
-              / "spring-boot-dependencies" / BOOT_VERSION / "*.pom")
-    for pom in glob.glob(pat):
-        txt = Path(pom).read_text(encoding="utf-8", errors="ignore")
-        mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
-        if mm:
-            return int(mm.group(1).split(".")[0]), f"{Path(pom).name}"
+
+    def _mvn_tree() -> int:
+        # 权威来源: Maven 实际解析结果。实测: dependency:tree 的依赖行要走
+        # logger 打到 stdout, `-q` 下输出为空 —— 带 -q 会让此来源假绿。
+        p = subprocess.run(
+            ["mvn", "-o", "-pl", "cloud-infra-modules/search-service",
+             "dependency:tree"],
+            capture_output=True, text=True, cwd=str(ROOT), timeout=300,
+        )
+        for pat in (r"elasticsearch-java:jar:(\d+)\.",
+                    r"co\.elastic\.clients:elasticsearch-java:jar:(\d+)"):
+            m = re.search(pat, p.stdout)
+            if m:
+                return int(m.group(1))
+        return -1
+
+    def _bom_poms() -> int:
+        # 降级 A: 直接读 BOM。目录不只 BOOT_VERSION —— m2 里可能下载过多版本,
+        # 扫描更宽。
+        m = -1
+        for pom in glob.glob(str(Path.home() / ".m2/repository/org/springframework"
+                                 "/boot/spring-boot-dependencies/*/*.pom")):
+            txt = Path(pom).read_text(encoding="utf-8", errors="ignore")
+            mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
+            if mm:
+                m = max(m, int(mm.group(1).split(".")[0]))
+        return m
+
+    def _jar_dirs() -> int:
+        # 降级 B: 实际下载的 elasticsearch-java jar 版本目录, 取最大。
+        m = -1
+        for j in glob.glob(str(Path.home() / ".m2/repository/co/elastic/clients"
+                               "/elasticsearch-java/*/elasticsearch-java-*.jar")):
+            mm = re.search(r"elasticsearch-java-(\d+)\.", Path(j).name)
+            if mm:
+                m = max(m, int(mm.group(1)))
+        return m
+
+    for name, fn in (("mvn dependency:tree", _mvn_tree), ("BOM pom", _bom_poms),
+                     ("elasticsearch-java jar dirs", _jar_dirs)):
+        try:
+            v = fn()
+        except Exception:
+            v = -1
+        if v >= 0:
+            return v, name
     return -1, ""
 
 
