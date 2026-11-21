@@ -1,6 +1,6 @@
 package com.cloudinfra.system.mapper;
 
-import com.cloudinfra.common.core.tenant.TenantFilter;
+import com.cloudinfra.common.core.annotation.TenantFilter;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
