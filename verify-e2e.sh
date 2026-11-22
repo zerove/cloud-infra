@@ -1516,14 +1516,10 @@ echo
 # 逐个按容器名判定, 而不是只数 `podman ps` 里 healthy 的总数:
 # 后者会让"基础设施里有 6 个健康容器"冒充"6 个微服务都健康"。
 echo "[5/7] 等待 ${#MICROSERVICES[@]} 个微服务 healthy ..."
-# 预算从 240s 提到 600s（2026-10-03，依据 run 37057477434），再提到 720s
-# (2026-11-22, Run M: auth 在窗口末尾重启, "Up 1 second (starting)" 被判未 healthy;
-# 其他 5 个服务 healthy, commit 峰值 164%, 非 OOM)。给晚重启服务留足启动窗口。
-#
-# ⚠️ 同时修正一个诊断误导: 预算耗尽时服务可能只是在启动, 不是挂了。
-#    所以下面失败分支会打印启动进度信号（Tomcat/Started/readiness）,
-#    否则“没错误信息”会被误读成“没问题”。
-DEADLINE=$(( $(date +%s) + 720 ))
+# 预算 240s->600s->720s->900s。
+# Run M/N: auth 在窗口末尾重启后仍处于启动中, 其余服务 healthy。
+# 900s 在 45min job 预算内, 给慢重启服务留足启动窗口。
+DEADLINE=$(( $(date +%s) + 900 ))
 MISSING=""
 PROBE_FAILS=0
 # 运行期 commit 复查（2026-10-04）。

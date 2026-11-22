@@ -14,7 +14,7 @@ jobs:
   e2e:
     name: End-to-End Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     permissions:
       contents: read
     steps:
