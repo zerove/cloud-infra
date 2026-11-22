@@ -508,6 +508,7 @@ services:
   #      cloud-infra-otel-collector chart, 出口可能真实存在, 需在集群内另行核实后再动。
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
+    profiles: ["observability"]
     # ✅ 2026-10-04: 存储从 elasticsearch 改为 **postgresql**, OAP 首次真正启动成功。
     #
     #   为什么必须换存储 (不是 OAP 版本问题):
@@ -628,6 +629,7 @@ services:
     logging: *default-logging
 
   skywalking-ui:
+    profiles: ["observability"]
     # 与 skywalking-oap 保持同版本 (原为 10.2.0, OAP 是 9.7.0)。
     # OAP 本轮升到 10.1.0 后两者错开, 而 UI↔OAP 的 GraphQL 接口在小版本间
     # 可能有字段变更 —— 不实测就等于把风险留给下一个人。
@@ -776,10 +778,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       redis:
         condition: service_healthy
     logging: *default-logging
@@ -864,10 +863,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       postgres:
         condition: service_healthy
       redis:
@@ -951,10 +947,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       postgres:
         condition: service_healthy
       redis:
@@ -1054,10 +1047,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       postgres:
         condition: service_healthy
       redis:
@@ -1146,10 +1136,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -1238,10 +1225,7 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      #   OAP 自身的真依赖是 postgres (SW_STORAGE=postgresql, 见 skywalking-oap 块)。
-      #     2026-10-04 存储切换后本注释仍写 elasticsearch, 已过期。
-      skywalking-oap:
-        condition: service_started
+      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
       elasticsearch:
         condition: service_healthy
     logging: *default-logging
