@@ -24,6 +24,7 @@ CHECK_ONLY=0
 SYNC_ONLY=0
 INFRA_ONLY=0
 SELF_TEST=0
+NO_MONITORING=0
 for arg in "$@"; do
   case "$arg" in
     --full) FULL=1 ;;
@@ -31,9 +32,16 @@ for arg in "$@"; do
     --sync) SYNC_ONLY=1 ;;
     --infra) INFRA_ONLY=1 ;;
     --self-test) SELF_TEST=1 ;;
-    *) echo "未知参数: $arg (支持 --full --check --sync --infra --self-test)" >&2; exit 1 ;;
+    --no-monitoring) NO_MONITORING=1 ;;
+    *) echo "未知参数: $arg (支持 --full --check --sync --infra --self-test --no-monitoring)" >&2; exit 1 ;;
   esac
 done
+
+# 基础设施服务列表。--no-monitoring 跳过监控栈以降低 CI 内存压力。
+INFRA_SERVICES=(nacos postgres redis rabbitmq elasticsearch)
+if [ "$NO_MONITORING" -ne 1 ]; then
+  INFRA_SERVICES+=(prometheus alertmanager grafana loki sentinel)
+fi
 
 # compose.yaml 中 `profiles: ["full"]` 的服务名。
 #
@@ -783,8 +791,7 @@ if [ "$CHECK_ONLY" -ne 1 ]; then
   #   共享 runner 上易把全局 commit 顶爆(实测 Run L 239%, notification/search OOM)。
   #   SW agent 连不上 OAP 只打 warn, 不影响业务 E2E；OAP 配置对齐仍由前置守护检查。
   podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" up -d \
-    nacos postgres redis rabbitmq elasticsearch prometheus alertmanager grafana \
-    loki sentinel
+    "${INFRA_SERVICES[@]}"
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then
@@ -1000,8 +1007,7 @@ if [ "$FULL" -eq 1 ] && [ "$CHECK_ONLY" -ne 1 ]; then
       # 与 step 2a 同一白名单, 排除 skywalking-oap/ui 以降低 CI commit 压力。
       timeout 300 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" \
         --parallel 1 up -d \
-        nacos postgres redis rabbitmq elasticsearch prometheus alertmanager grafana \
-        loki sentinel
+        "${INFRA_SERVICES[@]}"
     fi
     # ⚠️ 串行逻辑**只在 start_full_services_serial 这一个函数里**。
     #   早前写成两条并列的 for 循环(profile / 非 profile 各一份), 结果守护

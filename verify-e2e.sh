@@ -1466,10 +1466,10 @@ echo
 # 打印 PASS, 而 CI 上该命令实际报
 #   podman-compose: error: argument command: invalid choice: 'full'
 # 同样是门禁假通过。
-echo "[3/7] 启动基础设施 + 微服务 (deploy/up.sh --full) ..."
+echo "[3/7] 启动基础设施 + 微服务 (deploy/up.sh --full --no-monitoring) ..."
 UP_LOG="$SCRIPT_DIR/.e2e-up.log"
 # tee: 既实时流到 CI 日志(超时被杀时仍可见), 又落盘供失败尾部诊断。
-if ./deploy/up.sh --full 2>&1 | tee "$UP_LOG"; then
+if ./deploy/up.sh --full --no-monitoring 2>&1 | tee "$UP_LOG"; then
   ok "compose 启动 + Nacos 配置同步完成"
   # ⚠️ 成功路径同样要留档（2026-10-03）。up.sh 返回 0 **不等于**微服务起来了:
   # CI run 37064502008 里 up.sh 报 PASS, 而 6 个微服务容器全部 absent
