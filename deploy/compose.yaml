@@ -335,7 +335,7 @@ services:
       HTTPS_PROXY: ''
       no_proxy: '*'
       NO_PROXY: '*'
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m"
+      ES_JAVA_OPTS: "-Xms256m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m"
     volumes:
       - esdata:/usr/share/elasticsearch/data
     networks:
@@ -727,7 +727,7 @@ services:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -741,7 +741,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -810,7 +810,7 @@ services:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -826,7 +826,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -906,7 +906,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -920,7 +920,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -981,7 +981,7 @@ services:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -995,7 +995,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -1081,7 +1081,7 @@ services:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1095,7 +1095,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -1170,7 +1170,7 @@ services:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1184,7 +1184,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "true"
+      SW_AGENT_ENABLED: "false"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
