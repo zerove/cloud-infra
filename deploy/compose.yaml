@@ -77,8 +77,8 @@ services:
       #   即 **./deploy/up.sh --sync 一直是坏的**, 且现象与因果相隔三层。
       #   今后新增任何 env 键前必须先确认它在本段内**唯一**。
       JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
-      JVM_XMS: 1g
-      JVM_XMX: 2g
+      JVM_XMS: 768m
+      JVM_XMX: 1536m
       # ⚠️ 必须显式清空代理变量(2026-10-05)。不写则 rootless podman 会从宿主
       #   shell 继承 http_proxy=http://127.0.0.1:7890, 而宿主该端口无监听,
       #   容器内 127.0.0.1 指向自己 ⇒ 任何走 HTTP 客户端的外网请求都会失败。
@@ -727,7 +727,7 @@ services:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -810,7 +810,7 @@ services:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -906,7 +906,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -981,7 +981,7 @@ services:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1081,7 +1081,7 @@ services:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1170,7 +1170,7 @@ services:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx256m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
