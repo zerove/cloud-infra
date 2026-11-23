@@ -1,0 +1,12 @@
+==== 根目录: /home/zeron/dev/cloud-infra ====
+==== 站 0: 多租户已真正启用 ====
+PASS TenantContextFilter 与 @TenantFilter 注解数(≥9)、部署态开关(3)均满足。
+==== 站 1: 已删除框架残留归零 ====
+PASS 0 命中。
+==== 站 2: Controller @PreAuthorize 覆盖率（豁免清单: internal 端点 / 登录 / 验证码 / 健康检查）====
+PASS Controller @PreAuthorize 覆盖率正常。
+==== 站 3: 关键过滤器 order 与信任链（TCF < HAF, 负向对照）====
+PASS TCF order=-110 (无显式 order) 与 HAF 无 order => 信任链绿。
+
+==== 汇总 ====
+🟢 ALL PASS (exit 0)
