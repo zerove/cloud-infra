@@ -78,6 +78,80 @@ compose_up_args() {
 
 resolve_compose_args
 
+# ⚠️ 这是本项目最阴的一类环境故障(2026-10-05 实测, 当天踩了两次)。
+#   podman 在容器停止时会 truncate healthcheck.log 再写新记录; 若进程在写入前
+#   就被杀(容器 crash / 强停 / 本项目反复出现的 malloc 失败崩溃), 就留下一个
+#   **0 字节文件**。之后:
+#
+#     $ podman ps
+#     Error: unable to get healthcheck log for <id>: failed to unmarshal ...
+#     rc=125, 且 stdout 完全为空
+#
+#   一个坏文件会让**所有** podman ps / podman-compose 调用失败 ——
+#   实测中 podman-compose 因此直接抛 CalledProcessError 而无法执行,
+#   连"这个容器还在不在"都查不出来(我一度误判 cloud-postgres 不存在)。
+#
+# ⚠️ rc=125 是 podman 的错误信号, **不是**超时(124)。本次我先把它当成超时,
+#   去找"为什么这么慢", 方向完全错了(第八课: 探针失效被读成别的问题)。
+# ⚠️【2026-10-05 修正】损坏**不止 0 字节**一种形态。实测我先按直觉写了
+#   `[]` 想修复, podman 报错变成:
+#     `readObjectStart: expect { or n, but found [`
+#   即它要的是**单个 JSON 对象**。该文件非空, 而原实现有
+#   `[ -s "$f" ] && continue`(非空就跳), 于是**恰好跳过了要修的文件** ——
+#   守护测试当时全绿, 因为它只造 0 字节文件(见 tests/test_repair_healthcheck_logs.sh 场景 1b)。
+#
+#   判据因此改为「能否解析」而非「是否为空」。合法内容取自**真实健康容器样本**
+#   (不是猜的格式, 第五课):
+#     {"Status":"healthy","FailingStreak":0,"Log":[...]}
+#   且**必须先验证 JSON 完整**再决定不动: 用 python3 解析, 解析失败才算坏。
+#   只看首字符会被 `{"Status":"healthy"`(截断的合法 JSON)骗过。
+#
+# 修法: 写入合法的空记录。这是**回退自身故障**的修复, 不丢有效数据 ——
+#   坏文件本来就没有可解析的数据。
+repair_healthcheck_logs() {
+  local root d f fixed=0
+  root="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/overlay-containers"
+  [ -d "$root" ] || return 0
+  for d in "$root"/*/; do
+    f="$d/healthcheck.log"
+    [ -f "$f" ] || continue
+    # 判据: 是否是 **podman 能解析的内容**。
+    #
+    # ⚠️ 这里**不能只用 `json.load` 判断合法性**(2026-10-05 实测踩到):
+    #   `[]` 是**合法 JSON**, json.load 成功 -> 会被判为"有效, 不碰";
+    #   但 podman 恰恰拒绝它:
+    #     readObjectStart: expect { or n, but found [
+    #   即 podman 要的是**对象({)或 null(n)**, 不是任意合法 JSON。
+    #   守护测试里"非空但格式非法([])"这项就是靠这条判据才能报红。
+    #
+    # 所以判据 = json.load 成功 **且** 顶层是 dict 或 None。
+    # 依据来自 podman 的报错原文, 不是推测(第五课)。
+    #
+    # 空文件也在这里被覆盖(json.load 对空文件直接失败)。
+    # python3 缺失时退回保守行为: 只修 0 字节, 不动非空文件(宁可漏修不可误伤)。
+    if command -v python3 >/dev/null 2>&1; then
+      if python3 -c '
+import json, sys
+try:
+    v = json.load(open(sys.argv[1], "rb"))
+except Exception:
+    sys.exit(1)
+# podman 的 readObjectStart 只接受对象或 null(报错: expect { or n)
+sys.exit(0 if isinstance(v, (dict, type(None))) else 1)
+' "$f" 2>/dev/null; then
+        continue  # podman 能解析, 不碰
+      fi
+    else
+      [ -s "$f" ] && continue
+    fi
+    if printf '{"Status":"reset","FailingStreak":0,"Log":null}' >"$f" 2>/dev/null; then
+      fixed=$((fixed+1))
+    fi
+  done
+  [ "$fixed" -gt 0 ] && echo "  ✓ 已修复 $fixed 个 podman 无法解析的 healthcheck.log (podman ps 本会因此全面失败)"
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # 兼容性自检 (--self-test): 不启动任何容器, 验证参数拼装与 compose.yaml 一致。
 #
@@ -209,10 +283,6 @@ ensure_env() {
     if [ -f "$PROJECT_ROOT/.env.example" ]; then
       echo "=== 未检测到 .env, 从 .env.example 生成本地开发配置 ==="
       cp "$PROJECT_ROOT/.env.example" "$ENV_FILE"
-      # 随机生成 JWT 密钥避免开发环境使用已知值
-      RANDOM_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
-      sed -i "s|^AUTH_JWT_SECRET=.*|AUTH_JWT_SECRET=${RANDOM_SECRET}|" "$ENV_FILE"
-      echo "  ✓ 已生成 $ENV_FILE (AUTH_JWT_SECRET 已随机化)"
     else
       echo "✗ 缺少 .env 且无 .env.example 模板, 请手动创建 .env" >&2
       exit 1
@@ -220,13 +290,46 @@ ensure_env() {
   else
     echo "=== 使用现有 .env (如需重置请删除后重跑) ==="
   fi
-  # Nacos 3.2.3+ 在 NACOS_AUTH_ENABLE=false 下仍会初始化 token 管理器，要求
-  # NACOS_AUTH_TOKEN 为 Base64 且解码后 >= 32 bytes(256 bits)，否则 crash-loop。
-  if ! grep -q '^NACOS_AUTH_TOKEN=' "$ENV_FILE" 2>/dev/null; then
-    _nats_tok=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
-    printf '\nNACOS_AUTH_TOKEN=%s\n' "$_nats_tok" >> "$ENV_FILE"
-    echo "  ✓ 已补充 NACOS_AUTH_TOKEN (Base64, >=256 bits)"
+
+  # 凭据随机化 (2026-11-06 统一): 留空 / 缺失 / 仍是模板占位值 时一律现场生成。
+  #
+  # 为什么三种情况都要管: 早先只在"新建 .env"分支里替换 AUTH_JWT_SECRET,
+  # 于是「手工 cp .env.example .env」和「升级前就已存在的 .env」都会带着
+  # 模板里的公开占位值一路跑下去 —— 那个值能通过长度校验, 也不在弱密钥黑名单里,
+  # 任何读过本仓库的人都能用它伪造管理员 JWT。仅靠服务端 fail-fast 拦不住它。
+  #
+  # 只在"值不可用"时才轮换: 每次启动无条件重生成会让已签发的 token 全部失效。
+  rotate_secret() {
+    _key="$1"
+    _placeholder="$2"
+    _cur="$(grep -E "^${_key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
+    if [ -z "$_cur" ] || [ "$_cur" = "$_placeholder" ]; then
+      _new="$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)"
+      if grep -qE "^${_key}=" "$ENV_FILE"; then
+        sed -i "s|^${_key}=.*|${_key}=${_new}|" "$ENV_FILE"
+      else
+        printf '\n%s=%s\n' "$_key" "$_new" >> "$ENV_FILE"
+      fi
+      echo "  ✓ 已为 $ENV_FILE 生成 ${_key}"
+    fi
+  }
+  rotate_secret AUTH_JWT_SECRET "your_very_secure_jwt_secret_key_at_least_32_chars"
+  # 公开示例值即"密钥已公开", 会使内部调用验签 (verify-internal-sign) 形同虚设,
+  # 服务侧 InternalCallCrypto 对同一值也会直接拒绝启动 (fail-fast)。
+  rotate_secret INTERNAL_CALL_SECRET "cloud-infra-internal-dev-secret"
+
+  # 补齐 NACOS_AUTH_TOKEN: nacos 3.x 要求 Base64 令牌, 留空则容器 exit 255 重启循环。
+  # 存量 .env 早于该键, 故即使文件已存在也要回填 (2026-10-17 E2E 实测踩到)。
+  if ! grep -qE "^NACOS_AUTH_TOKEN=.+" "$ENV_FILE"; then
+    NACOS_TOKEN=$(head -c 32 /dev/urandom | base64 -w0)
+    if grep -qE "^NACOS_AUTH_TOKEN=" "$ENV_FILE"; then
+      sed -i "s|^NACOS_AUTH_TOKEN=.*|NACOS_AUTH_TOKEN=${NACOS_TOKEN}|" "$ENV_FILE"
+    else
+      printf '\n# Nacos 3.x 鉴权令牌 (Base64, 解码后 >= 32 字节)\nNACOS_AUTH_TOKEN=%s\n' "$NACOS_TOKEN" >> "$ENV_FILE"
+    fi
+    echo "  ✓ 已为 $ENV_FILE 生成 NACOS_AUTH_TOKEN"
   fi
+
   # shellcheck disable=SC1090
   # JAVA_OPTS 含空格与引号, 直接 source 会触发 "command not found";
   # 用 process substitution 过滤掉, 仅导出其余变量
@@ -327,6 +430,11 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     exit 2
   fi
 fi
+
+# ⚠️ 必须放在**任何 podman 调用之前**（包括下面的 down）。
+#   空 healthcheck.log 会让 podman ps / podman-compose 全面报错(rc=125),
+#   而 down 内部就要调 podman —— 不先修, 连清理都做不了。
+repair_healthcheck_logs
 
 echo "=== 1. 停止并清理旧环境 ==="
 podman-compose -f "$SCRIPT_DIR/compose.yaml" --env-file "$ENV_FILE" down 2>/dev/null || true

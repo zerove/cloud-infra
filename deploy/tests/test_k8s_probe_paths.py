@@ -22,12 +22,14 @@ actuator 健康端点的真实路径是 `/management/health/*`, 而**不是**
 `deploy/compose.yaml` 里 6 个服务的 healthcheck 用的就是
 `http://localhost:9301/management/health/readiness`, 且**长期可用**。
 即该路径是生产中已被验证可达的那个, 而 `/actuator/health/*` 从未生效过。
-本守护同时校验 compose healthcheck, 使三个部署面(manifests / Helm / compose)
+本守护同时校验 compose healthcheck, 使两个部署面(Helm / compose)
 不会各自漂移。
+⚠️ 2026-11-07: 原 kustomize 面(manifests/)已删除, 本守护相应移除该扫描根
+   —— 并且不再允许"声明的扫描根不存在"这种静默降级(见 SCAN_ROOTS 判定)。
 
 ## 判定方式
 
-扫描 manifests/ 与 deploy/k8s/ 下所有 `*Probe.httpGet.path`:
+扫描 deploy/k8s/ 下所有 `*Probe.httpGet.path`:
 1. 不得以 `/actuator` 开头(base-path 已取代它)
 2. 指向 health 分组时必须是 `/management/health/{liveness,readiness}`
 3. 探针端口必须是管理端口 9301
@@ -43,9 +45,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # 只扫 cloud-infra 自己的 Spring 服务。deploy/k8s/infra/ 是第三方组件 chart
 # (Elasticsearch / Nacos / Zipkin / OTel collector), 它们用自己的原生探针路径与端口
 # (如 /_cluster/health:9200), 不受 Spring 的 base-path 约束 —— 纳入扫描会全部误报。
+# ⚠️ 2026-11-07: 原第一个扫描根 `manifests/` (kustomize 面) 已删除 —— 但本脚本
+#    还在声明它, 而 `iter_yaml_files()` 对不存在的目录是静默 continue,
+#    于是删除这个部署面时没有任何东西报错。现在把每个声明的扫描根改为**必须存在**。
 SPRING_SERVICES = ("auth", "system", "file", "notification", "search", "gateway")
-SCAN_ROOTS = [REPO_ROOT / "manifests"]
-SCAN_ROOTS += [REPO_ROOT / "deploy" / "k8s" / name for name in SPRING_SERVICES]
+SCAN_ROOTS = [REPO_ROOT / "deploy" / "k8s" / name for name in SPRING_SERVICES]
 
 COMPOSE_FILE = REPO_ROOT / "deploy" / "compose.yaml"
 
@@ -83,17 +87,25 @@ PATH_RE = re.compile(r"^\s*path:\s*(\S+)\s*$", re.M)
 PORT_RE = re.compile(r"^\s*port:\s*(\d+)\s*$", re.M)
 
 
+def missing_scan_roots() -> list[Path]:
+    return [r for r in SCAN_ROOTS if not r.is_dir()]
+
+
 def iter_yaml_files():
     for root in SCAN_ROOTS:
-        if not root.is_dir():
-            continue
         for pattern in ("**/*.yaml", "**/*.yml"):
             yield from root.glob(pattern)
 
 
 def main() -> int:
-    if not any(r.is_dir() for r in SCAN_ROOTS):
-        print(f"FAIL: 未找到扫描目录: {[str(r) for r in SCAN_ROOTS]}")
+    missing = missing_scan_roots()
+    if missing:
+        # 声明了的扫描根必须存在: "静默跳过不存在的目录"会把"少扫一整块"合法化,
+        # 让失效的守护继续假绿(manifests/ 被删除时正是这样一路假绿过来的)。
+        print("FAIL: 声明的扫描根不存在 (声明 ≠ 实际, 不能判绿):")
+        for m in missing:
+            print(f"  {m}")
+        print("  → 若该目录确实已删除, 请同步移除 SCAN_ROOTS 里的声明, 不要让守护空转。")
         return 1
 
     failures: list[str] = []
@@ -168,6 +180,11 @@ def main() -> int:
                     failures.append(
                         f"deploy/compose.yaml:{line_no}: healthcheck 使用 {url} —— "
                         f"base-path=/management, 该路径恒 404(实测)")
+
+    if checked == 0:
+        print("FAIL: 扫描到 0 处探针 —— 声明的部署面找不到任何 *Probe 块,")
+        print("      这是守护失效而不是『通过』。检查 SCAN_ROOTS / 文件布局是否漂移。")
+        return 1
 
     if failures:
         print("FAIL:")

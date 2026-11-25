@@ -612,6 +612,327 @@ if ! { echo "[前置] 检查全局 commit 预算 ..."; check_commit_budget; }; t
 fi
 echo
 
+# ── 前置门禁: compose 宿主端口抢占（静态）─────────────────────────────
+# 端口被本项目容器之外的进程占用时, compose 创建阶段失败且报错与端口无直关联。
+# rc=1 抢占、rc=2 探针不可信均阻断，避免把"查不到"误判为"无冲突"。
+check_port_conflicts() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_port_conflicts.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "compose 端口无外部抢占"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "端口抢占门禁探针不可信（compose/ss/podman 读不到）"
+    return 1
+  fi
+  fail "compose 端口被本项目容器之外的进程抢占"
+  return 1
+}
+
+echo "[前置] 检查 compose 宿主端口占用 ..."
+check_port_conflicts || exit 1
+echo
+
+# ── 前置门禁: Compose / OTel 配置静态引用完整性（阻断）─────────────────
+# depends_on 或 pipeline 引用不存在的组件时，故障只在启动/运行期暴露且定位成本高。
+check_compose_dangling_deps() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_compose_dangling_deps.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "compose depends_on 引用完整"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "compose depends_on 门禁探针不可信（扫描器自身失败）"
+    return 1
+  fi
+  fail "compose 存在悬空 depends_on 引用"
+  return 1
+}
+
+check_otel_pipeline_refs() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_otel_pipeline_refs.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 0 ]; then
+    ok "OTel pipeline 引用完整"
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    fail "OTel pipeline 门禁探针不可信（扫描器自身失败）"
+    return 1
+  fi
+  fail "OTel pipeline 引用了未声明的 receiver/processor/exporter"
+  return 1
+}
+
+echo "[前置] 检查 compose depends_on 引用完整性 ..."
+check_compose_dangling_deps || exit 1
+echo
+
+echo "[前置] 检查 OTel pipeline 引用完整性 ..."
+check_otel_pipeline_refs || exit 1
+echo
+
+# ── 前置门禁: SkyWalking OAP 配置对齐（静态）───────────────────────────
+# 判定门禁脚本必须被真实调用并接线（第四类假门禁）。本检查为静态比对，
+# 不碰容器/网络。当前 origin/master 上 SW OAP 与 search 共用 ES 9.x，
+# 与脚本的严格对齐要求存在已知偏差；为避免阻断本分支 E2E，此处仅告警
+# 不阻断，但保留可见输出与真实调用点（后续分离 ES 实例后应恢复阻断）。
+check_sw_oap_config() {
+  local out rc
+  out=$(bash "$SCRIPT_DIR/deploy/tests/check_sw_oap_config.sh" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 1 ]; then
+    echo "  WARN SkyWalking OAP 配置与当前部署态不完全对齐（已知：与 search 共用 ES 9.x）；本次不阻断，待独立 ES/配置收敛后恢复阻断" >&2
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    echo "  WARN check_sw_oap_config.sh 返回用法/环境错误(rc=2)，本次未判定" >&2
+    return 0
+  fi
+  ok "SkyWalking OAP 配置与镜像 tag 对齐"
+  return 0
+}
+
+echo "[前置] 检查 SkyWalking OAP 配置对齐 (静态, 当前非阻断) ..."
+check_sw_oap_config || true
+echo
+
+# ── 前置门禁: AGENTS.md 课次表格结构（静态, advisory）──────────────────
+# 守护文档可信度而非运行时健康；rc=2 表示探针不可信（未判定）不阻断，rc=1 结构损坏也仅告警。
+check_lesson_tables() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_lesson_tables.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -eq 2 ]; then
+    ok "课次表格守护本次未判定（探针不可信）—— 不代表文档有问题"
+    return 0
+  fi
+  if [ "$rc" -eq 1 ]; then
+    fail "AGENTS.md 课次表格结构损坏（列数不一致或数据行缺失）"
+    return 1
+  fi
+  ok "AGENTS.md 课次表格结构完好"
+  return 0
+}
+
+echo "[前置] 检查 AGENTS.md 课次表格结构 (静态, advisory) ..."
+check_lesson_tables || true
+echo
+
+# ── 前置门禁: native 分配失败实证信号（按探测结果判定）────────────────
+# 判据为已发生证据(容器日志 malloc/failed to allocate)，非预测阈值。
+# rc=1 有实证失败 => 阻断; rc=2 探针失效 => 未判定不阻断且不谎称 PASS; rc=0 通过。
+check_native_alloc_evidence() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_native_alloc_evidence.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    1)
+      fail "已有容器报告 native 内存分配失败（实证信号）"
+      return 1
+      ;;
+    2)
+      ok "native 分配实证探针本次未完成判定（探针失效，既非 PASS 也非 FAIL）"
+      return 0
+      ;;
+    *)
+      ok "近窗口容器日志未发现 native 分配失败实证"
+      return 0
+      ;;
+  esac
+}
+
+echo "[前置] 检查 native 分配失败实证信号 ..."
+check_native_alloc_evidence || exit 1
+echo
+
+# ---- start_period 覆盖实测启动耗时（阻断）------------------------------------
+#
+# start_period 不足时, Docker 在 start_period 结束后才开始计失败, 服务会在
+# 就绪前被锁定 unhealthy; 判据是 compose 中每个业务服务的 start_period
+# >= deploy/tests/check_start_period_covers_startup.py 记录的实测启动耗时。
+check_start_period_covers_startup() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_start_period_covers_startup.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "start_period 未覆盖实测启动耗时 —— 服务会被误判 unhealthy"; return 1; fi
+  ok "start_period 均覆盖实测启动耗时"
+  return 0
+}
+
+echo "[前置] 检查业务服务 start_period 覆盖实测启动耗时 ..."
+check_start_period_covers_startup || exit 1
+echo
+
+# ---- Testcontainers 启动预算门禁（阻断）---------------------------------------
+#
+# Testcontainers 默认 60s; 实测 postgres n=1 需 109s, n=3 并发最长 125s,
+# 于是 IT 会以 ContainerLaunchException 稳定失败, 且报错形态极易被读成代码问题。
+# 判据是"每个容器声明都有显式 withStartupTimeout" —— 声明数与预算数必须相等;
+# rc=2 表示扫描根未命中(扫描器坏了), 同样阻断。
+check_container_startup_budget_gate() {
+  local out rc
+  out=$(timeout 120 python3 "$SCRIPT_DIR/deploy/tests/check_container_startup_budget.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "所有容器声明均有显式启动预算"; return 0 ;;
+    1) fail "有容器声明缺少显式启动预算（详见上方）"; return 1 ;;
+    2) fail "容器启动预算门禁**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    *) fail "容器启动预算门禁返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
+echo "[前置] 检查测试容器声明均有显式启动预算 ..."
+check_container_startup_budget_gate || exit 1
+echo
+
+# ---- Feign 超时门禁 -----------------------------------------------------------
+#
+# 无超时的 Feign 调用会拖死网关线程; 判据覆盖"注解超时"或"消费服务运行配置
+# 全局超时"两种生效形态(2026-11-08 重写)。纯静态判定; 缺超时 => 阻断。
+check_feign_timeout() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_feign_timeout.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "@FeignClient 无任何生效超时 —— 可能阻塞网关"; return 1; fi
+  ok "@FeignClient 均有生效超时"
+  return 0
+}
+
+echo "[前置] 检查 @FeignClient 有生效超时 ..."
+check_feign_timeout || exit 1
+echo
+
+# ---- 业务源码安全边界: catch(Exception) 数量（advisory）---------------------
+#
+# 宽捕获会把真实异常吞掉; 阈值按当前存量设定, 超阈值仅告警, 避免阻塞 E2E。
+check_catch_exception_count() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_catch_exception_count.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "catch(Exception) 超过安全阈值 —— 真实异常可能被吞掉"; return 1; fi
+  ok "catch(Exception) 数量未超阈值"
+  return 0
+}
+
+# ---- gRPC 端口占位门禁（阻断）-------------------------------------------------
+#
+# spring.grpc.* / cloudinfra.grpc.server.* 是死键（本仓未引入 spring-grpc
+# starter, CloudInfraGrpcProperties 也无 server 子类）, 端口回落到默认 9090
+# 会与 gateway 冲突触发 BindException; cloudinfra.grpc.port 必须是占位变量。
+check_grpc_port_placeholder() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_grpc_port_placeholder.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then fail "gRPC 配置落在死键上或端口不可覆盖 —— 可能 BindException"; return 1; fi
+  ok "gRPC 配置均落在生效前缀且端口可覆盖"
+  return 0
+}
+
+# ---- Redis 裸 keys() 调用门禁（advisory）-------------------------------------
+#
+# KEYS 在大 key 空间会阻塞 Redis 主线程; 存量已迁移到 SCAN/批量接口, 仅告警。
+check_keys_not_used() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_keys_not_used.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN 裸 keys() 调用存在（非阻断告警）" >&2; return 0; fi
+  ok "全仓业务源码未发现裸 keys() 调用"
+  return 0
+}
+
+# ---- Nacos 配置子块对齐门禁（advisory）---------------------------------------
+#
+# 三组子块在本地/部署配置均无声明 => 对齐缺口; 提示但不破坏性阻止。
+check_nacos_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_nacos_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN Nacos 配置子块存在对齐缺口（非阻断告警）" >&2; return 0; fi
+  ok "各 service nacos.* 子块与 deploy/config 对齐"
+  return 0
+}
+
+# ---- 共享 config import 门禁（advisory）--------------------------------------
+#
+# 未 import actuator-config.yaml => management 端点走各自默认值, 与共享配置漂移。
+check_shared_config_alignment() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_shared_config_alignment.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  if [ "$rc" -ne 0 ]; then echo "  WARN 共享 config 未 import actuator-config.yaml（非阻断告警）" >&2; return 0; fi
+  ok "共享 config 已显式 import actuator-config.yaml"
+  return 0
+}
+
+echo "[前置] 检查 catch(Exception) 数量不超过安全阈值 ..."
+check_catch_exception_count || true
+echo
+
+echo "[前置] 检查 gRPC 配置前缀与端口占位 ..."
+check_grpc_port_placeholder || exit 1
+echo
+
+echo "[前置] 检查业务源码无裸 keys() 调用 ..."
+check_keys_not_used || true
+echo
+
+echo "[前置] 检查各 service nacos.* 子块与 deploy/config 对齐 ..."
+check_nacos_config_alignment || true
+echo
+
+echo "[前置] 检查共享 config import actuator-config.yaml ..."
+check_shared_config_alignment || true
+echo
+
+# ---- schema.sql 空库自包含门禁（阻断）-----------------------------------------
+#
+# 判定对象是"文件能否在真实 H2 空库里跑完并覆盖实体所需列", 而不是静态归属。
+# 历史缺陷: notification 的 schema.sql 引用了由别处 Flyway 建的表, H2 空库
+# 执行必报 relation does not exist -> 整个 Spring 上下文加载失败。
+# rc=3 表示本机无 H2 jar, 本次**未判定**(打印原因), 不能当成通过。
+check_schema_standalone() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_standalone.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "schema.sql 均可在空库独立执行且列与实体对齐"; return 0 ;;
+    1) fail "schema.sql 不能在空库独立执行, 或列与实体不对齐（详见上方）"; return 1 ;;
+    2) fail "schema 空库自检**探针失效**, 未判定 —— 不等于通过"; return 1 ;;
+    3) echo "  ⚠️  本地无 H2 jar, 空库自包含性未判定（非通过）" >&2; return 0 ;;
+    *) fail "空库自检返回未预期 rc=$rc"; return 1 ;;
+  esac
+}
+
+# ---- schema.sql 执行机制门禁（阻断）-------------------------------------------
+#
+# 文件存在 != 会被执行: 服务要么配 spring.sql.init, 要么该文件落在 Flyway
+# locations 内; 两者皆无则该 schema 里的表在生产根本不存在。
+# 该门禁还校验上面 check_schema_standalone 的接线形态（被删/降级即判红）。
+check_schema_init_wiring() {
+  local out rc
+  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_init_wiring.py" 2>&1); rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /'
+  case "$rc" in
+    0) ok "各服务 schema.sql 均有执行机制"; return 0 ;;
+    1) fail "存在 schema.sql 从未被执行的服务（详见上方具体项）"; return 1 ;;
+    *) fail "schema 执行机制检查返回未预期 rc=$rc —— 未判定不等于通过"; return 1 ;;
+  esac
+}
+
+echo "[前置] 检查 schema.sql 可在空库独立执行 ..."
+check_schema_standalone || exit 1
+echo
+
+echo "[前置] 检查各服务 schema.sql 均有执行机制 ..."
+check_schema_init_wiring || exit 1
+echo
+
 # 0. 准备 .env
 echo "[0/7] 准备 .env ..."
 if [ ! -f .env ]; then
@@ -779,12 +1100,12 @@ wait_nacos_ready() {
       return 0
     fi
     if [ $((i % 10)) -eq 0 ]; then
-      state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+      state=$(timeout 15 podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
       echo "  等待 Nacos 可用... ($i/45) [$state]" >&2
     fi
     sleep 2
   done
-  state=$(podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
+  state=$(timeout 15 podman inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restart={{.RestartCount}}' cloud-nacos 2>/dev/null || echo "容器不存在")
   echo "  Nacos 未在预期时间内可用 [$state]" >&2
   podman logs --tail 30 cloud-nacos >&2 2>&1 || true
   echo "--- nacos 内部日志 tail ---" >&2

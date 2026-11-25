@@ -15,7 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.cloudinfra.common.core.domain.model.LoginUser;
-import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.crypto.InternalCallVerifier;
 import com.cloudinfra.framework.security.cache.PermissionLocalCache;
 import com.cloudinfra.common.core.security.IPermissionProvider;
 import com.cloudinfra.common.util.JwtUtils;
@@ -194,23 +194,14 @@ public class HeaderAuthenticationFilter extends OncePerRequestFilter {
         return false;
     }
 
-    /** 关闭校验时恒为可信；开启时要求 (timestamp:nonce) 的 HMAC 签名有效。 */
+    /**
+     * 关闭校验时恒为可信；开启时要求 (timestamp:nonce) 的 HMAC 签名有效。
+     *
+     * <p>判定逻辑统一在 {@link InternalCallVerifier} (单一真源); 本站点只负责传入
+     * 自己的开关 ({@code cloud-infra.security.verify-internal-sign}) 与已注入的密钥。
+     */
     private boolean isTrustedInternalRequest(HttpServletRequest request) {
-        if (!verifyInternalSign) {
-            return true;
-        }
-        String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
-        String ts = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
-        String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
-        if (sign == null || ts == null || nonce == null) {
-            return false;
-        }
-        try {
-            return InternalCallCrypto.verify(
-                internalCallSecret, sign, Long.parseLong(ts), nonce);
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return InternalCallVerifier.isTrusted(request, verifyInternalSign, internalCallSecret);
     }
 
     /**

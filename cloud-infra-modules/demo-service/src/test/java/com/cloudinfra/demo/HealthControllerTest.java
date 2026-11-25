@@ -12,6 +12,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Duration;
+
 /**
  * 服务启动冒烟测试。
  * 使用 Testcontainers 启动 Redis，保证框架组件（幂等切面、Redisson）可装配。
@@ -22,7 +24,8 @@ class HealthControllerTest {
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-        .withExposedPorts(6379);
+        .withExposedPorts(6379)
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {

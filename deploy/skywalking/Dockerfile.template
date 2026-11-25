@@ -19,11 +19,9 @@ RUN addgroup -S cloudinfra && adduser -S cloudinfra -G cloudinfra
 RUN chown -R cloudinfra:cloudinfra /app
 USER cloudinfra
 COPY target/*-exec.jar app.jar
-# 复制 CDS 存档 (不存在时忽略)
-RUN cp target/*.cds /app/application.cds 2>/dev/null || true
 
-# JVM 内存优化 + CDS 启动加速
-ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:SharedArchiveFile=/app/application.cds"
+# JVM 内存优化
+ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 
 # SkyWalking APM agent (字节码增强, 可选启用)
 # 通过 env SW_AGENT_ENABLED=true 启用, 默认 false 兼容现有部署

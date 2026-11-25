@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -59,10 +60,12 @@ class NotificationDispatchReliabilityIT {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
         .withDatabaseName("cloud_infra")
         .withUsername("postgres")
-        .withPassword("password");
+        .withPassword("password")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
-    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine");
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine")
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     /**
      * 最小手工装配: 仅 JDBC + RabbitTemplate + 被测 Mapper。

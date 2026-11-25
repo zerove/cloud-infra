@@ -1,6 +1,6 @@
 package com.cloudinfra.common.core.tenant;
 
-import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.crypto.InternalCallVerifier;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -112,24 +112,11 @@ public class TenantContextFilter extends OncePerRequestFilter implements Ordered
     /**
      * 判断本次请求的内部调用签名是否有效。
      *
-     * <p>与 {@code HeaderAuthenticationFilter#isTrustedInternalRequest} 采用同一密钥、同一组头、
-     * 同一 fail-closed 策略。两处必须一致：若这里比它宽松，攻击者就只需绕过身份验签即可跨租户。</p>
+     * <p>判定逻辑统一在 {@link InternalCallVerifier} (单一真源), 与身份侧校验采用
+     * 同一密钥、同一组头、同一 fail-closed 策略 —— 若这里比身份验签宽松,
+     * 攻击者就只需绕过身份验签即可跨租户。本过滤器无开关: 校验恒生效。</p>
      */
     private boolean isTrustedInternalRequest(HttpServletRequest request) {
-        if (internalCallSecret == null || internalCallSecret.isBlank()) {
-            // 密钥未注入: 无法验签即无法信任, fail-closed
-            return false;
-        }
-        String sign = request.getHeader(InternalCallCrypto.HEADER_SIGN);
-        String ts = request.getHeader(InternalCallCrypto.HEADER_TIMESTAMP);
-        String nonce = request.getHeader(InternalCallCrypto.HEADER_NONCE);
-        if (sign == null || ts == null || nonce == null) {
-            return false;
-        }
-        try {
-            return InternalCallCrypto.verify(internalCallSecret, sign, Long.parseLong(ts), nonce);
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return InternalCallVerifier.isTrusted(request, true, internalCallSecret);
     }
 }

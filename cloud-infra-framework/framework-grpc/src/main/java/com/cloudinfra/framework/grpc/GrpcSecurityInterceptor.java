@@ -1,6 +1,7 @@
 package com.cloudinfra.framework.grpc;
 
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
+import com.cloudinfra.common.core.crypto.InternalCallVerifier;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import io.grpc.Context;
 import io.grpc.Contexts;
@@ -104,21 +105,17 @@ public class GrpcSecurityInterceptor implements ServerInterceptor {
         return new CallerBindingListener<>(delegate, caller);
     }
 
-    /** 校验内部调用 HMAC 签名, 与 HTTP 侧 {@code HeaderAuthenticationFilter} 同一套密钥与时间窗. */
+    /**
+     * 校验内部调用 HMAC 签名, 与 HTTP 侧共用 {@link InternalCallVerifier} 同一套密钥与时间窗.
+     *
+     * <p>本拦截器无独立开关: 是否校验由调用点的 {@code require-internal-sign} 决定,
+     * 因此这里恒以 {@code verifyEnabled=true} 进入唯一实现。</p>
+     */
     private boolean isTrustedInternalCall(Metadata headers) {
-        String sign = trimmed(headers.get(METADATA_INTERNAL_SIGN));
-        String timestamp = trimmed(headers.get(METADATA_INTERNAL_TIMESTAMP));
-        String nonce = trimmed(headers.get(METADATA_INTERNAL_NONCE));
-        if (sign == null || timestamp == null || nonce == null) {
-            return false;
-        }
-        long epochMillis;
-        try {
-            epochMillis = Long.parseLong(timestamp);
-        } catch (NumberFormatException invalid) {
-            return false;
-        }
-        return InternalCallCrypto.verify(internalCallSecret, sign, epochMillis, nonce);
+        return InternalCallVerifier.isTrusted(true, internalCallSecret,
+            trimmed(headers.get(METADATA_INTERNAL_SIGN)),
+            trimmed(headers.get(METADATA_INTERNAL_TIMESTAMP)),
+            trimmed(headers.get(METADATA_INTERNAL_NONCE)));
     }
 
     @Nullable
