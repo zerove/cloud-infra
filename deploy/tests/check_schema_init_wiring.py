@@ -127,12 +127,87 @@ SHARED_BY_DESIGN: dict[tuple[str, str], str] = {
 _GUARD = MODULES / "notification-service" / "src" / "main" / "resources" / "schema.sql"
 
 
+_GATE_CALL_RE = re.compile(
+    r"^\s*(?:if\s+!?\s*)?check_schema_standalone(?![.\w(])"
+)
+
+
+def _gate_calls(text: str) -> list[str]:
+    """返回 verify-e2e.sh 中**命令词位置**的 check_schema_standalone 调用行。
+
+    只匹配行首(可带 `if` 前缀)的调用; 函数定义 `check_schema_standalone() {`
+    与路径 `.../check_schema_standalone.py` 都不匹配。
+    """
+    return [
+        ln for ln in text.splitlines()
+        if _GATE_CALL_RE.search(ln) and not ln.lstrip().startswith("#")
+    ]
+
+
+def _is_blocking_call(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        re.search(r"\|\|\s*exit\b", stripped) is not None
+        or (stripped.startswith(("if ", "if !")) and "; then" in stripped)
+    )
+
+
+def _selftest_matcher() -> bool:
+    """判据自检: 匹配器必须区分"真实调用"与"函数体内的脚本路径"。
+
+    这是对 2026-11-14 假绿的永久负向对照 —— 若有人把匹配条件改回
+    "包含字面量即可", 下面第 3/4 条会立即失败。
+    """
+    cases = [
+        ("check_schema_standalone || exit 1", 1, True),
+        ("  check_schema_standalone || exit 1", 1, True),
+        ("if ! check_schema_standalone; then", 1, True),
+        ("check_schema_standalone() {", 0, None),
+        ('  out=$(python3 "$SCRIPT_DIR/deploy/tests/check_schema_standalone.py")', 0, None),
+        ("check_schema_standalone || true", 1, False),
+        ("check_schema_standalone", 1, False),
+        ("# check_schema_standalone || exit 1", 0, None),
+    ]
+    ok = True
+    for text, expected_calls, expected_blocking in cases:
+        calls = _gate_calls(text)
+        if len(calls) != expected_calls:
+            print(
+                f"FAIL: [matcher selftest] `{text}` 期望 {expected_calls} 个调用, "
+                f"实际 {len(calls)} —— 判据无法区分调用与实现路径"
+            )
+            ok = False
+            continue
+        if expected_blocking is not None:
+            actual = _is_blocking_call(calls[0])
+            if actual != expected_blocking:
+                print(
+                    f"FAIL: [matcher selftest] `{text}` 阻断性应为 "
+                    f"{expected_blocking}, 实际 {actual}"
+                )
+                ok = False
+    return ok
+
+
 def _verify_shared_by_design_guard() -> bool:
     """确认配套守护**仍在位且仍以阻断方式接线**。
 
     守护被删, 或被后人加了 `|| true` 降级, 例外就失去了验证依据 —— 此时必须判红。
     ⚠️ 这里**只验证在位与接线形态**, 不代跑它(它要在真实空库上执行 schema.sql)。
+
+    ⚠️ 2026-11-14 修复自身假绿:
+    原判据是"任意一行包含 `check_schema_standalone` 且不以 # 开头、不含 `() {`"。
+    但**函数体内**的 `out=$(python3 .../check_schema_standalone.py ...)` 也满足该条件,
+    于是把真实调用 `check_schema_standalone || exit 1` 整行删掉后, 守护仍然判绿
+    （负向对照实测 rc=0）。这是第五课补记一那类"探针把自身实现当成被测对象"。
+
+    现改为只认**shell 命令词位置**的调用, 并在每次运行时先自检匹配器
+    (_selftest_matcher), 防止判据被改回"包含字面量即可"。
     """
+    if not _selftest_matcher():
+        print("FAIL: 接线判据自检未通过 —— 探针不可信, 不得据此判绿")
+        return False
+
     guard = Path("deploy/tests/check_schema_standalone.py")
     if not guard.exists():
         print(f"FAIL: 表级豁免依赖的守护 {guard} 已不存在 —— 豁免失去依据, 不得继续生效")
@@ -143,21 +218,19 @@ def _verify_shared_by_design_guard() -> bool:
         print("FAIL: verify-e2e.sh 不存在, 无法确认配套守护是否接线")
         return False
     text = wiring.read_text(encoding="utf-8", errors="replace")
-    called = [
-        ln for ln in text.splitlines()
-        if "check_schema_standalone" in ln
-        and not ln.strip().startswith("#")
-        and "() {" not in ln
-    ]
+
+    called = _gate_calls(text)
     if not called:
         print("FAIL: check_schema_standalone 已无调用点 —— 配套守护形同虚设, 例外失去依据")
         return False
-    if any(ln.rstrip().endswith("|| true") for ln in called):
-        print(
-            "FAIL: check_schema_standalone 被 `|| true` 降级为非阻断 —— "
-            "配套守护不再中止 E2E, 例外失去依据"
-        )
-        return False
+
+    for ln in called:
+        if not _is_blocking_call(ln):
+            print(
+                "FAIL: check_schema_standalone 的调用未以阻断方式接线 —— "
+                f"`{ln.strip()}` 不再中止 E2E, 例外失去依据"
+            )
+            return False
     return True
 
 

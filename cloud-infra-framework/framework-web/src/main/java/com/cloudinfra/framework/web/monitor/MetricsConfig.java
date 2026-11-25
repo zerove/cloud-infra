@@ -2,7 +2,6 @@ package com.cloudinfra.framework.web.monitor;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.micrometer.metrics.autoconfigure.MeterRegistryCustomizer;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

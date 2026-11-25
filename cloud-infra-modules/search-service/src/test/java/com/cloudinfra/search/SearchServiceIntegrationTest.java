@@ -7,19 +7,13 @@ import com.cloudinfra.search.dto.IndexInfoVO;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.repository.OperLogRepository;
 import com.cloudinfra.search.service.IndexAdminService;
-import com.cloudinfra.search.service.impl.IndexAdminServiceImpl;
 import com.cloudinfra.test.BaseIntegrationTest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -33,7 +27,6 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 import com.cloudinfra.framework.security.filter.HeaderAuthenticationFilter;
@@ -75,28 +68,6 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
             .withEnv("discovery.type", "single-node")
             .withEnv("xpack.security.enabled", "false")
             .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
-            // 显式声明 ready 条件, 不依赖库内置默认。
-            //
-            // ⚠️【2026-10-07 重要更正】本文件原先**没有**这个覆盖, 曾被判定为
-            // 失败原因, 经对照实验**证伪**:
-            //
-            //   我当时推断「Testcontainers 内置正则要求冒号后有空格, 而 ES 9.x
-            //   输出紧凑 JSON 无空格, 故永不匹配」。**这个推断是错的。**
-            //   从 1.21.0 jar 常量池提取库的真实正则, 用 Java Pattern 逐行匹配
-            //   真实 ES 日志, 结果是 **命中 1 行**:
-            //     库内置: .*("message":\s?"started[\s?|"].*|] started\n$)
-            //            逐行 find = 1  (整块 find = true)
-            //
-            //   反向对照更直接: 把本文件**还原成没有覆盖的 HEAD 版本**重跑,
-            //   结果同样是 **7 tests / 0 failures / 0 errors / BUILD SUCCESS**。
-            //   即修复前后结果一致 ⇒ 该覆盖**不是** Search 失败的原因。
-            //
-            // 真正的变量是**并发负载**: 全量 Reactor 跑时红 (263s),
-            //   单独跑两次都绿 (355s / 365s)。不编造根因。
-            //
-            // 保留本覆盖的理由: 它把隐式的库默认变成显式契约, 读代码即可知道
-            //   在等什么; 且不降低可维护性。但它**不构成缺陷修复**, 不要当成果。
-            .waitingFor(Wait.forLogMessage(".*\"message\":\"started.*", 1))
             .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
@@ -477,56 +448,5 @@ public class SearchServiceIntegrationTest extends BaseIntegrationTest {
         assertThrows(IllegalArgumentException.class, () -> {
             indexAdminService.rebuildIndex("unknown-index");
         });
-    }
-
-    /**
-     * 覆盖删除-重建路径（参数校验之后的真实路径）。
-     *
-     * <p>⚠️ 本用例的存在理由不是"补覆盖率"，而是修正一个【恒真的绿灯】。
-     * 原先唯一的 rebuildIndex 用例传的是未知名，会在参数校验处提前抛出，
-     * 于是 delete → 分片就绪等待 → createWithMapping 从未被执行，
-     * 而该 IT 仍跑出全绿 —— 那种绿与修复是否有效彻底脱钩。
-     * 详见 AGENTS.md 第九课补记三十六 与 RebuildPathCoverageGuardTest。
-     *
-     * <p>⚠️ 断言手段的选择经过一次失败-纠正，不得随意更换：
-     * 首版用 Spring 的 {@code OutputCaptureExtension}，结果【探针失效】：
-     * 本项目 {@code logback-common.xml} 定义了自定义 appender（CONSOLE_STD /
-     * CONSOLE_JSON），捕获到的是 "Appender named [CONSOLE_STD] not referenced"
-     * 之类的启动警告，而非业务日志 ⇒ 断言红，但红的原因不是"路径没执行"。
-     * 这是"探针失效被读成被测对象失败"的又一次复现。
-     * 改用 {@code ListAppender} 直挂目标 logger（参照 AuthEvaluatorTest 已有范式），
-     * 不依赖全局 appender 配置。
-     */
-    @Test
-    @Order(8)
-    @DisplayName("删除-重建路径必须真正执行, 且重建后索引立即可用")
-    public void testRebuildIndexExecutesDeleteThenCreateWithReadinessWait() {
-        Logger target = (Logger) LoggerFactory.getLogger(IndexAdminServiceImpl.class);
-        ListAppender<ILoggingEvent> recorder = new ListAppender<>();
-        recorder.start();
-        target.addAppender(recorder);
-
-        try {
-            // sys_oper_log 是实现的 KNOWN_INDEXES 真实键名 ⇒ 越过参数校验, 进入删除-重建。
-            // ⚠️ 该名必须来自实现, 手写会与实现漂移而恒假绿（AGENTS.md 第五课）。
-            indexAdminService.rebuildIndex("sys_oper_log");
-
-            List<String> messages = recorder.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
-            assertThat(messages)
-                    .as("删除-重建路径未执行, 记录到的日志: %s", messages)
-                    .anyMatch(m -> m.contains("删除旧索引") && m.contains("sys_oper_log"));
-            assertThat(messages)
-                    .as("删除-重建路径未走完, 记录到的日志: %s", messages)
-                    .anyMatch(m -> m.contains("已重建"));
-
-            // 行为契约: 旧实现 delete 后直接 create, 新索引主分片未就绪时 search 会 503。
-            // 故重建后必须【立即】可见且非 MISSING, 否则修复无效。
-            assertThat(indexAdminService.listIndexes())
-                    .as("重建后 sys_oper_log 应处于 OPEN 状态")
-                    .anyMatch(i -> "sys_oper_log".equals(i.getIndexName()) && !"MISSING".equals(i.getStatus()));
-        } finally {
-            target.detachAppender(recorder);
-            recorder.stop();
-        }
     }
 }

@@ -119,4 +119,7 @@ management:
   tracing:
     enabled: true
     sampling:
-      probability: ${TRACE_SAMPLING_PROBABILITY:0.1}
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317

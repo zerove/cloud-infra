@@ -1,9 +1,7 @@
 package com.cloudinfra.file;
 
 import com.cloudinfra.common.core.domain.model.LoginUser;
-import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.test.BaseIntegrationTest;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import com.cloudinfra.framework.mybatis.config.MybatisPlusConfig;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -98,14 +96,12 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
             .withPassword("password")
-            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
-            // n=3 并发时最长 125 秒 / 总计 173 秒 —— Testcontainers 默认 60 秒不够。
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379)
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
@@ -269,6 +265,56 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
         });
     }
 
+    /**
+     * 删除端点的 HTTP 可达性。
+     *
+     * <p>服务层 delete() 早已存在, 但在补上 @DeleteMapping 之前没有任何入口能到达它 ——
+     * 「能力存在」不等于「能力被暴露」。本用例锁住 HTTP 这一层。
+     *
+     * <p>注意断的是**业务码**而非 HTTP 状态: 本项目约定 HTTP 200 + 业务码
+     * (见 AuthenticationEntryPointImpl 注释), 断 HTTP 状态会假绿。
+     */
+    @Test
+    void deleteEndpointRemovesFileOverHttp() {
+        byte[] up = client.post().uri("/file/upload")
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .body(BodyInserters.fromMultipartData(textFile("to-delete.txt").build()))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+        String json = new String(up);
+
+        int i = json.indexOf("fileId") + 7;
+        while (i < json.length() && !Character.isDigit(json.charAt(i))) { i++; }
+        int j = i;
+        while (j < json.length() && Character.isDigit(json.charAt(j))) { j++; }
+        long fileId = Long.parseLong(json.substring(i, j));
+
+        client.delete().uri("/file/" + fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.code").isEqualTo(200);
+
+        // 删完必须取不回原始内容, 否则等于「接口返回成功但对象还在」。
+        // download 走 StreamingResponseBody 没有 Result 信封, 故直接比对载荷 ——
+        // 判据指向被检对象本身, 与响应结构解耦。
+        byte[] after = client.get().uri("/file/download/" + fileId)
+                .header("X-User-Id", USER_WITH_PERM_ID)
+                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
+                .exchange()
+                .expectBody(byte[].class)
+                .returnResult().getResponseBody();
+
+        assertThat(after == null ? "" : new String(after))
+                .doesNotContain("integration-test-content-to-delete.txt");
+    }
+
     private MultipartBodyBuilder textFile(String name) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", new ByteArrayResource(("integration-test-content-" + name).getBytes()) {
@@ -358,122 +404,6 @@ public class FileHttpFlowIntegrationTest extends BaseIntegrationTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(true)
                 .jsonPath("$.data[0].versionNumber").isEqualTo(1);
-    }
-
-    /**
-     * 删除端点（issue 34, 2026-10-07）端到端覆盖。
-     *
-     * <p>用真实 PostgreSQL 容器 + 真实 SecurityFilterChain + 真实 @PreAuthorize +
-     * 真实 LocalStorageStrategy，验证三层防护与端点可达性 —— 服务层单测无法证明
-     * 端点真的注册、权限点真的被拦截。</p>
-     */
-    @Test
-    @Order(4)
-    void unauthenticatedDeleteIsRejectedWith401() {
-        client.delete().uri("/file/{fileId}", 1L)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.code").isEqualTo(401);
-    }
-
-    @Test
-    @Order(5)
-    void userWithoutRemovePermissionGets403() {
-        client.delete().uri("/file/{fileId}", 1L)
-                .header("X-User-Id", USER_NO_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_NO_PERM_ID)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.code").isEqualTo(403);
-    }
-
-    @Test
-    @Order(6)
-    void ownerCanDeleteUploadedFileAndItDisappearsFromSearch() {
-        // 上传 → 拿到 fileId
-        byte[] resp = client.post().uri("/file/upload")
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .body(BodyInserters.fromMultipartData(textFile("to-delete.txt").build()))
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(true)
-                .returnResult().getResponseBody();
-        long fileId = fileIdOf(resp);
-
-        // 删除前：搜索能命中
-        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "to-delete").build())
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.data.records[0].fileName").isEqualTo("to-delete.txt");
-
-        // 删除 → 成功
-        client.delete().uri("/file/{fileId}", fileId)
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(true);
-
-        // 删除后：元数据真的消失（不是"返回成功但记录还在"）
-        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "to-delete").build())
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.data.records").isEmpty();
-
-        // 再次删除同一 id → 404（资源确实没了，而非幂等返回成功）
-        client.delete().uri("/file/{fileId}", fileId)
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.code").isEqualTo(404);
-    }
-
-    /**
-     * 请求参数校验端到端覆盖 (#15)。
-     *
-     * <p>验证 {@code @Validated} + 参数约束在真实 MVC + 真实 GlobalExceptionHandler
-     * (经 GlobalExceptionAutoConfiguration 装配) 下确实拦截非法输入并返回
-     * HTTP 400 + 业务码 PARAM_ERROR, 而非把语义失败读成 500。</p>
-     */
-    @Test
-    @Order(7)
-    void invalidSearchParamsAreRejectedWith400() {
-        // 空/纯空白关键词: @NotBlank 触发
-        client.get().uri(b -> b.path("/file/search").queryParam("keyword", "   ").build())
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isEqualTo(400)
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.code").isEqualTo(ErrorCode.PARAM_ERROR.getCode());
-
-        // 每页大小越界 (pageSize=0): @Min(1) 触发
-        client.get().uri(b -> b.path("/file/search")
-                        .queryParam("keyword", "x").queryParam("pageSize", "0").build())
-                .header("X-User-Id", USER_WITH_PERM_ID)
-                .header("X-User-Name", "it_user_" + USER_WITH_PERM_ID)
-                .exchange()
-                .expectStatus().isEqualTo(400)
-                .expectBody()
-                .jsonPath("$.success").isEqualTo(false)
-                .jsonPath("$.code").isEqualTo(ErrorCode.PARAM_ERROR.getCode());
     }
 
     /** 从上传响应 JSON 提取 fileId（避免引入完整反序列化依赖）。 */

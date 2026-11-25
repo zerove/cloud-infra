@@ -1,10 +1,7 @@
 package com.cloudinfra.auth;
 
-import com.cloudinfra.api.system.dto.RegisterUserDTO;
-import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.test.BaseIntegrationTest;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +16,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,16 +54,14 @@ class AuthGatewayIntegrationTest extends BaseIntegrationTest {
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
             .withPassword("password")
-            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
-            // n=3 并发时最长 125 秒 / 总计 173 秒 —— Testcontainers 默认 60 秒不够。
-            // 本类是 fullit3/fullit5 中 auth 模块唯一失败项, 根因即此预算不足。
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            // Testcontainers 默认 60s 对 postgres 不够（实测 n=1 需 109s）
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     /** Redis 用于验证码存储和 JWT 缓存 */
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379)
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
@@ -114,10 +110,9 @@ class AuthGatewayIntegrationTest extends BaseIntegrationTest {
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.success());
 
         // When: 注册用户
-RegisterUserDTO registerUser = RegisterUserDTO.builder()
-                .username("integration_test_user")
-                .password("Test@1234")
-                .build();
+        com.cloudinfra.common.core.domain.model.LoginUser registerUser = new com.cloudinfra.common.core.domain.model.LoginUser();
+        registerUser.setUsername("integration_test_user");
+        registerUser.setPassword("Test@1234");
 
         Result<Void> registerResult = authController.register(registerUser, null);
 
@@ -140,10 +135,9 @@ RegisterUserDTO registerUser = RegisterUserDTO.builder()
     @Test
     void shouldRejectInvalidPasswordOnRegister() {
         // Given: 密码不符合强度要求
-RegisterUserDTO registerUser = RegisterUserDTO.builder()
-                .username("weak_password_user")
-                .password("weak")
-                .build();
+        com.cloudinfra.common.core.domain.model.LoginUser registerUser = new com.cloudinfra.common.core.domain.model.LoginUser();
+        registerUser.setUsername("weak_password_user");
+        registerUser.setPassword("weak");
 
         // When: 注册
         Result<Void> result = authController.register(registerUser, null);
@@ -158,17 +152,15 @@ RegisterUserDTO registerUser = RegisterUserDTO.builder()
         // Given: 先注册一个用户
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.success());
 
-RegisterUserDTO registerUser1 = RegisterUserDTO.builder()
-                .username("duplicate_user")
-                .password("Test@1234")
-                .build();
+        com.cloudinfra.common.core.domain.model.LoginUser registerUser1 = new com.cloudinfra.common.core.domain.model.LoginUser();
+        registerUser1.setUsername("duplicate_user");
+        registerUser1.setPassword("Test@1234");
         authController.register(registerUser1, null);
 
         // When: 再次注册相同用户名
-RegisterUserDTO registerUser2 = RegisterUserDTO.builder()
-                .username("duplicate_user")
-                .password("Test@1234")
-                .build();
+        com.cloudinfra.common.core.domain.model.LoginUser registerUser2 = new com.cloudinfra.common.core.domain.model.LoginUser();
+        registerUser2.setUsername("duplicate_user");
+        registerUser2.setPassword("Test@1234");
 
         org.mockito.Mockito.when(userApi.registerUser(org.mockito.Mockito.any())).thenReturn(Result.fail("用户已存在"));
 

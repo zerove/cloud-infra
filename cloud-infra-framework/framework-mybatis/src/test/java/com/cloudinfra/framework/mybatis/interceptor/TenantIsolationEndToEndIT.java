@@ -5,7 +5,6 @@ import com.cloudinfra.common.core.annotation.TenantFilter;
 import com.cloudinfra.common.core.crypto.InternalCallCrypto;
 import com.cloudinfra.common.core.tenant.TenantContext;
 import com.cloudinfra.common.core.tenant.TenantContextFilter;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import jakarta.servlet.FilterChain;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -26,6 +25,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,8 +58,7 @@ class TenantIsolationEndToEndIT {
 
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-        // 显式启动预算, 不依赖 Testcontainers 60 秒默认。
-        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     private SqlSessionFactory sessions;
     private PGSimpleDataSource dataSource;

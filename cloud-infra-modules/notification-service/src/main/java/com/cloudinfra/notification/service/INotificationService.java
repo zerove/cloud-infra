@@ -15,13 +15,11 @@ public interface INotificationService {
     void sendNotification(NotificationSendRequest request);
 
     /**
-     * 获取用户通知历史 (分页, 可按状态/类型过滤)。
-     *
-     * <p>分页窗口由 {@link PageQuery} 的 {@code normalized*} 统一归一化;
-     * 返回 {@link PageResult} 携带 total。</p>
+     * 获取用户通知历史（分页）
+     * @param page 页码（从 1 开始）
+     * @param size 每页条数
      */
-    PageResult<Notification> getNotificationHistory(Long userId, NotificationStatus status,
-                                                    NotificationType type, PageQuery pageQuery);
+    List<Notification> getNotificationHistory(Long userId, int page, int size);
 
     /**
      * 根据关键词检索通知 (检索标题和内容, 分页)

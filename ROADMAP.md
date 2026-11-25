@@ -29,10 +29,10 @@ This document serves as the master tracking list for the `cloud-infra` project, 
 | 能力 | 代码量 | 业务引用 | 判定 |
 |---|---|---|---|
 | M6-01 多租户 | ~400 行 | **10 文件** (9 Mapper + 网关 `X-Tenant-Id`) | 🟢 (2026-10-01 升级, 见下) |
-| M6-02 幂等框架 | ~500 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
-| M6-03 Outbox | 767 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
-| M6-04 编排引擎 | 764 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
-| M6-05 OpenAPI | ~300 行 | **0** → **已于 2026-10-13 删除** | ⛔ 已删除 |
+| M6-02 幂等框架 | ~500 行 | **0** (唯一引用已移除, 仅存注释) | ⚪ |
+| M6-03 Outbox | 767 行 | **0** | ⚪ |
+| M6-04 编排引擎 | 764 行 | **0** | ⚪ |
+| M6-05 OpenAPI | ~300 行 | **0** | ⚪ |
 | M7-02 gRPC | 345 行 | 1 (仅 system-module, 默认关闭) | ⚪ |
 
 **达成率 1/6**（M6-01 于 2026-10-01 从"部署态无效"转为真正生效，见下节）。
@@ -45,8 +45,7 @@ ROADMAP 此前挂着一条“需人工决策”的三选一（开+绑主体 / �
 
 改造前的三个真实问题（后两个此前未被记录）：
 
-1. **开关从未打开** —— `cloud-infra.tenant.enabled` 默认 false 且当时的 `deploy/config` 无一处开启
-   （**已于 2026-10-01 在 file-service / notification-service / system-module 三处开启**；
+1. **开关从未打开** —— `cloud-infra.tenant.enabled` 默认 false 且 `deploy/config` 无一处开启
 2. **租户身份由客户端自选** —— 网关原样透传 `X-Tenant-Id`，任意已认证用户改一个头即可读他租户数据
 3. **下游对租户头不验签**（新发现）—— `TenantContextFilter` order `-110` **先于**
    `HeaderAuthenticationFilter` 执行，而后者才对 `X-User-Id` 验签。身份验签了、租户却是敞开的：
@@ -109,14 +108,13 @@ Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此�
 **未来若引入跨租户异步场景**，需为消息体补 `tenantId` 并在消费端回填 `TenantContext`（`finally` 清理）。
 该项尚未实现，且**在出现第一个跨租户异步用例前不应先做**（见准入原则）。
 
-代码构成对照 (2026-10-17 重数): 框架 + starter + common + api **9177 行**, gateway + auth **2539 行**
-(合计 11716) vs 业务模块 **12790 行** —— 即**业务层已厚过框架层**, 与旧数字给出的结论方向相反。
+代码构成对照: 框架/网关/认证层 **13843 行** vs 业务模块 **12138 行** ——
 “为业务服务的骨架”自身已厚过它服务的 4 个业务服务。
 
 ### ⚠️ 零引用框架已成业务负担
 
-~~`deploy/config/search-service.yaml:40`~~
-**（2026-10-17 更正: 该键已随 Outbox 框架于 2026-10-13 一并删除, 全仓 grep 0 命中）**
+`deploy/config/search-service.yaml:40` 至今保留 `cloud-infra.outbox.enabled: false`
+（注释: “禁用 Outbox 功能（避免 StreamBridge 依赖问题）”。
 
 **Outbox 不只是“没人用”, 而是“用了会坏”** —— 一个业务零引用的框架反过来要求业务配开关规避。
 
@@ -126,102 +124,6 @@ Feign 内部调用、MQ 消费、`@Scheduled` 任务均无登录主体，因此�
 
 值得投入的不是新增, 而是让 `⚪` 转 `🟢`（详见 issue 28）。判据不变:
 每项开工前先回答“哪个现有业务现在就需要它”, 答不出就不做。
-
----
-
-## ✅ L3 端到端验收通过 (2026-10-04, 首次真实跑通)
-
-CI 自 09-30 起持续受 billing blocker 影响, 本轮验收全部依据**本地真实运行**:
-Podman 实际容器状态、真实 HTTP/JWT 接口、SkyWalking PostgreSQL 里的真实 segment。
-
-### 六服务全部起来且健康
-
-    cloud-gateway / cloud-auth / cloud-system / cloud-file
-    cloud-notification / cloud-search        全部 running + healthy
-
-### 真实接口链路
-
-    POST /auth/captchaImage  -> 200 (真实 base64 PNG, 带 uuid)
-    POST /auth/login         -> 200, 签发真实 JWT (264 字符)
-                                payload: sub=admin userId=1 roleId=1
-                                         tenantId=default jti=<uuid>
-    GET  :9000/system/user/list (Bearer JWT) -> 200 真实数据 (admin 用户)
-    GET  :9000/system/dept/list (Bearer JWT) -> 200 真实数据 (总公司)
-    GET  :9000/system/menu/list (Bearer JWT) -> 200 真实数据 (系统管理)
-    GET  :9000/system/user/list (无 token)     -> 401 拒绝   ← 负向对照
-
-账号来源: `sys_user` 里 admin 的密码是 BCrypt 哈希, 明文在
-`docs/perf/2026-09-01-v1.0.0-deploy-verify.md` 记录为 `admin123`
-(与仓库里既有的两个 IT 脚本一致)。验证码是固定值 `1234` 且**一次性** ——
-复用上一次拿到的验证码会得到 `验证码错误或已过期` (code 1004),
-该错误与密码错误 (code 400) 不同, 可据此区分是哪一步失败。
-
-### SkyWalking 真实 segment (PostgreSQL)
-
-`segment_20261005` 共 36,740 条, 六服务全部有数据:
-
-| 服务 | segment |
-| :--- | ---: |
-| file-service | 8,148 |
-| cloud-infra-auth | 7,729 |
-| search-service | 6,441 |
-| notification-service | 6,251 |
-| system-module | 4,381 |
-| cloud-infra-gateway | 3,783 |
-
-> 服务名的取法: `segment.service_id` 是 `base64(name).instanceId`,
-> 直接 `select service_id` 看到的是 `ZmlsZS1zZXJ2aWNl.1` 这类值。
-> 解码才得到服务名 —— **不存在 `service` / `service_id` / `service_traffic` 这三张表**
-> (真实表名带日期后缀, 如 `service_traffic_20261005`),
-> 且它不含服务名, 靠它 join 反而查不出结果。
-
-### 根因: 全局 commit 预算被 JVM 的 native 预留吃光
-
-宿主机 `vm.overcommit_memory=2`, `CommitLimit=20.6GB` **全机共享**。未设上限的
-JVM 默认 `Compressed class space reserved 1GB` + `Metaspace reserved 1.15GB`
-—— 9 个 JVM 合计约 19.35GB, 顶到 99.7% 只是时间问题。
-
-崩溃形态是 `malloc failed to allocate 112 bytes / AllocateHeap` + `ExitCode=1`
-+ `OOMKilled=false`。**oom=false 是关键**: cgroup 从未 OOM, 所以调 `mem_limit`
-完全无效 —— 内核是在 commit 层拒绝的。
-
-处置(均经受控实验定值, 非推断):
-
-| 项 | 前 | 后 | 依据 |
-| :--- | :--- | :--- | :--- |
-| JVM Metaspace | unlimited | 256m | 逐档实验: 128m 崩溃 / 192m 成功 / 384m 只多 12MB VmSize |
-| 业务 Xmx | 320~1536m | 256m | smaps 实测堆段 RSS 仅 161~206MB |
-| 基础设施启动 | 并发 | `--parallel 1` | 峰值 99% → 92% |
-| 业务服务启动 | 并发 | 逐个 + 45s 间隔 | 已在本轮生效 |
-
-效果: 业务 JVM 的 **VmSize 从 10.5GB 降到 1.1GB**, commit 峰值从 99.7% 降到
-稳定 85~95%。
-
-### 本轮修掉的四个"假线索"
-
-1. **`podman-compose create` 在 1.0.6 不存在**, 但 `|| true` 吞掉了错误 ——
-   容器压根没创建。受控实验五档全"失败"其实全是**探针失效被读成被测失败**。
-2. **函数外的 `return` 会终止整个脚本**, `local` 只是伴随报错。日志停在
-   `create` 那行, 看起来像 podman-compose 卡住。
-3. **空的 healthcheck.log 让 `podman ps` / `container ls` / `inspect` 全部失败**,
-   稳定观察循环把"取不到值" 读成 "未稳定"。一个循环内就产生了 8 个空文件。
-   **且它是全局性的**: 24 个容器里只要**一个**的该文件损坏, **所有** ps 类命令
-   一起报错 —— 我因此一度找不到 `cloud-postgres` 容器, 误以为它不存在。
-   修复格式也有坑: `[]` 仍不合法, podman 要的是单个 JSON **对象**
-   (从健康容器取样得知): `{"Status":"healthy","FailingStreak":0,"Log":[]}`。
-4. **`/actuator/health` 不是健康端点** —— 真实路径是
-   `9301/management/health/readiness`。用错端点会得到业务 `code:1000`,
-   看起来像服务故障。
-
-### 新增守护
-
-| 文件 | 判据 | 负向对照 |
-| :--- | :--- | :--- |
-| `deploy/tests/check_jvm_native_memory_bounds.py` | 9 个 JVM 全部限制 native 预留 | 逐服务删除, 9/9 报红 |
-| `deploy/up.sh` 自检 4/4 | main 流程无函数外 `local` / `return` | 注入两者, 各自报红 |
-
-自检 4/4 的由来: 原有 3 项全部只测**函数** `start_full_services_serial`,
-main 流程里的错误一个都测不到 —— 而真实运行必经的恰恰是 main 流程。
 
 ---
 
@@ -332,7 +234,7 @@ main 流程里的错误一个都测不到 —— 而真实运行必经的恰恰�
 ### 5. Code Generation & Business Alert (2026-09, v1.0.0 候选)
 **Goal:** ~~消除 RuoYi 手工 CRUD 样板~~ + 业务告警闭环。
 codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表验证过), 不再作为交付目标推进。
-- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接). 2464 行 + 26 项自测
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 历史已移除): 10+ FreeMarker 模板 (entity/mapper/dto/vo/converter/service/impl/controller/sql) + FlywayDdlParser (无需 DB 连接). 2464 行 + 26 项自测
   - ⚪ **2026-09-29 降级为可选工具**: 目标“消除 RuoYi 手工 CRUD 样板”仅在 `sys_post` 一张表上验证过, **其余业务表均为手写**。判定为可选开发工具, **不再占用路线图名额、不再新增模板**。若未来真实表迁移需求出现, 再评估投入
 - [x] 🟢 **codegen 模板 PG 化** (commit 8b6b6de): MySQL → PostgreSQL 16 风格 (BIGSERIAL, COMMENT ON, IF NOT EXISTS) + 回归测试.
 - [x] 🟢 **VO @Schema + UpdateDTO @Size 255** (commit 0ef0005): Swagger 字段描述完整 + 校验合理.
@@ -384,7 +286,7 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 
 ### Milestone 5: v1.0.0 Production-Ready (2026-09, 已发布)
 *Focus: P0 修复 + codegen 价值验证 + 业务告警闭环.*
-- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行) — 2026-09-29 降级为可选开发工具, 不再占路线图名额
+- [x] ⚪ **cloud-infra-codegen 模块** (commit b9a2a84..1359496, 8 commits / 3660 行, 历史已移除) — 2026-09-29 降级为可选开发工具, 后续因零业务引用清理出仓库
 - [x] 🟢 **P0-3b 端到端 401 实测** (commit 5a82318): JWT blacklist 运行时验证
 - [x] 🟢 **codegen 灰度迁移 sys_post** (commit 0ccdf52): 验证 codegen 输出与手写代码语义一致
 - [x] 🟢 **M5-03 业务告警 AOP 化** (commit 8430811 + 2c88ea2): @BusinessMetric 注解 + 运行时 Counter 7.0 实测
@@ -461,268 +363,4 @@ codegen 部分已于 2026-09-29 降级为 `⚪` 可选开发工具 (仅 1 张表
 - 通知直接 TLS 配置及真实组件握手测试已补齐（`b984269`），TLS 1.2/1.3、缺少身份头拒绝、心跳、推送及连接清理通过。反向代理、可信网关和生产容器链路尚未验收，M7-03 不应整体关闭。
 - **下一阶段优先完成 M7 验收缺口**：gRPC 方法级权限映射与数据范围过滤 → 第二业务模块客户端接入与网络集成测试 → 通知可信网关和容器 TLS 入口验证。
 - 上述前置验收完成后，执行 M7-07 性能基准更新。**M7-04 CDC、M7-05 模板市场、M7-06 编辑器插件已冻结**（见上方“未来 M7+ 已冻结”）。当前不将设计或组件测试标记为生产交付。
-- 质量基线：`mvn -o clean test` **625 项单测 0 失败 0 错误 1 跳过**（2026-11-21 实测, 以 surefire XML 为准）+ 整套 IT（116 项）。历史值 422（2026-09-29）/ 474（2026-09-30）/ 501（2026-10-01）/ 516（2026-10-17）/ 614（2026-11-21 首度完整统计前值）已过时
-  - **2026-10-17 修复了一处长期红灯**: `StreamingResponseAsyncDispatchTest` 是被 surefire 执行的
-    `@SpringBootTest(RANDOM_PORT)` 单测, 却会经 `RedissonConfig` 连 `localhost:6379`。
-    无 Redis 时 3 项 ERROR, **CI 亦无 `services:` 提供 Redis**。此前"501 项 0 失败"的基线
-    只在有 Redis 的机器上成立。现已用 `spring.autoconfigure.exclude` 隔离。
-
----
-
-## 📌 2026-10-04 现状审计与下一阶段计划
-
-### ⚠️ 2026-11-02 Session 产出（审计只读 + 负向对照）
-以下三项为本次 session 的复盘产出；本次未改任何代码：
-1. **完成基线复核报告** (`docs/audit/2026-11-02-completion-baseline.md`)：M6/M7 badge 维持无漂移；达成率仍 1/6（仅 M6-01）。
-2. **信任链逐跳复核报告** (`docs/audit/2026-11-02-trust-chain-review.md`)：六课逐跳全部通过（1✓ 2✓ 3✓ 4✓ 5✓）；第六课负向对照实测——临时改坏 `HeaderAuthenticationFilter.getOrder()` → 守护 grep 报红、立即还原后守护绿，`grep -c "return -200" = 0` 无残留。
-3. **SkyWalking OAP UI trace 详情展开验证步骤** (`docs/audit/M7-01-trace-ui-verification-steps.md`)：留待 CI/E2E run 后人工执行一次归档；本会话不跑通此验证。
-
-本节是**当前唯一的行动依据**，上方历史里程碑仅作背景。
-
-### 一、本轮实测量到的真实状态
-
-> **2026-10-05 更新**: 下表部分数值已被新一轮实测取代, 见下方“1a”。
-
-| 项 | 真实状态 | 证据 |
-| :--- | :--- | :--- |
-| 宿主机三本账 | 健康（`Committed_AS` 64%、load 2.28、`MemAvailable` 13GB） | 直接读 `/proc/meminfo` / `uptime` |
-| CI（E2E） | ⛔ **`BILLING_BLOCKED`**，最新 run `37182409630` steps=0 | `./deploy/tests/classify_gh_run.sh --workflow e2e.yml` |
-| SkyWalking OAP | ✅ 首次真正可用（PG 存储，`/healthcheck` 200） | 本轮实测 + `b32a95da` |
-| agent 日志 | ✅ 刷屏已消除（255 行 → 0） | 三组容器对照 A/B/C |
-| **6 个业务服务** | ✅ **全部 healthy**（本项目首次完整拉起） | 逐服务 `podman inspect` |
-| **端到端登录** | ✅ 拿到真实 JWT | `POST /auth/login` |
-| **带鉴权业务接口** | ✅ 返回真实数据 + 权限列表 | `GET /system/user/list` |
-| **SkyWalking trace** | ✅ `segment_20261004` = **4401 条**，6 个服务名全部在列 | 直查 OAP 的 PostgreSQL 存储 |
-
-#### 1a. 2026-10-05 重新验收（可复现脚本已修好）
-
-**E2E `PASS=8 FAIL=0`（退出码 0，连续两次一致）** —— 走公开接口：
-登录 / 错误密码被拒 / 无 token 401 / 带 token 200 / 伪造 token 401 / SkyWalking trace。
-
-| 项 | 2026-10-05 实测 |
-| :--- | :--- |
-| 6 个业务服务 | 6/6 healthy，稳定观察期 8 轮采样无崩溃 |
-| trace | `segment_20261005` = **8580 条**，6 个服务名全部有（gateway 740 ~ notification 1957） |
-| `Committed_AS` | 高位 84–90% 波动，**此时仍稳定** |
-
-本轮修掉三个**真实**缺陷（均为实测驱动，非推测）：
-
-1. **podman 元数据损坏（阻断性）**：`cloud-nacos` 的 `healthcheck.log` 为 0 字节，
-   podman 无法反序列化 → `podman ps` / healthcheck 读取 / `podman-compose` 全部间歇失败。
-   ⚠️ 修复时**必须先从正常容器取真实 JSON 结构**（顶层是**对象** `{Status,FailingStreak,Log}`，
-   不是数组）—— 按猜的格式写只会把报错从“空文件”变成“格式不对”。
-2. **`e2e-test.sh` 判据查了聚合表（假红）**：报“agent 注入可能失败”，而 6 个服务 agent
-   全部正常。判据查 `service_traffic_*`（OAP 定时任务生成的**聚合表**，实时为空）——
-   表在、列名对、SQL 不报错，**结论却错**。已改查 `segment` 表。
-3. **一个无效门禁（自造，已删除）**：`check_heap_headroom.py` 假设“堆外余量为 0 导致
-   malloc 失败”，**实测证伪**（见 B3.1）。
-
-> 下文的 B2/B3 已据此更新；B1（CI 计费）仍未解除。
-
-### 二、三个必须先处理的阻塞
-
-**B1. CI 计费阻塞（非代码问题，需人工）**
-`GitHub Settings → Billing & plans` 未处理前，本仓库 E2E **一次都不会真正执行**。
-在此之前，任何“CI 绿/红”的观察都无效。判据用 `classify_gh_run.sh`，不要靠看 `conclusion`。
-
-**B2. ~~全链路运行时验证缺失~~ ✅ 已于 2026-10-04 关闭**
-本轮本地拉起 6 个服务，完成 `登录 → JWT → 带 token 查用户列表` 闭环，
-并确认 SkyWalking 收到 4401 条 trace。**E2E 在 CI 侧仍因 B1 未跑过一次**，
-故本地证据不能代替 CI 证据 —— 缺口从“无任何运行时验证”变为“缺 CI 侧交叉验证”。
-
-**B3. commit 预算是拉起全栈的真实瓶颈（而非宿主机内存不足）**
-`Committed_AS` 曾达 18.3GB / 20.63GB（89%），4 个服务因此以
-`Native memory allocation (malloc) failed` 崩溃，而 `oom 0` / `OOMKilled=false`
-—— **内核从未 OOM-kill，是 JVM 分配被直接拒绝**。
-停掉 4 个本项目可选组件（`redisinsight` / `jaeger` / `promtail` / `loki`，
-`Committed_AS` 18.3GB → 12.15GB）后，全部服务稳定 healthy。
-
-> ⚠️ `redisinsight` 的 `VmSize=21262MB`（21GB）而 `RSS` 仅 149MB。
-> 它不占多少物理内存，但在 `overcommit_memory=2` 下会**预留 commit 额度**。
-> ⇒ 排查此类问题时，**“它值不值得停”看 `VmSize` 而不是 `RSS`**。
-> 这修正了第八课“`VmSize` 严重高估、不能只看它”的适用边界：
-> 高估说的是**它未被触碰的部分**，但**预留本身仍是真实成本**。
-
-**B3.1 ✅ 已于 2026-10-05 修正归因（重要，原 B3 把变量归错了）**
-
-原 B3 隐含一个假设：只要把 `Committed_AS` 降下来就安全。2026-10-05 实测证明
-**单看commit 比值不足以预测崩溃**，因为**决定变量是“同时启动多少个 JVM”**：
-
-| 场景 | commit 区间 | 结果 |
-| :--- | :--- | :--- |
-| 逐个启动（间隔 45s） | 73–84% | 6/6 存活 |
-| 连续启动 2 个 | 85–93% | **已在运行**的 auth/file 崩溃 |
-| 稳定观察期 8 轮采样 | 84–90% | 全程 6/6 存活 |
-
-**同一 commit 值（85–90%）在两种场景下一崩一活** ⇒ 静态阈值无法区分它们。
-即“给更多资源反而更早失败”：启动新服务本身要预留虚拟内存，把**已在运行**的
-服务挤死。这也解释了为何当时先归因于`redisinsight` 的预留 —— 降低基线确实有效，
-但**降低基线不消除并发启动这个触发条件**。
-
-配套结论（已落到代码）：
-
-- 删除了 `check_heap_headroom.py` 门禁。它的假设是“堆外余量为 0 导致 malloc 失败”，
-  **实测证伪**：auth 堆外余量 384MB（阈值只要 256MB）照样崩。删除原因写在
-  `verify-e2e.sh` 内，避免下一个人把它加回来。
-- 排除了 `pthread_create failed (EAGAIN)` 的另一个成因（线程数上限）：
-  `threads-max`=159962 / 当时仅 2353，cgroup `pids.max`=max（无限制）。
-  **只按错误文案推断成因不可靠**。
-- 规避手段：**降低启动并发 + 逐个间隔启动**，而非调 `-Xmx`/`mem_limit` 比例。
-
-**B4. 非本项目进程反复挤占宿主机**
-`/proc` 实测多个 `session-*.scope`（`ai_developer_growth` 的 python、rustc 等）
-各占 160MB+，高 CPU 时 `load` 冲到 21。**不得擅自终止**（可能是用户正在跑的任务）。
-但它会让每次本地验证结果不可信 —— 每轮验证前先读三本账。
-
-### 三、下一阶段计划（按"完成 = 被业务使用"排序）
-
-| 优先级 | 事项 | 完成判据（L3） | 备注 |
-| :--- | :--- | :--- | :--- |
-| ~~P0~~ | ~~消除 B2：本地全栈拉起并验收~~ | 6 个服务 healthy + 登录链路 | ✅ **本轮完成** |
-| ~~P0~~ | ~~SkyWalking trace 首次真实查询~~ | 收到真实 trace | ✅ **本轮完成**（4401 条，含 6 个服务名） |
-| **P0** | 把本地验收脚本化 | 一条命令完成拉起+登录+trace 校验 | 本轮全是手工步骤，下个会话要重来一遍 |
-| **P1** | B1 人工解除后首次真跑 E2E | run 的 steps > 0 且给出真实失败清单 | 改代码无效 |
-| **P1** | 把“OAP 可用”变成守护 | 守护覆盖 agent 日志目录 + 存储分派 | ✅ 本轮已做 |
-| **P1** | 降低全栈内存占用 | `Committed_AS` 峰值 < 80% | 当前靠停 4 个可选组件，属临时手段 |
-| **P2** | M7 验收缺口（见 2026-09-29 段） | 第二业务模块接入 gRPC | 仍适用，但不得在 P0 未完成前开工 |
-| **P2** | 完成基线复核（M6/M7 badge 重算） | 2026-11-02 只读复核报告落盘；badge 无漂移 | 完成（`docs/audit/` 三份报告） |
-| **P2** | 第六课信任链逐跳复核 + 负向对照实测 | 六课 5 点全过；order 守护红绿闭环 | 完成（`docs/audit/` 二份报告 + `HeaderAuthenticationFilter` 一次性改坏后还原） |
-| **⚠️ 待人工** | M7-01 OAP UI trace 详情展开验证 | 查 `segment_YYYYMMDD` 取 traceId → GraphQL 查询 → 展开面板非空 | CI/E2E run 后执行一次归档（`docs/audit/M7-01-trace-ui-verification-steps.md`） |
-
-### 三之二、本轮验收的具体证据（可复现）
-| **P1** | CI Maven cache key 加 commit SHA | 仅 pom 变更重缓存，每 PR 省 ~100MB 全量下载 | ✅ 本轮已提交 (commit 841d8419)
-| **P1** | native MaxRAM=14g auth 验证 | CI run 后逐档验证 auth 原生镜像；当前 14g 尚未跑过 | ⛔ Frozen: 待 CI run 后实测
-
-
-```bash
-# 启动（**必须带 --profile full** —— 6 个业务服务都带 profiles: ["full"]）
-podman-compose --profile full -f deploy/compose.yaml up -d \
-  gateway auth system file notification search
-
-# 登录：字段名是 captcha（不是 code），且 uuid 必须非空
-CFG=$(grep '^AUTH_CAPTCHA_FIXED_CODE' .env | cut -d= -f2-)
-curl -s -X POST http://localhost:9000/auth/login -H 'Content-Type: application/json' \
-  -d "{\"username\":\"admin\",\"password\":\"admin123\",\"captcha\":\"$CFG\",\"uuid\":\"p1\"}"
-
-# SkyWalking 是否真收到 trace（表名带日期后缀）
-podman exec cloud-postgres psql -U postgres -d skywalking -t -A \
-  -c "SELECT count(*) FROM segment_$(date +%Y%m%d);"
-
-# ⚠️ 服务名要从 **segment** 表取, 不是 service_traffic_*(那是聚合表, 实时为空):
-#   service_id 格式是 `<base64服务名>.<序号>`, 解码前必须先剥掉 `.N` 后缀。
-podman exec cloud-postgres psql -U postgres -d skywalking -t -A -c \
-  "SELECT convert_from(decode(regexp_replace(service_id,'\.[0-9]+\$',''),'base64'),'UTF8') \
-   || '=' || count(*) FROM segment_$(date +%Y%m%d) GROUP BY 1 ORDER BY 2 DESC;"
-```
-
-> **首次登录必然超时**（网关报 `Read timed out` / HTTP 500），第二次即 267ms 成功。
-> 原因是首次调用要初始化 Nacos 服务发现 + Feign 客户端。
-> **这不是缺陷**，但它长得非常像缺陷 —— 且网关返回的是 Spring Boot 默认 500 格式，
-> 而非本项目统一的 `Result` 格式，很容易被误判成“网关连不上 auth”。
-> ⇒ **凡看到网关侧 500，先去下游容器日志确认它到底处理成功没有**：
-> 下游 `Status: 200 | Duration: 10249ms` 就是这类误判的决定性反证。
->
-> 同理，本次踩到的另外三个“看起来像 bug 的真相”：
-> - **业务服务全部 `missing services`** → 它们带 `profiles: ["full"]`，不加 `--profile full` 不会被启动。
->   而 `podman-compose config --services` 不加 profile 时**同样不列出它们**，
->   看起来像“compose 文件坏了”。
-> - **登录报 `captcha=null`** → 真实字段名是 `captcha`，我按直觉写了 `code`。
->   这就是第五课那条：字段名不能靠命名直觉推断，要从日志/代码里读。
-> - **容器状态 `exited|healthy`** → 健康检查是**缓存的旧值**，退出时间 `FinishedAt` 才是真的。
->   `exited` 且 `healthy` 同时出现，说明容器根本没被纳入本轮重启。
-
-> **一条新增的原则（来自本轮）**：本轮两处缺陷的共性是
-> **“修好一处，忘了另一处依赖它的地方”**——
-> 存储改了但门禁的判据没跟着改；日志目录在镜像里缺失但没人验证过非 root 能否创建。
-> ⇒ **凡改动某个“被多方依赖的配置/契约”，必须同时列出并核对所有依赖方**，
-> 包括**门禁与守护测试**。它们也会因为你的改动而失效，且失效时通常表现为“测试自己报错”而非“红”。
-
-### 四、本轮新增守护
-
-| 守护 | 防护什么 | 负向对照 |
-| :--- | :--- | :--- |
-| `check_sw_oap_config.sh` 按 `SW_STORAGE` 分派 | 非 ES 存储误报红 / 缺失 `SW_STORAGE` 误放行 | 已验证：删文案 → 命中 case9；缺失放行 → 命中 case10 |
-| `agent-entrypoint.sh` 注入 `-Dskywalking.logging.output=CONSOLE` | 非 root 容器内 agent 日志写失败刷屏 | 已验证：重建后异常 709/815 → **0** |
-| `e2e-test.sh` 场景六：查 SkyWalking 存储的 `segment_YYYYMMDD` 与上报服务名 | M7-01 “已交付”但实际未生效（只查 agent 日志或 OAP `/healthcheck` 均无效，后者postgres 停掉仍返回 200） | 四项对照全做：日期写错 → `FAIL=2`；白名单不匹配 → 服务名单独红而 segment 绿；停 OAP → `SKIP` 不误判红；`segment=0` → 独立红 |
-| `verify-e2e.sh` agent 日志异常显式断言 | 掩盖性 `grep -v 'skywalking-api.log'` 把未修缺陷伪装成干净日志 | 双向对照：未重建的 `cloud-auth` 命中 **815**，已修复的 `cloud-system` 命中 **0** |
-
----
-
-## ⚠️ 2026-10-04 晚间更正：上一行那句负向对照是**无效的**
-
-上表原写：
-
-```
-| agent-entrypoint.sh 默认 SW_LOGGING_OUTPUT=CONSOLE | ... | 已验证：不设255 行 → 设后 0 行 |
-```
-
-**这条负向对照本身是无效的，被本轮实测推翻。**它测的是 entrypoint 脚本里
-`export SW_LOGGING_OUTPUT=...` 这一行的效果，而 agent 读的是**进程环境变量**
-（`agent.config` 第 115 行 `logging.output=${SW_LOGGING_OUTPUT:FILE}`）。
-shell 变量与环境变量同名但不是一回事，所以那一次“0 行”测的是别的东西。
-
-真实情况：异常并未消失，只是**换了一种形态**——
-
-|阶段 | 现象 |
-| :--- | :--- |
-| 修之前的“修复” | 每服务 45s 内 255 行 |
-| 那个无效修复之后 | 每服务 **360~815 行**，持续整个容器生命周期 |
-
-而 `verify-e2e.sh` 里有三处 `grep -v 'skywalking-api\.log'` **正在把它滤掉**，
-于是缺陷看起来像已修。**这正是本项目记录的“假绿”的一个全新变体：
-过滤规则本身就是掩盖器。**
-
-### 为什么会漏：负向对照打在了错误的层级
-
-第四课要求“改坏 → 守护变红”，本轮照做了，但**对照打在了被修改的那一层**
-（entrypoint 脚本），而不是**被保护的那一层**（agent 真正读取的环境/属性）。
-两端之间隔着一个进程边界，脚本层的任何改动都不会自动传到那里。
-
-> **规则**：若被守护对象的判据来自**另一个进程的资源**（环境变量、JVM 属性、
-> 文件、端口、网络），负向对照必须作用在**那个进程能看到的通道**上。
-> 在脚本里改一个 shell 变量，然后观察该脚本自己的输出，永远不会失败。
-
-### 正解与最终证据
-
-```
-SW_OPTS="${SW_OPTS} -Dskywalking.logging.output=${SW_LOGGING_TARGET:-CONSOLE}"
-```
-
-| 证据 | 修复前 | 修复后 |
-| :--- | --- | --- |
-| `cloud-system` 日志中 `skywalking-api.log` 命中 | 709 | **0** |
-| `cloud-auth` 同上 | 815 | **0** |
-| 运行中 JVM `/proc/1/environ` 实测属性 | 无 | `skywalking.logging.output=CONSOLE` |
-| agent 日志是否进 stdout | 否 | 是（576 行/90s） |
-
-注意第3 行：**必须读运行中进程**，不能另起一个 JVM 去查
-（本次先试`podman exec ... java -XX:+PrintFlagsFinal`，读到的是探针自己的堆上限，
-完全是另一个数——又一个“探针测错对象”）。
-
-### 顺带修掉的两个自身缺陷
-
-1. **`set -e` + `pipefail` 下探针失败 = 脚本崩溃，不是判定失败。**
-   两者在日志里长得一样：都是没有`FAIL` 消息就结束。已加 `|| true`。
-2. **`tr -d '[:space:]'` 把换行也删了**，多个服务名粘连成
-   `notification-servicecloud-postgres:5432file-service...`。
-   已改为逐行处理 + `grep -qx` 精确整行匹配。
-
-### 关于 commit 瓶颈：一项**取消**的改造
-
-本轮原计划把 `redisinsight` / `jaeger` / `promtail` / `loki` 改为按需 profile。
-**实测后取消**，理由如下（先有证据再动配置）：
-
-| 观察 | 含义 |
-| :--- | :--- |
-| 我批量查容器时 `Committed_AS` 达 **87%** | 那是**探针自身**造成的瞬时峰值 |
-| 静置后 `Committed_AS` 为 **56%**（11.51 / 20.63 GB），项目门禁 PASS，余量 9.12 GB | 当前**没有** commit 瓶颈 |
-| 容器 `VmSize` 合计远大于 `Committed_AS` | `VmSize` 严重高估（见第八课）：OAP 堆仅 1 GB 却 `VmSize` 8 GB |
-
-⇒ 重组件不是本机瓶颈；改 profile 属于无证据的改动，只会增加维护面。
-**“资源越多越早失败”那条签名本轮没有出现**，因此不构成改配置的依据。
-
-### 尚未验证的一项（明确标 ⚠️ 而非已完成）
-
-SkyWalking UI（`18080`）可打开，但**尚未验证在 UI 中实际展开一条 trace 详情**。
-OAP 的 GraphQL 查询 API 与版本强绑定，手写查询体两次踩空（`InvalidSyntax`），
-故 `e2e-test.sh` 改为查存储—— 存储能证明“收到数据”，但不能替代“UI 可读”。
+- 质量基线：`mvn -o clean test` **501 项单测 0 失败**（2026-10-01 实测, 以 surefire XML 为准）。历史值 422（2026-09-29）/ 474（2026-09-30）已过时

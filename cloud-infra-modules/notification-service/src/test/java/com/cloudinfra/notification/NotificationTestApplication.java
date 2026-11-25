@@ -8,11 +8,16 @@ import com.cloudinfra.framework.tracing.config.TracingAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import java.util.concurrent.Executors;
 
 /**
  * 通知服务集成测试专用应用。
@@ -59,4 +64,13 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
         })
 @Import({RedissonConfig.class, TracingAutoConfiguration.class, MybatisPlusConfig.class, PasswordEncoderConfig.class})
 public class NotificationTestApplication {
+
+    /**
+     * 提供 @Qualifier("applicationTaskExecutor") 依赖：NotificationServiceImpl 等组件在构造期要求该 bean。
+     * IT 不启用 spring.threads.virtual.enabled，VirtualThreadConfig 不会装配，故在测试应用中显式注册。
+     */
+    @Bean
+    public AsyncTaskExecutor applicationTaskExecutor() {
+        return new TaskExecutorAdapter(Executors.newVirtualThreadPerTaskExecutor());
+    }
 }

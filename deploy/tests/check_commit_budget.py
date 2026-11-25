@@ -43,33 +43,6 @@
 - 6 服务满负荷运行时: 69% (14.25 GB)
 
 85% 留出余量, 使"6 服务启动 + agent 建连"这段最耗 commit 的窗口不被中途掐断。
-
-### 2026-10-06 实测: 当前实测 96.6%, 门禁判红 —— 但这**不是**误报
-
-曾尝试把阈值提到 92% (理由: 23 容器全 healthy、实测 95.9%)。**该尝试已回退**,
-因为它站不住脚:
-
-| 证据 | 数值 | 说明 |
-| --- | --- | --- |
-| 实测比例 | 96.6% | 超过 92%, 调阈值后**仍判红**, 即改动无效 |
-| mmap 受控实验 | 1GB 成功 | 非阻塞 |
-| 实际触碰 200MB | 成功 | Committed_AS 确已真增长 |
-| `vm.overcommit_memory` | 0(启发式) | 非严格模式, 超额 commit 不被立即拒绝 |
-
-受控实验说明 97% 下内存**仍可分配**, 但这**不等于**应该放宽阈值:
-
-1. **可分配不等于安全**。启发式模式下真正的拒绝点取决于后续触碰的顺序与量,
-   AGENTS.md 记录的崩溃现场正是"明明物理内存充足却 mmap 失败"。
-2. **拿单次实验否定一个防护门禁**是本项目反复出现的失败模式(第六类假门禁的镜像:
-   真门禁被当成误报而移除)。当前无任何服务出现 malloc/pthread 失败, 但
-   `Committed_AS` 已达 96.6%, 余量仅 0.59GB —— 启动一个 JVM 都可能不够。
-3. 真正的解法是**降低占用**(停掉不用的观测栈), 不是移动判据。
-
-⚠️ 若要再次提议调阈值, 必须先回答三个问题, 缺一不可:
-  1. 受控实验是否在**多个时刻**重复做过(单次实验可能是尖峰间隙)?
-  2. `overcommit_memory` 是否为 2? 是 2 时超额 commit 会被**立即**拒绝,
-     此时该阈值必须大幅下调, 而不是上调。
-  3. 降低占用的方案是否已评估过? 直接调阈值是在绕过问题, 不是解决问题。
 """
 
 from __future__ import annotations
@@ -78,40 +51,7 @@ import re
 import sys
 
 # Committed_AS 占 CommitLimit 的比例上限。
-#
 # 依据: 根因现场 88% 会崩; 6 服务健康运行 69%; 85% 留出启动窗口余量。
-#
-# 曾提议提到 92%, 已回退 —— 理由见文件头「2026-10-06 实测」小节。
-# 要点: 实测 96.6% 时 92% 同样判红, 改动无效; 且"受控实验显示还能分配内存"
-# 不能作为放宽防护的依据。真正该做的是降低占用。
-#
-# ============================================================================
-# 2026-10-06 复核: 该阈值**只在严格模式下有意义**
-# ============================================================================
-# 宿主 `vm.overcommit_memory` 已从 2 变为 0 (启发式)。受控实验证据:
-# 在 Committed_AS 达到 CommitLimit 的 **109%** 时, 连续 8 次 256MB mmap
-# **全部成功**; 而同一操作在 overcommit=2 时曾返回 `errno=12 (ENOMEM)`。
-#
-# 两种模式下"比例超阈值"的含义完全不同:
-#   overcommit=2 (严格): 超额 commit 被内核直接拒绝 -> 比例是真实且唯一的约束
-#   overcommit=0/1    : 拒绝风险低 -> 比例不再是有效预测指标
-#
-# 若在非严格模式下沿用同一阈值判红, 那不是"守护"而是**误报源**: 它会在
-# `verify-e2e.sh` 硬阻断 E2E, 且失败文案让用户去清理**当前并不存在**的孤儿
-# 进程(实测 13GB 孤儿已不在, 22 容器全 healthy)。
-#
-# 【为什么不给非严格模式编一个新阈值】本项目已经吃过这个教训:
-# `check_heap_headroom.py` 假设"mem_limit 1024m 恰等于 -Xmx 1024m ⇒ 必然失败",
-# 被实测证伪(堆外余量 384MB 时照样 malloc 失败), 该门禁已删除。
-# 非严格模式下没有可靠的**静态**预测器 —— 崩溃取决于启动并发等动态因素。
-# 故此处只告警并陈述实测事实, 不假装能预测。
-STRICT_OVERCOMMIT = "2"
-
-
-def is_strict_mode(overcommit: str | None) -> bool:
-    """是否处于严格 overcommit 模式 —— 决定比例阈值是否还有判据意义。"""
-    return overcommit == STRICT_OVERCOMMIT
-
 MAX_COMMIT_RATIO = 0.85
 
 
@@ -144,33 +84,10 @@ def check() -> int:
     print(f"commit 预算: {committed / 1048576:.2f} / {limit / 1048576:.2f} GB ({ratio:.0%})")
 
     overcommit = read_overcommit_mode()
-    strict = is_strict_mode(overcommit)
-
-    if strict:
+    if overcommit == "2":
         print("vm.overcommit_memory = 2 (严格模式): 超额 commit 会被直接拒绝")
-    else:
-        print(f"vm.overcommit_memory = {overcommit}: 非严格模式, 内核不会拒绝超额 commit")
-
-    if not strict:
-        # 非严格模式: 比例已不是有效预测指标, 但仍陈述事实供人判断。
-        # 返回 0(告警而非阻断), 因为此时判红会阻断 E2E 却不代表任何真实风险。
-        if ratio > MAX_COMMIT_RATIO:
-            print(f"WARN: commit 占用 {ratio:.0%} 超过阈值 {MAX_COMMIT_RATIO:.0%}, "
-                  f"但当前为非严格 overcommit 模式, 该比例不再预测分配失败。")
-        else:
-            print(f"PASS: commit 占用 {ratio:.0%} 在阈值 {MAX_COMMIT_RATIO:.0%} 之内 "
-                  f"(非严格模式, 该比例不具预测意义, 仅陈述事实)")
-            return 0
-        print("      (2026-10-06 实测: overcommit=0 时 Committed_AS 达 CommitLimit 的 109%,")
-        print("       连续 8 次 256MB 分配仍全部成功; 而 overcommit=2 时同一操作返回 ENOMEM)")
-        print()
-        print("      若宿主被改为 overcommit=2, 本门禁会恢复为硬阻断。")
-        print("      真正的约束此时是物理内存 MemAvailable, 而它无法由本文件静态预测 ——")
-        print("      崩溃取决于同时启动多少个服务等动态因素(见 check_heap_headroom 被删除的记录)。")
-        print()
-        print("      查看当前账本: grep -E 'MemAvailable|Committed_AS|CommitLimit' /proc/meminfo")
-        print("      如需真正的前置拦截, 请在严格模式下运行。")
-        return 0
+    elif overcommit in ("0", "1"):
+        print(f"vm.overcommit_memory = {overcommit}: 非严格模式, 拒绝风险较低")
 
     if ratio > MAX_COMMIT_RATIO:
         print(f"FAIL: commit 预算占用 {ratio:.0%} 超过阈值 {MAX_COMMIT_RATIO:.0%}")

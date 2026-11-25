@@ -6,8 +6,8 @@ RUN chown -R cloudinfra:cloudinfra /app
 USER cloudinfra
 COPY cloud-infra-auth/target/*-exec.jar app.jar
 
-# JVM 内存优化 + CDS 启动加速
-ENV JAVA_OPTS="-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+# JVM 内存优化
+ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 
 # shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
 # SkyWalking APM agent - 通过 SW_AGENT_ENABLED=true 启用 (默认 false 不影响现状)

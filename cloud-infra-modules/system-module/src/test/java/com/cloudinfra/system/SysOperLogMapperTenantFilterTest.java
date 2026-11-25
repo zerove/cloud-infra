@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 /**
  * issue 36 深化防御守护:审计日志源表 {@code sys_oper_log} 必须带租户过滤注解。
  *
- * <p>背景:深化防御（V27 补租户列 + {@code @TenantFilter}）是纵深防线, 端点前置校验
+ * <p>背景:深化防御（V24 补租户列 + {@code @TenantFilter}）是纵深防线, 端点前置校验
  * （PR #83 已交付）之外, 审计查询也必须按调用方租户过滤。本守护防止未来因
  * 组件重构把 {@code @TenantFilter} 移掉而静默回退到"全租户审计"。</p>
  */

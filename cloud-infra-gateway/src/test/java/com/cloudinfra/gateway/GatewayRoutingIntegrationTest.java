@@ -1,7 +1,6 @@
 package com.cloudinfra.gateway;
 
 import com.cloudinfra.test.BaseIntegrationTest;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +13,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,15 +46,13 @@ class GatewayRoutingIntegrationTest extends BaseIntegrationTest {
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
             .withPassword("password")
-            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
-            // n=3 并发时最长 125 秒 / 总计 173 秒 —— Testcontainers 默认 60 秒不够。
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     /** Redis for Gateway rate limiting */
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379)
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {

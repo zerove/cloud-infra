@@ -11,6 +11,9 @@ import com.cloudinfra.file.service.FileStorageUrlService;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.file.service.FilePermissionService;
 import com.cloudinfra.file.util.FileValidator;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.http.Method;
+import io.minio.MinioClient;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
@@ -27,14 +30,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +49,10 @@ import java.security.InvalidKeyException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import com.cloudinfra.common.core.exception.BusinessException;
+import com.cloudinfra.common.core.exception.ErrorCode;
 
 @Tag(name = "文件管理")
 @RestController
@@ -59,7 +64,7 @@ public class FileController {
     private final IFileService fileService;
     private final FileValidator fileValidator;
     private final FilePermissionService permissionService;
-    private final FileStorageUrlService storageUrlService;
+    private final MinioClient minioClient;
 
     /**
      * 申请上传预签名 URL (前端直传 MinIO, 不经过 file-service 中转)
@@ -77,9 +82,9 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/presign-upload")
     public Result<Map<String, String>> presignUpload(
-            @RequestParam("filename") @NotBlank(message = "文件名不能为空") String filename,
-            @RequestParam("contentType") @NotBlank(message = "文件类型不能为空") String contentType,
-            @RequestParam(value = "size", required = false) @Positive(message = "文件大小必须为正数") Long size,
+            @RequestParam("filename") String filename,
+            @RequestParam("contentType") String contentType,
+            @RequestParam(value = "size", required = false) Long size,
             @RequestAttribute(value = "userId", required = false) Long requestUserId)
             throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
             NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
@@ -93,7 +98,13 @@ public class FileController {
 
         // 5 分钟过期
         int expirySeconds = 300;
-        String uploadUrl = storageUrlService.presignPut(objectKey, expirySeconds);
+        String uploadUrl = minioClient.getPresignedObjectUrl(
+            GetPresignedObjectUrlArgs.builder()
+                .method(Method.PUT)
+                .bucket("cloud-infra-files")
+                .object(objectKey)
+                .expiry(expirySeconds, TimeUnit.SECONDS)
+                .build());
 
         Map<String, String> result = new HashMap<>();
         result.put("objectKey", objectKey);
@@ -125,7 +136,13 @@ public class FileController {
 
         // 10 分钟过期
         int expirySeconds = 600;
-        String downloadUrl = storageUrlService.presignGet(objectKey, expirySeconds);
+        String downloadUrl = minioClient.getPresignedObjectUrl(
+            GetPresignedObjectUrlArgs.builder()
+                .method(Method.GET)
+                .bucket("cloud-infra-files")
+                .object(objectKey)
+                .expiry(expirySeconds, TimeUnit.SECONDS)
+                .build());
 
         Map<String, String> result = new HashMap<>();
         result.put("fileId", String.valueOf(fileId));
@@ -151,16 +168,17 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/presign-multipart-init")
     public Result<Map<String, Object>> presignMultipartInit(
-            @RequestParam("filename") @NotBlank(message = "文件名不能为空") String filename,
-            @RequestParam("contentType") @NotBlank(message = "文件类型不能为空") String contentType,
-            @RequestParam("totalSize") @Positive(message = "文件大小必须为正数") Long totalSize,
-            @RequestParam("partCount")
-            @Min(value = 1, message = "分片数必须大于等于 1")
-            @Max(value = 1000, message = "分片数不能超过 1000") int partCount,
+            @RequestParam("filename") String filename,
+            @RequestParam("contentType") String contentType,
+            @RequestParam("totalSize") Long totalSize,
+            @RequestParam("partCount") int partCount,
             @RequestAttribute(value = "userId", required = false) Long requestUserId)
             throws ServerException, InsufficientDataException, ErrorResponseException, IOException,
             NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException,
             InternalException {
+        if (partCount < 1 || partCount > 1000) {
+            return Result.fail(400, "分片数必须在 1-1000 之间");
+        }
         Long userId = resolveUserId(requestUserId);
         fileValidator.validate(filename, contentType, totalSize);
 
@@ -177,7 +195,14 @@ public class FileController {
         int partExpiry = 300;
         Map<String, String> partUrls = new HashMap<>();
         for (int i = 1; i <= partCount; i++) {
-            String partUrl = storageUrlService.presignPut(objectKey, partExpiry);
+            String partUrl = minioClient.getPresignedObjectUrl(
+                GetPresignedObjectUrlArgs.builder()
+                    .method(Method.PUT)
+                    .bucket("cloud-infra-files")
+                    // S3 multipart URL 格式: objectKey + ?partNumber=N&uploadId=XXX
+                    .object(objectKey)
+                    .expiry(partExpiry, TimeUnit.SECONDS)
+                    .build());
             partUrls.put("part" + i, partUrl);
         }
 
@@ -319,16 +344,13 @@ public class FileController {
     @PreAuthorize("@ss.hasPermi('file:file:history')")
     @GetMapping("/history/{fileId}")
     public Result<List<FileVersion>> history(@PathVariable Long fileId,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "20") Integer size,
             @RequestAttribute(value = "userId", required = false) Long requestUserId) {
         try {
             Long userId = resolveUserId(requestUserId);
             if (!permissionService.hasAccess(userId, fileId, "READ")) {
                 return Result.fail(403, "无权限查看版本历史");
             }
-            List<com.cloudinfra.file.domain.FileVersion> domainVersions = fileService.getVersionHistory(
-                    fileId, Math.max(page, 1), Math.min(Math.max(size, 1), 100));
+            List<com.cloudinfra.file.domain.FileVersion> domainVersions = fileService.getVersionHistory(fileId);
             List<FileVersion> dtoVersions = domainVersions.stream()
                 .map(v -> {
                     FileVersion dto = new FileVersion();
@@ -349,6 +371,19 @@ public class FileController {
         }
     }
 
+    @Operation(summary = "根据关键词搜索文件")
+    @PreAuthorize("@ss.hasPermi('file:file:search')")
+    @GetMapping("/search")
+    public Result<IPage<FileMetadataVO>> search(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "1") long pageNum,
+            @RequestParam(defaultValue = "10") long pageSize) {
+        if (keyword == null || keyword.isBlank()) {
+            return Result.fail(400, "搜索关键词不能为空");
+        }
+        return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
+    }
+
     @Operation(summary = "删除文件（硬删除，不可恢复）")
     @PreAuthorize("@ss.hasPermi('file:file:remove')")
     @DeleteMapping("/{fileId}")
@@ -358,13 +393,13 @@ public class FileController {
         Long userId = resolveUserId(requestUserId);
         // service 层抛 BusinessException 时由 GlobalExceptionHandler 统一转 Result,
         // 但其 getSuggestedHttpStatus() 恒为 500 —— 权限/不存在这类语义失败
-        // 不该被读成"服务故障"。故在此显式映射, 保持与 @PreAuthorize 的 401/403 一致的语义层。
+        // 不该被读成"服务故障"。故在此显式映射, 与 @PreAuthorize 的 401/403 保持语义一致。
         try {
             fileService.delete(fileId, userId);
             return Result.success();
         } catch (BusinessException e) {
-            // 按 ErrorCode 枚举比对, 不用裸数字: 1005/1006 一旦错误码调整,
-            // 裸数字会静默失配并退化成 500(第四课: 判据必须指向被检对象本身)
+            // 按 ErrorCode 枚举比对, 不用裸数字: 1005/1006 一旦调整,
+            // 裸数字会静默失配并退化成 500。
             if (ErrorCode.NO_PERMISSION.getCode().equals(e.getCode())) {
                 return Result.fail(403, e.getMessage());
             }
@@ -375,27 +410,5 @@ public class FileController {
             log.error("文件删除失败 [fileId={}]: {}", fileId, e.getMessage());
             return Result.fail(ErrorCode.SYSTEM_ERROR.getCode(), e.getMessage());
         }
-    }
-
-    @Operation(summary = "根据关键词搜索文件")
-    @PreAuthorize("@ss.hasPermi('file:file:search')")
-    @GetMapping("/search")
-    public Result<IPage<FileMetadataVO>> search(
-            @RequestParam @NotBlank(message = "搜索关键词不能为空") String keyword,
-            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于等于 1") long pageNum,
-            @RequestParam(defaultValue = "10")
-            @Min(value = 1, message = "每页大小必须大于等于 1")
-            @Max(value = 100, message = "每页大小不能超过 100") long pageSize) {
-        return Result.success(fileService.searchFiles(keyword.trim(), pageNum, pageSize));
-    }
-
-    @Operation(summary = "获取文件元数据")
-    @PreAuthorize("@ss.hasPermi('file:file:download')")
-    @GetMapping("/metadata/{fileId}")
-    public Result<FileMetadataVO> getMetadata(
-            @PathVariable @Positive(message = "文件 ID 必须为正数") Long fileId,
-            @RequestAttribute(value = "userId", required = false) Long requestUserId) {
-        Long userId = resolveUserId(requestUserId);
-        return Result.success(fileService.getMetadata(fileId, userId));
     }
 }

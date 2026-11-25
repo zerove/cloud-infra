@@ -3,7 +3,6 @@ package com.cloudinfra.notification.service;
 import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.mapper.NotificationDispatchMapper;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +24,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -61,14 +61,11 @@ class NotificationDispatchReliabilityIT {
         .withDatabaseName("cloud_infra")
         .withUsername("postgres")
         .withPassword("password")
-        // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒,
-        // n=3 并发时最长 125 秒 / 总计 173 秒 —— Testcontainers 默认 60 秒不够。
-        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-alpine")
-        // 本轮 RabbitMQ 亦出现 1 次启动失败, 同因: 预算不足而非配置错误。
-        .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+        .withStartupTimeout(Duration.ofMinutes(3));
 
     /**
      * 最小手工装配: 仅 JDBC + RabbitTemplate + 被测 Mapper。

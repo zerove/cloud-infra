@@ -3,7 +3,6 @@ package com.cloudinfra.framework.mybatis.aspect;
 import com.cloudinfra.common.core.annotation.AuditLog;
 import com.cloudinfra.common.context.UserContext;
 import com.cloudinfra.common.core.audit.IAuditLogService;
-import com.cloudinfra.common.util.SensitiveDataRedactor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -12,6 +11,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 

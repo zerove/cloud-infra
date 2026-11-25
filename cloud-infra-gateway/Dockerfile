@@ -17,11 +17,11 @@ USER cloudinfra
 # 注意 cloud-infra-auth/Dockerfile 早已用 *-exec.jar —— 这个坑被踩过一次, 只是漏了 gateway。
 COPY cloud-infra-gateway/target/*-exec.jar app.jar
 
-# JVM 内存优化 + CDS 启动加速
+# JVM 内存优化
 # SerialGC: 小堆最省内存的 GC（~10MB 开销，远低于 ZGC 的 ~100MB）
 # -Xmx256m: 微服务模式下足够处理并发请求
 # UseContainerSupport: 自动感知容器内存限制
-ENV JAVA_OPTS="-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 
 # shell 形式 + exec: 使 $JAVA_OPTS 生效，同时信号正确处理
 # SkyWalking APM agent - 通过 SW_AGENT_ENABLED=true 启用 (默认 false 不影响现状)

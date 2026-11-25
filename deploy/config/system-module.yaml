@@ -36,9 +36,6 @@ spring:
     # (Spring Boot loader NestedJarFile 全局锁 + 虚拟线程 pinning 导致死锁, 见本次调试记录)
     lazy-initialization: false
     # 已保持 false: 与其他服务统一 - 防止 fat jar 类加载与 Nacos 注册并发风险
-  autoconfigure:
-    # 排除 Seata（无 Seata Server 部署，@GlobalTransactional 注解空转）
-    exclude: io.seata.spring.boot.autoconfigure.SeataAutoConfiguration
   datasource:
     url: jdbc:postgresql://${SPRING_DATASOURCE_HOST:cloud-postgres}:${SPRING_DATASOURCE_PORT:5432}/cloud_infra
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -117,8 +114,7 @@ management:
         enabled: true
   tracing:
     sampling:
-      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
-      probability: 0.2
+      probability: 1.0
 # Resilience4j 弹性设计配置
 #
 # ⚠️ 阈值必须嵌在 configs.default / instances.<name> 之下。属性类

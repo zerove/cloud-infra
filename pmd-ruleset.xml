@@ -47,10 +47,8 @@
         标注的场景失去信号。
 
       SystemPrintln / AvoidPrintStackTrace
-        cloud-infra-codegen 是命令行代码生成器, stdout/stderr 就是它的输出通道, 不是
-        "调试残留"。该模块刻意保持零传递依赖（不引入日志框架）以维持"可作为库被引用"
-        的定位, 且已明确为 ⚪ 可选工具、停止新增模板 —— 引入 slf4j 并改写 16 处输出
-        得不偿失。
+        保留为仓库级豁免项：若后续出现明确需要 stdout/stderr 的 CLI/工具代码可沿用；
+        当前主业务模块应继续使用日志框架而非 System.out/printStackTrace。
 
       AvoidDuplicateLiterals
         命中的 5 处全在 Feign 契约接口里重复的路径字面量（如 "/system/user/..."）。

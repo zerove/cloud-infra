@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -52,6 +51,9 @@ public class AuditAggregatorService {
 
             // 1. 异步拉取系统操作日志 (本地 DB)
             CompletableFuture<List<UnifiedAuditRecord>> operLogsFuture = CompletableFuture.supplyAsync(() -> {
+                // issue 36 深化防御: supplyAsync 提交到 virtual thread executor, ThreadLocal 不继承,
+                // 必须先捕获再 set 回 TenantContext, 使 @TenantFilter 的租户过滤真正生效.
+                String tenantId = TenantContext.getTenantIdOrDefault();
                 TenantContext.setTenantId(tenantId);
                 try {
                     return operLogMapper.selectList(
@@ -64,7 +66,7 @@ public class AuditAggregatorService {
                         userId.toString(),
                         log.getTitle(),
                         log.getOperUrl(),
-                        mapOperLogStatus(log.getStatus()),
+                        "SUCCESS", 
                         log.getOperName(),
                         "SYSTEM"
                     )).collect(Collectors.toList());
@@ -77,36 +79,25 @@ public class AuditAggregatorService {
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
                 TenantContext.setTenantId(tenantId);
                 try {
-                    // 端点已分页：必须逐页取完, 否则审计聚合会静默丢数据
-                    final int pageSize = 100;
-                    final int maxPages = 50;
-                    List<UnifiedAuditRecord> collected = new ArrayList<>();
-                    for (int pageNum = 1; pageNum <= maxPages; pageNum++) {
-                        PageQuery pageQuery = new PageQuery();
-                        pageQuery.setPageNum(pageNum);
-                        pageQuery.setPageSize(pageSize);
-                        // S2-B3: 用户端 logs 禁止跨用户；审计聚合走内部 HMAC 契约端点
-                        Result<PageResult<NotificationLogDTO>> result =
-                            notificationApi.getInternalLogs(userId, pageQuery);
-                        if (result == null || result.getData() == null || result.getData().getRecords() == null
-                                || result.getData().getRecords().isEmpty()) {
-                            break;
-                        }
-                        List<NotificationLogDTO> records = result.getData().getRecords();
-                        records.forEach(log -> collected.add(new UnifiedAuditRecord(
-                            log.getCreateTime(),
-                            userId.toString(),
-                            "发送通知 [" + log.getChannelCode() + "]",
-                            log.getNotificationId().toString(),
-                            log.getStatus(),
-                            log.getErrorMessage(),
-                            "NOTIFICATION"
-                        )));
-                        if (records.size() < pageSize) {
-                            break;
-                        }
+                    // B3/S2: 用户端 /notification/logs 禁止跨用户；审计聚合走内部 HMAC 契约
+                    // issue 36 深化防御: 在 virtual thread 内注入租户上下文, 经 FeignAuthInterceptor
+                    // 透传 X-Tenant-Id, 由下游 TenantContextFilter (验签后) 装配.
+                    String tenantId = TenantContext.getTenantIdOrDefault();
+                    TenantContext.setTenantId(tenantId);
+                    Result<List<NotificationLogDTO>> result = notificationApi.getInternalLogs(userId);
+                    if (result == null || result.getData() == null) {
+                        return Collections.emptyList();
                     }
-                    return collected;
+
+                    return result.getData().stream().map(log -> new UnifiedAuditRecord(
+                        log.getCreateTime(),
+                        userId.toString(),
+                        "发送通知 [" + log.getChannelCode() + "]",
+                        log.getNotificationId().toString(),
+                        log.getStatus(),
+                        log.getErrorMessage(),
+                        "NOTIFICATION"
+                    )).collect(Collectors.toList());
                 } catch (Exception e) {
                     log.error("拉取通知审计日志失败", e);
                     return Collections.emptyList();

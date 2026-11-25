@@ -108,14 +108,14 @@
 
     <div class="info">
       <strong>使用说明:</strong><br>
-      1. 输入 <code>userId</code> (默认 1) 点击 "连接"<br>
-      2. 打开新窗口, 在网关或直连调 <code>POST /notification/send</code> 触发推送<br>
-      3. 此页面会实时收到推送
+      1. M7-03 后 WS 握手需内部签名头（<code>X-Internal-Call/Timestamp/Nonce</code>）+ <code>X-User-Id</code>，浏览器原生 WebSocket 无法直接设置自定义头；请使用 <code>docs/demos/notification-websocket-e2e.py</code> 或经网关/代理注入头后连接<br>
+      2. 端点: <code>ws://localhost:8084/notification/ws</code>（无 userId 路径参数）<br>
+      3. 连接后可通过 <code>POST /notification/send</code> 触发推送验证
     </div>
 
     <div class="form-group">
       <input type="number" id="userId" value="1" min="1" placeholder="userId">
-      <input type="text" id="wsUrl" value="ws://localhost:8084/notification/ws/1">
+      <input type="text" id="wsUrl" value="ws://localhost:8084/notification/ws">
       <button id="connectBtn" onclick="connect()">连接</button>
       <button id="disconnectBtn" onclick="disconnect()" disabled>断开</button>
       <button id="pingBtn" onclick="sendPing()" disabled>心跳</button>
@@ -265,11 +265,8 @@
       }
     }
 
-    // 同步 userId 变化到 wsUrl
-    userIdInput.addEventListener('input', () => {
-      const url = wsUrlInput.value.replace(/\/ws\/\d+/, `/ws/${userIdInput.value}`);
-      wsUrlInput.value = url;
-    });
+    // M7-03: userId 由握手头 X-User-Id 决定，不再体现在路径中
+    userIdInput.addEventListener('input', () => {});
   </script>
 </body>
 </html>

@@ -1,0 +1,318 @@
+{
+  "dashboard": {
+    "uid": "cloud-infra-business",
+    "title": "Cloud-Infra Business Metrics",
+    "tags": ["cloud-infra", "business", "api", "auth"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "HTTP Request Rate (req/s)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(http_server_requests_seconds_count[1m])",
+            "legendFormat": "{{instance}} - {{method}} {{uri}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "HTTP Request Latency (p50, p95, p99)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_server_requests_seconds_bucket[1m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[1m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[1m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [1], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["B", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High API Latency (p95 > 1s)",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 3,
+        "title": "HTTP Error Rate (4xx, 5xx)",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(http_server_requests_seconds_count{status=~\"4..\"}[1m])",
+            "legendFormat": "{{instance}} - 4xx",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])",
+            "legendFormat": "{{instance}} - 5xx",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Error Rate"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.05], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["B", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "2m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High 5xx Error Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 4,
+        "title": "Auth Login Success Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(auth_login_total{status=\"success\"}[1m])",
+            "legendFormat": "Login Success",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(auth_login_total{status=\"failure\"}[1m])",
+            "legendFormat": "Login Failure",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(auth_login_total{status=\"captcha_error\"}[1m])",
+            "legendFormat": "Captcha Error",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Active Sessions / JWT Tokens",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "auth_active_sessions",
+            "legendFormat": "{{instance}} - active sessions",
+            "refId": "A"
+          },
+          {
+            "expr": "auth_jwt_cache_size",
+            "legendFormat": "{{instance}} - JWT cache size",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Gateway Route Throughput",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(gateway_route_requests_total[1m])",
+            "legendFormat": "{{route}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Database Connection Pool Usage",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "hikaricp_connections_active / hikaricp_connections_max * 100",
+            "legendFormat": "{{instance}} - active %",
+            "refId": "A"
+          },
+          {
+            "expr": "hikaricp_connections_idle / hikaricp_connections_max * 100",
+            "legendFormat": "{{instance}} - idle %",
+            "refId": "B"
+          },
+          {
+            "expr": "hikaricp_connections_pending",
+            "legendFormat": "{{instance}} - pending",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Pool Usage %"},
+          {"format": "short", "label": "Pending"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [85], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "5m",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "DB Connection Pool Exhaustion",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 8,
+        "title": "Redis Commands Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(redis_commands_total[1m])",
+            "legendFormat": "{{instance}} - {{command}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Commands/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "RabbitMQ Queue Depth",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rabbitmq_queue_messages",
+            "legendFormat": "{{queue}} - messages",
+            "refId": "A"
+          },
+          {
+            "expr": "rabbitmq_queue_messages_ready",
+            "legendFormat": "{{queue}} - ready",
+            "refId": "B"
+          },
+          {
+            "expr": "rabbitmq_queue_messages_unacked",
+            "legendFormat": "{{queue}} - unacked",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Messages"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Circuit Breaker States",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "resilience4j_circuitbreaker_state",
+            "legendFormat": "{{circuitbreaker}} - {{state}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "options": {"0": {"color": "green", "text": "CLOSED"}, "1": {"color": "yellow", "text": "HALF_OPEN"}, "2": {"color": "red", "text": "OPEN"}}}
+            ]
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(http_server_requests_seconds_count, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    }
+  },
+  "overwrite": true
+}

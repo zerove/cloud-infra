@@ -6,7 +6,6 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.api.system.dto.RegisterUserDTO;
 import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.model.LoginUser;
-import jakarta.validation.Valid;
 import com.cloudinfra.common.core.enums.ResultCode;
 import com.cloudinfra.common.util.PasswordValidator;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,7 +49,7 @@ public class AuthController {
     //   2) 全仓核实无任何客户端发送 Idempotency-Key, REPLAY 实际从未命中;
     //   3) 原先靠自动键 (anon + URI + body 摘要) 生效, 会让"用户重复提交相同注册信息"
     //      拿到首次的旧响应, 形成假成功。详见 issue 27 决策 4。
-    public Result<Void> register(@Valid @RequestBody RegisterUserDTO registerUser, HttpServletRequest request) {
+    public Result<Void> register(@RequestBody LoginUser registerUser, HttpServletRequest request) {
         if (!PasswordValidator.isValid(registerUser.getPassword())) {
             return Result.fail(
                 ResultCode.BUSINESS_ERROR.getCode(),
@@ -87,14 +86,5 @@ public class AuthController {
             authTokenService.delToken(authorization.substring(7));
         }
         return Result.success();
-    }
-
-    private static LoginUser toLoginUser(LoginRequest request) {
-        return LoginUser.builder()
-                .username(request.username())
-                .password(request.password())
-                .captcha(request.captcha())
-                .uuid(request.uuid())
-                .build();
     }
 }

@@ -36,13 +36,13 @@ class ControllerAuthorizationTest {
     /**
      * 允许不带 {@code @PreAuthorize} 的路径前缀。
      *
-     * <p>{@code /internal/}：服务间契约端点，由 {@code NotificationSecurityConfig} 的
-     * HMAC 单点鉴权保护（网关无路由），语义为调用方身份而非用户权限。</p>
+     * <p>{@code /internal/} 由 {@code NotificationSecurityConfig} 的 HMAC 单点签名决策保护，
+     * 不走用户 {@code @PreAuthorize} 权限语义（与 system-module 一致）。</p>
      */
     private static final List<String> UNPROTECTED_ALLOWLIST = List.of("/internal/");
 
     @Test
-    @DisplayName("所有非 /internal/ 端点都必须带 @PreAuthorize")
+    @DisplayName("所有端点都必须带 @PreAuthorize")
     void everyEndpointRequiresAuthorization() throws Exception {
         Set<String> gaps = new TreeSet<>();
         int total = 0;
@@ -62,7 +62,8 @@ class ControllerAuthorizationTest {
                 if (classLevelAuth || AnnotatedElementUtils.hasAnnotation(method, PreAuthorize.class)) {
                     continue;
                 }
-                if (UNPROTECTED_ALLOWLIST.stream().anyMatch(full::startsWith)) {
+                if (UNPROTECTED_ALLOWLIST.stream().anyMatch(full::startsWith)
+                        || UNPROTECTED_ALLOWLIST.stream().anyMatch(path::startsWith)) {
                     continue;
                 }
                 gaps.add(type.getSimpleName() + "  " + full);
@@ -79,7 +80,7 @@ class ControllerAuthorizationTest {
     @DisplayName("允许清单必须保持最小（防止被当成绕过鉴权的后门）")
     void allowlistStaysMinimal() {
         assertThat(UNPROTECTED_ALLOWLIST)
-            .as("新增例外前请先确认: 该端点是否真的不需要任何用户权限判定（内部 HMAC/网关隔离）")
+            .as("仅允许 /internal/（HMAC 契约）豁免；新增例外前请先说明该端点为何不需要用户权限判定")
             .containsExactly("/internal/");
     }
 

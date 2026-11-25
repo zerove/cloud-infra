@@ -47,7 +47,7 @@ public class NotificationLog {
     private LocalDateTime createTime;
 
     /**
-     * 租户 ID (M6-01 多租户隔离; issue 36 纵深防御 - V27 补列)
+     * 租户 ID (M6-01 多租户隔离; issue 36 纵深防御 - V24 补列)
      */
     private String tenantId;
 

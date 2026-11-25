@@ -248,21 +248,21 @@ public class FileServiceImpl implements IFileService {
 
         // 权限校验走 Feign(resourceMappingApi + userApi), 存储删除走对象存储;
         // 二者都是网络往返, 必须在事务外执行, 否则数据库连接会被跨网络持有。
-        // 本类的 upload()/update() 早已采用该约定, 仅 delete() 曾把三者一起塞进 @Transactional。
         if (!permissionService.hasAccess(userId, fileId, "WRITE")) {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to delete this file");
         }
 
-        // 删除同样必须命中真实存储后, 否则 MinIO 上的大文件删不掉且会残留配额占用
+        // 必须按"哪个后端真正持有该文件"定位策略: 用默认策略删除 MinIO 上的对象会
+        // 静默无效(既没删掉, 调用方也只看到 false)。
         StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
         if (!strategy.delete(metadata.getFilePath())) {
-            // 存储仍持有对象: 抛错且不落库, 避免留下"记录没了、文件还在"的幽灵文件
-            // (且配额不会被错误释放)
+            // 存储仍持有对象: 抛错且不落库, 避免"记录没了、文件还在"的幽灵文件
             log.warn("存储删除失败, 保留元数据以免产生幽灵文件 [fileId={}, path={}]",
                     fileId, metadata.getFilePath());
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "存储删除失败，文件未被删除");
         }
 
+        // 存储已删, 此处只剩 DB 变更: 用短事务一次性提交
         Long ownerId = parseUploader(metadata.getUploader());
         if (ownerId == null) {
             ownerId = userId;
@@ -270,7 +270,6 @@ public class FileServiceImpl implements IFileService {
         final Long quotaOwnerId = ownerId;
         final long fileSize = metadata.getFileSize() == null ? 0L : metadata.getFileSize();
 
-        // 存储已删, 此处只剩 DB 变更: 用短事务一次性提交
         Boolean removed = transactionTemplate.execute(status -> {
             if (fileSize > 0) {
                 quotaService.release(quotaOwnerId, fileSize);
@@ -334,17 +333,5 @@ public class FileServiceImpl implements IFileService {
         }
         // 返回 MinIO object key (即 file_path), 不返回 InputStream
         return metadata.getFilePath();
-    }
-
-    @Override
-    public FileMetadataVO getMetadata(Long fileId, Long userId) {
-        FileMetadata metadata = metadataMapper.selectById(fileId);
-        if (metadata == null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "File not found");
-        }
-        if (!permissionService.hasAccess(userId, fileId, "READ")) {
-            throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to access this file");
-        }
-        return mapToVo(metadata);
     }
 }

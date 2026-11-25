@@ -162,31 +162,25 @@ public class SysUserServiceImpl implements ISysUserService {
         int rows = userMapper.updateById(user);
         // 角色变更后通知下游失效该用户权限缓存
         if (userDTO.getRoleId() != null) {
-            afterCommit(() -> permissionInvalidationService.invalidateUser(userDTO.getUserId()));
+            permissionInvalidationService.invalidateUser(userDTO.getUserId());
         }
         // 停用（status=1）时立即吊销存量会话，防止被停用账号继续使用已签发 JWT
         if (userDTO.getStatus() != null && userDTO.getStatus() == 1) {
-            afterCommit(() -> sessionRevoker.revokeAllSessions(userDTO.getUserId()));
+            sessionRevoker.revokeAllSessions(userDTO.getUserId());
         }
         return rows;
     }
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int deleteUserByIds(Long[] userIds) {
-        // 先清理用户-角色关联再删用户；一条 IN 批量删除，而非逐用户 delete。
-        // 用 QueryWrapper + 列名而非 LambdaQueryWrapper + 方法引用: 后者依赖 MyBatis-Plus
-        // 的 lambda 元数据缓存，纯单测（未初始化 TableInfo）下会抛 "can not find lambda cache"。
-        userRoleMapper.delete(new QueryWrapper<SysUserRole>().in("user_id", List.of(userIds)));
+        // 先清理用户-角色关联再删用户；同时广播失效权限缓存
+        for (Long userId : userIds) {
+            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+            permissionInvalidationService.invalidateUser(userId);
+        }
         int rows = userMapper.deleteBatchIds(List.of(userIds));
-        // 广播失效权限缓存 + 吊销全部存量会话（已签发 token 立即失效）。
-        // 移出事务：Redis 网络 I/O 不应占用数据库连接；吊销失败也不应回滚用户删除
-        // （会话键由 TTL 兜底过期）。
-        afterCommit(() -> {
-            for (Long userId : userIds) {
-                permissionInvalidationService.invalidateUser(userId);
-            }
-            sessionRevoker.revokeAllSessions(List.of(userIds));
-        });
+        // 删除后吊销全部存量会话，已签发 token 立即失效
+        sessionRevoker.revokeAllSessions(List.of(userIds));
         return rows;
     }
 
@@ -198,23 +192,8 @@ public class SysUserServiceImpl implements ISysUserService {
         user.updatePassword(passwordEncoder, password);
         int rows = userMapper.updateById(user);
         // 密码重置后吊销全部会话：持有旧凭据的攻击者/前用户必须重新登录
-        afterCommit(() -> sessionRevoker.revokeAllSessions(userId));
+        sessionRevoker.revokeAllSessions(userId);
         return rows;
     }
 
-    /**
-     * 把 Redis 副作用推迟到事务提交之后；无事务时立即执行（不改变原行为）。
-     */
-    private static void afterCommit(Runnable action) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            action.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                action.run();
-            }
-        });
     }
-}

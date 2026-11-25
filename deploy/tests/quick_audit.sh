@@ -29,7 +29,7 @@ package com.cloudinfra.system.controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// 临时探针注释已清理
+/** 临时探针: 故意没有 @PreAuthorize, 用于验证 quick_audit 站 2 判红。 */
 @RestController
 public class ZzSelfTestProbeController {
     @GetMapping("/self-test-probe")
@@ -76,24 +76,11 @@ PYEOF
 
 echo "==== 站 0: 多租户已真正启用 ===="
 tcf=$(extract_order "$REPO/cloud-infra-common/src/main/java/com/cloudinfra/common/core/tenant/TenantContextFilter.java")
-# ⚠️ 2026-11-21: CI 宿主 ubuntu-26.04 runner 无 `rg`（实测 `rg: command not found`，
-#   n 为 0 而站 0 红）。计数改用 python3（与 extract_order 同款，见 2026-11-21 修复注释）。
-out=$(python3 - "$REPO" <<'PYEOF' 2>/dev/null
-import glob, re, sys
-root = sys.argv[1]
-n = 0
-for f in glob.glob(root + "/cloud-infra-modules/**/*.java", recursive=True):
-    n += open(f, encoding="utf-8", errors="ignore").read().count("@TenantFilter")
-switches = 0
-for f in ("system-module", "file-service", "notification-service"):
-    t = open(root + "/deploy/config/" + f + ".yaml", encoding="utf-8", errors="ignore").read()
-    if re.search(r"^  tenant:", t, re.M):
-        switches += 1
-print(n, switches)
-PYEOF
-)
-n=$(printf '%s' "$out" | awk '{print $1}')
-switches=$(printf '%s' "$out" | awk '{print $2}')
+n=$(grep -R --include="*.java" -c "@TenantFilter" cloud-infra-modules 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')
+switches=0
+for f in deploy/config/{system-module,file-service,notification-service}.yaml; do
+  if grep -q "^  tenant:" "$f"; then switches=$((switches+1)); fi
+done
 if [[ "$n" -ge 9 ]] && [[ "$switches" -eq 3 ]] && [[ -n "$tcf" ]]; then
   echo "PASS TenantContextFilter 与 @TenantFilter 注解数(≥9)、部署态开关(3)均满足。"
 else
@@ -101,17 +88,7 @@ else
 fi
 
 echo "==== 站 1: 已删除框架残留归零 ===="
-hits=$(python3 - "$REPO" <<'PYEOF' 2>/dev/null
-import glob, re, sys
-root = sys.argv[1]
-pat = re.compile("@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi")
-cnt = 0
-for f in glob.glob(root + "/cloud-infra-modules/**/*.java", recursive=True):
-    cnt += len(pat.findall(open(f, encoding="utf-8", errors="ignore").read()))
-print(cnt)
-PYEOF
-)
-hits=${hits:-0}
+hits=$(grep -R --include='*.java' -nE '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' cloud-infra-modules 2>/dev/null | wc -l)
 if [[ "$hits" -eq 0 ]]; then
   echo "PASS 0 命中。"
 else
@@ -119,6 +96,7 @@ else
 fi
 
 echo "==== 站 2: Controller @PreAuthorize 覆盖率（豁免清单: internal 端点 / 登录 / 验证码 / 健康检查）===="
+# 仅审计生产源码中的 Controller（src/main）；测试夹具 Controller 不受本安全守护约束。
 py_out=$(python3 - "$REPO" <<'PYEOF'
 import re, sys, glob, os
 root = sys.argv[1]
@@ -126,6 +104,8 @@ pa = re.compile(r'@PreAuthorize\(')
 pa_files = []
 with_mapping = 0
 for f in sorted(glob.glob(root + '/**/controller/*.java', recursive=True)):
+    if '/src/test/' in f:
+        continue
     t = open(f).read()
     if re.search(r'@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping)', t):
         with_mapping += 1
@@ -149,6 +129,8 @@ root = sys.argv[1]
 pa_files = set()
 with_mapping = 0
 for f in sorted(glob.glob(root + '/**/controller/*.java', recursive=True)):
+    if '/src/test/' in f:
+        continue
     t = open(f).read()
     if re.search(r'@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping)', t):
         with_mapping += 1

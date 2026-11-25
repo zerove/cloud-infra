@@ -152,140 +152,12 @@ limit needs to be increased` —— **账号计费/额度问题**, 任何代码�
 > → `CODE_FAILURE` 且能指出失败步骤名; 不存在的 run → `UNKNOWN`。
 > `RUN_OK` 分支因 E2E **从未有过成功 run**, 只能用构造数据验证 —— 这一点本身也说明:
 > **"E2E 通过"迄今没有任何真实证据**。
+>
+> 【2026-11-15 更正】以上为 2026-10-03 的历史状态。自 2026-11-13 起 E2E 已多次真实
+> 成功并留档（issue 37 各切片 PR #111-#126 的 E2E Verify 均 passed，证据见各 PR
+> checks 与 issue 37 复跑证据块）。阅读本段时请按"当时状态"理解，勿按当前状态。
 
 详见 `ROADMAP.md` “运行时有效性审计” 与 issue 29。
-
-> **【2026-10-05 09:37 复核】计费阻塞仍在持续**: 最新 E2E run `37182409630` 依然
-> `steps=0` + 计费字样。自 2026-10-03 02:30 起, **E2E 流水线已连续 5+ 次从未真正执行**。
-
-### ⛔ 第 4 类假门禁: **门禁脚本自己从未被调用**（2026-10-05 新增, 最重要的一条）
-
-本项目已有 3 类「看起来存在、实际不生效」的同型问题:
-
-| # | 形态 | 长期未被发现的原因 |
-| :--- | :--- | :--- |
-| 1 | 自动配置类未登记进 `imports` | 有测试, 但手工 `new` 切面绕过 |
-| 2 | `@Scheduled` 缺 `@EnableScheduling` | mock 直接调方法, 绕过触发 |
-| 3 | 门禁脚本没有任何脚本调用 | 脚本自己能跑通, 从未被要求运行 |
-
-**2026-10-05 复盘查出第 4 类, 且规模超出预期**: `deploy/tests/` 当时共 21 个脚本（2026-10-17 实测已增至 51 个）,
-逐个反查 `.github/workflows/*.yml` 的引用, **只有 6 个被调用, 15 个从未执行**。
-
-### 它解释了一个长期 puzzled 现象
-
-CI 反复以**同一条报错**告警:
-
-```text
-Parameter N of constructor in ... required a single bean, but 2 were found
-```
-
-而且**每次只报一个类**, 于是只能"报一次修一个"——
-`docs/lessons/debugging-log.md`（原第五课补记二）记录了三个 run 依次报出三个不同类。
-
-守护那个缺陷的 `test_executor_injection_qualifier.py` **从未在 CI 里跑过**。
-若它跑过, **第一轮就会把全仓的注入点一次报全**。
-
-即: 不是"报了但没修好", 而是**门禁从来没运行过**。
-
-### 为什么逐个写 `run:` 步骤必然漏接
-
-漏接时**完全无声** —— 没有报错、没有红灯, 只是某个脚本安静地不跑。
-本次缺口正是这样形成的: 每加一个门禁都要记得在 workflow 里加一行,
-忘记时没有任何机制会告诉你。
-
-**正解两步**:
-
-1. **聚合步骤**: `for t in deploy/tests/test_*` 一次跑全部, 新增脚本零成本纳入。
-2. **`test_gate_wiring.py` 守护接线**: 反查工作流正文, 报出未被引用的脚本。
-
-⚠️ 只接 `test_*`, **不接 `check_*`**: 后者是**判定**门禁, 由 `verify-e2e.sh`
-在运行期读真实 `/proc/meminfo` 下结论。在 workflow 里跑只会读到 **runner 自己的**
-账本, 对本项目无意义。
-
-> **【2026-10-05 再更正】上面那条注记的**结论部分错了**: 不该接进 workflow
-> ≠ 不必验证接线。第一版守护把这条读成了"豁免", 于是漏掉下面 3 个缺陷。
->
-> **深度验证时实测查出（4 类负向对照全部命中）**:
->
-> | # | 缺陷 | 为什么第一版守护看不见 |
-> | :--- | :--- | :--- |
-> | 1 | `check_commit_runtime_guard.py` 与 `check_sw_oap_config.sh` **全仓无任何调用点** | 被 `check_` 前缀**无条件豁免**, 而豁免理由"由 verify-e2e.sh 调"**从未被验证** |
-> | 2 | 修复豁免后仍假绿: 通配符 `for t in deploy/tests/test_*.sh` **不匹配 `check_*`**, 但旧代码用**全局开关** `via_wildcard` 放行**全部**脚本 | 问的是"是否存在某个通配符", 不是"**这个脚本**有没有会执行到它的接线" |
-> | 3 | 删掉聚合步骤的真实执行体后仍假绿 | `- name: Gate self-tests (deploy/tests/test_*)` 这行**标签**里含被检字面量, `name not in blob` 恒为假 |
->
-> **缺陷 1 的严重性高于原先那 15 个**: 这两个脚本**各自都有守护测试且全绿**
-> （`test_commit_runtime_guard.py` / `test_check_sw_oap_config.sh`），
-> 却从未被调用 —— 与 M6/M7 那 11 项"建成无人使用"是**同一个误判**，
-> 只不过发生在门禁层。`check_sw_oap_config` 防的正是 SkyWalking OAP
-> **崩溃循环 51 次**那个已被记录过的故障。
->
-> **三条通用规则**（本轮新得）:
->
-> 1. **豁免必须附验证, 不能只声明理由。** "它由 X 调用"是**待验证的断言**,
->    不是豁免的许可证。正确形态: 去 `X` 里真找一遍, 找不到就不豁免。
-> 2. **通配符豁免必须按前缀分别判定。** 全局开关会让一个类别获得
->    自己**享受不到**的豁免（`test_*` 的通配符不执行 `check_*`）。
-> 3. **被检字面量不能出现在注释与标签里。** 这是本项目第 7 次同型
->    （`docs/lessons/debugging-log.md` 第八课补记一已记 6 次）。正解: 判定前先剥离不可执行行 ——
->    `#` 注释、`- name:` / `name:` 标签。
->
-> 负向对照（四类，全部精确命中）:
-> | 对照 | 期望 | 实测 |
-> | :--- | :--- | :--- |
-> | A 正向（真实仓库） | rc=0 | rc=0, 未被引用 0 |
-> | B 删两个 `check_*` 全部引用 | 报红 2 | 报红 2, rc=1 |
-> | C 删聚合步骤（标签仍在） | 报红 9 | 报红 9, rc=1 |
-> | D 只删一个 `check_*` | 报红 1 | 报红 1, rc=1 |
->
-> 另: **报错文案也是探针的一部分**（`docs/lessons/debugging-log.md` 第五课补记四）。旧文案对 `check_*` 也说
-> "未被 `.github/workflows/*.yml` 引用", 会把人引向工作流, 而正确接入位置是
-> `verify-e2e.sh`。已按前缀分流。
-
-> **【2026-10-05 第三次更正】修完接线还必须给它自检, 且自检本身又踩了同一个坑**
->
-> 接线后我给 `verify-e2e.sh --self-test` 加了 3 项断言。**第一版是假绿**:
-> 删掉 `check_commit_runtime_guard || true` 调用行后, 自检仍报 PASS。
->
-> 原因与缺陷 1 **完全同型**: 判据用 `index($0, "check_commit_runtime_guard")`,
-> 而 `check_commit_runtime_guard() {` 这个**函数定义**照样命中 ——
-> **定义存在 ≠ 被调用**。这已是本项目**第 8 次**同型（`docs/lessons/debugging-log.md` 第八课补记一记 6 次,
-> 上面的缺陷 2/3 算第 7 次）。
->
-> **判据必须匹配"调用形态"而不是"名字出现过"**。实测有两种真实形态并存:
->
-> ```bash
-> check_commit_runtime_guard || true          # 裸调用
-> { ...; check_sw_oap_config; } then          # 嵌在 if 条件里
-> ```
->
-> 正解: 排除 `name() {`（定义）、`name=`（赋值）、`#`（注释）后,
-> 匹配**独立调用**。
->
-> 附带一处 awk 细节: 用 `exit` 跳出主块会**跳过 `END`**, 故改用 `nextfile`。
->
-> 三条路径全部验证:
-> | 对照 | 期望 | 实测 |
-> | :--- | :--- | :--- |
-> | 正向 | rc=0 | rc=0（15 项全绿：原 12 + 新增 3） |
-> | 删调用行（保留定义） | rc=1 | rc=1, 报"定义还在但从未被调用" |
-> | 阻断改 `\|\| true` | rc=1 | rc=1, 报"不再是阻断执行" |
->
-> **通用规则**: 给门禁接线之后, 必须问"**下一个人删掉这行时会怎样**"。
-> 若答案是"静默失效", 那接线本身也需要守护。
-
-### 守护接线本身的两个坑（都踩到了）
-
-1. **不要硬编码"已接线清单"** —— 那会在有人**删掉工作流引用**时变成又一张
-   没人维护的登记表, 即守护自己也会假绿。只做"列文件 → 找引用"。
-2. **判据必须认通配符**（`docs/lessons/debugging-log.md` 第五课第七例）: 本守护第一版只按具体文件名找引用,
-   于是"`for t in test_*.sh` 明明会执行"被报成"从未引用"。
-   **判"有没有被调用"要用会执行到它的那种形式**, 而不是猜某一种写法。
-
-负向对照: 移除聚合步骤 → 报红 **9 个**(恰是原本未接线的那批) + rc=1;
-恢复后转绿。是 9 而非 15 —— 另外 6 个本就有显式 `run:` 步骤, 精度正确。
-
-**通用规则**: **新增门禁脚本时, 必须同时确认它被 CI 调用了**。
-判据不是"我写了它", 而是"workflow 正文里能反查到它"。
 
 ---
 
@@ -343,12 +215,377 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 
 
 
+### ⚠️ 第五课: **看起来正常的错误信息**比报错更危险 (2026-10-03 新增)
+
+排查 Nacos 配置与 ES 400 时反复撞上一种新形态, 与前三课都不同:
+**取证手段本身失效, 但不报错, 而是给出一个语法合法、语义错误的结论。**
+
+三个实例, 全部由我自己造成:
+
+| 实例 | 探针写的对象 | 实际对象 | 探针输出 | 真实含义 |
+| :--- | :--- | :--- | :--- | :--- |
+| ES 诊断 v1 | `oper_log` | `sys_oper_log` | `404` | 索引名不存在, 与 ES 是否健康无关 |
+| ES 诊断 v2 | `device_telemetry`（按**类名**猜） | `iot_telemetry` | `404` | 同上 |
+| 回读守卫 v1 | 先剥离字符串字面值 | 需匹配 URL 与 `$file` | “找不到回读点” | 把要守的东西也擦了, 恒假红 |
+
+**为什么这类比报错难发现**:
+
+- 报错会中断流程; 假结论会**继续往下走**, 并在后续推理中被当成事实。
+- 本项目已被“机制存在 ≠ 机制在运行”坑过 (第三课), 但那至少还会红。
+  这一类的特征是**全绿**: 测试通过、日志有输出、结论自洽 —— 只是结论错了。
+- 第二例尤其典型: 我从 `DeviceTelemetryDocument` **推导**出 `device_telemetry`,
+  推导链本身合理, 但真实索引名是 `iot_telemetry`。
+  **类名/文件名/资源名与运行时标识符之间没有必然对应关系**,
+  靠命名直觉推断必错。
+
+**三条可直接执行的规则**:
+
+1. **探针的对象必须从被测系统里提取, 不能手写**。
+   正确做法: 从 Java 侧提取全部 `@Document(indexName=...)`,
+   与诊断脚本的列表**双向比对**（缺失和多余都判红）——
+   `deploy/tests/test_es_diagnostics_index_names.py` 即此例。
+2. **“探不到”有两个解释, 必须区分**: 对象不存在(探错了) vs 对象存在但不可用(真故障)。
+   这正是 `HEAD /<index> -> 404` 无法单独作为证据的原因:
+   它同时支持两种互斥结论。
+3. **静默降级的取证比没有取证更坏**。宁可让探针在“对象不确定”时直接失败,
+   也不要让它继续输出一个格式正确的结果。
+
+**与 L2.5 的关系**: 负向对照仍能救这一类 —— 但前提是**对照要打在探针本身**。
+我第一版索引名守护的提取正则用了 `[^\s;]+`, 对 `for idx in a b c; do`
+只抓到第一个索引, 于是漏掉的恰好是“未被探测”的那部分 ——
+即最需要被发现的那部分。对真实脚本跑正向时它立刻报红, 才暴露出来。
+**若当时是拿桩数据跑正向, 这个洞会一路留到 CI。**
+
+`TenantIsolationEndToEndIT` 的定位: 真实 PostgreSQL 容器 + 真实 `TenantSqlInterceptor` + 真实过滤器,
+而非 mock 直调方法。
+
+**但它不是本项目第一个 L3 多租户证据** —— `docs/perf/2026-09-04-m6-01-runtime-verify.md`
+已有一份人工运行时验证报告。它的增量价值在于**自动化与可重复**:
+那份报告是一次性的人工取证, 不在默认构建里跑, 回归时不会自动重现;
+本 IT 每次 `mvn verify -DskipITs=false` 都会执行, 因此能长期充当回归网。
+
+---
+### ⚠️ 第五课补记一: 扫描器自己坏掉时，会长成守护的样子
+
+把上面的守护从"查一个类"扩成"全仓扫描"时，守护本身连续三次**假装通过**：
+
+| 缺陷 | 现象 | 为什么假 |
+| :--- | :--- | :--- |
+| 模块根取聚合目录 `cloud-infra-modules/` | 全 SKIP | 那目录没有 `target/`，字节码永远找不到，而 `exit 0` |
+| `javap` 段尾按空行切 | 有效字节码被读成 0 | `descriptor:` 行后就停了，够不到 `RuntimeVisibleParameterAnnotations` |
+| 匹配 `L.../Qualifier;` | 恒为 0 | `javap` 在参数注解区输出的是**源码形式** `Qualifier(`，不是描述符 |
+
+还有一条逻辑漏洞：删掉**一个** `.class` 时，剩余的验过了 → 守护 WARN 后 `exit 0`。
+"验到 2 个里的 1 个，剩下 1 个完全没验" 不等于"通过"。
+
+**统一规则**：
+
+1. **扫描器要能失败**：`扫到 0 个目标` 必须判红（扫描器坏了 ≠ 通过）。
+2. **没验到 ≠ 验过了**：`SKIP` 一律不判绿，只在"整个 `target/classes` 都不存在"时
+   才允许 `SKIP + exit 0`，且必须打印原因。
+3. **解析外部工具输出前，先看它的真实格式**：`javap`/JSON/XML 的实际长相要看一眼，
+   不要按记忆写正则。本次两个 bug 都源于"我以为 javap 输出长什么样"。
+
+### ⚠️ 第五课补记二: 逐个修不是修, 是让 bug 排队（2026-10-03）
+
+同一个根因（Lombok 不把字段上的 `@Qualifier` 复制到构造参数）在 CI 上真实报了**三次**：
+
+| run | 类 | 参数 |
+| :--- | :--- | :--- |
+| 37059177909 / 37074048182 | `NotificationServiceImpl` | Parameter 8 |
+| 37077332251 | `NotificationDispatchRecoveryTask` | Parameter 4 |
+
+第一次我改了 `NotificationServiceImpl` 的构造器就以为修好了 ——
+下一轮 CI 立刻以 `Parameter 4` 报出**第二个**类，同一个根因。
+
+> **逐个修的代价不是修得慢，是每次 E2E 只暴露一个, 每次都要等一轮完整 CI（约 17 分钟）才发现下一个。**
+> 更糟的是它给人"已经修好了"的错觉。正确做法是找**共同机制**一次覆盖：
+> 本例是根 `lombok.config` 的 `copyableAnnotations`。
+
+判定依据：报错文案里若出现**同一句** `required a single bean, but 2 were found`、
+只是类名/参数序号不同，就该假设"还有别的类"，而非"换个类再修"。
+
+### ⚠️ 第五课补记三: 守护自身失败会掩盖真实问题（2026-10-02）
+
+排查 notification 的 `@Qualifier` 缺陷时，我写了字节码守护并挂在 E2E 的**早期步骤**。
+它需要 `target/classes` 里的字节码，那要等编译完成 —— 于是：
+
+```text
+mvn -o → Non-resolvable import POM（既无依赖也无字节码）→ 该步红 → 整个 run 中断
+```
+
+代价是 E2E 主脚本根本没跑，**更早的真实失败被换成了一个看起来合理的红灯**。
+
+两个层面的错误：
+
+1. **位置错误**：需要编译产物的守护，只能放在编译之后。
+   放在之前，它要么误报，要么不得不写成“缺产物就跳过” —— 而跳过若无条件执行，
+   就成了“只有全绿才检查”的假门禁（比没有更坏）。
+   故正解是两件事同时做：**移到编译后** + `if: always()` 保留失败时的可执行性。
+2. **跳过 ≠ 通过**：无字节码时必须 `SKIP` 并**打印原因**，`exit 0` 属于“本次不判定”，
+   绝不能 `exit 1`（那是把“没测”说成“测了不过”），也绝不能静默 `exit 0`。
+
+> 这条与第四课的“负向对照”同源：守护的价值不在“它会红”，而在“它红的时候确实有东西坏了”。
+> 守护自己出错时，它和被守护对象一样会骗人。
+
+### ⚠️ 第六课补记: ES 版本不匹配，会伪装成“客户端异常”（2026-10-03）
+
+`search` 的报错连续两个 E2E run（`37077332251` / `37079433594`）都停在这里：
+
+```text
+DataAccessResourceFailureException: node: http://cloud-elasticsearch:9200/,
+  status: 400, [es/indices.exists] Expecting a response body, but none was sent
+```
+
+这个信息有**三重误导**，所以定位花了好几轮：
+
+| 误导 | 事实 |
+| :--- | :--- |
+| “ES 返回 400 但没说原因” | 服务端说了：`media_type_header_exception: Invalid media-type value on headers [Accept, Content-Type]`，只是客户端把它丢了 |
+| “curl 正常，ES 没事” | curl **不发**那两个头。带 `compatible-with=9` 立刻报同一个错 |
+| “带 `node: http://…`，是网络/代理问题” | 是版本问题。我本地还真先被自己的 `http_proxy` 带偏了一轮 |
+
+真实根因：Spring Boot 4.1.0 的 BOM 指定 `elasticsearch-client.version = 9.4.2`，
+而 `deploy/compose.yaml` 写的是 `elasticsearch:8.18.0`。9.x 客户端默认发
+`compatible-with=9` 头，8.x 服务端不认。
+
+**可复现的判据**（不需要启动整套服务）：
+
+```bash
+curl -s http://127.0.0.1:9200/ \
+  -H "Accept: application/vnd.elasticsearch+json; compatible-with=9" \
+  -H "Content-Type: application/vnd.elasticsearch+json; compatible-with=9"
+# → media_type_header_exception
+```
+
+> **通用形式**：客户端库与服务端的主版本不一致时，报错往往落在**协议层**（头、编码、帧格式），
+> 完全不提“版本”这个词。看到 `media_type_header_exception` / `Unsupported Media-Type` /
+> `unexpected end of stream` 这类，就该直接去查两端版本，而不是从网络栈往下挖。
+
+#### 第七例“看起来正常的错误信息”
+
+这次的形态更隐蔽一层：**探测手段（curl）恰好绕开了故障条件**，
+于是“ES 健康”被反复确认，方向却一直错。已有守护
+`deploy/tests/test_es_version_alignment.py` 从 Maven BOM 读客户端版本，
+与三处服务端配置比对（含“各处必须一致”）。
+
+### ⚠️ 第六课补记二: 排查环境本身的差异，会伪装成被测系统的缺陷（2026-10-03）
+
+search 的 ES `status: 400, Expecting a response body, but none was sent` 在本地**直接复现了**，
+且复现得像真的一样：
+
+```text
+容器内 curl HEAD /sys_oper_log
+  → curl: (7) Failed to connect ... via 127.0.0.1 after 0 ms
+```
+
+看上去就是"ES 不可达 / 被中间层拦截"，实际上：
+
+| 事实 | 含义 |
+| :--- | :--- |
+| 我自己的 shell 有 `http_proxy=http://127.0.0.1:7890` | 与被测系统无关 |
+| `podman exec` 把该代理注入容器，覆盖了 compose 里的 `http_proxy: ""` | 覆盖发生在**容器启动后**，我读 compose 看不到 |
+| 宿主机直连得到 `502` + 响应头 `Proxy-Connection` | 502 来自**代理**，不是 ES |
+| 去掉代理后同一请求 `404` + `X-elastic-product: Elasticsearch` | ES 服务端完全正常 |
+
+**教训**：
+
+1. **`502`/`via <proxy>` 之类信息里出现的地址属于环境，不属于被测系统**。
+   先问"这个地址是谁给的"，再问"服务为什么不认"。
+2. **本地复现成功 ≠ 找到根因**。复现只证明现象存在；必须再做一次
+   "改变单一变量后现象是否消失"的对照，才能归因。本次正是靠
+   `env -u http_proxy ...` 的前后对照把结论翻过来的。
+3. **compose 里写了空值 ≠ 运行时是空值**。rootless podman 会从宿主 shell 补齐继承变量，
+   配置文件与实际环境可以差得很远 —— 要用 `podman inspect` / `env` 看**实际**值。
+
+> 讽刺的是，本项目 `deploy/compose.yaml` 对全部 9 个业务服务都**已正确**清空了代理
+> （`HTTP_PROXY: ""` … `no_proxy: "*"`），所以 CI 上这条线索根本不存在。
+> 我差点把本地噪声当成 CI 根因去改生产配置 —— 那正是"未获真实证据就改配置"。
+### 证据分级（本次实践后的补充）
+
+| 级别 | 手段 | 能证明什么 |
+| :--- | :--- | :--- |
+| L1 结构性 | 读源码 / 反射扫描 / 自动配置登记 | 机制存在 |
+| L2 触发性 | 守护测试断言装配与默认值 | 条件成立时代码会执行 |
+| L3 端到端 | **真实容器**跑完整链路 | 运行时确实按预期工作 |
+| L2.5 负向对照 | 改坏 → 断言守护变红 | 守护本身有效 |
+
+### ⚠️ 第八课: 「给更多资源反而更早失败」是判别特征，不是噪声（2026-10-04）
+
+**背景**: 6 个业务服务反复崩溃, JVM 报
+`Native memory allocation (malloc) failed to allocate 112 bytes` /
+`pthread_create failed (EAGAIN)`, 而 cgroup 侧 `memory.events oom=0`、
+`OOMKilled=false`、宿主机仍有约 10GB `MemAvailable`。所有"内存不够"的假设都被证据否定。
+
+真因在**宿主机全局**: `vm.overcommit_memory = 2`（严格模式）使所有进程共享
+`CommitLimit = MemTotal + SwapTotal = 20.63 GB`。元凶是一个 13 小时前实验遗留的
+孤儿 JVM（`VmSize 40.62 GB` / `RSS 0.07 GB`，`cgroup` 在 `session-*.scope`
+而非 `libpod-*`，**`podman ps` 根本看不到它**）。
+
+受控实验给出的最干净证据:
+
+```text
+Committed_AS  20.54 / 20.63 GB (100%)
+MemAvailable  4.14 GB                        ← 物理内存充足
+mmap 256MB    FAIL errno=12 (ENOMEM)         ← 但 256MB 都分不出
+```
+
+**三条可直接执行的规则**:
+
+1. **"资源越多越早失败" = 共享配额的签名, 不是矛盾。**
+   普通资源不足永远表现相反（给更多就变慢）。所以一旦观测到反向相关,
+   就该怀疑**配额/预算/限额是全局共享的**, 而不是"参数调错了"。
+   本例中提高 `mem_limit` 或 `-Xmx` 只会**更快**耗尽全局 commit 预算。
+
+2. **判据要选对账本。** 物理内存 (`MemAvailable`) 与提交额度 (`Committed_AS`)
+   是**两套独立账本**。本例中前者有 4GB、后者已 100%, 而"4GB 可用"毫无意义。
+   排查此类问题必须同时读两者; 只读 `free -h` 会得出"内存充足"的错误结论。
+
+3. **孤儿进程不在容器的任何清单里。** `podman ps` / `docker ps` 只列容器。
+   真正吃资源的可能是不属于任何容器的宿主进程。**必须直接扫 `/proc`**:
+
+   ```bash
+   for p in /proc/[0-9]*; do awk '/^VmSize/{print $2, FILENAME}' "$p/status"; done | sort -rn | head
+   # 再用 cgroup 区分归属: 含 libpod- 才是容器
+   awk -F: '/^0::/{print $3}' /proc/<pid>/cgroup
+   ```
+
+   ⚠️ **`VmSize` 会严重高估**:`Committed_AS` 只统计**被触碰过的页**。
+   本例孤儿进程 `VmSize 40.62 GB` 而 `RSS 0.07 GB`, 相差 580 倍。
+   故不能只看 `VmSize` 排序就下结论, 要看实际 `Committed_AS` 增量。
+
+**已加门禁**: `deploy/tests/check_commit_budget.py`（阈值 85%）+
+`deploy/tests/test_commit_budget.py`（14 项断言）+ `verify-e2e.sh` 前置门禁。
+负向对照: hog 进程占满 commit 至 `mmap ENOMEM`, 门禁 3 秒内 `exit 1`。
+
+> ⚠️ **但这个门禁有个已知的覆盖缺口（2026-10-04 实测）**:
+> 它只在 `verify-e2e.sh` **启动前**查一次, 而实测失败发生在**运行期负载高峰** ——
+> 启动时 `Committed_AS` 仅 64%、门禁 PASS, 十几分钟后 OAP 仍死于
+> `Native memory allocation (malloc) failed to allocate 9104 bytes`。
+> 即**通过门禁 ≠ 运行期不会耗尽**。
+> 待办: 运行期需周期性复查(尤其在 `mvn` + 镜像构建 + 20 容器同时起的高峰期),
+> 不能只在开头看一眼。
+
+### ⚠️ 第八课补记二: 宿主机负载会伪装成被测系统的缺陷（2026-10-04）
+
+同一轮里, 本项目 E2E 连续两次失败, 两次都是**环境**问题, 但报出的错误
+看起来都像代码/配置缺陷:
+
+| 现象 | 表面读法 | 真实原因 |
+| :--- | :--- | :--- |
+| Nacos Derby `Login timeout exceeded`, 崩溃循环 10 次 | 堆太小 / 数据目录自锁 | 宿主机 `%wa`=64.9%, I/O 饥饿下同步磁盘操作超时 |
+| OAP `malloc failed to allocate 9104 bytes` | 内存泄漏 / 堆不够 | 同上; 崩在 JIT deopt 阶段, 当时仅 67 线程 / 1G 堆 |
+| `podman system df` / `inspect` 无输出 | Podman 坏了 | 同一 I/O 压力下探针超时 |
+
+**清理后宿主机账本完全健康**(`Committed_AS` 5.03/20.63 GB = 24%,
+`MemAvailable` 17.26 GB) ⇒ 失败由负载高峰引起, 不是配置。
+
+**三条规则**:
+
+1. **失败时先看宿主机三本账, 再看被测系统**:
+   `%wa`(I/O 等待)、`load`、`Committed_AS`。三本账都健康而应用失败,
+   才轮到怀疑应用。
+2. **`load` 高但没有任何容器在跑, 是个强信号** —— 说明有**不属于容器**的进程。
+   本次 12 核机器 load 22, `podman ps` 却几乎空; `top -o %CPU` 立刻显示
+   13 个 `ai_developer_growth` 的 pytest 进程各占 83% CPU。
+   **与「孤儿 JVM」同一形状**: 不在任何容器清单里, 只能靠 `/proc` 或 `top` 直接看。
+3. **属于别的项目的进程不能擅自终止**。它们可能是用户正在跑的测试,
+   强杀不可逆。本项目当时正确做法是停下来问, 而不是"清理一下环境"。
+
+**更一般的形式**: 本项目的三次环境类故障(代理、commit 配额、外部负载)
+形态完全一致 —— **报错来自被测系统, 成因在系统之外**。
+所以任何失败的归因, 第一步都该是"**这到底是谁的账**"。
+
+### ⚠️ 第八课补记一: 探针自己坏掉时, 会把被测系统判成失败（2026-10-04）
+
+同一轮排查里, **我自己的观测脚本连续两次给出与事实相反的结论**:
+
+| 探针缺陷 | 观测到的现象 | 真实状态 |
+| :--- | :--- | :--- |
+| `podman inspect` 密集轮询超时 | `存活=0/6` | 6/6 存活 |
+| 统计脚本子 shell 变量丢失 | `VmSize 之和 = 0.00 GB` | 5.48 GB |
+
+**根因是同一件事: 探针把"取不到值"当成了"取到假值"。**
+`$([ "$(timeout 10 podman inspect ...)" = "true" ])` 在超时时得到空串,
+空串 ≠ `true` 于是判"已退出" —— **探针失效被读成了被测对象失败**。
+
+同一缺陷在生产脚本里也存在, 已修:
+
+```bash
+# ❌ 原写法: 两件本质不同的事被混为一谈
+state=$(podman inspect --format '{{.State.Health.Status}}' "$c" 2>/dev/null || echo absent)
+#   探针超时/Podman 卡住 -> 应重试
+#   容器真的没被创建     -> 才是故障(问题在 podman-compose 那一步)
+
+# ✅ 修复后: 显式区分, 且探针失败不消耗判定预算
+state=$(timeout 15 podman inspect --format '{{.State.Health.Status}}' "$c" 2>/dev/null)
+if [ "$?" -ne 0 ] || [ -z "$state" ]; then
+  state="probe-timeout"; round_fail=1      # continue 重试, 不计入 600s 预算
+fi
+```
+
+**通用规则**:
+
+1. **探针必须带 `timeout`, 且必须区分三态**: 成功取到值 / 取不到值 / 取到假值。
+   只区分"等于期望值"与"不等于期望值"的探针, 必然在自身失效时说谎。
+2. **`存活=0` 与 `失败=0` 同时出现时, 先怀疑探针**。两个计数互斥却同时为 0,
+   在数学上就说明**至少有一个计数的输入是空值**。
+3. **守护静态断言时, 被检字面量不能出现在断言自身附近。**
+   本项目实测连踩 6 次（见 `verify-e2e.sh` 的 `run_gate_selftest` 注释）:
+   污染源从**注释**一路升级到**断言代码自己**。
+   正解: 先算出函数体行区间, 搜索限定在该区间之外。
+4. **注入有前置条件时, 不能用 `sed` 替换一个当前不存在的字面量。**
+   本次真实踩到: 守护测试里写 `sed 's|image: elasticsearch:8.18.0|...'`,
+   而该字面量只在**前一个用例注入之后**才存在 → `sed` 静默无操作,
+   测试"通过"了但什么都没测。**`sed` 没匹配上不报错, 等于一个恒假绿的断言。**
+   正解: 用结构化插入(而非替换), 且插入后**自检生效**:
+   ```bash
+   inject() { python3 ...; grep -q "$expected" "$f" || { red "注入未生效"; exit 2; }; }
+   ```
+5. **测试用例之间不得共享可变状态。** 靠 `cp 还原` 的写法, 只要漏一次
+   就会让下一个用例跑在被改过的内容上 —— 本次真的发生了:
+   "双 ES 9" 用例跑在上一用例的副本上, 出现两个同名服务, `awk` 取到第一个,
+   本该报红的**报了绿**。正解是每个用例一份副本 + 被测对象支持路径覆盖:
+   ```bash
+   WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
+   COMPOSE_FILE="$WORK/compose.yaml" "$SCRIPT"
+   ```
+   配套地, **被测脚本不该把路径写死** —— 写死就迫使测试去改生产文件。
+6. **函数不该假定调用前的初始状态。** `inject_separate_es` 以为副本是干净的,
+   于是重复插入同名服务。写"修改型"函数时, 让它**自己**先重置。
+
+### ⚠️ 黑名单 vs 白名单: 判据的"取反"往往才是正确的（2026-10-04）
+
+SkyWalking 的 ES 兼容性判据原本是**排除 9.x**:
+
+```bash
+if [[ "$IMG" =~ ^9\. ]]; then 判红; else 判绿; fi
+```
+
+这类写法的问题不在于某一条分支写错, 而在于**它无法枚举"未知的坏"**。
+实测被它放过的配置:
+
+| 镜像 | 为什么坏 | 黑名单看得见吗 |
+| :--- | :--- | :--- |
+| `opensearch:2.11.1` | 源自 ES 7.10.2 但协议/插件不兼容 | 否 |
+| `elasticsearch:latest` | 无版本, 未来可能解析到 9.x | 否 |
+| `elasticseach:8.18.0` | **镜像名拼错**, 根本拉不到 | 否 |
+| `es:8` | 不是 ES | 否 |
+
+四条全部静默通过。而"合法的 7.x / 8.x"是**有限可枚举的**, 官方文档写得很清楚
+（Backend storage → Elasticsearch+ → "ElasticSearch 7 and 8"）。
+
+**规则**: 当"正确"的一侧**可枚举**而"错误"的一侧不可枚举时, 必须用白名单。
+判据的方向应由**哪一侧能穷举**决定, 而不是由"当前已知哪些坏"决定。
+
+**配套的隐蔽陷阱**: 提取字段时别只取你关心的那一半。本次
+`| sed 's/.*://'` 丢掉了镜像名, 于是 `elasticseach:8.18.0` 提取出 `8` 就通过了 ——
+**tag 合法不等于镜像正确**。白名单要覆盖你要校验的**整个标识**, 而不是它的尾部。
+
+
 ## 🚫 框架能力准入原则 (2026-09-29 新增, 强制)
 
-本项目曾出现约 4200 行“已实现且有自测, 但业务零引用”的框架代码。
-**这 4200 行已于 2026-10-13 全部删除**（codegen 2464 + 幂等 376 + Outbox 767 + 编排引擎 540 ——
-原表所列 764/767/500/2464 与实际删除量略有出入，以 ARCHITECTURE.md 为准）。
-本节保留的是**准入原则**，而非存量清单。新增框架能力前必须先回答:
+本项目已出现约 4200 行“已实现且有自测, 但业务零引用”的框架代码。新增框架能力前必须先回答:
 
 1. **先有第二个真实用例, 再有抽象。** 只有一个用例时直接写具体代码。
 2. **提出来源必须是业务, 不是设想。** 说清“哪个现有业务场景现在就需要它”。
@@ -360,9 +597,7 @@ Parameter N of constructor in ... required a single bean, but 2 were found
 
 违反上述任一条即视为过度设计。详见 `.scratch/2026-q3-roadmap/issues/27-framework-admission-and-cuts.md`。
 
-> **当前存量提醒** (2026-10-17 更新): 上述零业务引用代码**已全部删除, 当前存量约 0 行**。
-> 历史记录: 约 4200 行零业务引用代码 (编排引擎 764 + Outbox 767 +
-> 幂等 500 + codegen 2464)。保留但暂停投入。
+> **当前存量提醒** (2026-10-17 更新): 历史上的零业务引用代码（编排引擎、Outbox、幂等、codegen）已在后续清理中移除或处置；新增能力继续遵循“先有真实业务用例与引用再抽象”的准入原则。
 > **Outbox 的业务负担已于 issue 29 解除**: opt-in 失效已修,
 > `deploy/config/search-service.yaml` 里那个“并不生效”的规避开关与对应死配置已删除。
 
@@ -461,8 +696,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 | `cloud-infra-starter` | 引导与自动配置组件 | 负责框架能力的自动装配 (租户、平台属性) |
 | `cloud-infra-gateway` | 统一网关 | 负责身份传播、路由拦截、内部调用签名剥离 |
 | `cloud-infra-auth` | 认证中心 | 负责 Token 签发、登录锁定、验证码校验、JWT 黑名单 (logout jti) |
-| `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层。**鉴权覆盖由 `ControllerAuthorizationTest` 守护** (2026-09-30 审计发现 3 个端点"认证即可读", 已修; 非 `/internal/` 端点必须有 `@PreAuthorize`, 例外清单必须保持最小)。**多租户已在部署态开启** (`deploy/config` 三个服务), 租户来自 JWT claim 而非客户端请求头, 详见下方「第四课」 |
-| `cloud-infra-codegen` | 代码生成框架 (`⚪` 可选工具, 非路线图能力) | 含 `core` (JDK 17 编译) + `maven-plugin` (JDK 17, 自包含) 子模块; 仅 `sys_post` 一表验证过, **停止新增模板** |
+| `cloud-infra-modules` | 核心业务微服务 (`system`, `file`, `notification`, `search`) | 业务逻辑实现层。**鉴权覆盖由 `ControllerAuthorizationTest` 守护** (2026-09-30 审计发现 3 个端点"认证即可读", 已修; 非 `/internal/` 端点必须有 `@PreAuthorize`, 例外清单必须保持最小)。**多租户已在部署态开启** (`deploy/config` 三个服务), 租户来自 JWT claim 而非客户端请求头, 详见下方“第四课” |
 | `cloud-infra-test-support`| 集成测试底座 | 提供 Testcontainers 配置 |
 
 ### 3. 核心业务流程
@@ -509,7 +743,7 @@ Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 
 - **Spring Cloud**: 2025.1.2
 - **JDK**: 25
 - **数据库**: PostgreSQL 16 (实际使用) / MySQL 8.4 (驱动可配)
-- **中间件**: Redis 7.2, Nacos 3.x, **Elasticsearch 9.0.3**（主版本必须与 Spring Boot 4.1.0 BOM 指定的客户端 9.4.2 一致，见 `docs/lessons/debugging-log.md`）, RabbitMQ 3.x
+- **中间件**: Redis 7.2, Nacos 3.x, **Elasticsearch 9.0.3**（主版本必须与 Spring Boot 4.1.0 BOM 指定的客户端 9.4.2 一致，见第六课补记）, RabbitMQ 3.x
 - **可观测性**: OpenTelemetry (OTLP 4318), Prometheus, Zipkin, Grafana
 
 ### 4. 测试夹具隔离 (2026-10-01 新增)
@@ -709,17 +943,11 @@ native 修好后，`Build & Push Docker Images` 首次真正执行，立刻失�
 - **安全**: 管理端点收敛 (9301/management), 异常脱敏, JWT 黑名单 (Redis TTL 24h, JwtAuth + HeaderAuth + gateway SessionStore 三层), 文件魔数校验, P0-3b HeaderAuth blacklist 修复 (commit 370dcd1+ae06566)。WebSocket 信任模型已与 HTTP 对齐 (`verify-internal-sign` 同一开关, 2026-09-30); **该开关已改为默认 fail-closed (true), 两侧同默认, commit `2c4e528`** —— 此前默认 false 使 `isTrustedInternalRequest` 首行恒真、验签代码不可达。守护测试 `*DefaultFailClosedTest` x2 走真实 Spring 装配断言默认值, `WebSocketIdentityTrustIT` 提供端到端证据
 - **X-Trace-Id 校验**: 外部可控的 `X-Trace-Id` 写入 MDC 与响应头前先按 `^[A-Za-z0-9_-]{1,64}$` 校验, 阻断日志伪造 (2026-09-29)
 - **gRPC 安全边界** (M7-02 Phase D): 内部调用 HMAC 签名 + 调用方身份 + 租户上下文三道校验, 失败统一 `UNAUTHENTICATED` 且不区分原因; `hasPermi` 在 gRPC 通道内恒为 false, 写操作仍禁止放开
-- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient), **cloud-infra-codegen 模块新增** (core + maven-plugin 双子模块)
-- **性能**: KEYS→SCAN, 分页 LIMIT, Feign 显式超时, G1GC + 256m。
-  - **2026-10-17 更正 —— 「N+1 批量删除」此前并未真正完成**:
-    `SysUserServiceImpl.deleteUserByIds` 仍在循环里逐用户 `userRoleMapper.delete` + Redis 广播,
-    `UserSessionRevoker.revokeAllSessions(List)` 是 `forEach` 导致 **N 次全库 SCAN**。
-    二者已于 2026-10-17 改为单条 `IN` 批量删除 + 单次 SCAN（Redis `{a,b,c}` 选支）。
-  - **性能基线以 README 为准**: 57 RPS / p99 1066ms, 端点 `/v3/api-docs`（静态 OpenAPI JSON,
-    不触达业务逻辑）。此前并列的「146 RPS / p99 165ms」**无可复现依据**, 已撤下。
+- **架构**: framework-security optional api, common 无 stream 依赖, gateway 路由修复 (IdentityRequestWrapper.getHeaders + @LoadBalanced RestClient)
+- **性能**: KEYS→SCAN, N+1 批量删除, 分页 LIMIT, Feign 显式超时, ZGC+512m, 基准测试 (10并发 146 RPS, p99 165ms — 2026-08-31 实测, 较旧基线 57 RPS / 1066ms 提升 2.5-6x)
 - **事务**: 14+ @Transactional rollbackFor, Feign 调用移出事务, DLQ 重抛
 - **部署**: compose restart/healthcheck, Helm PDB, prometheus port 9301, Seata disabled
-- **代码生成**: `cloud-infra-codegen` (`⚪` 可选工具) 含 10+ 模板, 支持 Maven 插件/CLI/编程式三种调用, 基于 Flyway DDL 解析。**不再投入**
+- **历史清理**: `cloud-infra-codegen`（历史可选工具，零业务引用）已移除，不再作为可用能力或路线图投入项
 
 ## Agent skills
 
@@ -734,21 +962,3 @@ Standard triage labels are used. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context layout. See `docs/agents/domain.md`.
-
----
-
----
-
-## 📚 调试战史的位置
-
-本文件已剥离**环境调试过程**（宿主机内存/commit 预算、Podman & Ryuk 容器启动、
-Testcontainers 超时、探针自身失效等共 5,559 行）。
-
-这些内容对**产品代码**无指导作用，却曾占 `AGENTS.md` 的 89%，导致每个 agent session
-背着数百 KB 与写代码无关的上下文。
-
-- 需要排查**基础设施类**故障时，按需检索 → [`docs/lessons/debugging-log.md`](docs/lessons/debugging-log.md)
-- **不要预先加载**该文件。
-
-其中沉淀出的**通用方法论**（探针失效与被测对象失败必须分开、负向对照是守护有效性的唯一
-证明、受控对照要做两次…）已在本文件顶部各「硬规则」中保留摘要。

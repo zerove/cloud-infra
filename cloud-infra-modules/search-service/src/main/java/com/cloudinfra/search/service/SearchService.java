@@ -12,6 +12,7 @@ import java.util.List;
  * 搜索服务接口
  * 提供对操作日志等数据的全文搜索功能
  */
+@FunctionalInterface
 public interface SearchService {
 
     /**

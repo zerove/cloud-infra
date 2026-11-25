@@ -1,5 +1,5 @@
 -- Flyway 迁移脚本 (PostgreSQL 16)
--- 版本: V27__add_tenant_id_to_audit_log_tables.sql
+-- 版本: V24__add_tenant_id_to_audit_log_tables.sql
 -- 描述: M6-01 多租户数据隔离 - 审计日志表补 tenant_id 列 (issue 36 纵深防御)
 --
 -- 背景:
@@ -13,7 +13,7 @@
 --
 -- 口径:
 -- - 存量行默认 tenant_id='default' (与 V14 中业务表 DEFAULT 'default' 一致);
--- - 新行由 TenantSqlInterceptor 按调用上下文自动追加;
+-- - 新行由 TenantInsertInterceptor 按调用上下文自动追加;
 -- - 查询由 @TenantFilter + TenantSqlInterceptor 按上下文租户过滤.
 --
 -- 幂等性: 可重复执行 (ADD COLUMN IF NOT EXISTS / CREATE INDEX IF NOT EXISTS).

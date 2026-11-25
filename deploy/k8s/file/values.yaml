@@ -12,8 +12,7 @@ serviceAccount:
   name: ''
 podAnnotations:
   prometheus.io/scrape: 'true'
-  # /management/prometheus 在管理端口 9301(原 8083 是业务端口, 抓取恒 404)
-  prometheus.io/port: '9301'
+  prometheus.io/port: '8083'
   prometheus.io/path: /management/prometheus
 podSecurityContext:
   runAsNonRoot: true
@@ -72,6 +71,8 @@ env:
     secretKeyRef:
       name: cloud-infra-secrets
       key: internalCall.secret
+- name: SPRING_PROFILES_ACTIVE
+  value: k8s
 - name: NACOS_ADDR
   valueFrom:
     configMapKeyRef:
@@ -118,8 +119,7 @@ env:
       name: cloud-infra-secrets
       key: minio.secret-key
 - name: JAVA_OPTS
-  # native 内存四项上限与 compose 逐字一致(守护: deploy/tests/test_k8s_values_alignment.py)
-  value: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+  value: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /management/health/liveness

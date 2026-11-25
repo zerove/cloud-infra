@@ -3,20 +3,22 @@ package com.cloudinfra.api.notification;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
-import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.api.notification.fallback.NotificationApiFallbackFactory;
-import com.cloudinfra.common.core.domain.PageQuery;
-import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.cloud.openfeign.SpringQueryMap;
@@ -48,7 +50,7 @@ public interface NotificationApi {
     @GetMapping("/notification/history")
     @CircuitBreaker(name = "notificationService")
     @Retry(name = "notificationService")
-    Result<PageResult<NotificationHistoryResponse>> getHistory(
+    Result<List<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
@@ -76,9 +78,7 @@ public interface NotificationApi {
      * 获取特定用户的发送审计日志 (按日志行分页, records 与 total 同为日志条数)
      */
     @GetMapping("/notification/logs")
-    Result<PageResult<NotificationLogDTO>> getLogs(
-            @RequestParam Long userId,
-            @SpringQueryMap PageQuery pageQuery);
+    Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId);
 
     /**
      * 查询当前用户通知历史（不接受 userId，兼容安全路径）
@@ -86,48 +86,24 @@ public interface NotificationApi {
     @GetMapping("/notification/my/history")
     @CircuitBreaker(name = "notificationService")
     @Retry(name = "notificationService")
-    Result<PageResult<NotificationHistoryResponse>> getMyHistory(
+    Result<List<NotificationHistoryResponse>> getMyHistory(
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
-            @SpringQueryMap PageQuery pageQuery);
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size);
 
     /**
-     * 查询当前用户发送审计日志（不接受 userId）
+     * 查询当前用户发送审计日志（不接受 userId，兼容安全路径）
      */
     @GetMapping("/notification/my/logs")
     @CircuitBreaker(name = "notificationService")
     @Retry(name = "notificationService")
-    Result<PageResult<NotificationLogDTO>> getMyLogs(@SpringQueryMap PageQuery pageQuery);
+    Result<List<NotificationLogDTO>> getMyLogs();
 
     /**
-     * 查询当日通知发送配额（当前用户）
-     */
-    @GetMapping("/notification/quota")
-    @CircuitBreaker(name = "notificationService")
-    @Retry(name = "notificationService")
-    Result<NotificationQuotaStatusDTO> getQuota();
-
-    /**
-     * 查询当前用户通知偏好
-     */
-    @GetMapping("/notification/preferences")
-    @CircuitBreaker(name = "notificationService")
-    @Retry(name = "notificationService")
-    Result<List<NotificationPreferenceDTO>> getPreferences();
-
-    /**
-     * 保存当前用户通知偏好
-     */
-    @PutMapping("/notification/preferences")
-    @CircuitBreaker(name = "notificationService")
-    Result<List<NotificationPreferenceDTO>> savePreferences(@RequestBody List<NotificationPreferenceSaveRequest> requests);
-
-    /**
-     * 获取指定用户的发送审计日志（内部 Feign 契约，HMAC 保护，不经网关暴露）。
-     * 用于跨服务审计聚合等可信场景；用户端请使用 {@code /notification/my/logs} 或同用户 legacy 路径。
+     * 获取指定用户发送审计日志（内部 Feign 契约，HMAC 保护，不经网关暴露）。
+     * 形状与 master {@code getLogs(userId)} 对齐，供可信审计聚合使用。
      */
     @GetMapping("/internal/notification/logs")
-    Result<PageResult<NotificationLogDTO>> getInternalLogs(
-            @RequestParam Long userId,
-            @SpringQueryMap PageQuery pageQuery);
+    Result<List<NotificationLogDTO>> getInternalLogs(@RequestParam Long userId);
 }

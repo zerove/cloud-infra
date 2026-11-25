@@ -179,59 +179,6 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理静态资源/未映射路径的 404。
-     *
-     * <p>{@code NoHandlerFoundException} 在启用默认静态资源映射后基本不会被抛出
-     * （Spring Boot 3.2+ / 4.x 走 {@code NoResourceFoundException}），因此此前
-     * 一切"路径不存在"都落到兜底分支变成 **HTTP 500**，而不是 404。
-     */
-    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    public ResponseEntity<Result<?>> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException e) {
-        log.warn("No resource found: {}", e.getResourcePath());
-        return new ResponseEntity<>(
-            Result.fail(ErrorCode.NOT_FOUND.getCode(), "接口不存在"),
-            HttpStatus.NOT_FOUND
-        );
-    }
-
-    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<Result<?>> handleMethodNotSupported(org.springframework.web.HttpRequestMethodNotSupportedException e) {
-        log.warn("Method not supported: {}", e.getMethod());
-        return new ResponseEntity<>(
-            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "不支持的请求方法: " + e.getMethod()),
-            HttpStatus.METHOD_NOT_ALLOWED
-        );
-    }
-
-    @ExceptionHandler({org.springframework.web.HttpMediaTypeNotSupportedException.class,
-            org.springframework.web.HttpMediaTypeNotAcceptableException.class})
-    public ResponseEntity<Result<?>> handleMediaTypeNotSupported(Exception e) {
-        log.warn("Media type not acceptable: {}", e.getMessage());
-        return new ResponseEntity<>(
-            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "不支持的媒体类型"),
-            HttpStatus.NOT_ACCEPTABLE
-        );
-    }
-
-    @ExceptionHandler(org.springframework.web.bind.MissingRequestHeaderException.class)
-    public ResponseEntity<Result<?>> handleMissingRequestHeader(org.springframework.web.bind.MissingRequestHeaderException e) {
-        log.warn("Missing request header: {}", e.getHeaderName());
-        return new ResponseEntity<>(
-            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "缺少必需请求头: " + e.getHeaderName()),
-            HttpStatus.BAD_REQUEST
-        );
-    }
-
-    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
-    public ResponseEntity<Result<?>> handleMaxUploadSize(org.springframework.web.multipart.MaxUploadSizeExceededException e) {
-        log.warn("Upload size exceeded: {}", e.getMessage());
-        return new ResponseEntity<>(
-            Result.fail(ErrorCode.PARAM_ERROR.getCode(), "上传文件超过大小限制"),
-            HttpStatus.CONTENT_TOO_LARGE
-        );
-    }
-
-    /**
      * 处理所有未捕获的运行时异常
      */
     @ExceptionHandler(Exception.class)

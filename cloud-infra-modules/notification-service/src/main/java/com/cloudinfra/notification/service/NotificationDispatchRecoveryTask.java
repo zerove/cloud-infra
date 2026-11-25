@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -72,8 +72,8 @@ public class NotificationDispatchRecoveryTask {
      * 本类由 {@code @Scheduled} 驱动，在同一上下文中被创建，
      * 因此两处必须同时修 —— 只修一处仍然起不来。
      */
-    @Qualifier("notificationAsyncExecutor")
-    private final Executor taskExecutor;
+    @Qualifier("applicationTaskExecutor")
+    private final AsyncTaskExecutor taskExecutor;
 
     /**
      * 每分钟扫描一次陈旧且未完成分发的通知并重投。

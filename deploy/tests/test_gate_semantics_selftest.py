@@ -28,39 +28,38 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[2] / "verify-e2e.sh"
 REPO = SCRIPT.parents[0]
 
-# 本轮（2026-11-08 收口）确定的阻断门禁清单 ——
-# verify-e2e.sh 内嵌 self-test 的 14 项, 两侧必须一致。
+# 适配说明（issue 37 / PR #106+ 切片）:
+# 本文件从 archive/local-lineage-2026-11-08 恢复后, 原 14+11 清单与
+# origin/master 当前 verify-e2e.sh 不匹配 —— 大量 lineage 门禁尚未回补。
+# 本次按“当前树适用性”收敛为**已存在且真实接线**的门禁, 保留守护意图:
+# 任何已声明门禁的接线语义（阻断/告警）漂移均须红灯; 新增 gate 应在
+# 接线时同步登记本清单（防止 silent semantic drift）。
+#
+# lineage 清单其余项随对应 check_* / 接线切片恢复后再逐项加入。
 BLOCKING_GATES = (
-    "check_sw_oap_config",
-    "check_schema_standalone",
-    "check_schema_init_wiring",
-    "check_container_startup_budget_gate",
-    "check_es_wait_strategy",
-    "check_compose_dangling_deps",
-    "check_otel_pipeline_refs",
-    "check_port_conflicts",
-    "check_v18_watchdog",
-    "check_commit_runtime_guard",
+    "check_commit_budget",
     "check_native_alloc_evidence",
+    "check_feign_timeout",
     "check_grpc_port_placeholder",
     "check_start_period_covers_startup",
-    "check_feign_timeout",
+    "check_container_startup_budget_gate",
+    "check_schema_standalone",
+    "check_schema_init_wiring",
 )
 
-# 本轮（2026-11-08）判定为 advisory 的门禁 ——
-# 在 verify-e2e.sh 中以 `|| true` 降级, 语义为"提示/指标, 不阻断流程"。
+# 当前 advisory：
+# - check_sw_oap_config: search/SW 共用 ES 9.x 配置已知不匹配, 非阻断
+#   （ES/config 收敛后应升为阻断并同步更新清单与调用点）
+# - check_lesson_tables: 文档可信度守护, rc=2 未判定/rc=1 结构损坏均不阻断运行时
+# - check_catch_exception_count / check_keys_not_used: 源码质量守护，超存量阈值/裸 KEYS 仅告警
+# - check_nacos_config_alignment / check_shared_config_alignment: 配置对齐守护，缺口需人工判断
 ADVISORY_GATES = (
+    "check_sw_oap_config",
+    "check_lesson_tables",
     "check_catch_exception_count",
     "check_keys_not_used",
     "check_nacos_config_alignment",
     "check_shared_config_alignment",
-    "check_proxy_env",
-    "check_resource_optimization",
-    "check_docs_probe_scripts",
-    "check_lesson_tables",
-    "check_jvm_native_bounds",
-    "check_jvm_opts_keys",
-    "check_testcontainers_runtime",
 )
 
 

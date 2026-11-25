@@ -1,15 +1,9 @@
 package com.cloudinfra.notification.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import static com.cloudinfra.notification.ws.NotificationWebSocketHandler.pushToUser;
 import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
-import com.cloudinfra.api.notification.enums.NotificationType;
-import com.cloudinfra.common.core.domain.PageQuery;
-import com.cloudinfra.common.core.domain.PageResult;
-import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.notification.config.RabbitMQConfig;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
@@ -22,7 +16,6 @@ import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
 import com.cloudinfra.notification.service.INotificationService;
 import com.cloudinfra.notification.service.NotificationRouter;
 import com.cloudinfra.notification.service.NotificationQuotaService;
-import com.cloudinfra.notification.service.NotificationPushGateway;
 import com.cloudinfra.notification.util.TemplateProcessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,15 +23,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.dao.DataAccessException;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.List;
-import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -49,7 +43,6 @@ public class NotificationServiceImpl implements INotificationService {
     private final NotificationRouter notificationRouter;
     private final ScheduledNotificationMapper scheduleMapper;
     private final NotificationQuotaService quotaService;
-    private final NotificationPushGateway pushGateway;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
     /**
@@ -74,7 +67,7 @@ public class NotificationServiceImpl implements INotificationService {
      * <p>不要改成 {@code @Primary}：那会影响全局其他注入点，
      * 而这里只需要明确“我要的是哪一个”。
      */
-    private final Executor taskExecutor;
+    private final AsyncTaskExecutor taskExecutor;
 
     /**
      * 显式构造器 —— 不能用 Lombok 的 {@code @RequiredArgsConstructor}。
@@ -99,20 +92,20 @@ public class NotificationServiceImpl implements INotificationService {
      */
     public NotificationServiceImpl(
             NotificationMapper notificationMapper,
+            NotificationLogMapper logMapper,
             NotificationTemplateMapper templateMapper,
             NotificationRouter notificationRouter,
             ScheduledNotificationMapper scheduleMapper,
             NotificationQuotaService quotaService,
-            NotificationPushGateway pushGateway,
             ObjectMapper objectMapper,
             RabbitTemplate rabbitTemplate,
-            @Qualifier("notificationAsyncExecutor") Executor taskExecutor) {
+            @Qualifier("applicationTaskExecutor") AsyncTaskExecutor taskExecutor) {
         this.notificationMapper = notificationMapper;
+        this.logMapper = logMapper;
         this.templateMapper = templateMapper;
         this.notificationRouter = notificationRouter;
         this.scheduleMapper = scheduleMapper;
         this.quotaService = quotaService;
-        this.pushGateway = pushGateway;
         this.objectMapper = objectMapper;
         this.rabbitTemplate = rabbitTemplate;
         this.taskExecutor = taskExecutor;
@@ -238,46 +231,6 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     /**
-     * 事务回滚时归还本请求占用的配额 (Redis INCR 不受 DB 事务管理)。
-     *
-     * <p><b>问题</b>: {@code checkQuota} 的计数扣减发生在事务内, 事务回滚后
-     * Redis 计数不会自动退还 —— 「校验通过但后续环节失败」的请求会白白占用
-     * 1 次配额, 客户端重试继续消耗: 一次瞬时故障即可让用户耗尽当日额度
-     * 却收不到任何通知。</p>
-     *
-     * <p><b>为什么不把 checkQuota 移到 afterCommit</b>: 配额判定必须能「拒绝」
-     * 请求 (超限抛异常中断事务), 移到提交后则永远无法拒绝; 且 INCR 的原子判超
-     * 是「计数不超发」的保证, 换成「先 GET 再 INCR」会退化为并发下可超发的软检查。
-     * 故保留事务内 INCR 作为「配额预留」, 仅补回滚补偿。</p>
-     *
-     * <p><b>注册必须紧跟 checkQuota 之后</b>: 超限时 checkQuota 已内部归还
-     * (INCR 后 decrement), 若在其之前注册, 超限请求回滚时会被再归还一次,
-     * 每次被拒反而净扣 1 —— 连续重试甚至能重新解锁发送。</p>
-     *
-     * <p>仅 {@code STATUS_ROLLED_BACK} 归还; 提交成功不归还; {@code STATUS_UNKNOWN}
-     * (提交结果未知, 极少见) 亦不归还, 以免漏计可能已提交的发送。</p>
-     */
-    private void registerQuotaRefundOnRollback(Long userId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            // 无事务上下文 (测试直调等): 不存在回滚, 无需注册
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
-                    try {
-                        quotaService.refundQuota(userId);
-                    } catch (DataAccessException refundFailure) {
-                        // 补偿失败不外抛, 以免掩盖事务回滚的真实原因; 记录 userId 供排查
-                        log.error("配额归还失败, 该用户今日计数将偏高 1: userId={}", userId, refundFailure);
-                    }
-                }
-            }
-        });
-    }
-
-    /**
      * 事务提交后把通知投递到 MQ (issue 27 决策 2)
      *
      * <p>不在此处直接发送渠道: 内存线程池在事务提交与实际投递之间的崩溃窗口会让通知
@@ -327,6 +280,39 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
+    public List<NotificationLog> getLogs(Long userId) {
+        // 1. 获取用户的所有通知 ID
+        List<Notification> notifications = notificationMapper.selectList(
+            new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
+        );
+        if (notifications == null || notifications.isEmpty()) {
+            return Collections.emptyList();
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    try {
+                        quotaService.refundQuota(userId);
+                    } catch (DataAccessException refundFailure) {
+                        // 补偿失败不外抛, 以免掩盖事务回滚的真实原因; 记录 userId 供排查
+                        log.error("配额归还失败, 该用户今日计数将偏高 1: userId={}", userId, refundFailure);
+                    }
+                }
+            }
+        });
+    }
+
+        // 2. 根据通知 ID 集合检索所有渠道日志
+        return logMapper.selectList(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationLog>()
+                .in(notificationIds.isEmpty(),
+                    NotificationLog::getNotificationId, notificationIds)
+                .orderByDesc(NotificationLog::getCreateTime)
+        );
+    }
+
+    @Override
     public PageResult<NotificationLog> getLogs(Long userId, PageQuery pageQuery) {
         Page<NotificationLog> page = new Page<>(pageQuery.normalizedPageNum(), pageQuery.normalizedPageSize());
         IPage<NotificationLog> result = notificationMapper.selectLogPageByUserId(page, userId);
@@ -334,60 +320,15 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public PageResult<Notification> searchNotifications(String keyword, PageQuery pageQuery) {
-        Page<Notification> page = new Page<>(pageQuery.normalizedPageNum(), pageQuery.normalizedPageSize());
-        LambdaQueryWrapper<Notification> wrapper = new LambdaQueryWrapper<Notification>()
-            .and(w -> w.like(Notification::getTitle, keyword)
-                .or()
-                .like(Notification::getContent, keyword))
-            .orderByDesc(Notification::getCreateTime);
-        Page<Notification> result = notificationMapper.selectPage(page, wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize());
-    }
-
-    @Override
-    public PageResult<Notification> getNotificationHistory(Long userId, NotificationStatus status,
-                                                           NotificationType type, PageQuery pageQuery) {
+    public List<Notification> getNotificationHistory(Long userId, int page, int size) {
         LambdaQueryWrapper<Notification> wrapper =
             new LambdaQueryWrapper<Notification>().eq(Notification::getUserId, userId)
-                .eq(status != null, Notification::getStatus, status)
-                .eq(type != null, Notification::getType, type)
                 .orderByDesc(Notification::getCreateTime);
-        Page<Notification> page = new Page<>(pageQuery.normalizedPageNum(), pageQuery.normalizedPageSize());
-        Page<Notification> result = notificationMapper.selectPage(page, wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize());
-    }
-
-    /**
-     * 将通知标记为已读 (issue 12: 前身是控制器里的假成功桩, 现在真正落库)。
-     *
-     * <p>校验顺序: 不存在 → RESOURCE_NOT_FOUND; 非本人 → NO_PERMISSION
-     * (fail-closed: 无安全上下文时 userId 为 null 同样拒绝)。
-     *
-     * <p>幂等: 已读的通知直接返回, 保留首次已读时间, 不产生 UPDATE。
-     *
-     * <p>更新刻意用"局部实体"(仅 id/status/readTime): 若整实体回写, 本次读到的
-     * 陈旧快照会覆盖分发器并发写入的 dispatch_status/attempts/channels
-     * (与 NotificationDispatcher 的局部更新约定一致)。
-     */
-    @Override
-    public void markAsRead(Long notificationId, Long userId) {
-        Notification notification = notificationMapper.selectById(notificationId);
-        if (notification == null) {
-            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "通知不存在");
-        }
-        if (userId == null || !userId.equals(notification.getUserId())) {
-            throw new BusinessException(ErrorCode.NO_PERMISSION, "无权操作该通知");
-        }
-        if (NotificationStatus.READ == notification.getStatus()) {
-            return;
-        }
-        notification.markAsRead();
-        Notification update = new Notification();
-        update.setId(notification.getId());
-        update.setStatus(notification.getStatus());
-        update.setReadTime(notification.getReadTime());
-        notificationMapper.updateById(update);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> p =
+            notificationMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                wrapper);
+        return p.getRecords();
     }
 
     /**
@@ -409,12 +350,12 @@ public class NotificationServiceImpl implements INotificationService {
                 new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        pushGateway.pushToUser(notification.getUserId(), payload);
+                        pushToUser(notification.getUserId(), payload);
                     }
                 });
         } else {
             // 无事务上下文 (异步调度), 直接推
-            pushGateway.pushToUser(notification.getUserId(), payload);
+            pushToUser(notification.getUserId(), payload);
         }
     }
 }

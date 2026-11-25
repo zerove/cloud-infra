@@ -32,7 +32,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -143,19 +143,17 @@ class CrossServiceFeignChainIntegrationTest {
             .withEnv("POSTGRES_PASSWORD", "postgres")
             .withExposedPorts(5432)
             .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*", 2)
-                    // 原为 90 秒, 但受控对照实测(2026-10-08)本机 n=1 时 postgres
-                    // 就需 109 秒 —— 该预算本就不足, 本轮通过属侥幸(镜像已缓存)。
-                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
+                    .withStartupTimeout(Duration.ofSeconds(90)));
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379)
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @Container
     static final RabbitMQContainer RABBITMQ = new RabbitMQContainer("rabbitmq:3.13-management-alpine")
             .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1)
-                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
+                    .withStartupTimeout(Duration.ofSeconds(180)));
 
     @DynamicPropertySource
     static void gatewayProperties(DynamicPropertyRegistry registry) {
@@ -205,11 +203,7 @@ class CrossServiceFeignChainIntegrationTest {
                 // 无 ES 容器：指向死地址，连接失败仅影响搜索索引同步，不阻塞启动
                 // 内部调用密钥由 startProcess 以 -D 注入, 不用 --key=value:
                 // 那个形式对 InternalCallCrypto.resolveSecret() 不可见 (见 startProcess 内说明)
-                "--spring.elasticsearch.uris=http://127.0.0.1:1",
-                // 与 auth 侧同一处理: system 的主配置也固定 9301, 而本机
-                // cloud-system 容器正监听该端口 -> 子进程启动即
-                // "Web server failed to start. Port 9301 was already in use."。
-                "--management.server.port=0"));
+                "--spring.elasticsearch.uris=http://127.0.0.1:1"));
         Process sysProc = startProcess("system",
                 resolveExecJar("cloud-infra-modules/system-module/target/system-module-1.0.0-SNAPSHOT-exec.jar"),
                 sysArgs);

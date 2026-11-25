@@ -101,7 +101,7 @@ spring:
     clean-disabled: true
     out-of-order: false
 
-  # gRPC: 真正生效的配置位置是 cloudinfra.grpc（CloudInfraGrpcProperties 的 @ConfigurationProperties 前缀）。
+# gRPC: 真正生效的配置位置是 cloudinfra.grpc（CloudInfraGrpcProperties 的 @ConfigurationProperties 前缀）。
 # 此前这里写的是 spring.grpc.* —— 本仓库未引入 spring-grpc starter，那一整块
 # （server.port / reflection / flow-control-window / client.* 等）从未被读取，
 # gRPC server 一直用 properties 默认端口 9090，与 gateway 同端口时会 BindException。

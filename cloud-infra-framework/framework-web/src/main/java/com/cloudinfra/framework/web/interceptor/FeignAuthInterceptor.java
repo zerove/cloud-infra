@@ -12,12 +12,6 @@ import java.util.UUID;
 
 public class FeignAuthInterceptor implements RequestInterceptor {
 
-    /** 内部服务间调用标识 Header（保留常量供兼容引用） */
-    @Deprecated(forRemoval = true, since = "1.0.0")
-    public static final String INTERNAL_CALL_HEADER = InternalCallCrypto.HEADER_SIGN;
-    @Deprecated(forRemoval = true, since = "1.0.0")
-    public static final String INTERNAL_CALL_VALUE = "true";
-
     private final String internalCallSecret;
 
     public FeignAuthInterceptor(String internalCallSecret) {
@@ -45,6 +39,13 @@ public class FeignAuthInterceptor implements RequestInterceptor {
             }
             if (username != null) {
                 template.header("X-User-Name", username);
+            }
+
+            // issue 36 深化防御: 内部调用 (如审计聚合 → notification getInternalLogs) 也要把
+            // 租户透传给下游, 由下游 TenantContextFilter (同一内部签名边界) 注入 TenantContext.
+            String tenantId = TenantContext.getTenantIdOrDefault();
+            if (tenantId != null) {
+                template.header("X-Tenant-Id", tenantId);
             }
         }
 

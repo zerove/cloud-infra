@@ -43,15 +43,8 @@ services:
     #
     # 即**堆太小, Derby 建库在超时内完不成**。镜像脚本自己拼的是
     # `-Xms256m -Xmx512m -Xmn512m`(见容器日志), 官方默认 -Xms1g —— 本项目此前配的
-    # 恰好只有官方的 1/4。
-    #
-    # 2026-10-05 实测: JVM RSS 1570MB / RssAnon 1541MB, Xmx=2048m 是主体且未打满。
-    #   下界由**实测**钉住: 堆不能低于 1g(否则 Derby 建库超时, 见上)。
-    #   上界需求 = Xmx(2048m) + Metaspace(镜像内置 JVM_MMS=320m) + 线程栈/Native
-    #            ≈ 2.5GB, 故 3g 已留足余量, 由 4g 降为 3g。
-    #   ⚠️ 只降 mem_limit(cgroup 上限)不会降低实际占用 —— 实测仍是 ~1.6GB。
-    #     真正能降的是 Xmx, 而它已被上面的实测下界钉住。这是**预留**优化, 不是占用优化。
-    mem_limit: 3g
+    # 恰好只有官方的 1/4。mem_limit 必须 >= Xmx + metaspace + 线程栈, 故取 4g。
+    mem_limit: 4g
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -61,82 +54,15 @@ services:
       MODE: standalone
       PREFER_HOST_MODE: hostname
       NACOS_AUTH_ENABLE: "false"
-      NACOS_AUTH_TOKEN: "${NACOS_AUTH_TOKEN:?必填 nacos 3.x 需 Base64 令牌, 留空会导致容器 exit 255 重启循环}"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
       NACOS_AUTH_IDENTITY_KEY: serverIdentity
       NACOS_AUTH_IDENTITY_VALUE: security
       # 启用 v1/v2 客户端 API 兼容 (up.sh 配置同步与运维脚本依赖 v1 API)
       # 注: NACOS_CORE_API_* 环境变量不在 docker-startup.sh 白名单, 用 JAVA_TOOL_OPTIONS 注入
       # - 认证关闭时 admin API 仍需登录, 本地开发禁用便于 up.sh 脚本同步配置
-      #
-      # ⚠️【2026-10-05 P0 修正】这两个 JAVA_TOOL_OPTIONS 曾是**两个独立键**,
-      #   YAML 重复键**后者静默覆盖前者** —— 语法合法、不报错、结果与意图相反(第五课)。
-      #   实际后果已实测: `-Dnacos.core.auth.admin.enabled=false` 从未生效,
-      #   而 deploy/up.sh 的配置同步走 v3 admin API:
-      #     GET  /nacos/v3/admin/cs/config → 200 {"code":10001,"message":"access denied",
-      #                                              "data":"Code: 401, ... User not found! ..."}
-      #   即 **./deploy/up.sh --sync 一直是坏的**, 且现象与因果相隔三层。
-      #   今后新增任何 env 键前必须先确认它在本段内**唯一**。
-      JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=128m -XX:ReservedCodeCacheSize=128m -XX:MaxDirectMemorySize=128m"
-      JVM_XMS: 768m
-      JVM_XMX: 1536m
-      # ⚠️ 必须显式清空代理变量(2026-10-05)。不写则 rootless podman 会从宿主
-      #   shell 继承 http_proxy=http://127.0.0.1:7890, 而宿主该端口无监听,
-      #   容器内 127.0.0.1 指向自己 ⇒ 任何走 HTTP 客户端的外网请求都会失败。
-      #   ⚠️ 别被 no_proxy 里那串 "127.*" 骗了: curl 不认这种通配写法,
-      #   实测同容器内默认走代理 rc=7 失败, 而 --noproxy "*" 直连 code=200。
-      # ⚠️ 6 个代理键**必须写全**(2026-10-06 实测): 早先只写了 5 个、漏了 NO_PROXY,
-      #   而 rootless podman 会把宿主的 NO_PROXY 补进来 —— 实测容器内同时存在
-      #   `no_proxy=*`(本文件设的) 与 `NO_PROXY=172.31.*,...`(继承的)。
-      #   危害分级: 漏 http_proxy 是**有害**(会去连无监听的代理);
-      #   漏 NO_PROXY 只是状态不干净(没有代理可用时排除表不会被读)。
-      #   守护 deploy/tests/check_proxy_env.py 会把两者分别报出。
-      http_proxy: ''
-      https_proxy: ''
-      HTTP_PROXY: ''
-      HTTPS_PROXY: ''
-      no_proxy: '*'
-      NO_PROXY: '*'
-      # ⚠️ 必须限制 Metaspace 等 native 预留（2026-10-05 实测）。
-      #   未加限时 JVM 默认: CompressedClassSpace reserved 1GB + Metaspace 1.15GB。
-      #   nacos 是 9 个 JVM 里预留最大的(实测 VmSize 10.5GB), 而
-      #   vm.overcommit_memory=2 下**预留即计入全局 commit 预算** ——
-      #   实测 Committed_AS 顶到 99.7% 时六个业务服务同秒崩溃,
-      #   cgroup 的 oom 计数全为 0, 所以调 mem_limit 治不了。
-      #
-      # ⚠️【2026-10-05 二次修正】上一版注释写的是"真实可用的扩展点是
-      #   JAVA_OPT_EXT" —— **那仍然只验证到"脚本引用了这个变量", 没验证
-      #   参数真进了 JVM**。第二次踩的是同一个坑(第三课)。
-      #
-      #   JAVA_OPT_EXT 确实被 docker-startup.sh 第 152 行读取:
-      #     JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"
-      #   参数也确实出现在 /proc/1/cmdline 里。但**位置在 -jar 之后**,
-      #   而 JVM 遇到 -jar 即停止解析选项 —— 其后参数被当作传给
-      #   main() 的应用参数, 不是 VM flag。
-      #
-      #   决定性证据 (-XX:+PrintFlagsFinal 打印真实生效值):
-      #     参数在 -jar 之后:  MaxMetaspaceSize = 18446744073709551615 {default}
-      #                        CompressedClassSpaceSize = 1073741824    {default}
-      #     参数在 -jar 之前:  MaxMetaspaceSize = 268435456 {command line}
-      #   标记从 {default} 变 {command line} 才是生效, 光看 cmdline 不算。
-      #   旁证: VmSize 只从 10.28GB 降到 10.19GB —— 默认 Metaspace 上限
-      #   远大于 256m, 真生效应显著下降。
-      #
-      #   ⚠️ 为什么不能用报错判定: `java -XX:MaxMetaspaceSize=256m -jar
-      #   x.jar` **不报** Unrecognized option, 只报 jarfile 不存在,
-      #   即静默接受并丢弃。"没报错" 在这里是假信号。
-      #
-      #   ✅ 正解是 **JAVA_TOOL_OPTIONS** —— 由 JVM 自己解析, 与命令行
-      #   位置无关。受控实验已验证: 同样的 flag 经它注入后标记为
-      #   {environment} 且值为 268435456 / 134217728, 真实生效。
-      #
-      #   故断言必须建立在**数据流**上(compose env → 容器 env →
-      #   JVM 生效值), 而不是"脚本里能不能搜到这个变量名"。
-      #
-      #   ⚠️【2026-10-05 补记】上述四个 -XX 曾单独占一个 JAVA_TOOL_OPTIONS 键,
-      #   与上面那个 admin 开关**并存**。YAML 重复键静默取后者, 于是 admin
-      #   开关被吞掉。现已合并为**唯一一个**键, 两个用途都在同一行。
-      #   ⚠️ 新增 env 键时必须用结构化扫描确认唯一(见
-      #   deploy/tests/check_resource_optimization.py 第 8 项)。
+      JAVA_TOOL_OPTIONS: "-Dnacos.core.auth.admin.enabled=false"
+      JVM_XMS: 1g
+      JVM_XMX: 2g
     volumes:
       - ./nacos/data:/home/nacos/data
     networks:
@@ -164,55 +90,6 @@ services:
       POSTGRES_DB: cloud_infra
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
-      # ⚠️ 必须显式清空代理变量(2026-10-06 实测补齐)。宿主 shell 带
-      #   http_proxy=http://127.0.0.1:7890 而该端口无监听; rootless podman 会把它
-      #   注入容器, 于是任何走 HTTP 客户端的请求都会指向一个不存在的代理。
-      #   本服务当前日志里没有相关报错(客户端不走 http_proxy), 但"没报错"
-      #   不是"配置正确" —— 依赖的是客户端实现细节, 换库就可能失效。
-      http_proxy: ''
-      https_proxy: ''
-      HTTP_PROXY: ''
-      HTTPS_PROXY: ''
-      no_proxy: '*'
-      NO_PROXY: '*'
-      # ⚠️ 刻意**不改** PGDATA: 现有数据在 /var/lib/postgresql/data 下,
-      #   改路径会让容器看不见旧数据并当成空库重新初始化 = 丢数据。
-    # ⚠️ 2026-10-05 刷盘调优: **性能参数走 apply-postgres-tuning.sh 的
-    #   ALTER SYSTEM, 不是 compose 的 command 段**（详见 volumes 处的说明）。
-    #
-    # 【踩坑记录 —— 两种更直观的方式都试过且都无效】
-    #   1. compose `command: [postgres, -c, shared_buffers=192MB, ...]`
-    #      容器实际 Cmd = ["postgres"], 5 个 -c **全被丢弃**。
-    #   2. 环境变量 `PG_SHARED_BUFFERS=192MB`(官方文档说支持)
-    #      实测**同样无效**, 读回仍是 128MB。该镜像 entrypoint 不做这个转换。
-    #   ⇒ 两者都是"配置写了但运行时没生效"的假绿(第三条硬规则)。
-    #
-    # ⚠️ 关于第 1 条的**归因尚未查清, 别再沿用旧说法**:
-    #   隔离测试证明 podman-compose 1.6.0 **是支持 `command` 的**(新起容器实测
-    #   Cmd 正确带上了参数)。所以"该工具丢弃 command"这个解释**不成立**,
-    #   本项目 compose 里参数丢失另有原因、尚未定位。
-    #   ⚠️ 教训: 记踩坑记录时, **实测现象与推测原因必须分开写** ——
-    #   我把"丢弃"当成了已验证的根因写进注释, 下一个信它的人会去改工具版本。
-    #
-    # 【根因（这才是已验证的）】postgresql.conf 里是**非注释的**
-    #   `shared_buffers = 128MB`, 它在文件内的优先级高于任何外部传入。
-    #   所以必须能改到最终生效的那份配置 ⇒ ALTER SYSTEM 最可靠。
-    #
-    # 【实测依据】两本账分离, 瓶颈在 I/O 不在内存:
-    #   MemAvailable 常年 10.4GB; 而 /proc/diskstats 设备忙 48% 饱和,
-    #   15 秒却只写 5.1MB → 平均单次写 9.5KB / 每秒 35 次 = 小块同步写。
-    #   pg_stat_activity 有会话卡在 wait_event=IO|WALSync,
-    #   且 checkpoint_sync_time 三次采样**完全不变** → 元凶是 WAL 同步提交。
-    #
-    # 【⚠️ 刻意不动 fsync / synchronous_commit】
-    #   synchronous_commit=off 能把提交延迟降一个数量级, 但它**允许提交后
-    #   立即断电丢数据**。这是耐久性取舍, 属用户决策, 不代选。
-    #   需要时在 tuning-postgres.conf 追加一行即可(需 reload 或重启)。
-    #
-    # 【为什么 shared_buffers 只到 192MB 而不是 512MB】
-    #   容器 mem_limit 是 512m, 而 shared_buffers 是**独占**内存。
-    #   512m 会吃掉整个容器上限, 堆外(Native/线程栈)无处安放。
-    #   192MB 让工作集装得下, 又留足余量。
     volumes:
       - pgdata:/var/lib/postgresql/data
       # ⚠️ postgres-tuning.conf **刻意不挂载进容器**（2026-10-05 运行时纠正）。
@@ -281,14 +158,6 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER 必须在 .env 中设置}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS 必须在 .env 中设置}
-      # ⚠️ 清空代理变量(2026-10-06 实测)。management UI 的部分前端请求
-      #   会走 HTTP 客户端, 继承了无监听的代理就会失败。
-      http_proxy: ''
-      https_proxy: ''
-      HTTP_PROXY: ''
-      HTTPS_PROXY: ''
-      no_proxy: '*'
-      NO_PROXY: '*'
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
     networks:
@@ -484,152 +353,147 @@ services:
     logging: *default-logging
 
   # ========== 链路追踪 ==========
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    container_name: cloud-otel-collector
+    mem_limit: 256m
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      no_proxy: "*"
+      NO_PROXY: "*"
+    volumes:
+      - ./monitoring/otel-collector.yml:/etc/otel/config.yml:ro
+    command: ["--config=/etc/otel/config.yml"]
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    container_name: cloud-jaeger
+    mem_limit: 512m
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - no_proxy=*
+      - NO_PROXY=*
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - cloud-infra
+    logging: *default-logging
+
   # ========== SkyWalking APM (可选) ==========
   # 应用性能监控: 分布式追踪 + 慢 SQL/慢方法 + 服务拓扑 + 异常聚合
-  # 2026-10-07 收敛: Jaeger 已下线。两条链路并非冗余而是两套独立采集机制 ——
-  #   SkyWalking = JVM -javaagent 注入, 落 PostgreSQL 分区表(重启不丢)
-  #   Jaeger    = OTLP 经 otel-collector 转发, 内存存储(重启即丢)
-  # 选留 SkyWalking 的三条实测依据:
-  #   ① 六个业务服务当日均在写入(最新 span 距查询 < 1min), 链路完整;
-  #   ② 唯一带持久化 —— 本项目 OAP 有过 malloc 失败重启记录, 内存存储扛不住;
-  # 2026-10-13 补完: otel-collector 容器本身已从 compose 移除 (及其 deploy/monitoring/otel-collector.yml)。
-  #   移除理由**不是**"与 SkyWalking 冗余", 而是它构成一条**死路**:
-  #   其唯一 exporter 是 `debug`, trace 打到容器自身 stdout 后即丢弃;
-  #   而 6 个业务服务以 `management.tracing.sampling.probability=1.0`(**100% 采样**)
-  #   持续向它上报 —— 每请求做一次序列化与网络往返, 收益为零。
-  #   【2026-11-06 更新】上面这句描述的是移除当时(2026-10-13)的状态。模块级
-  #   `application.yml` 的 `probability` 已从 1.0 对齐到 0.2(与 deploy/config、
-  #   Helm values 一致), 现在回退层与部署层不再互相矛盾。
-  #   ⚠️ 前缀陷阱: Spring Boot 4.1.0 的属性前缀是 `management.opentelemetry.*`
-  #      (OpenTelemetryTracingProperties / OtlpTracingProperties),
-  #      **`management.otlp.*` 不会被读取** —— 仓库里曾有一批 `management.otlp.tracing.*`
-  #      配置, 它们既无效又指向这个死 collector, 已一并删除。
-  #   ⚠️ deploy/k8s/** 未动: k8s 侧 Helm chart 另行声明了 cloud-infra-zipkin 与
-  #      cloud-infra-otel-collector chart, 出口可能真实存在, 需在集群内另行核实后再动。
+  # 与 Jaeger 并存: Jaeger 用 OTel 协议, SkyWalking 用 agent gRPC 协议
   # 业务模块 JVM agent 通过 SW_AGENT_ENABLED=true 启用
   skywalking-oap:
-    profiles: ["observability"]
-    # ✅ 2026-10-04: 存储从 elasticsearch 改为 **postgresql**, OAP 首次真正启动成功。
+    # ⚠️ 版本选择受 ES 版本钳制, 且当前存在**未解冲突** (2026-10-03 实测)。
     #
-    #   为什么必须换存储 (不是 OAP 版本问题):
-    #     SkyWalking 官方文档(main)明确写 "ElasticSearch 7 and 8", **全系不支持 ES 9**。
-    #     实测 OAP 10.1.0 + ES 9.0.3 → UnsupportedOperationException:
-    #          Unsupported version: ElasticSearch 9.0
-    #     而本仓库 ES 必须是 9.x: Spring Boot 4.1.0 的 BOM 指定
-    #     elasticsearch-client.version=9.4.2, 9.x 客户端默认发
-    #     `compatible-with=9` 头, ES 8.x 服务端直接报 400 media_type_header_exception。
-    #     ⇒ **两个需求在版本上互斥**, 且都不能让步(search 降级客户端 = 改业务代码)。
+    #   已确认的事实:
+    #     OAP 10.1.0 + ES 9.0.3 → java.lang.UnsupportedOperationException:
+    #                                Unsupported version: ElasticSearch 9.0
+    #     官方文档(main 分支)明确写: "ElasticSearch 7 and 8"
+    #     即 **SkyWalking 全系不支持 ES 9**, 与 OAP 版本无关。
     #
-    #   为什么选 PostgreSQL 而不是方案 b (给 SkyWalking 单开一个 ES 8):
-    #     方案 b 实测**不可用**(2026-10-04 复测, 推翻 10-03 记录的"技术前提成立"):
-    #       OAP 连 ES 8 后版本冲突确实消除(日志 `ElasticSearch version is:
-    #       ElasticSearch 8.18`), 但紧接着建 sw_segment-YYYYMMDD 索引时
-    #       ResponseTimeoutException —— OAP 的 responseTimeout 是**硬编码 15000ms**,
-    #       同一台机器上 load 已降到 5.68、iowait 0%、ES 无线程池拒绝、
-    #       磁盘余 652GB, 直连 curl 建索引只要 3~6s (远小于 15s)。
-    #       ⇒ 不是"机器慢", 是 OAP 连续 ~10 次模板/映射更新后紧接着的大 PUT
-    #         超出了它的超时预算; 预热索引后重启复测**仍然超时**, 排除冷启动。
-    #     PostgreSQL 方案实测 100% 通过: 64 张表建齐、gRPC 11800 监听、
-    #     /healthcheck 200。且它复用已在运行的 postgres, **不新增容器与内存**。
+    #   冲突面: 本仓库 ES 升到 9.0.3 是为了对齐 search 服务的
+    #   Spring Data ES 9.x 客户端(探针实测发 compatible-with=9, 对 ES 8 报 400),
+    #   而 SkyWalking 只吃 ES 7/8 —— **两者无法共用同一个 ES 实例**。
     #
-    #   代价(如实记录): OAP 的 trace/log 全文检索走 PostgreSQL 会比 ES 慢。
-    #   本项目 SkyWalking 目前**零业务查询**(agent 注入已生效, 但没有任何人
-    #   查过 trace), 该代价当前为零; 若将来接入 trace 查询且出现性能问题,
-    #   再评估 BanyanDB(SkyWalking 原生推荐, 但需新增容器)。
+    #   ⚠️ 不要仅凭本注释下调镜像 tag 试: 9.7.0 实测同样抛该异常
+    #   (先前有"9.7.0 报错、10.1.0 不报错"的中间结论, 后被用 10.1.0 官方配置
+    #   复测推翻 —— 差异来自配置文件版本, 不是 OAP 版本)。
+    #
+    #   解法需在以下三者中选一, 见 docs/decisions/ 下的 ES 版本决策记录:
+    #     a) SkyWalking 改用非 ES 存储 (BanyanDB / PostgreSQL)
+    #     b) search 与 SkyWalking 各用一个 ES 实例
+    #     c) search 降级到 ES 8 客户端
     image: apache/skywalking-oap-server:10.1.0
     restart: unless-stopped
     stop_grace_period: 30s
     container_name: cloud-skywalking-oap
-    # ⚠️ 2026-10-04 调整: 1024m -> 2048m。
-    #   依据是**实测事实**: 容器 RSS 长期贴着 98.3% 的原限额运行, 即原配置本身过紧。
-    #   注意这不是 malloc 失败的原因 —— 2026-10-05 实测推翻了先前的归因:
-    #   cloud-auth 堆外余量 384MB(远超任何合理阈值)照样 malloc 失败,
-    #   而真正的原因是**宿主机全局 commit 预算**被多个 JVM 冲破
-    #   (见 verify-e2e.sh 的 check_commit_budget 与那里的详细说明)。
-    #   本项只消除"OAP 自身余量过紧"这个独立问题, 不声称能防住 malloc 失败。
-    #   取 2048m: 与同级的 elasticsearch(1024m 限额 / 512m 堆) 相比留出足够余量,
-    #   也与 system-module 的 2048m 同档。
-    mem_limit: 2048m
+    mem_limit: 1024m
     ports:
       - "11800:11800"  # gRPC agent 接收
       - "12800:12800"  # HTTP REST query
     volumes:
       - ./skywalking/config/application.yml:/skywalking/config/application.yml:ro
-    # ✅ healthcheck 修正为 /healthcheck (2026-10-04)。
-    #   原值 `/public/graph` 在 SkyWalking 10.x **恒返回 404** —— 该路径属于
-    #   已被移除的 Deprecated GraphQL API。所以这个 healthcheck 从加上的
-    #   第一天起就永远失败, 与 ES 冲突无关, 是**独立的第二处缺陷**。
-    #   (deploy/skywalking/README.md 早就写着"返回 Status: 404",
-    #    但没人把它和 compose 的 healthcheck 对上 —— 文档写了, 配置没改。)
+    # ⚠️ 这个 healthcheck 不能省 (2026-10-03)。
+    #   6 个业务服务全部用 SW_AGENT_OAP=cloud-skywalking-oap:11800 连 OAP,
+    #   而它们对 oap 的依赖原先只写 `condition: service_started` ——
+    #   那只保证**进程存在**, 不保证 gRPC 11800 已在监听。
+    #   容器一多(system/file/search/notification/auth 同时起)就会踩到启动竞争:
+    #     Caused by: java.net.UnknownHostException: cloud-skywalking-oap: Name does not resolve
+    #   报错发生在业务服务自己的日志里, 且**间歇出现**(gateway/search 常常正常),
+    #   很容易被误判成"偶发环境问题"而不去查依赖条件。
     #
-    #   `/healthcheck` 来自官方文档 (api/health-check):
-    #     "make sure to set necessary configurations required by the health checker
-    #      before using this endpoint, otherwise 404 will be returned."
-    #   即**必须**同时把 health-checker 模块打开(SW_HEALTH_CHECKER=default),
-    #   否则同样 404 —— 这是链上的第三处缺陷, 三个条件缺一不可:
-    #       ① 路径是 /healthcheck   ② SW_HEALTH_CHECKER 已启用   ③ 端口 12800
-    #   实测: 三者齐备 → 200; 缺 ② → 404。
-    #
-    #   ⚠️ 这是一个**浅层**探活: 停掉 postgres 后 OAP 日志确实打出
-    #      `Health check fails`, 但 HTTP 仍返回 200(score=0 表示"无故障项",
-    #      而非"全部检查通过")。故它能证明 **OAP 进程与 HTTP 服务已就绪**,
-    #      **不能**证明存储持续可用。存储可用性由 postgres 自己的 healthcheck 负责。
-    #      —— 依赖链上是 postgres(healthy) → oap(healthy), 两层各管一段。
-    #
-    #   探活失败重试 30 次 × 5s = 150s, 覆盖 OAP 首次初始化(建 64 张表)的耗时
-    #   (实测冷启动约 100s)。
+    #   判据用 12800(HTTP query 端口)而不是 11800: OAP 镜像里 curl 不可靠,
+    #   而 12800 走 HTTP, wget 即可探活。探活失败重试 30 次 × 5s = 150s,
+    #   覆盖 OAP 首次初始化(连 ES 建索引)的耗时。
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12800/healthcheck || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12800/public/graph || exit 1"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 30
-      start_period: 30s
+      start_period: 20s
     environment:
-      # ⚠️ 清空代理变量(2026-10-06 实测)。OAP 上报 gRPC/HTTP 与访问
-      #   PostgreSQL 都可能经过 HTTP 客户端; 宿主那个无监听的代理是隐患。
-      - http_proxy=
-      - https_proxy=
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - no_proxy=*
-      - NO_PROXY=*
       # SW 10.x 字段名: SW_CORE_GRPC_HOST (替换 9.6 的 SW_NODE_IP)
-      # ⚠️ SW_STORAGE 的取值是**存储实现名**, 不是通用词。
-      #   曾试 `SW_STORAGE=jdbc` → ProviderNotFoundException:
-      #     "no provider found for module storage"。
-      #   合法值: elasticsearch / postgresql / mysql / h2(镜像无 provider) / banyandb。
-      - SW_STORAGE=postgresql
-      - SW_JDBC_URL=jdbc:postgresql://cloud-postgres:5432/skywalking
-      - SW_DATA_SOURCE_USER=${POSTGRES_USER:-postgres}
-      - SW_DATA_SOURCE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
-      # 必须显式给地址: application.yml 里 postgresql 的默认值是
-      #   jdbc:postgresql://localhost:5432/skywalking —— 那是**官方单机默认**,
-      # 在 compose 网络里会连到自己容器内的 5432 → Connection refused。
-      # 与 ES 的 SW_STORAGE_ES_CLUSTER_NODES 是同一类坑, 不能靠"默认值刚好对"。
+      # ⚠️ SW_STORAGE 必须是 elasticsearch, **不能是 h2** (2026-10-03 实测)。
+      #   原值 h2 一直配在这里, 但镜像 apache/skywalking-oap-server:9.7.0 里
+      #   只有 h2-2.1.212.jar(驱动), **没有** storage-h2-plugin(provider),
+      #   于是启动直接失败:
+      #     ProviderNotFoundException: no provider found for module storage,
+      #     if you're sure it's not required module and want to remove it,
+      #     set the selector to -
+      #   崩溃循环, restarts 一路涨到 51。
       #
+      #   为什么此前一直没暴露: OAP 容器从未被真正重建过 —— 本机上跑的是
+      #   几个月前的旧镜像。而 depends_on 用 service_started,
+      #   只等进程存在, 不等它健康, 于是依赖它的 6 个业务服务照样"启动成功"。
+      #   即 **一个从未成功运行的服务, 被当成了已就绪的依赖**。
+      #   这次给 OAP 补上 healthcheck 并把 6 处依赖改成 service_healthy,
+      #   才把它暴露出来 —— 门禁变严后立刻抓到既有缺陷, 这是预期行为。
+      - SW_STORAGE=elasticsearch
+      # ⚠️ 必须显式给 ES 地址。application.yml 的默认值是 localhost:9200,
+      #   那是**官方单机默认**, 在 compose 网络里会连到自己容器内的 9200 →
+      #   Connection refused: localhost/127.0.0.1:9200, OAP 起不来。
+      #   实测: 同一份配置, 传 SW_STORAGE_ES_CLUSTER_NODES 时正常 listening 11800,
+      #        不传则必崩 —— 所以不能靠"配置默认值刚好对"。
+      - SW_STORAGE_ES_CLUSTER_NODES=cloud-elasticsearch:9200
       # 注: 曾试过用 SW_ADMIN_SERVER= / SW_STATUS= ... 禁用 9.7.0 没有的
-      # 6 个模块, **实测无效** —— 空值会让 ${VAR:default} 回落 default 而非置空。
+      # 6 个模块(admin-server/status/inspect/ui-management/dsl-debugging/
+      # receiver-runtime-rule), **实测无效** —— 空值会让 ${VAR:default} 回落
+      # default 而非置空, 仍报 "no provider found for module admin-server"。
       # 真正解法不是禁用, 而是让配置与镜像版本对齐(已改为官方 10.1.0 原版
       # application.yml), 故这些变量已删除。留在这里只会让人以为"配了就能禁用"。
       #
-      # 打开 health-checker 模块, 否则 /healthcheck 恒 404(见上方 healthcheck 注释)。
-      - SW_HEALTH_CHECKER=default
+      # 该 6 个模块本项目零业务引用; 若将来确需 admin API, 应升级到含
+      # 这些 provider 的镜像版本, 而不是靠环境变量硬压。
       - SW_CORE_GRPC_HOST=cloud-skywalking-oap
       - TZ=Asia/Shanghai
-      - JAVA_OPTS=-Xms384m -Xmx768m -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m
-      # 堆 1024m + 容器限额 2048m = 1024m 堆外余量, 供metaspace 与 300+ 线程栈使用。
+      - JAVA_OPTS=-Xms512m -Xmx1024m
     depends_on:
-      # ⚠️ 依赖对象已随存储切换改为 postgres。
-      #   保留指向 elasticsearch 会让 OAP 在 ES 慢启动时白等,
-      #   而它的存储根本不碰 ES —— 依赖必须指向**它真正使用**的服务。
-      postgres:
+      elasticsearch:
         condition: service_healthy
     networks:
       - cloud-infra
     logging: *default-logging
 
   skywalking-ui:
-    profiles: ["observability"]
     # 与 skywalking-oap 保持同版本 (原为 10.2.0, OAP 是 9.7.0)。
     # OAP 本轮升到 10.1.0 后两者错开, 而 UI↔OAP 的 GraphQL 接口在小版本间
     # 可能有字段变更 —— 不实测就等于把风险留给下一个人。
@@ -642,30 +506,11 @@ services:
     ports:
       - "18080:8080"   # SkyWalking UI
     environment:
-      # ⚠️ 清空代理变量(2026-10-06 实测)。UI 通过 HTTP 访问 OAP,
-      #   继承宿主那个无监听的代理会直接请求失败。
-      - http_proxy=
-      - https_proxy=
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - no_proxy=*
-      - NO_PROXY=*
-      # ⚠️ 必须带 http:// 前缀 (2026-10-04 实测)。
-      #   原值 `cloud-skywalking-oap:12800` 让 UI 启动即崩:
-      #     Exception in thread "main" java.lang.NullPointerException: authority
-      #   即 UI 用 URI 解析这个地址, 无 scheme ⇒ host 为 null ⇒ NPE。
-      #   README 早前记的"UI 镜像 Up 但 HTTP 拒绝连接"就是这件事,
-      #   当时误判为 "10.x UI 与 10.1 OAP hostname 兼容 issue"。
-      #   单变量对照实测: 加 http:// → HTTP 200 / restarts=0;
-      #                   不加      → NullPointerException: authority。
-      - SW_OAP_ADDRESS=http://cloud-skywalking-oap:12800
+      - SW_OAP_ADDRESS=cloud-skywalking-oap:12800
       - SW_SERVER_LISTEN_IP=0.0.0.0
       - TZ=Asia/Shanghai
     depends_on:
-      skywalking-oap:
-        # 由 started 收紧为 healthy: UI 只有 OAP 的 /healthcheck 通过才有意义,
-        # 否则会在 OAP 尚未就绪时启动失败并进入重启循环。
-        condition: service_healthy
+      - skywalking-oap
     networks:
       - cloud-infra
     logging: *default-logging
@@ -707,27 +552,12 @@ services:
       dockerfile: cloud-infra-gateway/Dockerfile
     image: localhost/cloud-infra-gateway:latest
     container_name: cloud-gateway
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 448m
     ports:
       - "9000:9000"
       - "9301:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -741,24 +571,15 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
-      # 实测 gateway 启动 128.1s(含 SkyWalking agent 装 transformer),
-      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
-      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
-      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
-      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
-      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
-      # 此值 = 实测 128.1s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
-      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
-      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
+      # 必须覆盖实测启动耗时 (128.1s)，否则启动期会被锁定 unhealthy；
+      # 依据: deploy/tests/check_start_period_covers_startup.py
       start_period: 180s
     networks:
       - cloud-infra
@@ -778,7 +599,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       redis:
         condition: service_healthy
     logging: *default-logging
@@ -790,27 +613,12 @@ services:
       dockerfile: cloud-infra-auth/Dockerfile
     image: localhost/cloud-infra-auth:latest
     container_name: cloud-auth
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 576m
     ports:
       - "8081:8081"
       - "9302:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -826,24 +634,15 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
-      # 实测 auth 启动 147.5s(含 SkyWalking agent 装 transformer),
-      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
-      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
-      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
-      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
-      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
-      # 此值 = 实测 147.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
-      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
-      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
+      # 必须覆盖实测启动耗时 (147.5s)，否则启动期会被锁定 unhealthy；
+      # 依据: deploy/tests/check_start_period_covers_startup.py
       start_period: 210s
     networks:
       - cloud-infra
@@ -863,7 +662,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -877,36 +678,14 @@ services:
       dockerfile: cloud-infra-modules/system-module/Dockerfile
     image: localhost/cloud-infra-system:latest
     container_name: cloud-system
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
     # 2026-09-01 P0-3b 验证: 768m 触发 Spring Boot 4.1 + Caffeine 3.x + JDK 25 ClassLoader 死锁
     # 2GB heap + --enable-native-access=ALL-UNNAMED 实测 86.19s 启动成功
     # 详见 docs/perf/2026-09-01-p0-3b-verify.md
-    # ⚠️ 2026-10-05 **撤销**了下调到 1024m 的尝试, 保留 2g。理由:
-    #   实测占用只有 666MB(31%), 看似该降 —— 但那份死锁报告是**真实故障**,
-    #   且 2g 是它的**修复值**, 不是随手设的。
-    #   死锁发生在 Xmx=2g 的配置下, 现在 Xmx=256m, 根因是否已消除属**推测**。
-    #   拿生产服务赌一个未验证的推测, 违反"改坏→确认守护会红"的前置要求。
-    #   ⇒ 真正该做的是**受控对照**: 用 1024m 起一次, 观察是否复现死锁。
-    #      在那之前保持 2g —— 预留浪费 1.3GB 远小于服务反复崩溃的代价。
     mem_limit: 2g
     ports:
       - "8082:8082"
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx1536m -Xms512m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -920,7 +699,7 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
@@ -947,7 +726,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -961,27 +742,12 @@ services:
       dockerfile: cloud-infra-modules/file-service/Dockerfile
     image: localhost/cloud-infra-file:latest
     container_name: cloud-file
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 448m
     ports:
       - "8083:8083"
       - "9304:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -995,36 +761,16 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
-      # 实测 file 启动 108.5s(含 SkyWalking agent 装 transformer),
-      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
-      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
-      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
-      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
-      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
-      # 此值 = 实测 108.5s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
-      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
-      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
+      # 必须覆盖实测启动耗时 (108.5s)，否则启动期会被锁定 unhealthy；
+      # 依据: deploy/tests/check_start_period_covers_startup.py
       start_period: 160s
-    volumes:
-      # ⚠️ 本地存储策略的目录必须挂持久卷 (2026-10-06 实测缺陷)。
-      #   此前 cloud-file **没有任何 volumes**, /tmp/cloud-infra/uploads
-      #   位于容器可写层 —— 容器重建后文件全部丢失, 而 file_metadata /
-      #   file_version 元数据仍在库里, 形成"有记录无文件"的孤儿。
-      #   本轮实测正是这个形态: 3 条元数据 + 4 条版本记录, 对应文件全不存在。
-      #
-      #   挂载点必须与 file-service.yaml 的 file.storage.local.path 一致,
-      #   否则会挂到服务根本不读的位置 —— 空挂载比不挂更危险,
-      #   因为它看起来配好了。
-      - fileuploads:/data/uploads
     networks:
       - cloud-infra
     depends_on:
@@ -1047,7 +793,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -1061,27 +809,12 @@ services:
       dockerfile: cloud-infra-modules/notification-service/Dockerfile
     image: localhost/cloud-infra-notification:latest
     container_name: cloud-notification
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 448m
     ports:
       - "8084:8084"
       - "9305:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1095,24 +828,15 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
-      # 实测 notification 启动 304.3s(含 SkyWalking agent 装 transformer),
-      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
-      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
-      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
-      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
-      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
-      # 此值 = 实测 304.3s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
-      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
-      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
+      # 必须覆盖实测启动耗时 (304.3s)，否则启动期会被锁定 unhealthy；
+      # 依据: deploy/tests/check_start_period_covers_startup.py
       start_period: 360s
     networks:
       - cloud-infra
@@ -1136,7 +860,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       postgres:
         condition: service_healthy
       rabbitmq:
@@ -1150,27 +876,12 @@ services:
       dockerfile: cloud-infra-modules/search-service/Dockerfile
     image: localhost/cloud-infra-search:latest
     container_name: cloud-search
-    # ⚠️ restart 策略缺失是实测缺陷（2026-10-05）。
-    #   六个业务服务原本**都没有** restart 键, 只有 nacos 有
-    #   (`restart: unless-stopped`)。实测后果: commit 冲到 ~96% 时
-    #   notification 以 exit=1 崩溃(`Native memory allocation (malloc)
-    #   failed`, 即 JVM 的 hs_err), 而 `RestartCount=0` —— **不自愈**。
-    #
-    #   这不是"新功能", 是补齐与 nacos 不一致的行为: 其余 15 个容器
-    #   崩溃后都会自动重启, 只有这 6 个静默退出, 观察窗口里表现为
-    #   「服务凭空消失」而无任何日志线索。
-    #
-    #   注意 `unless-stopped` **不会**对抗宿主机资源枯竭: commit 持续
-    #   满载时重启循环会立刻再崩(实测 auth 就出现过这种反复)。
-    #   因此它只解决"偶发崩溃自愈", 不解决"环境容量不足" ——
-    #   后者的正解仍是降低同时运行的服务数。
-    restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 448m
     ports:
       - "8085:8085"
       - "9306:9301"   # 管理端口 (ADR-008)
     environment:
-      JAVA_OPTS: "-XX:+UseG1GC -Xmx192m -Xms64m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport -XX:MaxMetaspaceSize=128m -XX:CompressedClassSpaceSize=48m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=48m"
+      JAVA_OPTS: "-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
       SPRING_PROFILES_ACTIVE: dev
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: cloud-nacos:8848
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 必须在 .env 中设置}
@@ -1184,24 +895,15 @@ services:
       NO_PROXY: "*"
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: cloud-nacos:8848
       # SkyWalking agent (M7-01: 默认开启)
-      SW_AGENT_ENABLED: "false"
+      SW_AGENT_ENABLED: "true"
       SW_AGENT_OAP: cloud-skywalking-oap:11800
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9301/management/health/readiness || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
-      # start_period 必须覆盖实测启动耗时, 否则会**误判 unhealthy**(真实语义见下)。
-      # 实测 search 启动 255.7s(含 SkyWalking agent 装 transformer),
-      # 而 start_period(20s) + interval(5s) * retries(5) = 45s 就判红。
-      # 机制: start_period 结束后 Docker 才计数失败, 连续失败达 retries 即转 unhealthy。
-      # ⚠️ unhealthy 并**非不可恢复**: 受控实验(临时容器, start_period=10s/interval=5s/retries=3,
-      #    探测目标 70s 后才就绪)实测 FailingStreak 3→4→6→7→8, 于 55s 回到 healthy 且计数归零。
-      #    故少配 start_period 的代价是"启动期被误标 unhealthy 的一段时间"而非永久卡死;
-      #    但依赖 health 状态做门禁的编排会在这段时间拒绝流量, 冷启动越长越易误判, 故仍应配足。
-      # 此值 = 实测 255.7s 留约 20% 余量; 调小前先重新读 'Started ... in N seconds'。
-      # ⚠️ 实测值随宿主负载波动很大(notification 两次: 130.9s / 304.3s, 差 2.3 倍),
-      #    故取最坏观测值并留余量 —— 少配会误判, 多配只是让判定晚点开始。
+      # 必须覆盖实测启动耗时 (255.7s)，否则启动期会被锁定 unhealthy；
+      # 依据: deploy/tests/check_start_period_covers_startup.py
       start_period: 330s
     networks:
       - cloud-infra
@@ -1225,7 +927,9 @@ services:
       #   ⇒ 把可观测性组件的可用性当成业务启动前提, 是我自己造的阻塞。
       #     OAP 崩溃应当**只影响可观测性**, 不影响业务可用性 ——
       #     这正是可观测性组件该有的隔离性。
-      # OAP 是可观测性依赖, 不作为业务启动前提; CI 默认不启动 skywalking-oap/ui。
+      #   保留 OAP 自身对 elasticsearch 的 service_healthy (那才是真依赖)。
+      skywalking-oap:
+        condition: service_started
       elasticsearch:
         condition: service_healthy
     logging: *default-logging
@@ -1243,14 +947,6 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 必须在 .env 中设置}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 必须在 .env 中设置}
-      # ⚠️ 清空代理变量(2026-10-06 实测)。MinIO 的 S3 客户端对 http_proxy
-      #   敏感, 继承无监听的代理会让签名/请求路径出错。
-      http_proxy: ''
-      https_proxy: ''
-      HTTP_PROXY: ''
-      HTTPS_PROXY: ''
-      no_proxy: '*'
-      NO_PROXY: '*'
     command: server /data --console-address ":9001"
     volumes:
       - miniodata:/data
@@ -1266,41 +962,7 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: cloud-redisinsight
-    # ⚠️ 必须标 profiles: ["full"]（2026-10-05 实测）。
-    #   它是纯调试 UI，零业务引用、零 depends_on，但**预留 20.76 GiB 虚拟地址空间**
-    #   （实测 pid 946577 `node redisinsight/api/dist/src/main`，
-    #     VmSize 20.76GB 而 RSS 仅 127MB —— 典型 Node V8 预留）。
-    #   这已**单独超过**全局 commit 预算的一半（CommitLimit 20.63GB），
-    #   而 vm.overcommit_memory=2 下预留即计入预算。
-    #
-    #   `mem_limit: 256m` 对它**无效** —— 已实测: cgroup 内存限额管的是
-    #   实际使用量，管不住 V8 的虚拟地址空间预留（同第八课:
-    #   "提高 mem_limit 只会更快耗尽全局预算"的反面 —— 这里根本调不动）。
-    #
-    #   业务服务（gateway/auth/system/...）都用 profiles: ["full"] 隔离,
-    #   但它没有，于是每次 `podman-compose up -d` 都会被拉起 ——
-    #   包括只想启动基础设施时。隔离对它失效的形态与"没人调用"一致：
-    #   机制在（同一套 profiles 约定），但没接上。
-    profiles: ["full"]
     mem_limit: 256m
-    # 显式清空代理变量 (2026-10-06 补)。
-    #
-    # 理由与其它 18 个服务完全一致, 但此前**漏了本服务** ——
-    # deploy/tests/check_proxy_env.py 的配置侧统计因此是 18/19 而非 全量。
-    # 该服务属 profiles: ["full"] 且当前未运行, 所以运行侧看不出来,
-    # 但配置缺口是真的: 一旦有人带 full profile 启动它, 就会继承宿主 shell
-    # 的 http_proxy(AGENTS.md 第六课补记二: rootless podman 会从宿主补齐变量),
-    # 而 127.0.0.1:7890 在容器网络里指向容器自身, 必然不可达。
-    #
-    # no_proxy: '*' 之外的四个必须清空 —— 只设 no_proxy 不够,
-    # 因为它只影响"哪些地址不过代理", 不影响"存在代理"。
-    environment:
-      HTTP_PROXY: ''
-      HTTPS_PROXY: ''
-      http_proxy: ''
-      https_proxy: ''
-      no_proxy: '*'
-      NO_PROXY: '*'
     ports:
       - "5540:5540"
     networks:
@@ -1315,7 +977,6 @@ volumes:
   grafana-data:
   loki-data:
   miniodata:
-  fileuploads:
 
 networks:
   cloud-infra:

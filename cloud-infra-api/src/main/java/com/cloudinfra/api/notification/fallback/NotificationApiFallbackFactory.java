@@ -4,27 +4,21 @@ import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
-import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
-import com.cloudinfra.common.core.domain.PageQuery;
-import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
-import java.util.List;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * NotificationApi 降级工厂
- *
- * <p>分页查询降级返回 {@link PageResult#empty()} (records 空, total/窗口均为 0) ——
- * 与"查询成功但结果为空"可区分: 后者 total 同为 0, 但窗口回显请求值。</p>
  */
 @Component
 public class NotificationApiFallbackFactory implements FallbackFactory<NotificationApi> {
@@ -41,9 +35,9 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             }
 
             @Override
-            public Result<PageResult<NotificationHistoryResponse>> getHistory(Long userId, NotificationStatus status,
-                    NotificationType type, PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationHistoryResponse>> getHistory(Long userId, NotificationStatus status,
+                    NotificationType type, Integer page, Integer size) {
+                return Result.success(Collections.emptyList());
             }
 
             @Override
@@ -52,44 +46,29 @@ public class NotificationApiFallbackFactory implements FallbackFactory<Notificat
             }
 
             @Override
-            public Result<PageResult<NotificationDTO>> searchNotifications(String keyword, PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationDTO>> searchNotifications(String keyword) {
+                return Result.success(Collections.emptyList());
             }
 
             @Override
-            public Result<PageResult<NotificationLogDTO>> getLogs(Long userId, PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationLogDTO>> getLogs(Long userId) {
+                return Result.success(Collections.emptyList());
             }
 
             @Override
-            public Result<PageResult<NotificationHistoryResponse>> getMyHistory(NotificationStatus status,
-                    NotificationType type, PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationHistoryResponse>> getMyHistory(NotificationStatus status,
+                    NotificationType type, Integer page, Integer size) {
+                return Result.success(Collections.emptyList());
             }
 
             @Override
-            public Result<PageResult<NotificationLogDTO>> getMyLogs(PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationLogDTO>> getMyLogs() {
+                return Result.success(Collections.emptyList());
             }
 
             @Override
-            public Result<NotificationQuotaStatusDTO> getQuota() {
-                return Result.fail(503, "通知服务暂不可用");
-            }
-
-            @Override
-            public Result<List<NotificationPreferenceDTO>> getPreferences() {
-                return Result.fail(503, "通知服务暂不可用");
-            }
-
-            @Override
-            public Result<List<NotificationPreferenceDTO>> savePreferences(List<NotificationPreferenceSaveRequest> requests) {
-                return Result.fail(503, "通知服务暂不可用");
-            }
-
-            @Override
-            public Result<PageResult<NotificationLogDTO>> getInternalLogs(Long userId, PageQuery pageQuery) {
-                return Result.success(PageResult.empty());
+            public Result<List<NotificationLogDTO>> getInternalLogs(Long userId) {
+                return Result.success(Collections.emptyList());
             }
         };
     }

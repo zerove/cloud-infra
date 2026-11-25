@@ -1,6 +1,5 @@
 package com.cloudinfra.notification.controller;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -8,8 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.cloudinfra.common.core.domain.PageQuery;
-import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.service.INotificationService;
 import java.time.LocalDateTime;
@@ -48,18 +45,15 @@ class InternalNotificationControllerTest {
         log.setStatus("SUCCESS");
         log.setErrorMessage(null);
         log.setCreateTime(LocalDateTime.of(2026, 11, 8, 12, 0));
-        given(notificationService.getLogs(eq(999L), any(PageQuery.class)))
-            .willReturn(PageResult.of(List.of(log), 1, 10, 1));
+        given(notificationService.getLogs(eq(999L))).willReturn(List.of(log));
 
         mockMvc.perform(get("/internal/notification/logs")
-                .param("userId", "999")
-                .param("pageNum", "1")
-                .param("pageSize", "10"))
+                .param("userId", "999"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true))
-            .andExpect(jsonPath("$.data.records[0].notificationId").value(7))
-            .andExpect(jsonPath("$.data.records[0].channelCode").value("email"));
+            .andExpect(jsonPath("$.code").value(200))
+            .andExpect(jsonPath("$.data[0].notificationId").value(7))
+            .andExpect(jsonPath("$.data[0].channelCode").value("email"));
 
-        then(notificationService).should().getLogs(eq(999L), any(PageQuery.class));
+        then(notificationService).should().getLogs(eq(999L));
     }
 }

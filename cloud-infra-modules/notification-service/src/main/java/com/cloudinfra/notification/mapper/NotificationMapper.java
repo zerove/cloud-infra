@@ -1,12 +1,8 @@
 package com.cloudinfra.notification.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.common.core.annotation.TenantFilter;
 import com.cloudinfra.notification.domain.Notification;
-import com.cloudinfra.notification.domain.NotificationLog;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 import org.springframework.stereotype.Repository;
 
 /**

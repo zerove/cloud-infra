@@ -16,6 +16,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Set;
 
 /**
  * Web 请求日志切面
@@ -29,6 +31,12 @@ public class WebLoggingAspect {
 
     private static final Logger log = LoggerFactory.getLogger(WebLoggingAspect.class);
 
+    // 敏感参数名集合（不区分大小写）
+    private static final Set<String> SENSITIVE_PARAMS = Set.of(
+        "password", "passwd", "pwd", "secret", "token", "apikey", "api_key",
+        "access_token", "refresh_token", "authorization", "credential",
+        "privatekey", "private_key", "apisecret", "api_secret"
+    );
 
     @Around("execution(* com.cloudinfra..controller..*(..))")
     public Object logWebRequest(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -43,7 +51,7 @@ public class WebLoggingAspect {
         }
 
         String methodName = joinPoint.getSignature().toShortString();
-        String params = SensitiveDataRedactor.redactArgs(joinPoint.getArgs());
+        String params = maskSensitiveParams(Arrays.deepToString(joinPoint.getArgs()));
         String userId = UserContext.get("userId");
 
         Object result;
@@ -63,5 +71,27 @@ public class WebLoggingAspect {
                     methodName, userId, response.getStatus(), duration, params);
             }
         }
+    }
+
+    /**
+     * 脱敏敏感参数
+     */
+    private String maskSensitiveParams(String params) {
+        if (params == null) {
+            return params;
+        }
+        String result = params;
+        for (String sensitive : SENSITIVE_PARAMS) {
+            // 匹配 key=value 或 "key": "value" 等模式
+            result = result.replaceAll(
+                "(?i)(" + sensitive + "\\s*[:=]\\s*\")([^\"]+)(\")",
+                "$1***MASKED***$3"
+            );
+            result = result.replaceAll(
+                "(?i)(" + sensitive + "\\s*[:=]\\s*)([^\\s,}]+)([\\s,}])",
+                "$1***MASKED***$3"
+            );
+        }
+        return result;
     }
 }

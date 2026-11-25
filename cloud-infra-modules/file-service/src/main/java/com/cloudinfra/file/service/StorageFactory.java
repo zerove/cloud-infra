@@ -43,6 +43,38 @@ public class StorageFactory {
     }
 
     /**
+     * 按"哪个后端真正持有该文件"来定位读取/删除用的策略。
+     *
+     * <p>不能直接用 {@link #getStrategy()}：它返回的是**当前默认**策略，而文件
+     * 实际可能在另一个后端（例：默认 local，但该文件是按大小路由到 MinIO 存下的）。
+     * 此时用默认策略删除会**静默无效** —— 既没删掉对象，调用方也只看到一个 false。
+     *
+     * <p>顺序：先问默认策略（绝大多数命中，零额外开销），未命中再逐个问其余策略。
+     *
+     * @param storedPath 元数据中记录的路径或对象名
+     * @return 能定位到该文件的策略；全部未命中时返回默认策略，由调用方的
+     *         {@code download} 抛出真实的"文件不存在"
+     */
+    public StorageStrategy resolveForRead(String storedPath) {
+        if (storedPath == null || storedPath.isEmpty()) {
+            return getStrategy();
+        }
+        StorageStrategy fallback = getStrategy();
+        if (fallback.exists(storedPath)) {
+            return fallback;
+        }
+        for (StorageStrategy strategy : strategies.values()) {
+            if (strategy == fallback) {
+                continue;
+            }
+            if (strategy.exists(storedPath)) {
+                return strategy;
+            }
+        }
+        return fallback;
+    }
+
+    /**
      * 获取当前默认激活的存储策略
      */
     public StorageStrategy getStrategy() {

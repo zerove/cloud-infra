@@ -169,9 +169,7 @@
                 <groupId>org.graalvm.buildtools</groupId>
                 <artifactId>native-maven-plugin</artifactId>
                 <configuration>
-                    <!-- 原为硬编码 <skip>false</skip>, 使 -Dnative.image.skip=true 对 auth 无效
-                         (gateway 走属性、auth 走硬编码, 行为不一致) -->
-                    <skip>${native.image.skip}</skip>
+                    <skip>false</skip>
                     <imageName>cloud-infra-auth-binary</imageName>
                     <mainClass>com.cloudinfra.auth.AuthApplication</mainClass>
                     <buildArgs>

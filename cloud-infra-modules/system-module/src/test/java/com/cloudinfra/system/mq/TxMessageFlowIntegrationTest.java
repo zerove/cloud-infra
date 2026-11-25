@@ -24,7 +24,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import com.cloudinfra.test.support.containers.InfrastructureContainers;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -54,21 +54,20 @@ class TxMessageFlowIntegrationTest extends BaseIntegrationTest {
             .withDatabaseName("cloud_infra")
             .withUsername("postgres")
             .withPassword("password")
-            // 受控对照实测(2026-10-08): 本机 n=1 时 postgres 启动 109 秒。
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     /** 隔离 RabbitMQ：避免与部署环境竞争消费（同 group 会抢消息）
-     *  注意：本机负载下 RabbitMQ 冷启动实测需 ~65s，默认 60s 等待会超时 */
+     *  注意：本机负载下 RabbitMQ 冷启动实测需 ~65s，默认 60s 等待会超时，故放宽到 180s */
     @Container
     static RabbitMQContainer rabbitmq = new RabbitMQContainer("rabbitmq:3.13-management-alpine")
             .waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1)
-                    .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT));
+                    .withStartupTimeout(Duration.ofSeconds(180)));
 
     /** Redis for distributed lock and caching */
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379)
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {

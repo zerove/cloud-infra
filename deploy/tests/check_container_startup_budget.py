@@ -19,9 +19,13 @@
 
 两处交叉佐证:
 
-* 同一批测试里, 走 `InfrastructureContainers.STARTUP_TIMEOUT`(3 分钟)的
+* 事故当天(2026-10-08, archive/local-lineage-2026-11-08 树)同一批测试里,
+  走共享常量 `InfrastructureContainers.STARTUP_TIMEOUT`(3 分钟)的
   `NotificationRecoveryMultiReplicaIT`(4 项)、`SystemIntegrationTest`(7 项)
   **全部通过**; 走 60 秒默认的则失败。
+  当前树已无该常量(见下方退出码 1 的修法提示), 但同形态的在树证据仍在:
+  `TxMessageFlowIntegrationTest` 第 60 行注释记录"本机负载下 RabbitMQ 冷启动
+  实测需 ~65s, 默认 60s 等待会超时, 故放宽到 180s"。
 * `CrossServiceFeignChainIntegrationTest` 的 postgres 硬编码 **90 秒**,
   已低于实测的 109 秒 —— 它本轮 5/5 通过属侥幸(镜像已缓存)。
 
@@ -69,6 +73,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # 只扫测试源码: 容器声明只应出现在测试里
+# (cloud-infra-test-support/src/main 里有一个无人引用的 InfrastructureContainers,
+#  属死代码、不参与任何测试运行, 不在本门禁范围; 若将来启用它, 其预算由使用方负责)
 SCAN_GLOBS = (
     "cloud-infra-auth/src/test/**/*.java",
     "cloud-infra-gateway/src/test/**/*.java",
@@ -232,7 +238,9 @@ def main() -> int:
         missing = decls - budgets
         print(f"  {path}: 声明 {decls} / 预算 {budgets} → 缺 {missing}", file=sys.stderr)
     print(
-        "\n修法: 给缺口容器加 .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT)"
+        "\n修法: 给缺口容器加 .withStartupTimeout(Duration.ofMinutes(3))"
+        "\n     （本仓没有 InfrastructureContainers.STARTUP_TIMEOUT 常量;"
+        " 现有合规文件用 Duration.ofMinutes(3) 或 ofSeconds(180)）"
         "\n     (当前 3 分钟; 受控对照实测 postgres n=1 需 109s, n=3 并发最长 125s)",
         file=sys.stderr,
     )

@@ -1,11 +1,9 @@
 package com.cloudinfra.notification.controller;
 
+import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationDTO;
 import com.cloudinfra.api.notification.dto.NotificationHistoryResponse;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceDTO;
-import com.cloudinfra.api.notification.dto.NotificationPreferenceSaveRequest;
-import com.cloudinfra.api.notification.dto.NotificationQuotaStatusDTO;
 import com.cloudinfra.api.notification.dto.NotificationRequest;
 import com.cloudinfra.api.notification.dto.NotificationResponse;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
@@ -13,8 +11,6 @@ import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.PageQuery;
 import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
-import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.common.util.SecurityUtils;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
@@ -39,6 +35,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Tag(name = "通知管理")
 @RestController
@@ -69,27 +68,37 @@ public class NotificationController {
     }
 
     /**
-     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；优先使用 {@link #getMyHistory}。
-     *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
+     * 查询通知历史。
+     *
+     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；
+     *     自助查询请使用 {@link #getMyHistory}。保留旧形状以兼容存量调用方。
      */
-    @Deprecated(since = "S2-compat", forRemoval = false)
-    @Operation(summary = "查询通知历史")
+    @Override
+    @Deprecated
+    @Operation(summary = "查询通知历史（deprecated：仅本人；请使用 /notification/my/history）")
     @PreAuthorize("@ss.hasPermi('notification:history')")
     @GetMapping("/history")
     public Result<PageResult<NotificationHistoryResponse>> getHistory(
             @RequestParam Long userId,
             @RequestParam(required = false) NotificationStatus status,
             @RequestParam(required = false) NotificationType type,
-            PageQuery pageQuery) {
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
         // S2-B3: 旧接口禁止跨用户查询；自助查询请使用 /notification/my/history
         Long current = SecurityUtils.getUserId();
         if (current == null || !current.equals(userId)) {
-            return Result.fail(403, "仅允许查询当前用户的通知历史，请使用 /notification/my/history");
+            return Result.fail(403, "禁止查询他人通知历史，请使用 /notification/my/history");
         }
-        PageResult<Notification> notifications =
-                notificationService.getNotificationHistory(userId, status, type, pageQuery);
-        return Result.success(notifications.map(n -> new NotificationHistoryResponse(
-                n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime())));
+
+        // 校验分页参数（size 上限 100，防止大分页拖垮 DB）
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        List<Notification> notifications = notificationService.getNotificationHistory(userId, safePage, safeSize);
+        List<NotificationHistoryResponse> responses = notifications.stream()
+                .map(n -> new NotificationHistoryResponse(
+                    n.getId(), n.getType(), n.getTitle(), n.getContent(), n.getStatus(), n.getCreateTime()))
+                .collect(Collectors.toList());
+        return Result.success(responses);
     }
 
     @Operation(summary = "将通知标记为已读")
@@ -126,22 +135,56 @@ public class NotificationController {
     }
 
     /**
-     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；优先使用 {@link #getMyLogs}。
-     *             管理员代查需未来 B1（显式权限+审计），见 ADR-011。
+     * 获取特定用户的发送审计日志。
+     *
+     * @deprecated S2-B3 已实施：仅允许本人（{@code userId == currentUser}），跨用户 403；
+     *     自助查询请使用 {@link #getMyLogs}。可信审计聚合请走内部 HMAC 契约。
      */
-    @Deprecated(since = "S2-compat", forRemoval = false)
-    @Operation(summary = "获取特定用户的发送审计日志")
+    @Override
+    @Deprecated
+    @Operation(summary = "获取用户发送审计日志（deprecated：仅本人；请使用 /notification/my/logs）")
     @PreAuthorize("@ss.hasPermi('notification:logs')")
     @GetMapping("/logs")
-    public Result<PageResult<NotificationLogDTO>> getLogs(
-            @RequestParam Long userId,
-            PageQuery pageQuery) {
+    public Result<List<NotificationLogDTO>> getLogs(@RequestParam Long userId) {
         // S2-B3: 旧接口禁止跨用户查询；自助查询请使用 /notification/my/logs
         Long current = SecurityUtils.getUserId();
         if (current == null || !current.equals(userId)) {
-            return Result.fail(403, "仅允许查询当前用户的发送日志，请使用 /notification/my/logs");
+            return Result.fail(403, "禁止查询他人发送审计日志，请使用 /notification/my/logs");
         }
-        return Result.success(notificationService.getLogs(userId, pageQuery).map(this::mapToLogDTO));
+        List<NotificationLog> logs = notificationService.getLogs(userId);
+        return Result.success(logs.stream()
+                .map(this::mapToLogDTO)
+                .collect(Collectors.toList()));
+    }
+
+    @Override
+    @Operation(summary = "查询当前用户通知历史")
+    @PreAuthorize("@ss.hasPermi('notification:history')")
+    @GetMapping("/my/history")
+    public Result<List<NotificationHistoryResponse>> getMyHistory(
+            @RequestParam(required = false) NotificationStatus status,
+            @RequestParam(required = false) NotificationType type,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        Long userId = SecurityUtils.getUserId();
+        return getHistory(userId, status, type, page, size);
+    }
+
+    @Override
+    @Operation(summary = "查询当前用户发送审计日志")
+    @PreAuthorize("@ss.hasPermi('notification:logs')")
+    @GetMapping("/my/logs")
+    public Result<List<NotificationLogDTO>> getMyLogs() {
+        Long userId = SecurityUtils.getUserId();
+        return getLogs(userId);
+    }
+
+    @Override
+    @PreAuthorize("denyAll()")
+    public Result<List<NotificationLogDTO>> getInternalLogs(Long userId) {
+        // 实际处理由 InternalNotificationController（/internal/**，HMAC 保护）承担。
+        // 此处仅满足 NotificationApi 契约；denyAll 防止接口注解继承导致的意外暴露。
+        return Result.fail(403, "请通过内部契约访问");
     }
 
     private NotificationDTO mapToDTO(Notification n) {
@@ -228,4 +271,3 @@ public class NotificationController {
     }
 
 }
-

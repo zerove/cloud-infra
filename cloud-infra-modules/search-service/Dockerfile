@@ -6,8 +6,8 @@ RUN chown -R cloudinfra:cloudinfra /app
 USER cloudinfra
 COPY cloud-infra-modules/search-service/target/*-exec.jar app.jar
 
-# JVM 内存优化 + CDS 启动加速
-ENV JAVA_OPTS="-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
+# JVM 内存优化
+ENV JAVA_OPTS="-XX:+UseG1GC -Xmx320m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 
 # entrypoint.sh: 等 Nacos 上 notification-service 注册, 拉其 IP, 注入 SERVICE_HOST_MAP env
 # 解决容器内 'notification-service' DNS 解析到 podman 内部错误 IP 198.18.0.30

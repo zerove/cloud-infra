@@ -27,7 +27,9 @@
 
 ## 负向对照
 
-  · 删掉 deploy/config/system-module.yaml 的 readTimeout -> 必须报红
+  · 删掉 deploy/config/search-service.yaml 的 readTimeout -> 必须报红
+    （search-service 是 FileApi / SearchApi 的唯一消费方；而 system-module 的
+     readTimeout 不是有效对照 —— NotificationApi 另有 notification-service 覆盖）
   · 把 API_ROOT 改到不存在的目录 -> 必须 rc=2（而不是 PASS）
 """
 import re

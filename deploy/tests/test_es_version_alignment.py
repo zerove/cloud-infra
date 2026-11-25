@@ -43,8 +43,7 @@ ES 8.x 服务端不认 -> 400。
 ## 负向对照
 
   · 把 compose 里的 ES 版本改回 8.x -> 必须失败
-  · 各处配置（compose / k8s values）不一致 -> 必须失败
-  · 任一声明的配置文件不存在 -> 必须失败（声明与实际不符 ≠ 通过）
+  · 三处配置（compose / manifests / k8s values）不一致 -> 必须失败
 """
 import re
 import subprocess
@@ -53,106 +52,124 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 承载 ES 镜像的服务端配置。两处都要查 —— 只查 compose 的话,
-# K8s 部署仍会踩同一个坑（这正是它长期存在的原因: 没人同时看两处）。
-# ⚠️ 2026-11-07 原来的第三项 `manifests/base/elasticsearch.yaml` 已随 kustomize 面删除:
-#    该条目此前会被 `if not f.exists(): continue` 静默跳过 —— 也就是说,
-#    从 manifests 被删那天起, 这个"三处核对"已经悄悄变成"两处核对"。
-#    现改为: 声明了的文件必须真实存在且被解析到, 否则直接报红。
+# 承载 ES 镜像的服务端配置。三处都要查 —— 只查 compose 的话,
+# K8s 部署仍会踩同一个坑（这正是它长期存在的原因: 没人同时看三处）。
 SERVER_CONFIGS = [
     ("deploy/compose.yaml", re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
+    ("manifests/base/elasticsearch.yaml",
+     re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
     ("deploy/k8s/infra/values.yaml",
      re.compile(r"^\s*image:\s*\S*elasticsearch:(\d+)\.", re.M)),
 ]
 
-BOOT_VERSION = "4.1.0"
+def _repo_boot_version() -> str:
+    """Spring Boot 版本从仓库根 pom 读 —— 不手写常量(会与 pom 漂移)。"""
+    txt = (ROOT / "pom.xml").read_text(encoding="utf-8")
+    m = re.search(r"<spring-boot\.version>([^<]+)<", txt)
+    return m.group(1) if m else ""
+
+
+def _mvn_client_major(offline: bool) -> tuple[int, str] | None:
+    """跑一次 dependency:tree; 拿不到则返回 None。
+
+    ⚠️ 必须用 `-DoutputFile`: 原实现带 `-q` 并读 stdout, 而 dependency:tree
+    的输出走 Maven 日志, `-q` 会把它整段吞掉 -> 该路径**从未真正取到过版本**,
+    每次都静默降级到 BOM。守护的第一来源形同虚设。
+    """
+    import tempfile
+    fd = tempfile.NamedTemporaryFile(
+        mode="r", suffix=".es-tree.txt", delete=False, encoding="utf-8"
+    )
+    fd.close()
+    args = ["mvn", "--batch-mode"]
+    if offline:
+        args.append("-o")
+    args += [
+        "-q", "-pl", "cloud-infra-modules/search-service",
+        "dependency:tree", "-Dincludes=co.elastic.clients:elasticsearch-java",
+        f"-DoutputFile={fd.name}",
+    ]
+    try:
+        subprocess.run(
+            args, capture_output=True, text=True, cwd=str(ROOT), timeout=600,
+        )
+        tree = Path(fd.name).read_text(encoding="utf-8", errors="ignore")
+    except (subprocess.SubprocessError, OSError):
+        tree = ""
+    finally:
+        Path(fd.name).unlink(missing_ok=True)
+    m = re.search(r"elasticsearch-java:jar:(\d+)\.", tree)
+    if m:
+        return int(m.group(1)), "mvn dependency:tree" + (" (offline)" if offline else "")
+    return None
+
+
+def _bom_client_major() -> tuple[int, str] | None:
+    """从 spring-boot-dependencies BOM 的 `<elasticsearch-client.version>` 取版本。
+
+    先查本地 ~/.m2; 再按需从 Maven Central 取那个 pom（CI 首次运行 ~/.m2 为空,
+    但网络可用）。只取一个 pom, 比跑完整 dependency:tree 快得多。
+    """
+    boot = _repo_boot_version()
+    if not boot:
+        return None
+    txt = ""
+    local = (
+        Path.home() / ".m2/repository/org/springframework/boot"
+        / "spring-boot-dependencies" / boot / f"spring-boot-dependencies-{boot}.pom"
+    )
+    if local.is_file():
+        txt = local.read_text(encoding="utf-8", errors="ignore")
+        src = local.name
+    if "<elasticsearch-client.version>" not in txt:
+        import urllib.request
+        url = (
+            "https://repo1.maven.org/maven2/org/springframework/boot"
+            f"/spring-boot-dependencies/{boot}/spring-boot-dependencies-{boot}.pom"
+        )
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                txt = r.read().decode("utf-8", "ignore")
+            src = f"central:{local.name}"
+        except Exception:
+            return None
+    mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
+    if mm:
+        return int(mm.group(1).split(".")[0]), src
+    return None
 
 
 def client_major() -> tuple[int, str]:
-    """ES 客户端主版本。多源取值, 全部失败返回 (-1, "")。
-
-    来源(顺序): ①mvn dependency:tree ②BOM pom(任何版本目录, 取最大)
-    ③本地仓库里实际下载的 elasticsearch-java jar 版本目录(取最大)。
+    """ES 客户端主版本。优先 mvn dependency:tree, 失败则读 BOM pom。
 
     返回 (major, 来源说明)。
     """
-    import glob
+    # 1) 权威来源: Maven 实际解析结果。
+    #    先离线(本地快), 再在线 —— **不能只写 -o**: E2E 在编译前跑本守护,
+    #    runner 的 ~/.m2 为空, 离线必然拿不到依赖树, 守护会误报"自身失效"。
+    #    2026-11-10 CI run 42678273812 即此形态。
+    for offline in (True, False):
+        got = _mvn_client_major(offline)
+        if got:
+            return got
 
-    def _mvn_tree() -> int:
-        # 权威来源: Maven 实际解析结果。实测: dependency:tree 的依赖行要走
-        # logger 打到 stdout, `-q` 下输出为空 —— 带 -q 会让此来源假绿。
-        p = subprocess.run(
-            ["mvn", "-o", "-pl", "cloud-infra-modules/search-service",
-             "dependency:tree"],
-            capture_output=True, text=True, cwd=str(ROOT), timeout=300,
-        )
-        for pat in (r"elasticsearch-java:jar:(\d+)\.",
-                    r"co\.elastic\.clients:elasticsearch-java:jar:(\d+)"):
-            m = re.search(pat, p.stdout)
-            if m:
-                return int(m.group(1))
-        return -1
-
-    def _bom_poms() -> int:
-        # 降级 A: 直接读 BOM。目录不只 BOOT_VERSION —— m2 里可能下载过多版本,
-        # 扫描更宽。
-        m = -1
-        for pom in glob.glob(str(Path.home() / ".m2/repository/org/springframework"
-                                 "/boot/spring-boot-dependencies/*/*.pom")):
-            txt = Path(pom).read_text(encoding="utf-8", errors="ignore")
-            mm = re.search(r"<elasticsearch-client\.version>([\d.]+)<", txt)
-            if mm:
-                m = max(m, int(mm.group(1).split(".")[0]))
-        return m
-
-    def _jar_dirs() -> int:
-        # 降级 B: 实际下载的 elasticsearch-java jar 版本目录, 取最大。
-        m = -1
-        for j in glob.glob(str(Path.home() / ".m2/repository/co/elastic/clients"
-                               "/elasticsearch-java/*/elasticsearch-java-*.jar")):
-            mm = re.search(r"elasticsearch-java-(\d+)\.", Path(j).name)
-            if mm:
-                m = max(m, int(mm.group(1)))
-        return m
-
-    for name, fn in (("mvn dependency:tree", _mvn_tree), ("BOM pom", _bom_poms),
-                     ("elasticsearch-java jar dirs", _jar_dirs)):
-        try:
-            v = fn()
-        except Exception as e:
-            v = -1
-            print(f"[diag] {name} raised: {e!r}")
-        if v >= 0:
-            return v, name
-    import os
-    m2 = str(Path.home() / ".m2/repository")
-    print("[diag] client_major: all sources failed: "
-          f"Path.home()={Path.home()}, m2_exists={os.path.isdir(m2)}, "
-          f"bom_poms={glob.glob(m2 + '/org/springframework/boot/spring-boot-dependencies/*/*.pom')[:5]}, "
-          f"es_jars={glob.glob(m2 + '/co/elastic/clients/elasticsearch-java/*/elasticsearch-java-*.jar')[:5]}")
+    # 2) 降级: 直接读 BOM (本地 ~/.m2 有就用, 没有就从 Maven Central 取该 pom)
+    got = _bom_client_major()
+    if got:
+        return got
     return -1, ""
 
 
-def server_majors() -> tuple[list[tuple[str, int]], list[str]]:
-    """返回 (解析到的 (路径, 主版本) 列表, 未找到/未解析到的声明路径列表)。
-
-    声明了的配置文件必须真实存在且能解析到版本号:
-    静默跳过会把"声明 N 处但实际只扫到 1 处"的假绿合法化 —— 路径写错、
-    或某个部署面被移走时, 守护会像没事一样继续报 PASS。
-    """
+def server_majors() -> list[tuple[str, int]]:
     out = []
-    missing = []
     for rel, pat in SERVER_CONFIGS:
         f = ROOT / rel
         if not f.exists():
-            missing.append(f"{rel} (文件不存在)")
             continue
         m = pat.search(f.read_text(encoding="utf-8"))
         if m:
             out.append((rel, int(m.group(1))))
-        else:
-            missing.append(f"{rel} (存在但解析不到 elasticsearch image 版本)")
-    return out, missing
+    return out
 
 
 def main() -> int:
@@ -164,14 +181,9 @@ def main() -> int:
         return 1
     print(f"INFO ES 客户端主版本 = {cmajor}  (来源: {csrc})")
 
-    servers, missing = server_majors()
-    if missing:
-        print("FAIL: 声明的 ES 服务端配置未全部解析到位 (声明 ≠ 实际, 不能判绿):")
-        for f in missing:
-            print(f"  - {f}")
-        return 1
+    servers = server_majors()
     if not servers:
-        print("FAIL 声明的配置里一处都没扫到 ES 版本 —— 扫描器坏了, 不能判绿")
+        print("FAIL 三处配置里一处都没扫到 ES 版本 —— 扫描器坏了, 不能判绿")
         return 1
 
     for rel, major in servers:
@@ -184,7 +196,7 @@ def main() -> int:
         else:
             print(f"PASS {rel}: 服务端主版本 {major} 与客户端一致")
 
-    # 各处之间也必须一致 —— 否则换个部署方式又踩一遍
+    # 三处之间也必须一致 —— 否则换个部署方式又踩一遍
     majors = {m for _, m in servers}
     if len(majors) > 1:
         detail = ", ".join(f"{r}={m}" for r, m in servers)

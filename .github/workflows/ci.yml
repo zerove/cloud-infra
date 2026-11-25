@@ -53,7 +53,15 @@ jobs:
         # 先 test-compile 因为直接调 failsafe goal 不触发编译生命周期。
         # 刻意串行：多模块并行会同时拉起多个 Testcontainers 容器，
         # runner 资源竞争导致 RabbitMQ 冷启动超时（本地全量回归实测踩坑）
-        run: mvn test-compile failsafe:integration-test failsafe:verify -DskipITs=false --batch-mode
+        env:
+          # GitHub runner Docker daemon (>=29) 拒绝 docker-java/Testcontainers 1.21 默认协商的旧 API 1.32,
+          # 报 "client version 1.32 is too old. Minimum supported API version is 1.40"。
+          # DOCKER_API_VERSION 在本栈未被采纳; docker-java 读取 ~/.docker-java.properties 的 api.version。
+          DOCKER_API_VERSION: "1.44"
+        run: |
+          mkdir -p "$HOME/.docker"
+          printf 'api.version=1.44\n' > "$HOME/.docker-java.properties"
+          mvn test-compile failsafe:integration-test failsafe:verify -DskipITs=false --batch-mode
 
       - name: Upload test reports
         if: always()
@@ -97,16 +105,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ github.sha }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
       - name: Install reactor artifacts (module SNAPSHOT deps must be resolvable)
         # checkstyle/spotbugs/pmd 都是按模块执行的, 每个模块都要解析自己的依赖,
-        # 其中包含同 reactor 的 SNAPSHOT (如 framework-* -> starter)。
-        # 本 job 不跑 package/install, 干净 runner 上这些构件根本不存在 ->
-        # "Could not find artifact com.cloudinfra:cloud-infra-framework-web:jar:1.0.0-SNAPSHOT"。
-        # 本地不报错是因为 ~/.m2 里残留着历史 install 的 SNAPSHOT, 属于典型的"本地绿 CI 红"。
+        # 其中包含同 reactor 的 SNAPSHOT。 本 job 不跑 package/install, 干净 runner 上
+        # 这些构件根本不存在会导致依赖解析失败。本地不报错常见原因是 ~/.m2 残留历史
+        # install 的 SNAPSHOT，属典型“本地绿 CI 红”。
         run: mvn install -DskipTests -DskipITs -Dcheckstyle.skip=true -Dspotbugs.skip=true --batch-mode
 
       - name: Run quality checks
@@ -126,7 +133,11 @@ jobs:
         #   No tests matching pattern "ArchitectureTest" were executed!
         # 注意: 真正的架构违规会以不同的措辞出现 (Architecture Violation ... was violated),
         # 两者不要混淆 —— 本次是参数名失效, 不是分层被破坏。
-        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false --batch-mode
+        #
+        # 2026-11-13: jacoco report/check 已绑 test 阶段（PR #105），本步仅运行
+        # ArchitectureTest 子集，覆盖率样本不代表模块整体；跳过 jacoco 避免与
+        # 覆盖率门禁目的混淆（覆盖率在全量 test/verify 路径评估）。
+        run: mvn -pl cloud-infra-modules/system-module -am test -Dtest=ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true --batch-mode
 
       - name: Upload quality reports
         # 本地与 CI 的静态分析结论曾长期不一致 (本地 ~/.m2 残留历史 SNAPSHOT +
@@ -179,6 +190,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-maven-
+
+      - name: Install reactor artifacts (module SNAPSHOT deps must be resolvable)
+        # native:compile 对 `mvn -pl cloud-infra-gateway --batch-mode` 这种**单模块**
+        # 下解析同 reactor 的 SNAPSHOT (gateway -> cloud-infra-common/api/framework-*) 需要
+        # 这些构件在本地 Maven 仓库可见。clean runner 上默认没有 -> 报错:
+        #   Could not resolve dependencies for project cloud-infra-gateway:jar:1.0.0-SNAPSHOT
+        #   Could not find artifact com.cloudinfra:cloud-infra-common:jar:1.0.0-SNAPSHOT
+        # quality-gate job 的 install 步骤不会在本 job 里执行, 故这里显式补一次
+        # (2026-11-10 CI run 42738441187 实证)。
+        run: mvn install -DskipTests -DskipITs -Dcheckstyle.skip=true -Dspotbugs.skip=true --batch-mode
 
       - name: Build Native Images
         # 2026-10-02 四次实测得到的事实（勿凭猜测再改）:

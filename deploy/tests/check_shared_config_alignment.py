@@ -52,6 +52,10 @@ def main(root: Path = ROOT) -> int:
     for svc_dir in service_dirs:
         if svc_dir.name == "demo-service":
             continue  # demo 明确弃用, 不计入
+        if svc_dir.name == "target" or not (svc_dir / "src").is_dir():
+            # Maven 聚合模块构建产物 (cloud-infra-modules/target/) 不是服务,
+            # 扫到它会把守护打成假红 (2026-11-17 实测: 本地 mvn 构建后必现)
+            continue
         res = svc_dir / "src" / "main" / "resources"
         ymls = sorted(res.glob("application*.yml")) if res.is_dir() else []
         local_ok = any(IMPORT_RE.search(

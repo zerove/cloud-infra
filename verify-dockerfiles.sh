@@ -55,8 +55,7 @@ echo "守护 1/2: 所有 Dockerfile 的 jar COPY 写法与 repackage classifier 
 # 它会让人以为"卡住=还在跑"。而且清单本身就是可审阅的:
 # 新增 Dockerfile 时必须同时登记到这里, 漏登记会显式报 FAIL 而不是静默跳过。
 DOCKERFILES=(
-  # 注意: 根 Dockerfile 已被本地主线删除(9a05c574 "remove legacy deployment
-  # manifests and root Dockerfiles"), 未在磁盘上, 不登记。
+  "Dockerfile"
   "cloud-infra-gateway/Dockerfile"
   "cloud-infra-auth/Dockerfile"
   "cloud-infra-modules/system-module/Dockerfile"

@@ -93,10 +93,45 @@ public class SysLoginService {
         }
     }
 
-    public Result<Void> register(com.cloudinfra.api.system.dto.RegisterUserDTO registerUser, String clientIp) {
+    public Result<Void> register(LoginUser registerUser, String clientIp) {
         checkRegisterRateLimit(registerUser.getUsername(), clientIp);
-        // 明文密码由 system 模块 BCrypt 加密
-        return userApi.registerUser(registerUser);
+
+        com.cloudinfra.api.system.dto.RegisterUserDTO userDTO =
+            com.cloudinfra.api.system.dto.RegisterUserDTO.builder()
+                .username(registerUser.getUsername())
+                .password(registerUser.getPassword()) // 明文密码由 system 模块 BCrypt 加密
+                .build();
+
+    /**
+     * 注册频率限制：同一用户名 + IP 在 1 小时内最多注册 5 次，防批量注册滥用。
+     */
+    private void checkRegisterRateLimit(String username, String clientIp) {
+        String key = "register:rate:" + username + ":" + (clientIp == null ? "unknown" : clientIp);
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1) {
+            redisTemplate.expire(key, REGISTER_WINDOW);
+        }
+        if (count != null && count > MAX_REGISTER_PER_WINDOW) {
+            throw new AuthBusinessException(AuthExceptionCode.REGISTER_RATE_LIMITED);
+        }
+    }
+
+    /**
+     * H5: E2E 固定验证码开关。仅当非空值时启用，提交的 code 与该值匹配即通过（uuid 仍要求存在）。
+     * 优先级：System 环境变量 AUTH_CAPTCHA_FIXED_CODE > 配置项 auth.captcha.fixed-code。
+     * 直接读环境变量以绕开 jasypt 对 Nacos 配置 PropertySource 的解密副作用
+     * （jasypt 4.0.4 + Spring 6 + Nacos Config 时，CachingResolver 在 BeanFactory
+     * 解析阶段返回 null，导致 @Value 拿到空串；环境变量是兜底且更直观）。
+     * 生产环境不得配置该项，默认无值即维持真实验证码校验。
+     */
+    private String fixedCaptchaCode = readFixedCaptchaCode();
+
+    private static String readFixedCaptchaCode() {
+        String env = System.getenv("AUTH_CAPTCHA_FIXED_CODE");
+        if (env != null && !env.isEmpty()) {
+            return env;
+        }
+        return System.getProperty("auth.captcha.fixed-code", "");
     }
 
     /**

@@ -1,9 +1,8 @@
 package com.cloudinfra.notification.controller;
 
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
-import com.cloudinfra.common.core.domain.PageQuery;
-import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.service.INotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +11,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 通知内部 Feign 契约端点（HMAC 保护，网关无路由）。
@@ -30,14 +32,15 @@ public class InternalNotificationController {
 
     @Operation(summary = "获取指定用户发送审计日志（内部 Feign 契约）")
     @GetMapping("/logs")
-    public Result<PageResult<NotificationLogDTO>> getInternalLogs(
-            @RequestParam Long userId,
-            PageQuery pageQuery) {
-        return Result.success(notificationService.getLogs(userId, pageQuery)
-            .map(this::mapToLogDTO));
+    public Result<List<NotificationLogDTO>> getInternalLogs(@RequestParam Long userId) {
+        List<NotificationLog> logs = notificationService.getLogs(userId);
+        List<NotificationLogDTO> dtos = logs.stream()
+                .map(this::mapToLogDTO)
+                .collect(Collectors.toList());
+        return Result.success(dtos);
     }
 
-    private NotificationLogDTO mapToLogDTO(com.cloudinfra.notification.domain.NotificationLog l) {
+    private NotificationLogDTO mapToLogDTO(NotificationLog l) {
         var dto = new NotificationLogDTO();
         dto.setNotificationId(l.getNotificationId());
         dto.setChannelCode(l.getChannelCode());

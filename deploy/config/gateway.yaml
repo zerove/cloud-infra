@@ -10,6 +10,7 @@ spring:
       enabled: true
   main:
     lazy-initialization: true
+    allow-bean-definition-overriding: true
   datasource:
     hikari:
       connection-timeout: 30000
@@ -70,56 +71,23 @@ management:
   tracing:
     enabled: true
     sampling:
-      # 2026-11-05 perf audit P0: 全量采样 1.0 -> 0.2（建议值），压 CPU/吞吐
-      probability: 0.2
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      endpoint: http://otel-collector:4317
+
 # Resilience4j 弹性设计配置
-#
-# ⚠️ 结构说明（2026-10-15 修正）: 此前这些参数被**平铺**在 `circuitbreaker:` 之下,
-# 而 resilience4j-spring-boot3 的属性类 CommonCircuitBreakerConfigurationProperties
-# 只有 instances / backends / configs 三个 Map 字段, **不存在**任何顶层阈值字段。
-# 即这些键全部无法绑定, 被 Spring 静默忽略 —— 配置"看起来生效"实则跑的是库默认值
-# (minimumNumberOfCalls=100 / waitDurationInOpenState=60s / slowCallDurationThreshold=60s)。
-# 正确的默认值写法必须嵌在 `configs.default` 之下。
-resilience4j:
-  circuitbreaker:
-    configs:
-      default:
-        failure-rate-threshold: 50
-        slow-call-rate-threshold: 80
-        slow-call-duration-threshold: 2s
-        sliding-window-count-based: true
-        sliding-window-size: 100
-        minimum-number-of-calls: 10
-        permitted-calls-in-half-open-state: 10
-        wait-duration-in-open-state: 30s
-        record-exceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-          - org.springframework.web.client.ResourceAccessException
-  ratelimiter:
-    configs:
-      default:
-        limit-refresh-period: 1s
-        limit-for-period: 100
-        timeout-duration: 500ms
-  retry:
-    configs:
-      default:
-        max-attempts: 3
-        wait-duration: 500ms
-        exponential-backoff: true
-        exponential-multiplier: 2.0
-        retry-exceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignore-exceptions:
-          - java.lang.IllegalArgumentException
-          - java.lang.IllegalStateException
-  bulkhead:
-    configs:
-      default:
-        max-concurrent-calls: 50
-        max-wait-duration: 1s
+# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:}
+    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
+
+# 内部服务间调用签名密钥不再在此声明（issue 30 清理, 2026-10-01）:
+# 该键写的是 ${INTERNAL_CALL_SECRET:} 透传, 而 InternalCallCrypto.resolveSecret()
+# 第一优先级读 System.getenv("INTERNAL_CALL_SECRET"), 且全仓无任何 @Value/Environment
+# 消费者读该键 —— 这段配置同步到 Nacos 后从不被读取, 只会误导运维以为改 Nacos 能生效。
+# 密钥的唯一正确来源是环境变量 INTERNAL_CALL_SECRET, compose.yaml 已用 ${INTERNAL_CALL_SECRET:?} 强制拦截漏配。
 
 # 网关转发到后端服务的 HTTP 客户端超时
 # 读超时原为硬编码 10s (GatewayClientConfig 里的字面量), 而 file/upload 的
@@ -133,15 +101,3 @@ gateway:
     connect: 3s
     connection-request: 3s
     read: 60s
-
-# JWT 配置（生产必须通过 AUTH_JWT_SECRET 注入外置强密钥；以下为开发默认值）
-auth:
-  jwt:
-    secret: ${AUTH_JWT_SECRET:}
-    expire-time: ${AUTH_JWT_EXPIRE_TIME:86400000}
-
-# 内部服务间调用签名密钥不再在此声明（issue 30 清理, 2026-10-01）:
-# 该键写的是 ${INTERNAL_CALL_SECRET:} 透传, 而 InternalCallCrypto.resolveSecret()
-# 第一优先级读 System.getenv("INTERNAL_CALL_SECRET"), 且全仓无任何 @Value/Environment
-# 消费者读该键 —— 这段配置同步到 Nacos 后从不被读取, 只会误导运维以为改 Nacos 能生效。
-# 密钥的唯一正确来源是环境变量 INTERNAL_CALL_SECRET, compose.yaml 已用 ${INTERNAL_CALL_SECRET:?} 强制拦截漏配。

@@ -14,6 +14,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
+
 @Testcontainers
 @ActiveProfiles("test")
 @SpringBootTest(
@@ -29,8 +31,7 @@ public class GatewaySentinelIntegrationTest extends BaseIntegrationTest {
     @Container
     static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379)
-            // 显式启动预算, 不依赖 Testcontainers 60 秒默认(受控对照见 auth/file 的说明)。
-            .withStartupTimeout(InfrastructureContainers.STARTUP_TIMEOUT);
+            .withStartupTimeout(Duration.ofMinutes(3));
 
     @DynamicPropertySource
     static void redisProperties(DynamicPropertyRegistry registry) {

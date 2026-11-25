@@ -4,7 +4,7 @@
 
 ## 📌 v1.0.0 (2026-09-01)
 
-![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-625%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen) ![Java](https://img.shields.io/badge/Java-25-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen) ![Tests](https://img.shields.io/badge/tests-504%20passing-success) ![ADRs](https://img.shields.io/badge/ADRs-11-blueviolet) ![ROADMAP](https://img.shields.io/badge/ROADMAP-1%2F6%20%E8%A2%AB%E4%BD%BF%E7%94%A8-blueviolet)
 
 > ⚠️ **进度口径说明** (2026-09-30): 徽章中的 `ROADMAP 1/6` 按项目级完成定义统计,
 > 即**被真实业务使用的能力数**。若按传统“条目打勾”口径计, M6/M7 看起来接近全绿 ——
@@ -12,14 +12,11 @@
 > 详见 [ROADMAP.md](ROADMAP.md) “按被使用标准重算”。
 
 **v1.0.0 关键变更** (相对 v1.0.0-rc1):
-- ⛔ **cloud-infra-codegen 模块已移除** (2026-10-13)
-    - **2026-09-30 修正**: 该项降级为 `⚪` 可选开发工具 —— 声称的“消除 RuoYi 手工 CRUD 样板”
-      仅在 `sys_post` **一张表**上验证过, 其余业务表均为手写。
-    - **2026-10-13 终局**: 框架准入原则第 1 条要求“第二个使用方”, 而该模块**零生产引用**,
-      故整体删除 (原 2,464 行 main 代码)。不是冻结 —— 无消费者且无维护者的代码, 正确状态是删除。
+- ⛔ **cloud-infra-codegen 模块已移除**: 历史上曾作为可选工具存在（仅 `sys_post` 一表验证，零业务使用），后续清理中已从仓库移除，不再作为可用能力文档化
 - ✅ **P0-3b JWT blacklist 端到端 401 实测通过** (HTTP 401 + Redis blacklist TTL 24h)
 - ✅ **Caffeine ClassLoader 死锁修复**: cloud-system 内存 768m→2g + `--enable-native-access=ALL-UNNAMED`
 - ✅ **业务告警指标 AOP 化** (`@BusinessMetric` 注解): auth.login.attempts + file.upload.failures 真正落地
+- ✅ **AGENTS.md 同步** (文档与仓库状态对齐)
 
 **完整状态**: [HANDOFF-2026-09-01.md](docs/HANDOFF-2026-09-01.md) · 26 个新 commits · 9 P0/M5 issues closed · 11 Prometheus 告警 (2 业务类运行时实测) · 性能基线见下方「性能基线」(口径: 网关入口路径, 非业务链路)
 
@@ -30,13 +27,12 @@
 ./deploy/up.sh              # 启动基础设施 + 同步 Nacos 配置
 bash e2e-test.sh            # 6/6 业务断言 PASS
 ./deploy/up.sh --check      # 0 配置漂移
-
 ```
 
 ## 🚀 技术栈
 
 - **核心**: Spring Boot 4.1.0 | JDK 25 (启用虚拟线程 Virtual Threads)
-- **云生态**: Spring Cloud 2025.1.3 | Spring Cloud Alibaba 2025.1.0.0
+- **云生态**: Spring Cloud 2025.1.2 | Spring Cloud Alibaba 2025.1.0.0
 - **注册与配置**: Nacos
 - **持久化**: MyBatis Plus 3.5.17 | PostgreSQL 16 | MySQL 8.4
 - **缓存与分布**: Redisson 4.7.0 | Redis 7.2
@@ -62,7 +58,7 @@ bash e2e-test.sh            # 6/6 业务断言 PASS
 ## 📈 可观测性
 
 - **链路追踪**: 每个请求在网关处被分配一个 `traceId`，并通过 Micrometer Tracing 在所有微服务间传播。
-- **监控**: Prometheus 抓取各服务的 `/management/prometheus` 端点 (管理端口 9301)，提供实时健康状态和性能指标。
+- **监控**: Prometheus 抓取各服务的 `/actuator/prometheus` 端点，提供实时健康状态和性能指标。
 - **日志**: 标准化日志格式，包含 `traceId` 以实现分布式日志关联。
 
 ## 🛡️ 关键修复记录 (2026-08)

@@ -32,7 +32,8 @@ public class AuditController {
      * {@code system:audit:list}，此前**不校验被查询的 userId 是否属于调用方租户**，
      * 而审计所依赖的 {@code sys_oper_log} / {@code sys_notification_log} 也没有租户维度
      * （无 {@code tenant_id} 列、Mapper 无 {@code @TenantFilter}），
-     * 于是任一租户的审计员都能读到另一租户用户的审计记录。</p>
+     * 于是任一租户的审计员都能读到另一租户用户的审计记录 ——
+     * 实测证据见 {@code .scratch/2026-q3-roadmap/issues/36-cross-tenant-audit-timeline-leak.md}。</p>
      *
      * <p>修法：用**租户过滤后的**用户可见性检查（{@code SysUserMapper} 带
      * {@code @TenantFilter}，查询自动追加 {@code tenant_id = ?}）当作授权边界。

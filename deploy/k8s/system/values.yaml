@@ -35,9 +35,7 @@ managementService:
 resources:
   limits:
     cpu: 1000m
-    # 与 compose mem_limit(2g) 对齐 —— 640Mi 有已证实的 Caffeine ClassLoader 死锁,
-    # 2g 是修复值(见 deploy/compose.yaml 与 check_resource_optimization.py)
-    memory: 2Gi
+    memory: 640Mi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -72,6 +70,8 @@ env:
     secretKeyRef:
       name: cloud-infra-secrets
       key: internalCall.secret
+- name: SPRING_PROFILES_ACTIVE
+  value: k8s
 - name: NACOS_ADDR
   valueFrom:
     configMapKeyRef:
@@ -119,9 +119,7 @@ env:
 - name: HIKARI_TEST_QUERY
   value: SELECT 1
 - name: JAVA_OPTS
-  # --enable-native-access 与 native 内存四项上限均与 compose 逐字一致
-  # (Caffeine 死锁修复依赖 native-access; 缺失时 JVM 默认预留约 2.15GB)
-  value: "-XX:+UseG1GC -Xmx256m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport --enable-native-access=ALL-UNNAMED -XX:MaxMetaspaceSize=256m -XX:CompressedClassSpaceSize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxDirectMemorySize=64m"
+  value: "-XX:+UseG1GC -Xmx384m -Xms128m -XX:+UseCompactObjectHeaders -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport"
 livenessProbe:
   httpGet:
     path: /management/health/liveness
@@ -160,18 +158,7 @@ configMap:
       \        rabbit:\n          bindings:\n            txMessageConsumer-in-0:\n\
       \              consumer:\n                auto-bind-dlq: true\n            \
       \    dlq-name: sys.tx.message.dlq\n                republish-to-dlq: true\n\
-      \  seata:\n    enabled: false\n\
-      \    tx-service-group: ${spring.application.name}-tx-group\n    service:\n \
-      \     vgroup-mapping:\n        cloud-infra-system: default\n    registry:\n\
-      \      type: nacos\n      nacos:\n        server-addr: ${NACOS_DISCOVERY_ADDR}\n\
-      \        namespace: ${spring.cloud.nacos.discovery.namespace}\n    config:\n\
-      \      type: nacos\n      nacos:\n        server-addr: ${NACOS_CONFIG_ADDR}\n\
-      \        namespace: ${spring.cloud.nacos.config.namespace}\n    client:\n  \
-      \    rm:\n        async-commit-buffer-limit: 1000\n        report-success-enable:\
-      \ true\n        lock:\n          retry-interval: 10\n          retry-times:\
-      \ 30\n        report-retry-count: 5\n      tm:\n        commit-retry-count:\
-      \ 5\n        rollback-retry-count: 5\n        default-global-transaction-timeout:\
-      \ 60000\n  threads:\n    virtual:\n      enabled: true\n  data:\n    redis:\n\
+      \  threads:\n    virtual:\n      enabled: true\n  data:\n    redis:\n\
       \      host: ${SPRING_DATA_REDIS_HOST}\n      port: 6379\n      database: 0\n\
       \  datasource:\n    driver-class-name: org.postgresql.Driver\n    url: jdbc:postgresql://${SPRING_DATASOURCE_HOST}:5432/cloud_infra\n\
       \    username: ${SPRING_DATASOURCE_USERNAME}\n    password: ${SPRING_DATASOURCE_PASSWORD}\n\

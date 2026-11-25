@@ -1,13 +1,11 @@
 package com.cloudinfra.notification.service.impl;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cloudinfra.api.notification.enums.DispatchStatus;
 import com.cloudinfra.api.notification.enums.NotificationStatus;
 import com.cloudinfra.api.notification.enums.NotificationType;
 import com.cloudinfra.common.core.domain.PageQuery;
 import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.exception.BusinessException;
-import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.common.core.exception.SystemExceptionCode;
 import com.cloudinfra.notification.domain.Notification;
 import com.cloudinfra.notification.domain.NotificationLog;
@@ -18,7 +16,6 @@ import com.cloudinfra.notification.mapper.NotificationMapper;
 import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.cloudinfra.notification.service.NotificationPushGateway;
 import com.cloudinfra.notification.service.NotificationQuotaService;
 import com.cloudinfra.notification.service.NotificationRouter;
 import com.cloudinfra.notification.service.channel.NotificationChannel;
@@ -30,9 +27,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,7 +49,6 @@ class NotificationServiceImplTest {
     @Mock private NotificationRouter notificationRouter;
     @Mock private ScheduledNotificationMapper scheduleMapper;
     @Mock private NotificationQuotaService quotaService;
-    @Mock private NotificationPushGateway pushGateway;
     @Mock private ObjectMapper objectMapper;
     @Mock private RabbitTemplate rabbitTemplate;
 
@@ -64,8 +57,8 @@ class NotificationServiceImplTest {
     @BeforeEach
     void setUp() {
         notificationService = new NotificationServiceImpl(
-            notificationMapper, templateMapper,
-            notificationRouter, scheduleMapper, quotaService, pushGateway, objectMapper,
+            notificationMapper, logMapper, templateMapper,
+            notificationRouter, scheduleMapper, quotaService, objectMapper,
             rabbitTemplate,
             // 同步执行器: 投递在 afterCommit 中立即完成, 保持单测确定性
             new org.springframework.core.task.support.TaskExecutorAdapter(Runnable::run)
@@ -226,6 +219,26 @@ class NotificationServiceImplTest {
         doThrow(new AmqpException("broker down"))
             .when(rabbitTemplate).convertAndSend(
                 eq("notification.dispatch.queue"), any(Object.class));
+
+        // when / then: 不抛异常
+        notificationService.sendNotification(request);
+
+        then(notificationMapper).should().insert(any(Notification.class));
+    }
+
+    @Test
+    void getNotificationHistory_shouldReturnList() {
+        // given
+        Long userId = 1L;
+        Notification notification = new Notification();
+        notification.setId(1L);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> page =
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 10);
+        page.setRecords(List.of(notification));
+        given(notificationMapper.selectPage(any(), any())).willReturn(page);
+
+        // when
+        List<Notification> result = notificationService.getNotificationHistory(userId, 1, 10);
 
         // when / then: 不抛异常
         notificationService.sendNotification(request);

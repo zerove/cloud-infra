@@ -33,7 +33,7 @@ import java.util.List;
  */
 @Slf4j
 @AutoConfiguration
-@ConditionalOnProperty(prefix = "cloudinfra.grpc", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "cloudinfra.grpc", name = "enabled", havingValue = "true", matchIfMissing = false)
 @EnableConfigurationProperties(CloudInfraGrpcProperties.class)
 @Import(GrpcServerLifecycle.class)
 public class GrpcServerAutoConfiguration {
