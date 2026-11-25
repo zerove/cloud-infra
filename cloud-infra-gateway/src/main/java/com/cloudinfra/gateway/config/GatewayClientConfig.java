@@ -117,4 +117,28 @@ public class GatewayClientConfig {
                             throw new IllegalStateException("HTTP error: " + response.getStatusCode());
                         });
     }
+
+    /**
+     * 提供配置完整的 RestClient.Builder
+     * 用于函数式路由 DSL (http() + lb()) 创建 RestClient
+     * 必须标记 @LoadBalanced：Gateway MVC 的 RestClientProxyExchange 通过
+     * LoadBalancerInterceptor 在 RestClient 内部解析 lb:// 服务名，
+     * 没有独立的 LoadBalancerClientFilter（该组件仅存在于 Gateway WebFlux 变体）。
+     */
+    @Bean
+    @Primary
+    @LoadBalanced
+    public RestClient.Builder gatewayRestClientBuilder(ClientHttpRequestFactory clientHttpRequestFactory,
+                                                       ObservationRegistry observationRegistry) {
+        return RestClient.builder()
+                .requestFactory(clientHttpRequestFactory)
+                .observationRegistry(observationRegistry)
+                .messageConverters(converters -> {
+                    converters.add(new MappingJackson2HttpMessageConverter());
+                })
+                .defaultStatusHandler(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        (request, response) -> {
+                            throw new IllegalStateException("HTTP error: " + response.getStatusCode());
+                        });
+    }
 }

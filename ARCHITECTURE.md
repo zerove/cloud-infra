@@ -116,6 +116,58 @@
 - **Saga 补偿**: onFailure handler (Phase B 集成 `IServicePlugin`)
 - **测试覆盖**: `WorkflowEngineTest` 8 单测 (单步骤 + DAG 顺序 + 重试 + 循环依赖检测 + id 唯一性 + 并行层 + 全局超时)
 
+> **2026-10 历史清理**: `cloud-infra-codegen`（可选代码生成工具，零业务引用）已从仓库移除；相关历史记录见 git history 与 ROADMAP/CONTEXT 归档条目。
+
+## 🏢 多租户数据隔离 (M6-01, 2026-09)
+
+**链路**: 客户端 → Gateway `SecurityFilter.propagateTenantHeader` → 业务 `TenantContextFilter` → `TenantContext` (ThreadLocal) → `TenantSqlInterceptor` → SQL `WHERE tenant_id = ?`
+
+- **Schema**: V14 migration (9 张业务表 + tenant_id VARCHAR(50) + 11 索引)
+- **注解**: `@TenantFilter` (类级或方法级, column + rejectWhenMissing)
+- **拦截器链顺序**: Pagination → Tenant → DataScope (串联而非覆盖)
+- **零业务侵入**: 业务 Mapper 加类级 `@TenantFilter` 即可, 无需改 SQL
+- **可选启用**: `cloud-infra.tenant.enabled=false` 时 TenantContext.hasTenant() 短路, 兼容单租户模式
+- **Gateway 防御**: `SecurityFilter` 透传 `X-Tenant-Id` 时校验 `[a-zA-Z0-9\-_]{1,50}`, 阻断 CRLF 注入与过长 DoS
+
+## 🔁 统一幂等框架 (M6-02, 2026-09)
+
+**链路**: 客户端 → Controller (`@Idempotent`) → `IdempotentAspect` → `IdempotencyStore` → Redis (lock + status + response 三 key)
+
+- **双模式**: REJECT (默认, 防抖/拒绝二次) + REPLAY (返回首次结果, 网络重试/支付场景)
+- **Idempotency-Key 头**: RFC 草案风格 (兼容 X-Request-Token)
+- **幂等键要求 (2026-09-29 收紧)**: REJECT 可在缺 key 时回退 `userId + URI + body digest`;
+  **REPLAY 必须由客户端显式提供 key**, 否则切面直通不拦截。自动键无法区分"网络重试"与
+  "用户重复提交相同内容", 后者会拿到首次旧响应形成假成功 (2026-09-29 issue 27 决策 4)
+- **Redis 三 key**:
+  - `idempotency:{hash}:lock`     - SET NX EX 短锁 (30s), 防并发首次
+  - `idempotency:{hash}:status`   - IN_FLIGHT / COMPLETED
+  - `idempotency:{hash}:response` - JSON 响应体, REPLAY 缓存 (默认 86400s = 24h)
+- **异常路径**: REPLAY 模式下业务异常 → releaseLock, 不缓存 (允许调整参数重试)
+- **Redis 故障降级**: 所有 Redis 异常 warn log, 默认放行业务 (避免单点)
+- **业务应用**: AuthController.register 用 REPLAY 模式
+
+## 📨 Outbox 框架化 (M6-03, 2026-09)
+
+**链路**: 业务方法 (`@PublishOutbox`) → `PublishOutboxAspect` (`@Around`) → `OutboxEventPublisher.publishTransactional()` → outbox_event 表 → `OutboxEventDispatcher` 异步轮询 → Spring Cloud Stream
+
+- **`@EnableOutbox` 注解**: 业务模块加一行启用, `@Import(OutboxAutoConfiguration)` 触发装配 OutboxEventPublisher + Aspect Bean
+- **`@PublishOutbox` 注解**: 业务方法标注即自动入 outbox, SpEL 提取 aggregateId (`#root.userId` 模式), 业务异常不写入 (与业务表同事务)
+- **零侵入接入**: 兼容现有 `OutboxEventPublisher.publishTransactional()` 显式 API (annotation-driven / explicit 双轨)
+- **异常容错**: 序列化失败 warn log + 跳过 (不阻塞业务), Redis 不可用降级 (Dispatcher 启动期容错)
+- **测试覆盖**: PublishOutboxAspectTest 5 单测 (完整 publish + 默认值 + null 跳过 + 异常跳过 + 序列化失败跳过)
+
+## 🔀 业务编排引擎 (M6-04, 2026-09)
+
+**链路**: 流程定义 (JSON `Workflow` + `WorkflowStep` record) → `WorkflowEngine.execute()` → DAG 拓扑排序 → 同层并行 + 步骤级重试/超时 → `WorkflowResult`
+
+- **DAG 拓扑**: BFS 分层 (level 0 = 起点), 循环依赖自动检测 (抛 IllegalStateException)
+- **并行执行**: 同层 (无依赖) 步骤用 `CompletableFuture` 并行, `Executors.newFixedThreadPool(8)` 默认
+- **重试**: per-step `RetryConfig` (max + interval 支持 s/ms), 指数退避 (Phase A 简化:固定间隔)
+- **超时**: per-step `TimeoutConfig` + 全局 `workflow.timeoutSeconds`, 双重保护
+- **失败传播**: 步骤 X 失败 → 依赖 X 的所有下游步骤标记 skipped, 不阻塞独立分支
+- **Saga 补偿**: onFailure handler (Phase B 集成 `IServicePlugin`)
+- **测试覆盖**: `WorkflowEngineTest` 8 单测 (单步骤 + DAG 顺序 + 重试 + 循环依赖检测 + id 唯一性 + 并行层 + 全局超时)
+
 ## ⚡ 关键设计决策 (ADR - Architecture Decision Records)
 - **决策 1**: 采用 **JDK 25 虚拟线程** $\rightarrow$ [理由: 消除传统线程池瓶颈，实现极高并发下的轻量级阻塞，提升吞吐量]
 - **决策 2**: 启用 **G1GC** (堆 256m) $\rightarrow$ [理由: 小堆下 G1GC 兼顾吞吐与开销; Generational ZGC 曾被多处文档声称, 但运行态从未采用 —— 其唯一出处是一个自陈"已失效"的根 Dockerfile, 已于 2026-10-17 删除]
