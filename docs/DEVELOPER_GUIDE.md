@@ -55,7 +55,6 @@ public void notifyTransactionComplete(TransactionEvent event) {
 
 ### Step 5: Data Access & Transactions
 *   **DB Access**: Use `framework-mybatis` for consistent entity mapping.
-*   **Distributed Transactions**: If your business process spans multiple modules, use the `framework-seata` integration to maintain atomicity.
 
 ---
 

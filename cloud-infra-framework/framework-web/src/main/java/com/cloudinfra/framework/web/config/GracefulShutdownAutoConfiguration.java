@@ -13,7 +13,6 @@ import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,7 +41,6 @@ public class GracefulShutdownAutoConfiguration {
 
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
     private final AtomicInteger activeRequestCount = new AtomicInteger(0);
-    private final CountDownLatch allRequestsCompleted = new CountDownLatch(0);
     private Instant shutdownStartTime;
 
     /**
@@ -55,10 +53,7 @@ public class GracefulShutdownAutoConfiguration {
     }
 
     public void requestCompleted() {
-        int remaining = activeRequestCount.decrementAndGet();
-        if (remaining == 0 && shutdownInitiated.get()) {
-            allRequestsCompleted.countDown();
-        }
+        activeRequestCount.decrementAndGet();
     }
 
     public boolean isShutdownInitiated() {
@@ -125,17 +120,21 @@ public class GracefulShutdownAutoConfiguration {
             int active = activeRequestCount.get();
             if (active > 0) {
                 log.info("步骤 2/4: 等待 {} 个活跃请求完成...", active);
-                try {
-                    boolean completed = allRequestsCompleted.await(maxWaitSeconds, TimeUnit.SECONDS);
-                    if (!completed) {
-                        log.warn("等待活跃请求超时 ({}s)，剩余 {} 个请求将被强制终止", 
-                            maxWaitSeconds, activeRequestCount.get());
-                    } else {
-                        log.info("所有活跃请求已完成");
+                long deadline = System.currentTimeMillis() + maxWaitSeconds * 1000L;
+                while (activeRequestCount.get() > 0 && System.currentTimeMillis() < deadline) {
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("等待活跃请求被中断");
+                        return;
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.warn("等待活跃请求被中断");
+                }
+                if (activeRequestCount.get() == 0) {
+                    log.info("所有活跃请求已完成");
+                } else {
+                    log.warn("等待活跃请求超时 ({}s)，剩余 {} 个请求将被强制终止",
+                        maxWaitSeconds, activeRequestCount.get());
                 }
             } else {
                 log.info("步骤 2/4: 无活跃请求，跳过等待");

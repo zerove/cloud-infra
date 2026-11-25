@@ -18,10 +18,10 @@ This document defines the canonical terminology used across the `cloud-infra` pr
 | Term | Definition | Context |
 | :--- | :--- | :--- |
 | **Actuator Engineering** | The practice of standardizing Spring Boot Actuator endpoints across all services (management port 9301, base-path `/management`, exposed endpoints: health,info,prometheus,metrics,env,beans,conditions,refresh). | Observability |
-| **StreamBridge** | **Deprecated** - Previously used Spring Cloud Stream component for async message dispatch. Replaced by direct `@RabbitListener` consumers. | Communication (Legacy) |
+| **StreamBridge** | Spring Cloud Stream component for async message dispatch. Legacy path: still used by system-module (LogEventListener, TxMessageRetryTask); new code should use direct `@RabbitListener` consumers. | Communication (Legacy) |
 | **Binding** | A named channel used by Spring Cloud Stream to connect an application to an external messaging system. **Deprecated**. | Messaging (Legacy) |
 | **Shared Config** | Configuration files stored in Nacos (e.g., `actuator-config.yaml`, `feign timeouts`, `otlp endpoint`) that are imported by multiple services to ensure consistency. | Configuration |
-| **Distributed Transaction** | A transaction that spans multiple services, managed by the `framework-seata` module. Disabled by default for system-module. | Data Consistency |
+| **Distributed Transaction** | A transaction that spans multiple services. Not currently used: the platform has no Seata dependency or server, each service manages local transactions only. | Data Consistency |
 | **Virtual Threads** | JDK 25 lightweight threads enabled globally (`spring.threads.virtual.enabled=true`), paired with Generational ZGC for microsecond GC pauses. | Concurrency |
 | **Header Authentication Filter** | Spring Security filter that reads `X-User-Id`/`X-User-Name` headers (injected by Gateway) and populates SecurityContext with permissions. | Security |
 | **Internal Call Signature** | HMAC-signed headers (`X-Internal-Call-Sign`, `X-Internal-Call-Timestamp`, `X-Internal-Call-Nonce`) used to authorize internal Feign endpoints (e.g., `/system/user/**`). | Security |
