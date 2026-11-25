@@ -3,6 +3,7 @@ package com.cloudinfra.auth.controller;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.SysLoginService;
+import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,10 +37,8 @@ public class AuthControllerTest {
     void shouldLoginSuccess() {
         when(loginService.login(any())).thenReturn(Result.success(Map.of("token", "mock-token")));
 
-        LoginUser loginUser = new LoginUser();
-        loginUser.setUsername("testuser");
-
-        Result<Map<String, Object>> response = authController.login(loginUser);
+        Result<Map<String, Object>> response =
+                authController.login(new LoginRequest("testuser", "secret", null, null));
 
         assertThat(response).isNotNull();
         assertThat(response.getData().get("token")).isEqualTo("mock-token");

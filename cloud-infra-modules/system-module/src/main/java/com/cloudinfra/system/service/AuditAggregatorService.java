@@ -2,6 +2,8 @@ package com.cloudinfra.system.service;
 
 import com.cloudinfra.api.notification.NotificationApi;
 import com.cloudinfra.api.notification.dto.NotificationLogDTO;
+import com.cloudinfra.common.core.domain.PageQuery;
+import com.cloudinfra.common.core.domain.PageResult;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.common.core.domain.entity.SysOperLog;
 import com.cloudinfra.common.core.tenant.TenantContext;
@@ -42,7 +44,11 @@ public class AuditAggregatorService {
     public List<UnifiedAuditRecord> getUnifiedTimeline(Long userId) {
         // 使用虚拟线程并发拉取不同源的日志
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            
+            // issue 36 深化防御: 必须在**提交任务的请求线程**里捕获租户。
+            // TenantContext 是普通 ThreadLocal, virtual thread 不会继承 ——
+            // 在 lambda 内读只会永远得到 "default", 让非 default 租户的审计静默丢失。
+            final String tenantId = TenantContext.getTenantIdOrDefault();
+
             // 1. 异步拉取系统操作日志 (本地 DB)
             CompletableFuture<List<UnifiedAuditRecord>> operLogsFuture = CompletableFuture.supplyAsync(() -> {
                 // issue 36 深化防御: supplyAsync 提交到 virtual thread executor, ThreadLocal 不继承,
@@ -71,6 +77,7 @@ public class AuditAggregatorService {
 
             // 2. 异步拉取通知发送日志 (远程 API)
             CompletableFuture<List<UnifiedAuditRecord>> notifyLogsFuture = CompletableFuture.supplyAsync(() -> {
+                TenantContext.setTenantId(tenantId);
                 try {
                     // B3/S2: 用户端 /notification/logs 禁止跨用户；审计聚合走内部 HMAC 契约
                     // issue 36 深化防御: 在 virtual thread 内注入租户上下文, 经 FeignAuthInterceptor
@@ -92,7 +99,7 @@ public class AuditAggregatorService {
                         "NOTIFICATION"
                     )).collect(Collectors.toList());
                 } catch (Exception e) {
-                    log.error("拉取通知审计日志失败: {}", e.getMessage());
+                    log.error("拉取通知审计日志失败", e);
                     return Collections.emptyList();
                 } finally {
                     TenantContext.clear();
@@ -108,8 +115,18 @@ public class AuditAggregatorService {
                 .collect(Collectors.toList()))
                 .join(); // 最终 join 在虚拟线程中可接受
         } catch (Exception e) {
-            log.error("审计聚合异常: {}", e.getMessage());
+            // 返回空集合会让"聚合整体失败"与"确实没有审计记录"在界面上无法区分;
+            // 补全堆栈是最低要求 —— 仅打 getMessage() 会丢掉 Caused by 链, 排障时无从追起。
+            log.error("审计聚合异常, 返回空结果", e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * SysOperLog.status 为 0/1 编码 (0=正常, 1=异常, 约定见 LogAspect)。
+     * 修复前此处硬编码 "SUCCESS", 会把失败操作伪装成成功 —— 审计数据失真。
+     */
+    private static String mapOperLogStatus(Integer status) {
+        return Integer.valueOf(1).equals(status) ? "FAIL" : "SUCCESS";
     }
 }

@@ -14,6 +14,7 @@ public interface ISysDictService {
 
     // Dictionary Data methods
     List<SysDictData> selectDictDataByType(String dictType);
+    String selectDictLabel(String dictType, String dictValue);
     int insertDictData(SysDictData dictData);
     int updateDictData(SysDictData dictData);
     int deleteDictDataByIds(Long[] ids);

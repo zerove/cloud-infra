@@ -65,7 +65,10 @@ public class TelemetryConsumer {
             
             log.debug("Indexed telemetry for device {}: {}", deviceId, metrics);
         } catch (Exception e) {
+            // 重抛: 此前吞掉异常等于让该条遥测永久丢失且无 DLQ 记录。
+            // 与 TxMessageConsumer / RuleConsumer 一致, 由容器 error handler 接管重试与死信。
             log.error("Failed to process telemetry message", e);
+            throw new RuntimeException("遥测消息处理失败, 转交重试/DLQ", e);
         }
     }
 }

@@ -13,8 +13,6 @@
     <packaging>jar</packaging>
 
     <properties>
-        <spring-boot.aot.skip>false</spring-boot.aot.skip>
-        <native.image.skip>false</native.image.skip>
         <main.class>com.cloudinfra.system.SystemApplication</main.class>
     </properties>
 

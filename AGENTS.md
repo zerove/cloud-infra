@@ -629,12 +629,61 @@ if [[ "$IMG" =~ ^9\. ]]; then 判红; else 判绿; fi
 
 ---
 
+## 🔍 快速核查清单（部署态与防护核验，每次会话必带）
+
+> 本节固化本次 11-02 复核用到的 4 条 grep 命令。下一轮审计前任何一条删引用都不会再漏。
+> 不改了任何代码；仅把“可复现核验”放进新会话默认动作。
+
+```bash
+# 0. 多租户已真正启用（业务 Mapper 注解数 + 部署态开关数都要 ≥ 1）
+rg -c "@TenantFilter" --type java cloud-infra-modules          # 期望 ≥9
+for f in deploy/config/{system-module,file-service,notification-service}.yaml; do
+  rg -n "^  tenant:" "$f"; done                                # 期望 enabled: true
+
+# 1. 已删除框架残留归零（幂等 / Outbox / OpenAPI / 编排引擎）
+rg '@Idempotent|@EnableOutbox|OpenApiExporter|WorkflowEngine|@EnableOpenApi' --type java cloud-infra-modules  # 期望 0
+
+# 2. Controller @PreAuthorize 覆盖率（非 /internal/** 仅计业务 controller）
+python3 - <<'PYEOF'
+import re, glob, os
+pa=re.compile(r'@PreAuthorize\(')
+for f in sorted(glob.glob('cloud-infra-modules/*/src/main/java/**/controller/*.java', recursive=True)):
+    t=open(f).read(); has_pa=bool(pa.search(t))
+    if re.search(r'@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping)', t):
+        print('Y' if has_pa else 'N')
+PYEOF
+# 期望 N 仅 InternalUserController
+
+# 3. 关键过滤器 order 与信任链（第六课：TenantContextFilter 必须先于 HeaderAuthenticationFilter）
+#    两种规格都要验证：两端都有显式 getOrder 时二者比较；
+#    若一端无显式 order，守护标记为"存疑"(red)，不绿——这不等于守卫失效，
+#    只是"下一个防御窗口"需要有人补 order 注入，避免假绿。
+#    可执行版本见 `deploy/tests/quick_audit.sh`（一键跑 4 站），本质等价于上述三条命令。
+# 真相（本会话实测，-U 模式读到全量）：
+#   TenantContextFilter  返回 -110（早先会话误记为 -100，实为 -110；见 trust-chain-review 第 46 行）
+#   HeaderAuthenticationFilter: implements OncePerRequestFilter 但无显式 getOrder()，按容器默认序
+# 期望：TCF(-110) 应小于 HAF 的任何显式约定；HAF 无显式 → 守护 red。
+rg -U "getOrder\(\)\s*\{[^}]*return\s+(-?\d+)" --type java \
+  cloud-infra-common/src/main/java/com/cloudinfra/common/core/tenant/TenantContextFilter.java
+rg -n "implements Ordered" --type java \
+  cloud-infra-framework/framework-security/src/main/java/com/cloudinfra/framework/security/filter/HeaderAuthenticationFilter.java
+# 期望 TCF(-110) < HAF: HAF 无显式 getOrder 即守护报红。一键等价脚本：
+#   bash deploy/tests/quick_audit.sh  (见本节末段注释)
+```
+
+> 本节用于替换会上述出现的 4 条手工命令——节省至少 1 次会话来回重做同一件事。
+
+---
+
 ## 🏗️ 系统架构分析 (System Architecture)
 
 ### 1. 整体设计
 Cloud-Infra 是一个基于 **JDK 25 (虚拟线程)** 和 **Spring Boot 4.1.0** 构建的高并发微服务平台。
 
-- **极致性能**: 全面启用 `spring.threads.virtual.enabled=true`，配合 **Generational ZGC** 消除线程阻塞瓶颈，保持微秒级 GC 停顿。
+- **极致性能**: 全面启用 `spring.threads.virtual.enabled=true`，配合 **G1GC**（堆 256m）。
+  > **2026-10-17 更正**: 本文档此前多处声称 `Generational ZGC`。运行态从来不是 ZGC ——
+  > 唯一出处是一个自陈"已失效"的根 `Dockerfile`, 该文件已删除。compose / Helm / 各模块
+  > Dockerfile 三面现已统一为 G1GC + `-Xmx256m`（该值是唯一有 E2E 运行时证据的堆）。
 - **统一入口**: `cloud-infra-gateway` 处理全局认证、限流和路由，将身份信息 (`X-User-Id`, `X-User-Name`) 注入下游。
 - **身份模型**: `cloud-infra-auth` 负责 JWT 签发与刷新，下游通过 `framework-security` 执行 RBAC 鉴权 (`@ss.hasPermi`)。
 

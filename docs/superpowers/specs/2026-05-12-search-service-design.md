@@ -25,7 +25,7 @@
     - 提供对 `sys_oper_log` 索引的物理读写操作。
 
 ### 2.3 数据流图
-`User` $ightarrow$ `SearchController` $ightarrow$ `SearchService` $ightarrow$ `OperLogRepository` $ightarrow$ `Elasticsearch` $ightarrow$ `Result`
+`User` $\rightarrow$ `SearchController` $\rightarrow$ `SearchService` $\rightarrow$ `OperLogRepository` $\rightarrow$ `Elasticsearch` $\rightarrow$ `Result`
 
 ## 3. 详细实现方案
 

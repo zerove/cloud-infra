@@ -175,7 +175,7 @@ class FileServiceImplTest {
 
         given(metadataMapper.selectById(fileId)).willReturn(metadata);
         given(permissionService.hasAccess(userId, fileId, "READ")).willReturn(true);
-        given(storageFactory.getStrategy()).willReturn(storageStrategy);
+        given(storageFactory.resolveForRead(anyString())).willReturn(storageStrategy);
         given(storageStrategy.download(metadata.getFilePath())).willReturn(new ByteArrayInputStream("pdf content".getBytes()));
 
         // when

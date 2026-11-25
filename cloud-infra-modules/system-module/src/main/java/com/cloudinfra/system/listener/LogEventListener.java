@@ -18,7 +18,7 @@ public class LogEventListener {
     private final SysLoginLogMapper loginLogMapper;
     private final StreamBridge streamBridge;
 
-    @Async
+    @Async("auditLogTaskExecutor")
     @EventListener
     public void saveLog(LogEvent event) {
         operLogMapper.insert(event.getOperLog());
@@ -26,7 +26,7 @@ public class LogEventListener {
         streamBridge.send("search-operlog-out-0", event.getOperLog());
     }
 
-    @Async
+    @Async("auditLogTaskExecutor")
     @EventListener
     public void saveLoginLog(LoginLogEvent event) {
         loginLogMapper.insert(event.getLoginLog());

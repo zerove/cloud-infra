@@ -3,6 +3,10 @@ package com.cloudinfra.search.service;
 import com.cloudinfra.api.search.dto.SearchRequest;
 import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.api.search.dto.OperLogDTO;
+import com.cloudinfra.search.domain.DeviceTelemetryDocument;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 搜索服务接口
@@ -10,6 +14,14 @@ import com.cloudinfra.api.search.dto.OperLogDTO;
  */
 @FunctionalInterface
 public interface SearchService {
+
+    /**
+     * 查询设备的遥测历史。
+     *
+     * <p>{@code getTelemetryHistory} 原先由 {@code SearchController} 直接注入
+     * {@code DeviceTelemetryRepository} 调用 —— 控制器绕过 service 层直达 repository。
+     */
+    List<DeviceTelemetryDocument> findTelemetryHistory(String deviceId, LocalDateTime start, LocalDateTime end);
     /**
      * 分页搜索操作日志
      *

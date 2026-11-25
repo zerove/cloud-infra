@@ -10,7 +10,6 @@ import com.cloudinfra.notification.domain.NotificationLog;
 import com.cloudinfra.notification.domain.NotificationTemplate;
 import com.cloudinfra.notification.domain.ScheduledNotification;
 import com.cloudinfra.notification.domain.dto.NotificationSendRequest;
-import com.cloudinfra.notification.mapper.NotificationLogMapper;
 import com.cloudinfra.notification.mapper.NotificationMapper;
 import com.cloudinfra.notification.mapper.NotificationTemplateMapper;
 import com.cloudinfra.notification.mapper.ScheduledNotificationMapper;
@@ -40,7 +39,6 @@ import java.util.stream.Collectors;
 public class NotificationServiceImpl implements INotificationService {
 
     private final NotificationMapper notificationMapper;
-    private final NotificationLogMapper logMapper;
     private final NotificationTemplateMapper templateMapper;
     private final NotificationRouter notificationRouter;
     private final ScheduledNotificationMapper scheduleMapper;
@@ -122,6 +120,8 @@ public class NotificationServiceImpl implements INotificationService {
 
         // 2. 发送频率配额校验 (基于 Redis 的日计数)
         quotaService.checkQuota(request.userId());
+        //    Redis 计数不受 DB 事务管理: 事务回滚时必须归还, 否则失败请求白耗额度
+        registerQuotaRefundOnRollback(request.userId());
 
         // 3. 检查是否为定时发送
         if (request.scheduleTime() != null) {
@@ -288,9 +288,20 @@ public class NotificationServiceImpl implements INotificationService {
         if (notifications == null || notifications.isEmpty()) {
             return Collections.emptyList();
         }
-        List<Long> notificationIds = notifications.stream()
-            .map(Notification::getId)
-            .collect(Collectors.toList());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    try {
+                        quotaService.refundQuota(userId);
+                    } catch (DataAccessException refundFailure) {
+                        // 补偿失败不外抛, 以免掩盖事务回滚的真实原因; 记录 userId 供排查
+                        log.error("配额归还失败, 该用户今日计数将偏高 1: userId={}", userId, refundFailure);
+                    }
+                }
+            }
+        });
+    }
 
         // 2. 根据通知 ID 集合检索所有渠道日志
         return logMapper.selectList(
@@ -302,13 +313,10 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public List<Notification> searchNotifications(String keyword) {
-        return notificationMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Notification>()
-                .and(wrapper -> wrapper.like(Notification::getTitle, keyword)
-                                       .or()
-                                       .like(Notification::getContent, keyword))
-        );
+    public PageResult<NotificationLog> getLogs(Long userId, PageQuery pageQuery) {
+        Page<NotificationLog> page = new Page<>(pageQuery.normalizedPageNum(), pageQuery.normalizedPageSize());
+        IPage<NotificationLog> result = notificationMapper.selectLogPageByUserId(page, userId);
+        return PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize());
     }
 
     @Override

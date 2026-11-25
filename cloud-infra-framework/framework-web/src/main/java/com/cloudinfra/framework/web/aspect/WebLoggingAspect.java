@@ -1,6 +1,7 @@
 package com.cloudinfra.framework.web.aspect;
 
 import com.cloudinfra.common.context.UserContext;
+import com.cloudinfra.common.util.SensitiveDataRedactor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;

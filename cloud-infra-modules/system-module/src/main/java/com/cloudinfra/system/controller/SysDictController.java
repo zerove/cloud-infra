@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "字典管理")
 @RestController
@@ -73,8 +75,34 @@ public class SysDictController {
     @Operation(summary = "根据字典类型查询字典数据")
     @PreAuthorize("hasAuthority('system:dict:query')")
     @GetMapping("/data/type/{dictType}")
-    public List<SysDictData> dictDataByType(@PathVariable String dictType) {
-        return dictService.selectDictDataByType(dictType);
+    public List<SysDictData> dictDataByType(
+            @PathVariable String dictType,
+            @RequestParam(required = false) String dictValue) {
+        List<SysDictData> list = dictService.selectDictDataByType(dictType);
+        if (dictValue == null || dictValue.isBlank()) {
+            return list;
+        }
+        return list.stream().filter(d -> dictValue.equals(d.getDictValue())).toList();
+    }
+
+    @Operation(summary = "根据字典类型与值查询字典标签")
+    @PreAuthorize("hasAuthority('system:dict:query')")
+    @GetMapping("/data/label/{dictType}/{dictValue}")
+    public String dictLabel(@PathVariable String dictType, @PathVariable String dictValue) {
+        return dictService.selectDictLabel(dictType, dictValue);
+    }
+
+    @Operation(summary = "根据字典类型查询字典值-标签映射")
+    @PreAuthorize("hasAuthority('system:dict:query')")
+    @GetMapping("/data/map/{dictType}")
+    public Map<String, String> dictDataMap(@PathVariable String dictType) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (SysDictData data : dictService.selectDictDataByType(dictType)) {
+            if (data.getDictValue() != null) {
+                map.put(data.getDictValue(), data.getDictLabel());
+            }
+        }
+        return map;
     }
 
     @Operation(summary = "新增字典数据")

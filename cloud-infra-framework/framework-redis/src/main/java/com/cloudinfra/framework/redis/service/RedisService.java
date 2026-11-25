@@ -1,5 +1,6 @@
 package com.cloudinfra.framework.redis.service;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -59,6 +60,18 @@ public class RedisService {
 
     public boolean delete(String key) {
         return Boolean.TRUE.equals(redisTemplate.delete(key));
+    }
+
+    /** 批量删除; 空集合直接返回 false, 避免向 Redis 发空命令。 */
+    public boolean delete(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            // 空集合短路返回, 不向 Redis 发起空 DEL 命令
+            return false;
+        }
+        // Spring Data Redis 4.1: delete(Collection) 返回 Long(实际删除的 key 数),
+        // 与单 key delete(K) 的 Boolean 语义不同, 二者不可混用。
+        Long deletedCount = redisTemplate.delete(keys);
+        return deletedCount != null && deletedCount > 0;
     }
 
     public boolean hasKey(String key) {

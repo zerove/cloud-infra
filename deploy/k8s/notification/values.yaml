@@ -35,7 +35,8 @@ managementService:
 resources:
   limits:
     cpu: 1000m
-    memory: 512Mi
+    # 与 compose mem_limit(640m) 对齐(堆 256m + 堆外上限 448m 需要 >512Mi)
+    memory: 640Mi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -136,7 +137,9 @@ startupProbe:
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
-  failureThreshold: 30
+  # 10 + 40×10 = 410s >= compose start_period 360s
+  # (notification 实测启动 304.3s, 原 30×10=300s 覆盖不住)
+  failureThreshold: 40
 configMap:
   enabled: true
   data:
@@ -158,9 +161,9 @@ configMap:
       \ ${SPRING_RABBITMQ_HOST}\n    port: 5672\n    username: ${SPRING_RABBITMQ_USERNAME}\n\
       \    password: ${SPRING_RABBITMQ_PASSWORD}\nmanagement:\n  server:\n    port:\
       \ 9301\n  endpoints:\n    web:\n      base-path: /management\n      exposure:\n\
-      \        include: \"*\"\n  tracing:\n    sampling:\n      probability: 1.0\n\
+      \        include: health,info,prometheus,metrics,refresh\n  tracing:\n    sampling:\n      probability: 0.2\n\
       \  otlp:\n    tracing:\n      endpoint: http://otel-collector:4317\n  tracing:\n\
-      \    enabled: true\n    sampling:\n      probability: 1.0\n    zipkin:\n   \
+      \    enabled: true\n    sampling:\n      probability: 0.2\n    zipkin:\n   \
       \   enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n      sender:\n\
       \        type: web\n    otel:\n      exporter:\n        zipkin:\n          endpoint:\
       \ http://zipkin:9411/api/v2/spans\n        otlp:\n          endpoint: http://otel-collector:4317\n"

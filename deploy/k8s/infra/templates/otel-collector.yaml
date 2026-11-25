@@ -73,23 +73,4 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   config.yaml: |
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-          http:
-    processors:
-      batch:
-    exporters:
-      otlp:
-        endpoint: zipkin:4317
-        tls:
-          insecure: true
-      logging:
-        verbosity: basic
-    service:
-      pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [batch]
-          exporters: [otlp, logging]
+    {{- toYaml .Values.otelCollector.config | nindent 4 }}

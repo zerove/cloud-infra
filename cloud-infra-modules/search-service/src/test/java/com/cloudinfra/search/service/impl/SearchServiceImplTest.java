@@ -6,6 +6,7 @@ import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.search.domain.OperLogDocument;
 import com.cloudinfra.search.domain.query.OperLogQuery;
 import com.cloudinfra.search.domain.query.SearchQueryBuilder;
+import com.cloudinfra.search.repository.DeviceTelemetryRepository;
 import com.cloudinfra.search.repository.OperLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,13 +29,14 @@ import static org.mockito.BDDMockito.then;
 class SearchServiceImplTest {
 
     @Mock private OperLogRepository operLogRepository;
+    @Mock private DeviceTelemetryRepository telemetryRepository;
     @Mock private SearchQueryBuilder queryBuilder;
 
     private SearchServiceImpl searchService;
 
     @BeforeEach
     void setUp() {
-        searchService = new SearchServiceImpl(operLogRepository, queryBuilder);
+        searchService = new SearchServiceImpl(operLogRepository, telemetryRepository, queryBuilder);
     }
 
     @Test

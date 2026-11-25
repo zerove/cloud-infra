@@ -48,5 +48,12 @@ public class FeignAuthInterceptor implements RequestInterceptor {
                 template.header("X-Tenant-Id", tenantId);
             }
         }
+
+        // issue 36 深化防御: 租户头必须**在 Servlet 请求上下文之外**也能透传。
+        // 审计聚合等场景在虚拟线程里发起 Feign 调用: TenantContext 由调用方显式
+        // 捕获并设置, 但 RequestContextHolder 不会跨线程继承 (Spring 默认
+        // threadContextInheritable=false)。若把本段放进上面的 attributes 分支,
+        // 异步路径永远发不出 X-Tenant-Id, 下游 @TenantFilter 退化为全租户查询。
+        TenantContext.getTenantId().ifPresent(tenantId -> template.header("X-Tenant-Id", tenantId));
     }
 }

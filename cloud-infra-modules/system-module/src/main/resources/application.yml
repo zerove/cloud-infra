@@ -123,7 +123,4 @@ management:
         include: health,info,prometheus,metrics,env,beans,conditions,refresh
   tracing:
     sampling:
-      probability: 1.0
-  otlp:
-    tracing:
-      endpoint: http://otel-collector:4317
+      probability: 0.2

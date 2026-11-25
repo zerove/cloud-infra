@@ -186,7 +186,8 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.NO_PERMISSION, "You do not have permission to download this file");
         }
 
-        StorageStrategy strategy = storageFactory.getStrategy();
+        // 按实际存放位置解析, 而非用 getStrategy() 恒定返回 local(2026-10-06 实测缺陷)
+        StorageStrategy strategy = storageFactory.resolveForRead(metadata.getFilePath());
         return strategy.download(metadata.getFilePath());
     }
 
@@ -206,19 +207,36 @@ public class FileServiceImpl implements IFileService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "File version not found");
         }
 
-        StorageStrategy strategy = storageFactory.getStrategy();
+        // 按实际存放位置解析(同上, 避免大文件版本读不到)
+        StorageStrategy strategy = storageFactory.resolveForRead(versionEntity.getStoragePath());
         return strategy.download(versionEntity.getStoragePath());
     }
 
     @Override
-    public List<FileVersion> getVersionHistory(Long fileId) {
-        return versionMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
-                .eq(FileVersion::getFileId, fileId)
-                .orderByDesc(FileVersion::getVersionNumber)
-        );
+    public List<FileVersion> getVersionHistory(Long fileId, int page, int size) {
+        // 版本数随重传次数无界增长, 故分页; 调用方需翻页取全量
+        return versionMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size),
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FileVersion>()
+                    .eq(FileVersion::getFileId, fileId)
+                    .orderByDesc(FileVersion::getVersionNumber)
+        ).getRecords();
     }
 
+    /**
+     * 删除文件（硬删除，不可恢复）。
+     *
+     * <p><b>2026-10-07 语义收紧</b>: 本方法原先对「元数据不存在」与「存储删除失败」
+     * 都返回 {@code false}。该端点开放后，HTTP 层无法对这两种情况给出正确语义 ——
+     * 若都映射为 404，调用方会认为「文件已消失」，而实际上存储对象与配额都还在。
+     * 故改为分别抛出可区分的异常：
+     * <ul>
+     *   <li>元数据不存在 → {@code RESOURCE_NOT_FOUND} (1006)</li>
+     *   <li>存储删除失败 → {@code SYSTEM_ERROR} (1000)，且<b>不</b>删元数据</li>
+     *   <li>无写权限 → {@code NO_PERMISSION} (1005)</li>
+     * </ul>
+     * 保留 {@code boolean} 返回值以兼容既有调用方，成功时恒为 true。
+     */
     @Override
     public boolean delete(Long fileId, Long userId) {
         // 顺序有语义: 先查元数据(不存在→404), 再校验权限(无权→403)。

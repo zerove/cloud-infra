@@ -6,12 +6,14 @@ import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.search.domain.UnifiedSearchResult;
 import com.cloudinfra.search.service.SearchProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class FileSearchProvider implements SearchProvider {
@@ -39,6 +41,7 @@ public class FileSearchProvider implements SearchProvider {
                 ))
                 .collect(Collectors.toList());
         } catch (Exception e) {
+            log.warn("文件搜索 provider 异常, 本 provider 返回空结果", e);
             return Collections.emptyList();
         }
     }

@@ -10,8 +10,9 @@ k3d cluster create $CLUSTER_NAME \
 echo "--- [2/4] 部署 Ingress Controller... ---"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
-echo "--- [3/4] 应用所有部署清单... ---"
-kubectl apply -f manifests/base/
+echo "--- [3/4] 应用所有部署清单 (Helm) ... ---"
+# 2026-10-17: kustomize 面 (manifests/) 已删除, 改走 deploy-k8s.sh 的 Helm 部署。
+./deploy-k8s.sh dev
 
 echo "--- [4/4] 等待服务就绪... ---"
 kubectl wait --for=condition=Ready pod -l app=system --timeout=300s

@@ -17,7 +17,7 @@
 
 # 单模块手动构建示例
 mvn clean package -pl cloud-infra-gateway -am -Pnative -DskipTests
-podman build -t cloud-infra-gateway:native -f deploy/Dockerfile.native .
+podman build -t cloud-infra-gateway:native -f cloud-infra-gateway/Dockerfile.native cloud-infra-gateway/
 
 # B. JRE 模块 (System/Search/Notification)
 mvn clean package -pl cloud-infra-modules/system-module -am -DskipTests

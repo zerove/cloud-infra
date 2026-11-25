@@ -17,11 +17,18 @@ public class GlobalExceptionHandler {
     /**
      * 处理自定义业务异常
      * 根据异常子类动态返回相应的 HTTP 状态码
+     *
+     * <p>日志分级 (#13): 4xx 是客户端可预期的语义失败 (凭据/权限/不存在等),
+     * 记 WARN 且不带堆栈; 5xx 是服务端问题, 记 ERROR 并附堆栈以便排查。</p>
      */
     @ExceptionHandler(com.cloudinfra.common.core.exception.BaseException.class)
     public ResponseEntity<Result<?>> handleBaseException(com.cloudinfra.common.core.exception.BaseException e) {
-        log.error("Business exception occurred: {}", e.getMessage());
         HttpStatus status = HttpStatus.valueOf(e.getSuggestedHttpStatus());
+        if (status.is4xxClientError()) {
+            log.warn("Business exception occurred: {}", e.getMessage());
+        } else {
+            log.error("Business exception occurred: {}", e.getMessage(), e);
+        }
         return new ResponseEntity<>(
             Result.fail(e.getCode(), e.getMessage()), 
             status

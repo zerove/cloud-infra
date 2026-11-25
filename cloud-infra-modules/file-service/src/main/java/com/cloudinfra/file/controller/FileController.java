@@ -3,8 +3,11 @@ package com.cloudinfra.file.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.cloudinfra.api.file.dto.FileVersion;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.common.core.exception.BusinessException;
+import com.cloudinfra.common.core.exception.ErrorCode;
 import com.cloudinfra.api.file.dto.FileMetadataVO;
 import com.cloudinfra.file.domain.FileContent;
+import com.cloudinfra.file.service.FileStorageUrlService;
 import com.cloudinfra.file.service.IFileService;
 import com.cloudinfra.file.service.FilePermissionService;
 import com.cloudinfra.file.util.FileValidator;
@@ -19,6 +22,10 @@ import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -50,6 +57,7 @@ import com.cloudinfra.common.core.exception.ErrorCode;
 @Tag(name = "文件管理")
 @RestController
 @RequestMapping("/file")
+@Validated
 @RequiredArgsConstructor
 public class FileController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FileController.class);

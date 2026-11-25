@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Configuration;
 public class MetricsConfig {
 
     @Bean
+    @ConditionalOnMissingBean(name = "metricsCommonTags")
     public MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
         return registry -> registry.config().commonTags("project", "cloud-infra");
     }

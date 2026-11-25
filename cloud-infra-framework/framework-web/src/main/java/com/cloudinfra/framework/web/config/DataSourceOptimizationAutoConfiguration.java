@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
@@ -30,6 +31,10 @@ import javax.sql.DataSource;
  */
 @AutoConfiguration
 @AutoConfigureBefore(org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration.class)
+// 无 spring.datasource.url 的服务 (如 auth) 根本不连库, 不应为它们凭空建一个连接池。
+// 缺此条件时, @Value("${spring.datasource.url}") 解析失败会让**整个上下文启动失败**
+// (2026-10-17 E2E 实测: auth 因此重启 62 次)。
+@ConditionalOnProperty(prefix = "spring.datasource", name = "url")
 public class DataSourceOptimizationAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceOptimizationAutoConfiguration.class);

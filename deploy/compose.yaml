@@ -92,6 +92,20 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须在 .env 中设置}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # ⚠️ postgres-tuning.conf **刻意不挂载进容器**（2026-10-05 运行时纠正）。
+      #   它原先挂载在 /etc/postgresql/tuning.conf, 但 postgresql.conf 与
+      #   postgresql.auto.conf 里**没有任何 include 指令**（容器内 grep 确认
+      #   无输出）⇒ 那个挂载永远不会被读取, 属"机制存在但从未生效"。
+      #   上面那句"以 include 方式挂载"是错的, 已删除。
+      #
+      #   唯一真实生效路径:
+      #     up.sh → apply-postgres-tuning.sh → ALTER SYSTEM → postgresql.auto.conf
+      #   要改调优参数, 请改 apply-postgres-tuning.sh 的期望值, 改这里无效。
+      #   该文件保留为 apply 脚本的**输入源**(单一数据源), 不再是运行时配置。
+      # 首次初始化时建 SkyWalking 存储库 (OAP 自 2026-10-04 用 postgresql 存储)。
+      #   ⚠️ 该目录**只在数据目录为空时**执行一次 —— 已有 pgdata 卷的环境不会补跑。
+      #     本机 pgdata 里 skywalking 库是手工建的, 与本脚本等价。
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
       - cloud-infra
     logging: *default-logging
@@ -110,6 +124,16 @@ services:
     mem_limit: 256m
     ports:
       - "6379:6379"
+    # ⚠️ 清空代理变量(2026-10-06 实测): 宿主 http_proxy 会被 rootless podman
+    #   注入容器, 而该端口无监听。redis 自身不用它, 但哨兵/集群模式下的
+    #   节点互联代码路径可能读得到 —— 依赖"恰好没用"不构成配置正确。
+    environment:
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
     volumes:
       - redisdata:/data
     networks:
@@ -172,7 +196,15 @@ services:
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      # ⚠️ 清空代理变量(2026-10-06 实测)。ES 的 Java 客户端读 http_proxy,
+      #   继承宿主那个无监听的 127.0.0.1:7890 会让跨节点/插件请求失败。
+      http_proxy: ''
+      https_proxy: ''
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      no_proxy: '*'
+      NO_PROXY: '*'
+      ES_JAVA_OPTS: "-Xms256m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=96m -XX:ReservedCodeCacheSize=96m"
     volumes:
       - esdata:/usr/share/elasticsearch/data
     networks:

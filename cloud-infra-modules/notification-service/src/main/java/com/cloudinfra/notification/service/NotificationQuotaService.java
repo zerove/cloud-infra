@@ -23,6 +23,30 @@ public class NotificationQuotaService {
     private static final String QUOTA_KEY_PREFIX = "notification:quota:daily:";
     private static final long DEFAULT_DAILY_LIMIT = 1000L; // 默认每日发送上限 1000 条
 
+    public record QuotaStatus(long used, long limit, long remaining, long resetInSeconds) {
+    }
+
+    /**
+     * 查询当日配额状态（只读，不消耗额度）。
+     */
+    public QuotaStatus getQuotaStatus(Long userId) {
+        String key = QUOTA_KEY_PREFIX + userId;
+        String raw = redisTemplate.opsForValue().get(key);
+        long used = 0L;
+        if (raw != null) {
+            try {
+                used = Math.max(0L, Long.parseLong(raw));
+            } catch (NumberFormatException ignored) {
+                used = 0L;
+            }
+        }
+        long limit = DEFAULT_DAILY_LIMIT;
+        long remaining = Math.max(0L, limit - used);
+        Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+        long resetInSeconds = (ttl == null || ttl < 0) ? 0L : ttl;
+        return new QuotaStatus(used, limit, remaining, resetInSeconds);
+    }
+
     /**
      * 校验发送频率是否超限
      * @param userId 用户ID
@@ -44,5 +68,16 @@ public class NotificationQuotaService {
             redisTemplate.opsForValue().decrement(key);
             throw new BusinessException(SystemExceptionCode.RESOURCE_EXHAUSTED);
         }
+    }
+
+    /**
+     * 归还一次配额占用 (供调用方在承载本次扣减的事务回滚时补偿)。
+     *
+     * <p>与 {@link #checkQuota} 超限路径的回退不同: 那是「拒绝」时的自补偿;
+     * 本方法服务于「校验已通过、但后续环节失败导致事务回滚」的补偿 ——
+     * Redis 计数不受 DB 事务管理, 不归还则失败请求白占额度, 客户端重试持续消耗。</p>
+     */
+    public void refundQuota(Long userId) {
+        redisTemplate.opsForValue().decrement(QUOTA_KEY_PREFIX + userId);
     }
 }

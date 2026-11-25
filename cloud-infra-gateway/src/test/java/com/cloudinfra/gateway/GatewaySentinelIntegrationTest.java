@@ -2,6 +2,7 @@ package com.cloudinfra.gateway;
 
 import com.alibaba.cloud.nacos.NacosConfigManager;
 import com.cloudinfra.test.BaseIntegrationTest;
+import com.cloudinfra.test.support.containers.InfrastructureContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;

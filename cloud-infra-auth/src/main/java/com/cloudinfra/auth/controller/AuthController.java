@@ -3,6 +3,8 @@ package com.cloudinfra.auth.controller;
 import com.cloudinfra.auth.service.AuthTokenService;
 import com.cloudinfra.auth.service.SysLoginService;
 import com.cloudinfra.common.core.domain.Result;
+import com.cloudinfra.api.system.dto.RegisterUserDTO;
+import com.cloudinfra.auth.controller.dto.LoginRequest;
 import com.cloudinfra.common.core.domain.model.LoginUser;
 import com.cloudinfra.common.core.enums.ResultCode;
 import com.cloudinfra.common.util.PasswordValidator;
@@ -28,8 +30,8 @@ public class AuthController {
 
     @Operation(summary = "登录")
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@RequestBody LoginUser loginUser) {
-        return loginService.login(loginUser);
+    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
+        return loginService.login(toLoginUser(request));
     }
 
     @Operation(summary = "刷新Token")

@@ -174,11 +174,11 @@ configMap:
       \   enabled: true\n  data:\n    redis:\n      host: ${SPRING_DATA_REDIS_HOST}\n\
       \      port: 6379\n      database: 0\nmanagement:\n  server:\n    port: 9301\n\
       \  endpoints:\n    web:\n      base-path: /management\n      exposure:\n   \
-      \     include: \"*\"\n  endpoint:\n    health:\n      show-details: always\n\
+      \     include: health,info,prometheus,metrics,refresh\n  endpoint:\n    health:\n      show-details: always\n\
       \  metrics:\n    export:\n      prometheus:\n        enabled: true\n  tracing:\n\
-      \    sampling:\n      probability: 1.0\n  otlp:\n    tracing:\n      endpoint:\
+      \    sampling:\n      probability: 0.2\n  otlp:\n    tracing:\n      endpoint:\
       \ http://otel-collector:4317\n  tracing:\n    enabled: true\n    sampling:\n\
-      \      probability: 1.0\n    zipkin:\n      enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n\
+      \      probability: 0.2\n    zipkin:\n      enabled: true\n      endpoint: http://zipkin:9411/api/v2/spans\n\
       \      sender:\n        type: web\n    otel:\n      exporter:\n        zipkin:\n\
       \          endpoint: http://zipkin:9411/api/v2/spans\n        otlp:\n      \
       \    endpoint: http://otel-collector:4317\n"

@@ -1,17 +1,19 @@
 package com.cloudinfra.search.controller;
 
-import com.cloudinfra.api.search.SearchApi;
 import com.cloudinfra.api.search.dto.OperLogDTO;
 import com.cloudinfra.api.search.dto.SearchRequest;
 import com.cloudinfra.api.search.dto.SearchResponse;
 import com.cloudinfra.common.core.domain.Result;
 import com.cloudinfra.search.domain.DeviceTelemetryDocument;
 import com.cloudinfra.search.domain.UnifiedSearchResult;
-import com.cloudinfra.search.repository.DeviceTelemetryRepository;
 import com.cloudinfra.search.service.SearchService;
 import com.cloudinfra.search.service.UnifiedSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -31,11 +33,11 @@ import java.util.List;
 @Tag(name = "搜索管理")
 @RestController
 @RequestMapping("/search")
+@Validated
 @RequiredArgsConstructor
-public class SearchController implements SearchApi {
+public class SearchController {
 
     private final SearchService searchService;
-    private final DeviceTelemetryRepository telemetryRepository;
     private final UnifiedSearchService unifiedSearchService;
 
     /**
@@ -45,20 +47,21 @@ public class SearchController implements SearchApi {
     @PreAuthorize("@ss.hasPermi('search:unified')")
     @GetMapping("/unified")
     public Result<List<UnifiedSearchResult>> unifiedSearch(
-            @RequestParam(value = "q", required = true) String q,
-            @RequestParam(value = "limit", defaultValue = "20") int limit) {
+            @RequestParam(value = "q", required = true) @NotBlank(message = "搜索关键字不能为空") String q,
+            @RequestParam(value = "limit", defaultValue = "20")
+            @Min(value = 1, message = "limit 必须大于等于 1")
+            @Max(value = 100, message = "limit 不能超过 100") int limit) {
         return Result.success(unifiedSearchService.unifiedSearch(q, limit));
     }
 
     /**
      * 搜索操作日志
      */
-    @Override
     @Operation(summary = "搜索操作日志")
     @PreAuthorize("@ss.hasPermi('search:operlog')")
     @GetMapping("/operlog")
     public Result<SearchResponse<OperLogDTO>> searchOperLog(
-        SearchRequest request
+        @Valid SearchRequest request
     ) {
         return Result.success(searchService.searchOperLog(request));
     }
@@ -74,7 +77,7 @@ public class SearchController implements SearchApi {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
         
-        List<DeviceTelemetryDocument> history = telemetryRepository.findByDeviceIdAndTimestampBetween(deviceId, start, end);
+        List<DeviceTelemetryDocument> history = searchService.findTelemetryHistory(deviceId, start, end);
         return Result.success(history);
     }
 }

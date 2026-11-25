@@ -1,1 +1,2 @@
+com.cloudinfra.framework.redis.config.MultiLevelCacheConfig
 com.cloudinfra.framework.redis.config.RedissonConfig

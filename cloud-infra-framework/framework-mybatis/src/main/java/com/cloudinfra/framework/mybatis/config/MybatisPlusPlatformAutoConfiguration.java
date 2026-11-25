@@ -37,7 +37,9 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
  * - MapperScannerConfigurer (扫描 com.cloudinfra.*.mapper)
  */
 @AutoConfiguration
-@AutoConfigureAfter(com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration.class)
+// 用类名字符串而非 .class 字面量: 本模块不再依赖 framework-web (持久化层不应拉入 HTTP 层),
+// 但 SqlSessionFactory 依赖对方提供的 DataSource bean, 该顺序仍需保留。
+@AutoConfigureAfter(name = "com.cloudinfra.framework.web.config.DataSourceOptimizationAutoConfiguration")
 @ConditionalOnClass({ SqlSessionFactory.class, MybatisSqlSessionFactoryBean.class })
 // 类级**不再**加任何 DataSource 条件注解 (2026-10-02 修正)。
 //

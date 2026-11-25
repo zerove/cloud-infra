@@ -17,8 +17,10 @@ serviceAccount:
 
 podAnnotations:
   prometheus.io/scrape: "true"
-  prometheus.io/port: "9000"
-  prometheus.io/path: "/actuator/prometheus"
+  # 管理端口 9301 + base-path=/management —— 原写 9000 + /actuator/prometheus,
+  # 两个值都错(业务端口 & 已被 base-path 取代的路径), 注解抓取恒 404。
+  prometheus.io/port: "9301"
+  prometheus.io/path: "/management/prometheus"
 
 podSecurityContext:
   runAsNonRoot: true
@@ -62,7 +64,9 @@ ingress:
 resources:
   limits:
     cpu: 1000m
-    memory: 512Mi
+    # 与 compose mem_limit(640m) 对齐 —— 512Mi 装不下
+    # 堆 256m + 堆外上限 448m, 属会被 cgroup OOM-kill 的组合
+    memory: 640Mi
   requests:
     cpu: 500m
     memory: 256Mi
@@ -209,7 +213,7 @@ configMap:
               include: health,info,prometheus,metrics,env,beans,conditions,refresh
         tracing:
           sampling:
-            probability: 1.0
+            probability: 0.2
         otlp:
           tracing:
             endpoint: http://otel-collector:4317

@@ -26,7 +26,7 @@ public interface IFileService {
     /**
      * 获取文件版本历史
      */
-    List<FileVersion> getVersionHistory(Long fileId);
+    List<FileVersion> getVersionHistory(Long fileId, int page, int size);
 
     /**
      * 根据关键词搜索文件
